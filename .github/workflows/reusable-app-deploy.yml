@@ -1,0 +1,115 @@
+name: Reusable Game App Deployment (ECR Build & EKS Helm Deploy)
+
+on:
+  workflow_call:
+    inputs:
+      ecr-repository:
+        description: 'Nome do repositório ECR (ex: foxbyte/game-server)'
+        required: true
+        type: string
+      dockerfile-path:
+        description: 'Caminho relativo para o Dockerfile'
+        required: false
+        type: string
+        default: './Dockerfile'
+      helm-chart-path:
+        description: 'Caminho do Helm Chart ou nome da release'
+        required: false
+        type: string
+        default: './helm/game-server'
+      namespace:
+        description: 'Namespace de destino no Kubernetes'
+        required: false
+        type: string
+        default: 'game'
+      aws-region:
+        description: 'Região AWS do EKS e ECR'
+        required: false
+        type: string
+        default: 'us-east-1'
+      eks-cluster-name:
+        description: 'Nome do cluster EKS'
+        required: false
+        type: string
+        default: 'foxbyte-dev-main-cluster'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-scan-and-deploy:
+    name: Build, Security Scan & Deploy to EKS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Caller Repository
+        uses: actions/checkout@v4
+
+      - name: Set Image Tag (SHA Short)
+        id: vars
+        run: echo "SHA_SHORT=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Configure AWS Credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::818928662779:role/github-actions-cdk-deploy
+          aws-region: ${{ inputs.aws-region }}
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build Docker Image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ inputs.ecr-repository }}
+          IMAGE_TAG: ${{ steps.vars.outputs.SHA_SHORT }}
+          DOCKERFILE: ${{ inputs.dockerfile-path }}
+        run: |
+          docker build -f $DOCKERFILE -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+      - name: Run Trivy Security Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ steps.login-ecr.outputs.registry }}/${{ inputs.ecr-repository }}:${{ steps.vars.outputs.SHA_SHORT }}
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Push Image to ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ inputs.ecr-repository }}
+          IMAGE_TAG: ${{ steps.vars.outputs.SHA_SHORT }}
+        run: |
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+      - name: Setup Helm CLI
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.14.0'
+
+      - name: Configure Kubeconfig for EKS
+        run: |
+          aws eks update-kubeconfig --name ${{ inputs.eks-cluster-name }} --region ${{ inputs.aws-region }}
+
+      - name: Deploy App via Helm
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ inputs.ecr-repository }}
+          IMAGE_TAG: ${{ steps.vars.outputs.SHA_SHORT }}
+          HELM_PATH: ${{ inputs.helm-chart-path }}
+          NAMESPACE: ${{ inputs.namespace }}
+        run: |
+          helm upgrade --install game-server $HELM_PATH \
+            --namespace $NAMESPACE \
+            --create-namespace \
+            --set image.repository=$ECR_REGISTRY/$ECR_REPOSITORY \
+            --set image.tag=$IMAGE_TAG \
+            --atomic \
+            --timeout 5m0s
