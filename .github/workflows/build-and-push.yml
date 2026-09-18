@@ -7,6 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  id-token: write
   contents: read
 
 env:
@@ -14,8 +15,8 @@ env:
   APP_PORT: "8081"
   HEALTH_PATH: /actuator/health
   AWS_REGION: us-east-1
-  AWS_ACCOUNT_ID: "765009073478"
-  ECR_REPO: foxbyte/enois-backend
+  AWS_ACCOUNT_ID: "818928662779"
+  ECR_REPO: enois/backend
   GITOPS_REPO: foxbyte-games/foxbyte-infra
   GITOPS_BRANCH: feature/pipeline_deploy
   GITOPS_MANIFEST: gitops/environments/dev/enois-backend.yaml
@@ -41,12 +42,11 @@ jobs:
           echo "SHA_SHORT=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
           echo "FULL_SHA=$(git rev-parse HEAD)"          >> $GITHUB_OUTPUT
 
-      - name: Configurar credenciais AWS
+      - name: Configurar credenciais AWS via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region:            ${{ env.AWS_REGION }}
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/forest-dev-github
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Auto-provisioning do repositório ECR
         run: |
