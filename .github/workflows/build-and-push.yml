@@ -7,7 +7,6 @@ on:
   workflow_dispatch:
 
 permissions:
-  id-token: write
   contents: read
 
 env:
@@ -42,11 +41,12 @@ jobs:
           echo "SHA_SHORT=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
           echo "FULL_SHA=$(git rev-parse HEAD)"          >> $GITHUB_OUTPUT
 
-      - name: Configurar credenciais AWS via OIDC
+      - name: Configurar credenciais AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/github-actions-ecr-push
-          aws-region: ${{ env.AWS_REGION }}
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ env.AWS_REGION }}
 
       - name: Auto-provisioning do repositório ECR
         run: |
@@ -140,17 +140,12 @@ jobs:
 
           if [ ! -f "$TARGET" ]; then
             echo "ERRO: Manifesto não encontrado em $TARGET"
-            echo "Arquivos disponíveis em gitops-repo/gitops/environments/dev/:"
             ls gitops-repo/gitops/environments/dev/ || true
             exit 1
           fi
 
-          echo "==> Manifesto atual:"
-          cat "$TARGET"
-
           yq eval -i ".values.image.digest = \"${{ needs.build-and-push.outputs.image_digest }}\"" "$TARGET"
-
-          echo "==> Manifesto atualizado:"
+          echo "Manifesto atualizado:"
           cat "$TARGET"
 
       - name: Commit & Push no GitOps
