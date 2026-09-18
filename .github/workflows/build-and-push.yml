@@ -1,4 +1,4 @@
-name: Deploy Enois Backend via Foxbyte Universal CI/CD
+name: Build, Push and GitOps Deploy (Enois Backend)
 
 on:
   push:
@@ -10,23 +10,160 @@ permissions:
   id-token: write
   contents: read
 
+env:
+  APP_NAME: enois-backend
+  APP_PORT: "8081"
+  HEALTH_PATH: /actuator/health
+  AWS_REGION: us-east-1
+  AWS_ACCOUNT_ID: "765009073478"
+  ECR_REPO: foxbyte/enois-backend
+  GITOPS_REPO: foxbyte-games/foxbyte-infra
+  GITOPS_BRANCH: feature/pipeline_deploy
+  GITOPS_MANIFEST: gitops/environments/dev/enois-backend.yaml
+
 jobs:
-  deploy:
-    name: Build, Scan and GitOps Deploy
-    uses: foxbyte-games/foxbyte-infra/.github/workflows/universal-service-cicd.yml@feature/pipeline_deploy
-    with:
-      app_name: "enois-backend"
-      app_type: "backend"
-      system: "enois"
-      domain: "social"
-      owner: "social-team"
-      database: "mariadb"
-      container_port: 8081
-      health_path: "/actuator/health"
-      target_environment: "dev"
-      gitops_repo: "foxbyte-games/foxbyte-infra"
-      gitops_branch: "feature/pipeline_deploy"
-      aws_region: "us-east-1"
-      aws_account_id: "765009073478"
-    secrets:
-      GITOPS_PAT: ${{ secrets.GITOPS_PAT }}
+  # ─────────────────────────────────────────────────────────────────────────────
+  # JOB 1: Build Docker, Trivy Scan e Push ECR
+  # ─────────────────────────────────────────────────────────────────────────────
+  build-and-push:
+    name: Build, Scan & Push ECR
+    runs-on: ubuntu-latest
+    outputs:
+      image_digest: ${{ steps.push.outputs.digest }}
+      image_tag:    ${{ steps.vars.outputs.SHA_SHORT }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Definir variáveis de versão
+        id: vars
+        run: |
+          echo "SHA_SHORT=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "FULL_SHA=$(git rev-parse HEAD)"          >> $GITHUB_OUTPUT
+
+      - name: Configurar credenciais AWS via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/github-actions-ecr-push
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Auto-provisioning do repositório ECR
+        run: |
+          if ! aws ecr describe-repositories --repository-names "$ECR_REPO" --region "$AWS_REGION" > /dev/null 2>&1; then
+            echo "Criando repositório ECR $ECR_REPO..."
+            aws ecr create-repository \
+              --repository-name "$ECR_REPO" \
+              --region "$AWS_REGION" \
+              --image-scanning-configuration scanOnPush=true \
+              --encryption-configuration encryptionType=AES256
+          else
+            echo "Repositório ECR $ECR_REPO já existe."
+          fi
+
+      - name: Login no Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build da imagem Docker
+        env:
+          IMAGE_URI: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO }}
+          IMAGE_TAG: ${{ steps.vars.outputs.SHA_SHORT }}
+        run: |
+          docker build \
+            --build-arg GIT_COMMIT="${{ steps.vars.outputs.FULL_SHA }}" \
+            -t "$IMAGE_URI:$IMAGE_TAG" \
+            -t "$IMAGE_URI:latest" \
+            .
+
+      - name: Trivy — Security Scan (bloqueia CRITICAL/HIGH)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO }}:${{ steps.vars.outputs.SHA_SHORT }}
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+
+      - name: Push da imagem para o ECR
+        id: push
+        env:
+          IMAGE_URI: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO }}
+          IMAGE_TAG: ${{ steps.vars.outputs.SHA_SHORT }}
+        run: |
+          docker push "$IMAGE_URI:$IMAGE_TAG"
+          docker push "$IMAGE_URI:latest"
+
+          DIGEST=$(aws ecr describe-images \
+            --repository-name "$ECR_REPO" \
+            --region "$AWS_REGION" \
+            --image-ids imageTag="$IMAGE_TAG" \
+            --query 'imageDetails[0].imageDigest' \
+            --output text)
+
+          echo "Digest imutável: $DIGEST"
+          echo "digest=$DIGEST" >> $GITHUB_OUTPUT
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # JOB 2: Atualiza o manifesto no GitOps (foxbyte-infra)
+  # ─────────────────────────────────────────────────────────────────────────────
+  gitops-promote:
+    name: GitOps Promote
+    runs-on: ubuntu-latest
+    needs: build-and-push
+
+    steps:
+      - name: Validar Digest
+        run: |
+          DIGEST="${{ needs.build-and-push.outputs.image_digest }}"
+          if [[ ! "$DIGEST" =~ ^sha256:[a-fA-F0-9]{64}$ ]]; then
+            echo "ERRO: Digest inválido: $DIGEST"
+            exit 1
+          fi
+          echo "Digest validado: $DIGEST"
+
+      - name: Checkout do repositório GitOps (foxbyte-infra)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.GITOPS_REPO }}
+          token: ${{ secrets.GITOPS_PAT }}
+          ref: ${{ env.GITOPS_BRANCH }}
+          path: gitops-repo
+
+      - name: Instalar yq
+        uses: mikefarah/yq@v4.40.5
+
+      - name: Atualizar digest no manifesto GitOps
+        run: |
+          TARGET="gitops-repo/${{ env.GITOPS_MANIFEST }}"
+
+          if [ ! -f "$TARGET" ]; then
+            echo "ERRO: Manifesto não encontrado em $TARGET"
+            echo "Arquivos disponíveis em gitops-repo/gitops/environments/dev/:"
+            ls gitops-repo/gitops/environments/dev/ || true
+            exit 1
+          fi
+
+          echo "==> Manifesto atual:"
+          cat "$TARGET"
+
+          yq eval -i ".values.image.digest = \"${{ needs.build-and-push.outputs.image_digest }}\"" "$TARGET"
+
+          echo "==> Manifesto atualizado:"
+          cat "$TARGET"
+
+      - name: Commit & Push no GitOps
+        run: |
+          cd gitops-repo
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "${{ env.GITOPS_MANIFEST }}"
+
+          if git diff --staged --quiet; then
+            echo "Sem alterações para comitar."
+          else
+            git commit -m "chore(gitops): deploy enois-backend [digest: ${{ needs.build-and-push.outputs.image_tag }}]"
+            git push origin "${{ env.GITOPS_BRANCH }}"
+            echo "Argo CD iniciará a sincronização em segundos."
+          fi
