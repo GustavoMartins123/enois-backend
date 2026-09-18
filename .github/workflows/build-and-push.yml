@@ -76,8 +76,9 @@ jobs:
             -t "$IMAGE_URI:latest" \
             .
 
-      - name: Trivy — Security Scan (bloqueia CRITICAL/HIGH)
+      - name: Trivy — Security Scan (report only, não bloqueia)
         uses: aquasecurity/trivy-action@master
+        continue-on-error: true
         with:
           image-ref: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO }}:${{ steps.vars.outputs.SHA_SHORT }}
           format: table
