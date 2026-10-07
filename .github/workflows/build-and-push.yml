@@ -1,165 +1,125 @@
-name: Build, Push and GitOps Deploy (Enois Backend)
+name: Build, Push and GitOps Deploy
 
 on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: 818928662779.dkr.ecr.us-east-1.amazonaws.com
+  ECR_REPOSITORY: enois/backend
+  GITOPS_REPO: florestaencantada/integration_gitops
+  GITOPS_BRANCH: main
+  MANIFEST_PATH: gitops/clusters/forest-dev/applications/enois-app.yaml
 
 permissions:
   id-token: write
   contents: read
 
-env:
-  APP_NAME: enois-backend
-  APP_PORT: "8081"
-  HEALTH_PATH: /actuator/health
-  AWS_REGION: us-east-1
-  AWS_ACCOUNT_ID: "818928662779"
-  ECR_REPO: enois/backend
-  GITOPS_REPO: foxbyte-games/foxbyte-infra
-  GITOPS_BRANCH: feature/pipeline_deploy
-  GITOPS_MANIFEST: gitops/environments/dev/enois-backend.yaml
-
 jobs:
-  # ─────────────────────────────────────────────────────────────────────────────
-  # JOB 1: Build Docker, Trivy Scan e Push ECR
-  # ─────────────────────────────────────────────────────────────────────────────
+  # =========================================================================
+  # ETAPA 1: Build da imagem Docker e Push para o ECR
+  # =========================================================================
   build-and-push:
-    name: Build, Scan & Push ECR
+    name: 🐳 Build & Push Docker Image
     runs-on: ubuntu-latest
     outputs:
-      image_digest: ${{ steps.push.outputs.digest }}
-      image_tag:    ${{ steps.vars.outputs.SHA_SHORT }}
+      image_tag: ${{ steps.vars.outputs.sha_short }}
+      image_ref: ${{ steps.vars.outputs.image_ref }}
 
     steps:
-      - name: Checkout
+      - name: 📥 Checkout do código
         uses: actions/checkout@v4
 
-      - name: Definir variáveis de versão
+      - name: 🏷️ Definir Tag (SHA Curto)
         id: vars
         run: |
-          echo "SHA_SHORT=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-          echo "FULL_SHA=$(git rev-parse HEAD)"          >> $GITHUB_OUTPUT
+          SHA_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "sha_short=${SHA_SHORT}" >> $GITHUB_OUTPUT
+          echo "image_ref=${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${SHA_SHORT}" >> $GITHUB_OUTPUT
 
-      - name: Configurar credenciais AWS via OIDC
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: ⚙️ Configurar Credenciais AWS via OIDC
+        uses: aws-actions/configure-aws-credentials@v6.2.4
         with:
-          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/forest-dev-github
+          role-to-assume: arn:aws:iam::818928662779:role/forest-dev-github
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Auto-provisioning do repositório ECR
-        run: |
-          if ! aws ecr describe-repositories --repository-names "$ECR_REPO" --region "$AWS_REGION" > /dev/null 2>&1; then
-            echo "Criando repositório ECR $ECR_REPO..."
-            aws ecr create-repository \
-              --repository-name "$ECR_REPO" \
-              --region "$AWS_REGION" \
-              --image-scanning-configuration scanOnPush=true \
-              --encryption-configuration encryptionType=AES256
-          else
-            echo "Repositório ECR $ECR_REPO já existe."
-          fi
-
-      - name: Login no Amazon ECR
+      - name: 🔑 Login no Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build da imagem Docker
-        env:
-          IMAGE_URI: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO }}
-          IMAGE_TAG: ${{ steps.vars.outputs.SHA_SHORT }}
-        run: |
-          docker build \
-            --build-arg GIT_COMMIT="${{ steps.vars.outputs.FULL_SHA }}" \
-            -t "$IMAGE_URI:$IMAGE_TAG" \
-            -t "$IMAGE_URI:latest" \
-            .
-
-      - name: Trivy — Security Scan (report only, não bloqueia)
-        uses: aquasecurity/trivy-action@master
-        continue-on-error: true
+      - name: Verifica e cria o repositório no ECR
+        uses: int128/create-ecr-repository-action@v1
         with:
-          image-ref: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO }}:${{ steps.vars.outputs.SHA_SHORT }}
-          format: table
-          exit-code: "1"
-          ignore-unfixed: true
-          vuln-type: os,library
-          severity: CRITICAL,HIGH
+          repository: ${{ env.ECR_REPOSITORY }}
 
-      - name: Push da imagem para o ECR
-        id: push
-        env:
-          IMAGE_URI: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO }}
-          IMAGE_TAG: ${{ steps.vars.outputs.SHA_SHORT }}
-        run: |
-          docker push "$IMAGE_URI:$IMAGE_TAG"
-          docker push "$IMAGE_URI:latest"
+      - name: ⚙️ Configurar Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-          DIGEST=$(aws ecr describe-images \
-            --repository-name "$ECR_REPO" \
-            --region "$AWS_REGION" \
-            --image-ids imageTag="$IMAGE_TAG" \
-            --query 'imageDetails[0].imageDigest' \
-            --output text)
+      - name: 🚀 Build & Push para o ECR
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ steps.vars.outputs.sha_short }}
+            ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-          echo "Digest imutável: $DIGEST"
-          echo "digest=$DIGEST" >> $GITHUB_OUTPUT
-
-  # ─────────────────────────────────────────────────────────────────────────────
-  # JOB 2: Atualiza o manifesto no GitOps (foxbyte-infra)
-  # ─────────────────────────────────────────────────────────────────────────────
-  gitops-promote:
-    name: GitOps Promote
-    runs-on: ubuntu-latest
+  # =========================================================================
+  # ETAPA 2: Promoção GitOps → EKS Floresta
+  # =========================================================================
+  promote-gitops:
+    name: 🔄 GitOps Update → EKS Floresta
     needs: build-and-push
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Validar Digest
-        run: |
-          DIGEST="${{ needs.build-and-push.outputs.image_digest }}"
-          if [[ ! "$DIGEST" =~ ^sha256:[a-fA-F0-9]{64}$ ]]; then
-            echo "ERRO: Digest inválido: $DIGEST"
-            exit 1
-          fi
-          echo "Digest validado: $DIGEST"
-
-      - name: Checkout do repositório GitOps (foxbyte-infra)
+      - name: 📥 Checkout do Repositório GitOps (integration_onprem)
         uses: actions/checkout@v4
         with:
           repository: ${{ env.GITOPS_REPO }}
-          token: ${{ secrets.GITOPS_TOKEN }}
           ref: ${{ env.GITOPS_BRANCH }}
+          token: ${{ secrets.GITOPS_TOKEN }}
           path: gitops-repo
 
-      - name: Instalar yq
-        uses: mikefarah/yq@v4.40.5
-
-      - name: Atualizar digest no manifesto GitOps
-        run: |
-          TARGET="gitops-repo/${{ env.GITOPS_MANIFEST }}"
-
-          if [ ! -f "$TARGET" ]; then
-            echo "ERRO: Manifesto não encontrado em $TARGET"
-            ls gitops-repo/gitops/environments/dev/ || true
-            exit 1
-          fi
-
-          yq eval -i ".values.image.digest = \"${{ needs.build-and-push.outputs.image_digest }}\"" "$TARGET"
-          echo "Manifesto atualizado:"
-          cat "$TARGET"
-
-      - name: Commit & Push no GitOps
+      - name: ✏️ Atualizar Tag da Imagem no Manifesto
         run: |
           cd gitops-repo
-          git config user.name  "github-actions[bot]"
+          echo "==> Atualizando ${{ env.MANIFEST_PATH }} para tag ${{ needs.build-and-push.outputs.image_tag }}"
+
+          # Atualiza a tag da imagem no skilrush-front
+          sed -i -E \
+            "s|(image:\s*${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:).*|\1${{ needs.build-and-push.outputs.image_tag }}|g" \
+            "${{ env.MANIFEST_PATH }}"
+
+          echo "Diff gerado:"
+          git diff "${{ env.MANIFEST_PATH }}"
+
+      - name: 🚀 Commit & Push no GitOps
+        run: |
+          cd gitops-repo
+          git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "${{ env.GITOPS_MANIFEST }}"
+
+          git add "${{ env.MANIFEST_PATH }}"
 
           if git diff --staged --quiet; then
-            echo "Sem alterações para comitar."
-          else
-            git commit -m "chore(gitops): deploy enois-backend [digest: ${{ needs.build-and-push.outputs.image_tag }}]"
-            git push origin "${{ env.GITOPS_BRANCH }}"
-            echo "Argo CD iniciará a sincronização em segundos."
+            echo "Nenhuma mudança de imagem, pulando commit."
+            exit 0
           fi
+
+          git commit \
+            -m "ci(skillify-frontend): atualiza imagem para ${{ needs.build-and-push.outputs.image_tag }}" \
+            -m "Disparado pelo commit ${{ github.sha }} por @${{ github.actor }}"
+
+          git push origin ${{ env.GITOPS_BRANCH }}
