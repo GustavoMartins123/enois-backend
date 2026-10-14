@@ -23,7 +23,6 @@ import com.socialcoisa.rede.shared.web.CurrentUser;
 import com.socialcoisa.rede.shared.web.CurrentUserResolver;
 
 @RestController
-@RequestMapping("/api")
 class ReportController {
 
 	private final ModerationService moderationService;

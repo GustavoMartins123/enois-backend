@@ -35,7 +35,6 @@ import com.socialcoisa.rede.shared.web.CurrentUser;
 import com.socialcoisa.rede.shared.web.CurrentUserResolver;
 
 @RestController
-@RequestMapping("/api")
 class ProfileController {
 
 	private final GetMeUseCase getMeUseCase;
