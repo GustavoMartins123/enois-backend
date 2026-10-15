@@ -156,8 +156,10 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 		Map<String, UserProfile> profiles = userProfileRepository.findAllByIds(authorIds).stream()
 			.collect(Collectors.toMap(UserProfile::id, Function.identity()));
 		List<PostId> postIds = visible.stream().map(Post::id).toList();
-		Map<PostId, ReactionType> currentUserReactions = postInteractionRepository
-			.findReactionsByUserAndPostIds(currentUserId, postIds);
+		// Sem sessao (link compartilhado aberto por quem recebeu) nao ha reacao do visitante para
+		// buscar: a leitura publica nao pode depender de um usuario logado.
+		Map<PostId, ReactionType> currentUserReactions = currentUserId == null ? Map.of()
+			: postInteractionRepository.findReactionsByUserAndPostIds(currentUserId, postIds);
 		return visible.stream()
 			.map(post -> {
 				UserProfile profile = profiles.get(post.authorId().value());

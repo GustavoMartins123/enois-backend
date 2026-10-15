@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -45,6 +46,8 @@ import com.socialcoisa.rede.feed.application.port.in.SavePostUseCase;
 import com.socialcoisa.rede.feed.application.port.in.SharePostUseCase;
 import com.socialcoisa.rede.feed.application.port.out.PostInteractionRepository;
 import com.socialcoisa.rede.feed.domain.PostId;
+import com.socialcoisa.rede.feed.domain.UserId;
+import com.socialcoisa.rede.shared.blocks.BlockedUsersReader;
 import com.socialcoisa.rede.idempotency.application.CommandResponse;
 import com.socialcoisa.rede.idempotency.application.IdempotencyApplicationService;
 import com.socialcoisa.rede.shared.web.ApiException;
@@ -73,6 +76,7 @@ class FeedController {
 	private final PostInteractionRepository postInteractionRepository;
 	private final CommentRepository commentRepository;
 	private final CursorCodec cursorCodec;
+	private final BlockedUsersReader blockedUsersReader;
 
 	FeedController(PublishPostUseCase publishPostUseCase, GetFeedUseCase getFeedUseCase, GetPostUseCase getPostUseCase,
 			GetProfilePostsUseCase getProfilePostsUseCase, DeletePostUseCase deletePostUseCase,
@@ -81,7 +85,7 @@ class FeedController {
 			SavePostUseCase savePostUseCase, SharePostUseCase sharePostUseCase,
 			IdempotencyApplicationService idempotency, CurrentUserResolver currentUserResolver,
 			PostInteractionRepository postInteractionRepository, CommentRepository commentRepository,
-			CursorCodec cursorCodec) {
+			CursorCodec cursorCodec, BlockedUsersReader blockedUsersReader) {
 		this.publishPostUseCase = publishPostUseCase;
 		this.getFeedUseCase = getFeedUseCase;
 		this.getPostUseCase = getPostUseCase;
@@ -98,6 +102,7 @@ class FeedController {
 		this.postInteractionRepository = postInteractionRepository;
 		this.commentRepository = commentRepository;
 		this.cursorCodec = cursorCodec;
+		this.blockedUsersReader = blockedUsersReader;
 	}
 
 	@PostMapping("/feed/posts")
@@ -121,12 +126,27 @@ class FeedController {
 		return getFeedUseCase.getFeed(new GetFeedQuery(user.id(), cursorCodec.decode(cursor), limit, tab));
 	}
 
+	/**
+	 * Leitura de um post unico. E PUBLICA de proposito: e para onde o link compartilhado aponta, e
+	 * exigir sessao aqui fazia o destinatario cair no login (ou ver "post nao encontrado").
+	 * A sessao, quando existe, so acrescenta o estado do proprio visitante (reacao) e respeita
+	 * bloqueio; sem ela a leitura e anonima.
+	 */
 	@GetMapping("/feed/posts/{postId}")
 	Object post(@RequestHeader(value = USER_HEADER, required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String postId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		return getPostUseCase.getPost(postId, user.id());
+		return getPostUseCase.getPost(postId, viewerIdOrNull(userId, sessionToken));
+	}
+
+	/** Resolve o visitante quando ha sessao valida e verificada; sem isso devolve null (leitura anonima). */
+	private UserId viewerIdOrNull(String userId, String sessionToken) {
+		try {
+			return currentUserResolver.resolve(userId, sessionToken).id();
+		}
+		catch (RuntimeException exception) {
+			return null;
+		}
 	}
 
 	@GetMapping("/users/{username}/posts")
@@ -262,12 +282,16 @@ class FeedController {
 				new PostId(postId)))));
 	}
 
+	/** Quem reagiu: leitura publica (a pagina do post tambem e). O visitante so esconde bloqueados. */
 	@GetMapping("/feed/posts/{postId}/reactions")
 	Object listReactions(@RequestHeader(value = USER_HEADER, required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String postId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		var reactions = postInteractionRepository.findReactionsByPostId(new PostId(postId), null, 50);
+		UserId viewer = viewerIdOrNull(userId, sessionToken);
+		Set<String> hidden = blockedUsersReader.hiddenIdsFor(viewer == null ? null : viewer.value());
+		var reactions = postInteractionRepository.findReactionsByPostId(new PostId(postId), null, 50).stream()
+			.filter(reaction -> !hidden.contains(reaction.userId()))
+			.toList();
 		var summary = reactions.stream()
 			.collect(Collectors.groupingBy(PostInteractionRepository.ReactionSummary::type, Collectors.counting()));
 		return Map.of("postId", postId, "summary", summary, "reactions", reactions);

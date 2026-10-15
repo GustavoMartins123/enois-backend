@@ -220,6 +220,10 @@ delete from flyway_schema_history where version = '<versao que falhou>';    # ou
   aberto. No app: `/suporte`, alcançável pelo menu da conta.
 - **Consentimento**: `POST /auth/signup` exige `acceptedTerms: true` (termos + 18 anos); o instante do aceite é
   gravado em `users.terms_accepted_at`. Sem esse campo a resposta é `400 TERMS_NOT_ACCEPTED`.
+- **Link compartilhado**: `GET /feed/posts/{postId}` e `GET /feed/posts/{postId}/reactions` são **públicos** —
+  é para onde o link de compartilhamento aponta e o destinatário não tem sessão. A sessão, quando existe, só
+  acrescenta o estado do visitante (reação) e esconde quem ele bloqueou. Escrever (comentar, reagir, salvar,
+  compartilhar) continua exigindo sessão.
 - **Confirmação de e-mail**: o cadastro **não** emite sessão. `POST /auth/signup` responde
   `{email, verificationRequired: true, emailSent}` e manda um link (`/auth/verify?token=...`) com token de
   hash SHA-256, validade de 24h e uso único; o instante da confirmação fica em `users.email_verified_at`.
