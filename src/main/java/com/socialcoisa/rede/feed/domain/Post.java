@@ -76,6 +76,19 @@ public class Post {
 		return true;
 	}
 
+	/**
+	 * Reativa um post excluido (desfazer da exclusao). Como a exclusao e logica, reverter e seguro:
+	 * o conteudo nunca saiu do banco. So faz sentido a partir de DELETED.
+	 */
+	public boolean undelete() {
+		if (status != PostStatus.DELETED) {
+			return false;
+		}
+		this.status = PostStatus.ACTIVE;
+		this.deletedAt = null;
+		return true;
+	}
+
 	public void addReaction() {
 		counters = counters.incrementReactions();
 	}

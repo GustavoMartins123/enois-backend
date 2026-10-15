@@ -39,6 +39,7 @@ import com.socialcoisa.rede.feed.application.port.in.BulkDeletePostsUseCase;
 import com.socialcoisa.rede.feed.application.port.in.CommentOnPostUseCase;
 import com.socialcoisa.rede.feed.application.port.in.DeletePostUseCase;
 import com.socialcoisa.rede.feed.application.port.in.EditPostUseCase;
+import com.socialcoisa.rede.feed.application.port.in.RestorePostUseCase;
 import com.socialcoisa.rede.feed.application.port.in.GetCommentsUseCase;
 import com.socialcoisa.rede.feed.application.port.in.GetFeedUseCase;
 import com.socialcoisa.rede.feed.application.port.in.GetPostUseCase;
@@ -72,6 +73,7 @@ class FeedController {
 	private final GetProfilePostsUseCase getProfilePostsUseCase;
 	private final DeletePostUseCase deletePostUseCase;
 	private final EditPostUseCase editPostUseCase;
+	private final RestorePostUseCase restorePostUseCase;
 	private final BulkDeletePostsUseCase bulkDeletePostsUseCase;
 	private final CommentOnPostUseCase commentOnPostUseCase;
 	private final GetCommentsUseCase getCommentsUseCase;
@@ -88,7 +90,7 @@ class FeedController {
 
 	FeedController(PublishPostUseCase publishPostUseCase, GetFeedUseCase getFeedUseCase, GetPostUseCase getPostUseCase,
 			GetProfilePostsUseCase getProfilePostsUseCase, DeletePostUseCase deletePostUseCase,
-			EditPostUseCase editPostUseCase,
+			EditPostUseCase editPostUseCase, RestorePostUseCase restorePostUseCase,
 			BulkDeletePostsUseCase bulkDeletePostsUseCase, CommentOnPostUseCase commentOnPostUseCase,
 			GetCommentsUseCase getCommentsUseCase, ReactToPostUseCase reactToPostUseCase,
 			SavePostUseCase savePostUseCase, SharePostUseCase sharePostUseCase,
@@ -101,6 +103,7 @@ class FeedController {
 		this.getProfilePostsUseCase = getProfilePostsUseCase;
 		this.deletePostUseCase = deletePostUseCase;
 		this.editPostUseCase = editPostUseCase;
+		this.restorePostUseCase = restorePostUseCase;
 		this.bulkDeletePostsUseCase = bulkDeletePostsUseCase;
 		this.commentOnPostUseCase = commentOnPostUseCase;
 		this.getCommentsUseCase = getCommentsUseCase;
@@ -201,6 +204,18 @@ class FeedController {
 		return idempotency.execute(user.id(), "PATCH", "/api/feed/posts/{postId}", idempotencyKey, hash,
 			() -> new CommandResponse(200, editPostUseCase.edit(new EditPostCommand(user.id(), new PostId(postId),
 				request.content(), request.tags()))));
+	}
+
+	/** Desfaz a exclusao do proprio post (o "desfazer" do aviso de exclusao). */
+	@PostMapping("/feed/posts/{postId}/restore")
+	ResponseEntity<String> restore(@RequestHeader(value = USER_HEADER, required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@PathVariable String postId) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		String hash = idempotency.hash(Map.of("postId", postId, "op", "restore"));
+		return idempotency.execute(user.id(), "POST", "/api/feed/posts/{postId}/restore", idempotencyKey, hash,
+			() -> new CommandResponse(200, restorePostUseCase.restore(user.id(), new PostId(postId))));
 	}
 
 	@PostMapping("/feed/posts/bulk-delete")
