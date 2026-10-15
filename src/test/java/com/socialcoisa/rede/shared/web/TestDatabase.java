@@ -1,6 +1,7 @@
 package com.socialcoisa.rede.shared.web;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -44,6 +45,25 @@ public final class TestDatabase {
 		require().update("""
 				insert into oauth_authorization_requests (state, provider, nonce, user_id, expires_at, created_at)
 				values (?, ?, ?, null, ?, ?)""", state, provider, nonce, expiresAt, Instant.now());
+	}
+
+	/**
+	 * Insere uma vaga direto no banco. Os testes de busca precisam de um acervo controlado e nao
+	 * podem passar pelo gate de reputacao (>150) do POST /jobs.
+	 */
+	public static void insertJob(String id, String title, String company, String location, String type, String level,
+			List<String> skills, Instant postedAt) {
+		// Cada teste re-semeia o mesmo acervo: limpa antes para o id nao colidir.
+		require().update("delete from job_skills where job_id = ?", id);
+		require().update("delete from jobs where id = ?", id);
+		require().update("""
+				insert into jobs (id, title, company, location, type, level, salary, currency, posted_by,
+					posted_at, updated_at, community_agreed_at)
+				values (?, ?, ?, ?, ?, ?, null, 'BRL', 'user_job_seed', ?, ?, ?)""",
+			id, title, company, location, type, level, postedAt, postedAt, postedAt);
+		for (String skill : skills) {
+			require().update("insert into job_skills (job_id, skill) values (?, ?)", id, skill);
+		}
 	}
 
 	public static Optional<String> userIdByEmail(String email) {

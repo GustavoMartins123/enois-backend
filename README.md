@@ -198,6 +198,12 @@ delete from flyway_schema_history where version = '<versao que falhou>';    # ou
   em que me candidatei; `POST /jobs/{id}/applications` é a inscrição (`409` se repetida); `PUT`/`DELETE /jobs/{id}`
   são do autor. No app: `/vagas` (listar/criar/inscrever), `/vagas/{id}` (detalhe + inscrever/salvar/excluir) e
   `/vagas/minhas` (minhas vagas e minhas candidaturas).
+- **Busca booleana nas vagas**: `GET /jobs?query=...` entende `AND`/`E`, `OR`/`OU`, `NOT`/`NÃO`/`NAO`,
+  `"frase exata"`, `-termo` (exclui), `+termo` (exige) e parênteses — sem operador, os termos valem como E
+  (precedência: NOT > AND > OR). Os termos casam com título, empresa, local, tipo, nível e habilidades.
+  A entrada nunca dá erro de sintaxe (parêntese/aspas soltos viram texto literal); o que existe é um teto de
+  64 termos e 12 níveis de parênteses, e `%`/`_` são escapados para não virar coringa. Os filtros de nível,
+  tipo, local e habilidades são **combinados** com a busca (antes eram um `else if` em cadeia e se anulavam).
 - **Moeda da vaga**: o corpo de `POST /jobs` aceita `currency` (`BRL` padrão, `USD`, `EUR`) e `salary` só com os
   números — a aplicação remove o símbolo que o autor digitar e a exibição remonta o texto com a moeda escolhida
   (`R$ 8.000 – R$ 12.000`, `US$ 90,000`). O símbolo nunca fica duplicado nem trocado, inclusive em vagas antigas.

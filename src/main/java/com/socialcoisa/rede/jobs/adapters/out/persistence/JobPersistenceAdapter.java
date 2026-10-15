@@ -12,21 +12,35 @@ import org.springframework.util.StringUtils;
 
 import com.socialcoisa.rede.jobs.application.port.out.JobRepository;
 import com.socialcoisa.rede.jobs.domain.Job;
+import com.socialcoisa.rede.shared.search.BooleanQuery;
+
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 
 @Repository
 class JobPersistenceAdapter implements JobRepository {
 
+	/** Caracteres que o LIKE interpreta: precisam ser escapados para o texto ser literal. */
+	private static final char LIKE_ESCAPE = '\\';
+
 	private final SpringDataJobJpaRepository springData;
 	private final SpringDataJobApplicationJpaRepository applicationRepo;
 	private final SpringDataJobSaveJpaRepository saveRepo;
+	private final EntityManager entityManager;
 	private final Clock clock;
 
 	JobPersistenceAdapter(SpringDataJobJpaRepository springData,
 			SpringDataJobApplicationJpaRepository applicationRepo,
-			SpringDataJobSaveJpaRepository saveRepo, Clock clock) {
+			SpringDataJobSaveJpaRepository saveRepo, EntityManager entityManager, Clock clock) {
 		this.springData = springData;
 		this.applicationRepo = applicationRepo;
 		this.saveRepo = saveRepo;
+		this.entityManager = entityManager;
 		this.clock = clock;
 	}
 
@@ -40,25 +54,103 @@ class JobPersistenceAdapter implements JobRepository {
 		return springData.findById(id).map(JobJpaEntity::toDomain);
 	}
 
+	/**
+	 * Lista as vagas aplicando TODOS os filtros informados.
+	 *
+	 * Antes cada filtro era um `else if`, entao buscar por texto descartava o nivel/tipo/local
+	 * escolhidos (e vice-versa). Agora os filtros sao combinados, e a busca textual aceita a
+	 * sintaxe booleana de {@link BooleanQuery} (AND/OR/NOT, frases, parenteses, {@code -termo}).
+	 */
 	@Override
 	public List<Job> findAll(String query, String type, String level, String location, List<String> skills,
 			Instant before, int limit) {
-		PageRequest page = PageRequest.of(0, limit);
-		List<JobJpaEntity> entities;
-		if (StringUtils.hasText(query)) {
-			entities = springData.searchByQuery(query, before, page);
-		} else if (skills != null && !skills.isEmpty()) {
-			entities = springData.findBySkills(skills, before, page);
-		} else if (StringUtils.hasText(level)) {
-			entities = springData.findByLevel(level, before, page);
-		} else if (StringUtils.hasText(type)) {
-			entities = springData.findByType(type, before, page);
-		} else if (StringUtils.hasText(location)) {
-			entities = springData.findByLocation(location, before, page);
-		} else {
-			entities = springData.findAllBefore(before, page);
+		CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+		CriteriaQuery<JobJpaEntity> criteria = cb.createQuery(JobJpaEntity.class);
+		Root<JobJpaEntity> root = criteria.from(JobJpaEntity.class);
+
+		List<Predicate> filters = new ArrayList<>();
+		if (before != null) {
+			filters.add(cb.lessThan(root.get("postedAt"), before));
 		}
-		return entities.stream().map(JobJpaEntity::toDomain).toList();
+		if (StringUtils.hasText(type)) {
+			filters.add(cb.equal(root.get("type"), type.trim()));
+		}
+		if (StringUtils.hasText(level)) {
+			filters.add(cb.equal(root.get("level"), level.trim()));
+		}
+		if (StringUtils.hasText(location)) {
+			filters.add(cb.equal(root.get("location"), location.trim()));
+		}
+		if (skills != null) {
+			for (String skill : skills.stream().filter(StringUtils::hasText).map(String::trim).toList()) {
+				filters.add(textMatch(criteria, cb, root, skill));
+			}
+		}
+
+		BooleanQuery booleanQuery = BooleanQuery.parse(query);
+		if (!booleanQuery.isEmpty()) {
+			filters.add(nodePredicate(criteria, cb, root, booleanQuery.root()));
+		}
+
+		criteria.select(root)
+			.where(filters.isEmpty() ? cb.conjunction() : cb.and(filters.toArray(Predicate[]::new)))
+			.orderBy(cb.desc(root.get("postedAt")));
+
+		return entityManager.createQuery(criteria)
+			.setMaxResults(limit)
+			.getResultList()
+			.stream()
+			.map(JobJpaEntity::toDomain)
+			.toList();
+	}
+
+	private Predicate nodePredicate(CriteriaQuery<JobJpaEntity> criteria, CriteriaBuilder cb, Root<JobJpaEntity> root,
+			BooleanQuery.Node node) {
+		return switch (node) {
+			case BooleanQuery.MatchAll ignored -> cb.conjunction();
+			case BooleanQuery.Term term -> textMatch(criteria, cb, root, term.text());
+			case BooleanQuery.Phrase phrase -> textMatch(criteria, cb, root, phrase.text());
+			case BooleanQuery.Not not -> cb.not(nodePredicate(criteria, cb, root, not.child()));
+			case BooleanQuery.And and -> cb.and(and.children().stream()
+				.map(child -> nodePredicate(criteria, cb, root, child))
+				.toArray(Predicate[]::new));
+			case BooleanQuery.Or or -> cb.or(or.children().stream()
+				.map(child -> nodePredicate(criteria, cb, root, child))
+				.toArray(Predicate[]::new));
+		};
+	}
+
+	/**
+	 * Um termo casa quando aparece em qualquer campo pesquisavel da vaga (titulo, empresa, local,
+	 * tipo, nivel ou habilidade) — o mesmo texto que a pessoa leria no card.
+	 *
+	 * O `coalesce` evita que um campo nulo torne o LIKE desconhecido (e, dentro de um NOT, sumisse
+	 * com a vaga por engano).
+	 */
+	private Predicate textMatch(CriteriaQuery<JobJpaEntity> criteria, CriteriaBuilder cb, Root<JobJpaEntity> root,
+			String rawText) {
+		String pattern = "%" + escapeLike(BooleanQuery.normalize(rawText)) + "%";
+		List<Predicate> perField = new ArrayList<>();
+		for (String field : List.of("title", "company", "location", "type", "level")) {
+			perField.add(cb.like(cb.lower(cb.coalesce(root.get(field), "")), pattern, LIKE_ESCAPE));
+		}
+		perField.add(skillMatch(criteria, cb, root, pattern));
+		return cb.or(perField.toArray(Predicate[]::new));
+	}
+
+	/** Habilidades ficam em tabela filha: casa por substring sem duplicar a vaga. */
+	private Predicate skillMatch(CriteriaQuery<JobJpaEntity> criteria, CriteriaBuilder cb, Root<JobJpaEntity> root,
+			String pattern) {
+		Subquery<Integer> subquery = criteria.subquery(Integer.class);
+		Root<JobJpaEntity> subRoot = subquery.from(JobJpaEntity.class);
+		Join<JobJpaEntity, String> skill = subRoot.join("skills");
+		subquery.select(cb.literal(1))
+			.where(cb.equal(subRoot.get("id"), root.get("id")), cb.like(cb.lower(skill), pattern, LIKE_ESCAPE));
+		return cb.exists(subquery);
+	}
+
+	private String escapeLike(String value) {
+		return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
 	}
 
 	@Override
