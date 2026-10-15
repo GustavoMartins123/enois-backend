@@ -130,10 +130,13 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		}
 		String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
 		userProfileRepository.findByEmail(normalizedEmail).ifPresent(profile -> {
-			String token = newResetToken();
+			String rawToken = newResetToken();
 			Instant now = clock.instant();
-			passwordResetTokenRepository.save(PasswordResetToken.create(token, profile.id(), now.plus(RESET_TOKEN_TTL), now));
-			emailService.sendPasswordResetEmail(normalizedEmail, profile.name(), token);
+			// So o hash vai para o banco; o token em claro existe apenas no e-mail.
+			passwordResetTokenRepository.deleteByUserId(profile.id());
+			passwordResetTokenRepository.save(
+				PasswordResetToken.create(hashToken(rawToken), profile.id(), now.plus(RESET_TOKEN_TTL), now));
+			emailService.sendPasswordResetEmail(normalizedEmail, profile.name(), rawToken);
 		});
 	}
 
@@ -146,7 +149,8 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		if (!StringUtils.hasText(newPassword) || newPassword.length() < 8) {
 			throw new ApiException(400, "WEAK_PASSWORD", "Senha deve ter pelo menos 8 caracteres.");
 		}
-		PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(token.trim())
+		String tokenHash = hashToken(token.trim());
+		PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(tokenHash)
 			.orElseThrow(() -> new ApiException(404, "INVALID_TOKEN", "Token invalido ou nao encontrado."));
 		if (resetToken.isExpired(clock.instant())) {
 			throw new ApiException(410, "TOKEN_EXPIRED", "Token de reset expirado.");
@@ -157,7 +161,7 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		StoredCredential credential = credentialRepository.findByUserId(resetToken.userId())
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
 		credentialRepository.save(credential.userId(), credential.email(), passwordHasher.hash(newPassword));
-		passwordResetTokenRepository.markUsed(token.trim());
+		passwordResetTokenRepository.markUsed(tokenHash);
 		authSessionRepository.revokeAllByUser(resetToken.userId(), clock.instant());
 	}
 
@@ -288,6 +292,18 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 			.replaceAll("[^a-z0-9]+", "-")
 			.replaceAll("(^-|-$)", "");
 		return StringUtils.hasText(slug) ? slug : "user";
+	}
+
+	/** Hash do token de reset: so o hash e persistido, para nao guardar credencial em claro. */
+	private String hashToken(String rawToken) {
+		try {
+			byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+				.digest(rawToken.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+			return java.util.HexFormat.of().formatHex(digest);
+		}
+		catch (java.security.NoSuchAlgorithmException exception) {
+			throw new ApiException(500, "HASH_FAILURE", "Nao foi possivel processar o token.");
+		}
 	}
 
 	private void validateSignup(SignupCommand command) {

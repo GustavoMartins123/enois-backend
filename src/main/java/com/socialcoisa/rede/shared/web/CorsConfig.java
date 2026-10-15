@@ -11,6 +11,8 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @Configuration
 class CorsConfig {
 
+	private static final String[] DEFAULT_ORIGINS = { "https://enois.ia.br", "http://localhost:5173" };
+
 	@Value("${rede.cors.allowed-origins:}")
 	private String allowedOrigins;
 
@@ -21,8 +23,9 @@ class CorsConfig {
 			public void addCorsMappings(CorsRegistry registry) {
 				// allowedOriginPatterns e obrigatorio para aceitar "*" junto com
 				// allowCredentials(true); allowedOrigins("*") lanca excecao em toda requisicao.
+				// Sem configuracao explicita, restringe as origens conhecidas do app.
 				String[] patterns = allowedOrigins.isBlank()
-					? new String[] { "*" }
+					? DEFAULT_ORIGINS
 					: Arrays.stream(allowedOrigins.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toArray(String[]::new);
 				registry.addMapping("/**")
 					.allowedOriginPatterns(patterns)

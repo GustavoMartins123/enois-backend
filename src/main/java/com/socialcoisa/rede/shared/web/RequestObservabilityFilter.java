@@ -41,8 +41,10 @@ class RequestObservabilityFilter extends OncePerRequestFilter {
 
 	private String requestId(HttpServletRequest request) {
 		String header = request.getHeader(REQUEST_ID_HEADER);
-		if (header != null && !header.isBlank()) {
-			return header.trim();
+		// O valor vem do cliente e vai para header de resposta e para o log: aceita apenas um
+		// identificador seguro para nao permitir injecao de cabecalho/log.
+		if (header != null && header.matches("^[A-Za-z0-9._-]{8,64}$")) {
+			return header;
 		}
 		return UUID.randomUUID().toString().replace("-", "");
 	}

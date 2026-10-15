@@ -11,4 +11,7 @@ public interface PasswordResetTokenRepository {
 	Optional<PasswordResetToken> findByToken(String token);
 
 	void markUsed(String token);
+
+	/** Remove tokens anteriores do usuario: apenas um reset fica valido por vez. */
+	void deleteByUserId(String userId);
 }

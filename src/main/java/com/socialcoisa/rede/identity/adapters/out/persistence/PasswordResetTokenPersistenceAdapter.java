@@ -30,6 +30,11 @@ class PasswordResetTokenPersistenceAdapter implements PasswordResetTokenReposito
 	}
 
 	@Override
+	public void deleteByUserId(String userId) {
+		repository.deleteByUserId(userId);
+	}
+
+	@Override
 	public void markUsed(String token) {
 		repository.findById(token).ifPresent(entity -> {
 			entity.markUsed(clock.instant());
