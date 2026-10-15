@@ -58,4 +58,12 @@ class CommunityMemberJpaEntity {
 		return CommunityMember.restore(id, communityId, userId, role, joinedAt);
 	}
 
+	void changeRole(MemberRole role) {
+		this.role = role;
+	}
+
+	String communityId() {
+		return communityId;
+	}
+
 }

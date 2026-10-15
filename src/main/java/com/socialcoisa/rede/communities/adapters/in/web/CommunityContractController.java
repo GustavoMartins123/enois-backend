@@ -154,6 +154,52 @@ class CommunityContractController {
 			});
 	}
 
+	/** Comunidades do usuario (menu lateral). Exige sessao: e a lista pessoal, nao o catalogo publico. */
+	@GetMapping("/mine")
+	PageResponse<CommunityView> mine(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestParam(defaultValue = "20") int limit) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		var items = communityService.listMine(user.id().value(), limit).stream()
+			.map(c -> new CommunityView(c.id(), c.name(), c.description(), communityService.countMembers(c.id()),
+				c.topic(), c.cover(), c.avatar(), true))
+			.toList();
+		return new PageResponse<>(items, null);
+	}
+
+	/** Transfere a administracao para outro membro (so o dono atual). */
+	@PostMapping("/{communityId}/transfer")
+	ResponseEntity<String> transfer(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@PathVariable String communityId, @RequestBody TransferOwnershipRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		String hash = idempotency.hash(Map.of("communityId", communityId, "newOwnerId",
+			request.newOwnerId() == null ? "" : request.newOwnerId()));
+		return idempotency.execute(user.id(), "POST", "/api/communities/{communityId}/transfer", idempotencyKey, hash,
+			() -> {
+				Community c = communityService.transferOwnership(communityId, user.id().value(), request.newOwnerId());
+				return new CommandResponse(200, new CommunityView(c.id(), c.name(), c.description(),
+					communityService.countMembers(c.id()), c.topic(), c.cover(), c.avatar(),
+					communityService.isMember(c.id(), user.id().value())));
+			});
+	}
+
+	/** Exclui a comunidade (so o dono). */
+	@DeleteMapping("/{communityId}")
+	ResponseEntity<String> delete(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@PathVariable String communityId) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		String hash = idempotency.hash(Map.of("communityId", communityId));
+		return idempotency.execute(user.id(), "DELETE", "/api/communities/{communityId}", idempotencyKey, hash,
+			() -> {
+				communityService.deleteCommunity(communityId, user.id().value());
+				return new CommandResponse(200, new StatusResponse(communityId, "DELETED"));
+			});
+	}
+
 	@GetMapping("/{communityId}/members")
 	PageResponse<MemberView> members(@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
@@ -193,6 +239,9 @@ class CommunityContractController {
 	}
 
 	record CommunityRequest(String name, String description, String topic, String cover, String avatar) {
+	}
+
+	record TransferOwnershipRequest(String newOwnerId) {
 	}
 
 	record MemberView(String userId, String username, String name, String avatar, String role) {

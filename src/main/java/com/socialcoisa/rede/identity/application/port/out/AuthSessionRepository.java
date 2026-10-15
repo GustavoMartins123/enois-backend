@@ -5,7 +5,8 @@ import java.util.Optional;
 
 public interface AuthSessionRepository {
 
-	void save(String token, String refreshToken, String userId, Instant createdAt, Instant expiresAt);
+	void save(String token, String refreshToken, String userId, Instant createdAt, Instant expiresAt,
+			Instant refreshExpiresAt);
 
 	Optional<String> findActiveUserId(String token, Instant now);
 

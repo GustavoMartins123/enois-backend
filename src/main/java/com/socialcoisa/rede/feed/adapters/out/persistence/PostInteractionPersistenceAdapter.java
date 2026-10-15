@@ -33,23 +33,29 @@ class PostInteractionPersistenceAdapter implements PostInteractionRepository {
 	}
 
 	@Override
-	public boolean addReaction(String id, PostId postId, UserId userId, ReactionType type, Instant createdAt) {
+	public ReactionOutcome addReaction(String id, PostId postId, UserId userId, ReactionType type, Instant createdAt) {
 		var existing = reactionRepository.findByPostIdAndUserId(postId.value(), userId.value());
+		boolean replacing = false;
 		if (existing.isPresent()) {
 			var old = existing.get();
 			if (old.getReactionType() == type) {
+				// Toggle: a mesma reacao foi tocada de novo -> desfaz.
 				reactionRepository.delete(old);
-				return false;
+				reactionRepository.flush();
+				return ReactionOutcome.REMOVED;
 			}
 			reactionRepository.delete(old);
 			reactionRepository.flush();
+			replacing = true;
 		}
 		try {
 			reactionRepository.saveAndFlush(new ReactionJpaEntity(id, postId.value(), userId.value(), type, createdAt));
-			return true;
+			return replacing ? ReactionOutcome.REPLACED : ReactionOutcome.ADDED;
 		}
 		catch (DataIntegrityViolationException exception) {
-			return false;
+			// Corrida: outra requisicao ja gravou a reacao deste usuario; o total ja a contempla.
+			// Tratar como troca evita incrementar de novo.
+			return ReactionOutcome.REPLACED;
 		}
 	}
 

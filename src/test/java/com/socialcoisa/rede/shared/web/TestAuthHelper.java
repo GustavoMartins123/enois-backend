@@ -14,7 +14,7 @@ import tools.jackson.databind.ObjectMapper;
 
 public class TestAuthHelper {
 
-	public record AuthSession(String token, String userId) {}
+	public record AuthSession(String token, String refreshToken, String userId) {}
 
 	private final MockMvc mockMvc;
 	private final ObjectMapper objectMapper;
@@ -59,6 +59,6 @@ public class TestAuthHelper {
 			.andReturn();
 
 		JsonNode node = objectMapper.readTree(login.getResponse().getContentAsString());
-		return new AuthSession(node.get("token").asText(), createdUserId);
+		return new AuthSession(node.get("token").asText(), node.get("refreshToken").asText(), createdUserId);
 	}
 }

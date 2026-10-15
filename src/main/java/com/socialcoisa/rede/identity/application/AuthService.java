@@ -379,7 +379,7 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		Instant refreshExpiresAt = now.plus(refreshTokenTtl);
 		String token = newToken();
 		String refreshToken = newToken();
-		authSessionRepository.save(token, refreshToken, profile.id(), now, expiresAt);
+		authSessionRepository.save(token, refreshToken, profile.id(), now, expiresAt, refreshExpiresAt);
 		return new AuthResponse(token, refreshToken, expiresAt, refreshExpiresAt, AuthUserView.from(profile));
 	}
 

@@ -40,13 +40,16 @@ class MessagingContractController {
 	private final CurrentUserResolver currentUserResolver;
 	private final MessagingService messagingService;
 	private final CursorCodec cursorCodec;
+	private final com.socialcoisa.rede.shared.blocks.BlockedUsersReader blockedUsersReader;
 
 	MessagingContractController(IdempotencyApplicationService idempotency, CurrentUserResolver currentUserResolver,
-			MessagingService messagingService, CursorCodec cursorCodec) {
+			MessagingService messagingService, CursorCodec cursorCodec,
+			com.socialcoisa.rede.shared.blocks.BlockedUsersReader blockedUsersReader) {
 		this.idempotency = idempotency;
 		this.currentUserResolver = currentUserResolver;
 		this.messagingService = messagingService;
 		this.cursorCodec = cursorCodec;
+		this.blockedUsersReader = blockedUsersReader;
 	}
 
 	@GetMapping
@@ -159,6 +162,41 @@ class MessagingContractController {
 			});
 	}
 
+	/**
+	 * Abre (ou reaproveita) a conversa direta com um usuario — e o que o botao "Mensagem" do perfil
+	 * chama. Nao cria conversa duplicada: devolve a existente quando ja ha uma entre os dois.
+	 */
+	@PostMapping("/direct")
+	ResponseEntity<String> direct(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@RequestBody DirectConversationRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		String otherId = request.userId() == null ? "" : request.userId().trim();
+		if (otherId.isEmpty()) {
+			throw new ApiException(400, "INVALID_RECIPIENT", "Destinatario obrigatorio.");
+		}
+		if (otherId.equals(user.id().value())) {
+			throw new ApiException(400, "INVALID_RECIPIENT", "Nao da para abrir uma conversa consigo mesmo.");
+		}
+		// Bloqueio vale nos dois sentidos: ninguem fala com quem bloqueou (ou foi bloqueado).
+		if (blockedUsersReader.hiddenIdsFor(user.id().value()).contains(otherId)
+				|| blockedUsersReader.hiddenIdsFor(otherId).contains(user.id().value())) {
+			throw new ApiException(403, "USER_BLOCKED", "Nao e possivel conversar com este usuario.");
+		}
+		Map<String, Object> payload = Map.of("direct", otherId);
+		String hash = idempotency.hash(payload);
+		return idempotency.execute(user.id(), "POST", "/api/conversations/direct", idempotencyKey, hash, () -> {
+			String conversationId = messagingService.directConversationBetween(user.id().value(), otherId);
+			List<String> pIds = messagingService.getParticipants(conversationId).stream()
+				.map(ConversationParticipant::userId)
+				.toList();
+			return new CommandResponse(200, new ConversationDetailView(conversationId, "DIRECT", null, pIds,
+				messagingService.getLastMessageText(conversationId),
+				messagingService.countUnread(conversationId, user.id().value())));
+		});
+	}
+
 	@PostMapping
 	ResponseEntity<String> create(@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
@@ -226,6 +264,9 @@ class MessagingContractController {
 	}
 
 	record CreateConversationRequest(String kind, String title, List<String> participantIds) {
+	}
+
+	record DirectConversationRequest(String userId) {
 	}
 
 	record SendMessageRequest(String text) {

@@ -6,6 +6,7 @@ import java.util.Optional;
 
 import com.socialcoisa.rede.communities.domain.Community;
 import com.socialcoisa.rede.communities.domain.CommunityMember;
+import com.socialcoisa.rede.communities.domain.MemberRole;
 
 public interface CommunityRepository {
 
@@ -15,7 +16,16 @@ public interface CommunityRepository {
 
 	List<Community> findAll(String topic, Instant before, int limit);
 
+	/** Comunidades das quais o usuario participa (menu lateral). */
+	List<Community> findByMember(String userId, int limit);
+
 	void saveMember(CommunityMember member);
+
+	/** Muda o papel de um membro (transferencia de administracao). */
+	void updateMemberRole(String communityId, String userId, MemberRole role);
+
+	/** Remove todos os vinculos de membros (ao excluir a comunidade, evita referencia orfa). */
+	void removeAllMembers(String communityId);
 
 	void removeMember(String communityId, String userId);
 

@@ -41,6 +41,15 @@ public class Community {
 		return new Community(id, name, description, topic, cover, avatar, createdBy, createdAt, now);
 	}
 
+	/**
+	 * Passa a propriedade para outro membro. A propriedade e o que autoriza editar e excluir, entao
+	 * a transferencia precisa ser explicita — sair da comunidade nao pode deixar o dono sem controle
+	 * nem largar a comunidade sem administracao.
+	 */
+	public Community transferOwnership(String newOwnerId, Instant now) {
+		return new Community(id, name, description, topic, cover, avatar, newOwnerId, createdAt, now);
+	}
+
 	public String id() { return id; }
 	public String name() { return name; }
 	public String description() { return description; }

@@ -13,6 +13,7 @@ import java.util.stream.Collectors;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -25,6 +26,7 @@ import org.springframework.util.StringUtils;
 import com.socialcoisa.rede.feed.application.BulkDeletePostsCommand;
 import com.socialcoisa.rede.feed.application.CommentOnPostCommand;
 import com.socialcoisa.rede.feed.application.DeletePostCommand;
+import com.socialcoisa.rede.feed.application.EditPostCommand;
 import com.socialcoisa.rede.feed.application.GetFeedQuery;
 import com.socialcoisa.rede.feed.application.GetCommentsQuery;
 import com.socialcoisa.rede.feed.application.GetProfilePostsQuery;
@@ -35,6 +37,7 @@ import com.socialcoisa.rede.feed.domain.FeedTab;
 import com.socialcoisa.rede.feed.application.port.in.BulkDeletePostsUseCase;
 import com.socialcoisa.rede.feed.application.port.in.CommentOnPostUseCase;
 import com.socialcoisa.rede.feed.application.port.in.DeletePostUseCase;
+import com.socialcoisa.rede.feed.application.port.in.EditPostUseCase;
 import com.socialcoisa.rede.feed.application.port.in.GetCommentsUseCase;
 import com.socialcoisa.rede.feed.application.port.in.GetFeedUseCase;
 import com.socialcoisa.rede.feed.application.port.in.GetPostUseCase;
@@ -65,6 +68,7 @@ class FeedController {
 	private final GetPostUseCase getPostUseCase;
 	private final GetProfilePostsUseCase getProfilePostsUseCase;
 	private final DeletePostUseCase deletePostUseCase;
+	private final EditPostUseCase editPostUseCase;
 	private final BulkDeletePostsUseCase bulkDeletePostsUseCase;
 	private final CommentOnPostUseCase commentOnPostUseCase;
 	private final GetCommentsUseCase getCommentsUseCase;
@@ -80,6 +84,7 @@ class FeedController {
 
 	FeedController(PublishPostUseCase publishPostUseCase, GetFeedUseCase getFeedUseCase, GetPostUseCase getPostUseCase,
 			GetProfilePostsUseCase getProfilePostsUseCase, DeletePostUseCase deletePostUseCase,
+			EditPostUseCase editPostUseCase,
 			BulkDeletePostsUseCase bulkDeletePostsUseCase, CommentOnPostUseCase commentOnPostUseCase,
 			GetCommentsUseCase getCommentsUseCase, ReactToPostUseCase reactToPostUseCase,
 			SavePostUseCase savePostUseCase, SharePostUseCase sharePostUseCase,
@@ -91,6 +96,7 @@ class FeedController {
 		this.getPostUseCase = getPostUseCase;
 		this.getProfilePostsUseCase = getProfilePostsUseCase;
 		this.deletePostUseCase = deletePostUseCase;
+		this.editPostUseCase = editPostUseCase;
 		this.bulkDeletePostsUseCase = bulkDeletePostsUseCase;
 		this.commentOnPostUseCase = commentOnPostUseCase;
 		this.getCommentsUseCase = getCommentsUseCase;
@@ -173,6 +179,23 @@ class FeedController {
 		return idempotency.execute(user.id(), "DELETE", "/api/feed/posts/{postId}", idempotencyKey, hash,
 			() -> new CommandResponse(200, deletePostUseCase.delete(new DeletePostCommand(user.id(), new PostId(postId),
 				reason))));
+	}
+
+	/** Edicao do proprio post (conteudo e tags). A autorizacao e do autor, validada no backend. */
+	@PatchMapping("/feed/posts/{postId}")
+	ResponseEntity<String> edit(@RequestHeader(value = USER_HEADER, required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@PathVariable String postId, @RequestBody EditPostRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		Map<String, Object> payload = new LinkedHashMap<>();
+		payload.put("postId", postId);
+		payload.put("content", request.content() == null ? "" : request.content());
+		payload.put("tags", request.tags() == null ? List.of() : request.tags());
+		String hash = idempotency.hash(payload);
+		return idempotency.execute(user.id(), "PATCH", "/api/feed/posts/{postId}", idempotencyKey, hash,
+			() -> new CommandResponse(200, editPostUseCase.edit(new EditPostCommand(user.id(), new PostId(postId),
+				request.content(), request.tags()))));
 	}
 
 	@PostMapping("/feed/posts/bulk-delete")

@@ -84,6 +84,9 @@ class PostJpaEntity {
 	@Column(name = "deleted_at")
 	private Instant deletedAt;
 
+	@Column(name = "edited_at")
+	private Instant editedAt;
+
 	protected PostJpaEntity() {
 	}
 
@@ -104,11 +107,12 @@ class PostJpaEntity {
 		entity.shares = post.counters().shares();
 		entity.status = post.status();
 		entity.deletedAt = post.deletedAt();
+		entity.editedAt = post.editedAt();
 		return entity;
 	}
 
 	Post toDomain() {
 		return Post.restore(new PostId(id), new UserId(authorId), type, content, tags, mediaIds, communityId, createdAt,
-			visibility, new Counters(reactions, comments, saves, shares), status, deletedAt);
+			visibility, new Counters(reactions, comments, saves, shares), status, deletedAt, editedAt);
 	}
 }

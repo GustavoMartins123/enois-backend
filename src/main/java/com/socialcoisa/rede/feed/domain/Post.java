@@ -17,10 +17,11 @@ public class Post {
 	private Counters counters;
 	private PostStatus status;
 	private Instant deletedAt;
+	private Instant editedAt;
 
 	private Post(PostId id, UserId authorId, PostType type, String content, List<String> tags, List<String> mediaIds,
 			String communityId, Instant createdAt, Visibility visibility, Counters counters, PostStatus status,
-			Instant deletedAt) {
+			Instant deletedAt, Instant editedAt) {
 		this.id = id;
 		this.authorId = authorId;
 		this.type = type;
@@ -33,19 +34,29 @@ public class Post {
 		this.counters = counters;
 		this.status = status;
 		this.deletedAt = deletedAt;
+		this.editedAt = editedAt;
 	}
 
 	public static Post publish(PostId id, UserId authorId, PostType type, String content, List<String> tags,
 			List<String> mediaIds, String communityId, Instant createdAt) {
 		return new Post(id, authorId, type, content, tags, mediaIds, communityId, createdAt, Visibility.PUBLIC,
-			Counters.zero(), PostStatus.ACTIVE, null);
+			Counters.zero(), PostStatus.ACTIVE, null, null);
 	}
 
 	public static Post restore(PostId id, UserId authorId, PostType type, String content, List<String> tags,
 			List<String> mediaIds, String communityId, Instant createdAt, Visibility visibility, Counters counters,
-			PostStatus status, Instant deletedAt) {
+			PostStatus status, Instant deletedAt, Instant editedAt) {
 		return new Post(id, authorId, type, content, tags, mediaIds, communityId, createdAt, visibility, counters,
-			status, deletedAt);
+			status, deletedAt, editedAt);
+	}
+
+	/**
+	 * Edicao do proprio post: troca conteudo e tags e marca a data. Devolve uma nova instancia porque
+	 * o conteudo e imutavel; id, autor e contadores sao preservados (editar nao zera nada).
+	 */
+	public Post edited(String newContent, List<String> newTags, Instant editedAt) {
+		return new Post(id, authorId, type, newContent, newTags, mediaIds, communityId, createdAt, visibility,
+			counters, status, deletedAt, editedAt);
 	}
 
 	public boolean isActive() {
@@ -135,5 +146,9 @@ public class Post {
 
 	public Instant deletedAt() {
 		return deletedAt;
+	}
+
+	public Instant editedAt() {
+		return editedAt;
 	}
 }

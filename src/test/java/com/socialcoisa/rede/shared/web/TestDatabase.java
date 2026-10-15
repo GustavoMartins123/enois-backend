@@ -77,6 +77,17 @@ public final class TestDatabase {
 		}
 	}
 
+	/** Forca a expiracao da sessao de um access token (para exercitar refresh sem esperar o tempo). */
+	public static void expireAccessToken(String accessToken, Instant expiresAt) {
+		require().update("update auth_sessions set expires_at = ? where token = ?", expiresAt, accessToken);
+	}
+
+	/** Forca a expiracao do refresh token de uma sessao. */
+	public static void expireRefreshToken(String refreshToken, Instant refreshExpiresAt) {
+		require().update("update auth_sessions set refresh_expires_at = ? where refresh_token = ?",
+			refreshExpiresAt, refreshToken);
+	}
+
 	/**
 	 * Apaga uma comunidade criada pelo teste. O banco dos testes e compartilhado entre as classes,
 	 * entao deixar uma comunidade para tras quebra o contrato que espera a lista vazia.

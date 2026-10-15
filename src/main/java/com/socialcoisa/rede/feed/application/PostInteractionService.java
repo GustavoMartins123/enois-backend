@@ -75,12 +75,32 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 		postRepository.save(post);
 		outboxEventRepository.append("PostCommented", post.id().value(), "{\"postId\":\"" + post.id().value()
 			+ "\",\"commentId\":\"" + saved.id() + "\",\"authorId\":\"" + command.authorId().value() + "\"}");
+		notifyCommentReply(parentCommentId, post, command.authorId().value());
 		notifyMentions(command.mentionedUserIds(), command.authorId().value(), post.id().value());
 		var profile = userProfileRepository.findById(command.authorId().value()).orElse(null);
 		return CommentView.from(saved,
 			profile != null ? profile.name() : null,
 			profile != null ? profile.username() : null,
 			profile != null ? profile.avatar() : null);
+	}
+
+	/**
+	 * Resposta a um comentario: quem escreveu o comentario-pai precisa ser avisado. Antes so o autor
+	 * do POST era notificado (via outbox), entao quem era respondido nunca ficava sabendo. Pular o
+	 * proprio autor da resposta e o autor do post (que ja recebe NEW_COMMENT) evita avisos duplicados.
+	 */
+	private void notifyCommentReply(String parentCommentId, Post post, String actorId) {
+		if (parentCommentId == null) return;
+		String parentAuthorId = commentRepository.findById(parentCommentId)
+			.map(comment -> comment.authorId().value())
+			.orElse(null);
+		if (parentAuthorId == null) return;
+		if (parentAuthorId.equals(actorId)) return;
+		if (parentAuthorId.equals(post.authorId().value())) return;
+		var actor = userProfileRepository.findById(actorId).orElse(null);
+		String actorName = actor != null && actor.name() != null ? actor.name() : "Alguem";
+		notificationService.create(parentAuthorId, "NEW_REPLY", actorId, "Nova resposta",
+			actorName + " respondeu ao seu comentario.", "/api/feed/posts/" + post.id().value(), "Ver");
 	}
 
 	private void notifyMentions(List<String> mentionedUserIds, String actorId, String postId) {
@@ -128,15 +148,33 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 			throw new ApiException(400, "INVALID_REACTION_TYPE", "Tipo de reacao obrigatorio.");
 		}
 		Post post = activePost(command.postId());
-		boolean added = postInteractionRepository.addReaction(newId("reaction"), post.id(), command.userId(),
+		var outcome = postInteractionRepository.addReaction(newId("reaction"), post.id(), command.userId(),
 			command.type(), clock.instant());
-		if (added) {
-			post.addReaction();
-			postRepository.save(post);
-			outboxEventRepository.append("PostReacted", post.id().value(), "{\"postId\":\"" + post.id().value()
-				+ "\",\"authorId\":\"" + command.userId().value() + "\"}");
+		// Trocar o tipo da reacao (REPLACED) NAO mexe no total: a pessoa ja estava contada. Antes,
+		// qualquer gravacao incrementava, e a contagem subia quando o usuario so mudava de reacao.
+		switch (outcome) {
+			case ADDED -> {
+				post.addReaction();
+				postRepository.save(post);
+				outboxEventRepository.append("PostReacted", post.id().value(), "{\"postId\":\"" + post.id().value()
+					+ "\",\"authorId\":\"" + command.userId().value() + "\"}");
+			}
+			case REMOVED -> {
+				post.removeReaction();
+				postRepository.save(post);
+				outboxEventRepository.append("PostReactionRemoved", post.id().value(),
+					"{\"postId\":\"" + post.id().value() + "\"}");
+			}
+			case REPLACED -> {
+				// nada a fazer no contador
+			}
 		}
-		return new PostActionResult(post.id().value(), added ? "REACTED" : "ALREADY_REACTED", post.counters());
+		String status = switch (outcome) {
+			case ADDED -> "REACTED";
+			case REPLACED -> "REACTION_CHANGED";
+			case REMOVED -> "REACTION_REMOVED";
+		};
+		return new PostActionResult(post.id().value(), status, post.counters());
 	}
 
 	@Override

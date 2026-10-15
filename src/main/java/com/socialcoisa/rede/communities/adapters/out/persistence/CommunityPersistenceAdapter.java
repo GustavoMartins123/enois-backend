@@ -11,6 +11,7 @@ import org.springframework.util.StringUtils;
 import com.socialcoisa.rede.communities.application.port.out.CommunityRepository;
 import com.socialcoisa.rede.communities.domain.Community;
 import com.socialcoisa.rede.communities.domain.CommunityMember;
+import com.socialcoisa.rede.communities.domain.MemberRole;
 
 @Repository
 class CommunityPersistenceAdapter implements CommunityRepository {
@@ -47,8 +48,33 @@ class CommunityPersistenceAdapter implements CommunityRepository {
 	}
 
 	@Override
+	public List<Community> findByMember(String userId, int limit) {
+		List<String> communityIds = memberRepo.findByUserId(userId).stream()
+			.map(CommunityMemberJpaEntity::communityId)
+			.limit(limit)
+			.toList();
+		if (communityIds.isEmpty()) {
+			return List.of();
+		}
+		return springData.findAllById(communityIds).stream().map(CommunityJpaEntity::toDomain).toList();
+	}
+
+	@Override
 	public void saveMember(CommunityMember member) {
 		memberRepo.save(CommunityMemberJpaEntity.fromDomain(member));
+	}
+
+	@Override
+	public void updateMemberRole(String communityId, String userId, MemberRole role) {
+		memberRepo.findByCommunityIdAndUserId(communityId, userId).ifPresent(entity -> {
+			entity.changeRole(role);
+			memberRepo.save(entity);
+		});
+	}
+
+	@Override
+	public void removeAllMembers(String communityId) {
+		memberRepo.deleteByCommunityId(communityId);
 	}
 
 	@Override
