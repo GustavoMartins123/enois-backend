@@ -22,7 +22,7 @@ import com.socialcoisa.rede.shared.web.ApiException;
 @Service
 public class EditPostService implements EditPostUseCase {
 
-	private static final int MAX_CONTENT = 1024;
+	private static final int MAX_CONTENT = 1200;
 	private static final int MAX_TAGS = 5;
 
 	private final PostRepository postRepository;
@@ -71,7 +71,7 @@ public class EditPostService implements EditPostUseCase {
 		}
 		String normalized = content.trim();
 		if (normalized.length() > MAX_CONTENT) {
-			throw new ApiException(400, "CONTENT_TOO_LONG", "Conteudo deve ter no maximo 1024 caracteres.");
+			throw new ApiException(400, "CONTENT_TOO_LONG", "Conteudo deve ter no maximo 1200 caracteres.");
 		}
 		return normalized;
 	}

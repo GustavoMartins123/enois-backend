@@ -248,8 +248,8 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 			throw new ApiException(400, "INVALID_COMMENT_CONTENT", "Conteudo obrigatorio.");
 		}
 		String normalized = content.trim();
-		if (normalized.length() > 1024) {
-			throw new ApiException(400, "COMMENT_TOO_LONG", "Comentario deve ter no maximo 1024 caracteres.");
+		if (normalized.length() > 800) {
+			throw new ApiException(400, "COMMENT_TOO_LONG", "Comentario deve ter no maximo 800 caracteres.");
 		}
 		return normalized;
 	}

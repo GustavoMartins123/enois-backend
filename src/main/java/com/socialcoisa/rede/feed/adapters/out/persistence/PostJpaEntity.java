@@ -41,7 +41,7 @@ class PostJpaEntity {
 	@Column(nullable = false)
 	private PostType type;
 
-	@Column(nullable = false, length = 1024)
+	@Column(nullable = false, length = 1200)
 	private String content;
 
 	@ElementCollection(fetch = FetchType.EAGER)

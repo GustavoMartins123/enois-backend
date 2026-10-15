@@ -54,16 +54,16 @@ class EventSanitizationTests {
 	@Test
 	void expiresAtComesFromTheEventDate() {
 		Event iso = Event.create("e1", "Meetup", LocalDate.now().minusDays(2).toString(), "19:30", "ONLINE",
-			"Dona", null, "user", Instant.now());
+			"Dona", null, null, null, "user", Instant.now());
 		assertThat(iso.expiresAt()).isPresent();
 		assertThat(iso.isExpired(Instant.now(), Duration.ZERO)).isTrue();
 
-		Event brazilian = Event.create("e2", "Meetup", "01/01/2020", null, "ONLINE", "Dona", null, "user",
+		Event brazilian = Event.create("e2", "Meetup", "01/01/2020", null, "ONLINE", "Dona", null, null, null, "user",
 			Instant.now());
 		assertThat(brazilian.isExpired(Instant.now(), Duration.ZERO)).isTrue();
 
 		// Sem data utilizavel nao ha vencimento: nunca sanitiza por palpite.
-		Event undated = Event.create("e3", "Meetup", "amanha", "", "ONLINE", "Dona", null, "user", Instant.now());
+		Event undated = Event.create("e3", "Meetup", "amanha", "", "ONLINE", "Dona", null, null, null, "user", Instant.now());
 		assertThat(undated.expiresAt()).isEmpty();
 		assertThat(undated.isExpired(Instant.now(), Duration.ZERO)).isFalse();
 	}

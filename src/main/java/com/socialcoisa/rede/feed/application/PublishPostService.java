@@ -93,8 +93,8 @@ public class PublishPostService implements PublishPostUseCase {
 		if (!StringUtils.hasText(command.content())) {
 			throw new ApiException(400, "INVALID_CONTENT", "Conteudo obrigatorio.");
 		}
-		if (command.content().trim().length() > 1024) {
-			throw new ApiException(400, "CONTENT_TOO_LONG", "Conteudo deve ter no maximo 1024 caracteres.");
+		if (command.content().trim().length() > 1200) {
+			throw new ApiException(400, "CONTENT_TOO_LONG", "Conteudo deve ter no maximo 1200 caracteres.");
 		}
 		if (command.tags() != null && command.tags().stream().filter(StringUtils::hasText).distinct().count() > 5) {
 			throw new ApiException(400, "TOO_MANY_TAGS", "Post deve ter no maximo 5 tags.");
