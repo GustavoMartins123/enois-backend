@@ -210,10 +210,36 @@ public class SocialLoginService implements OAuthUseCase {
 	private AuthResponse login(OAuthProvider provider, TokenValidationResult validation, String appleUserPayload) {
 		String userId = externalIdentityRepository
 			.findUserIdByProviderAndExternalId(provider.name(), validation.externalUserId())
-			.orElseGet(() -> createAccountForProvider(provider, validation, appleUserPayload));
-		// O provedor confirma o e-mail: quem entra assim nao precisa passar pela confirmacao.
-		markVerified(userId);
+			.orElseGet(() -> resolveOrCreateAccount(provider, validation, appleUserPayload));
+		// O provedor confirma o e-mail e responde pela segunda etapa: a conta entra verificada e com o
+		// segundo fator delegado (sem inventar um TOTP que nao existe).
+		markVerifiedByProvider(userId);
 		return createSession(userId);
+	}
+
+	/**
+	 * Conta ja existente com este e-mail: vincula em vez de recusar — mas SO quando o provedor afirma
+	 * que o e-mail e verificado. E-mail "declarado" (sem essa garantia) nunca vincula sozinho: seria
+	 * entregar a conta a quem apenas digitou o endereco.
+	 */
+	private String resolveOrCreateAccount(OAuthProvider provider, TokenValidationResult validation,
+			String appleUserPayload) {
+		String email = normalizeEmail(validation.email());
+		if (StringUtils.hasText(email)
+				&& (userProfileRepository.existsByEmail(email) || credentialRepository.existsByEmail(email))) {
+			if (!validation.emailVerified()) {
+				throw new ApiException(409, "ACCOUNT_EXISTS_UNVERIFIED_EMAIL",
+					"Ja existe uma conta com este e-mail e o " + provider.name()
+						+ " nao confirmou que ele e seu. Entre com e-mail e senha e vincule depois.");
+			}
+			String existing = userProfileRepository.findByEmail(email).map(UserProfile::id)
+				.orElseGet(() -> credentialRepository.findByEmail(email)
+					.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."))
+					.userId());
+			externalIdentityRepository.save(existing, provider.name(), validation.externalUserId(), email);
+			return existing;
+		}
+		return createAccountForProvider(provider, validation, appleUserPayload);
 	}
 
 	private String createAccountForProvider(OAuthProvider provider, TokenValidationResult validation,
@@ -223,7 +249,7 @@ public class SocialLoginService implements OAuthUseCase {
 			throw new ApiException(409, "OAUTH_EMAIL_REQUIRED",
 				"O provedor nao informou um e-mail. Entre com e-mail e senha e vincule a conta depois.");
 		}
-		// Conta existente com este e-mail: vinculamos apenas se a pessoa pedir de proposito.
+		// Chegamos aqui sem conta previa (o vinculo por e-mail verificado acontece antes).
 		if (userProfileRepository.existsByEmail(email) || credentialRepository.existsByEmail(email)) {
 			throw new ApiException(409, "ACCOUNT_EXISTS_LINK_REQUIRED",
 				"Ja existe uma conta com este e-mail. Entre com e-mail e senha e vincule o "
@@ -290,7 +316,7 @@ public class SocialLoginService implements OAuthUseCase {
 		}
 		externalIdentityRepository.save(userId, provider.name(), validation.externalUserId(),
 			normalizeEmail(validation.email()));
-		markVerified(userId);
+		markVerifiedByProvider(userId);
 		return createSession(userId);
 	}
 
@@ -327,10 +353,23 @@ public class SocialLoginService implements OAuthUseCase {
 			.toList();
 	}
 
-	private void markVerified(String userId) {
+	/**
+	 * Marca a conta como verificada pelo provedor: e-mail confirmado e segundo fator delegado. Quem
+	 * entra por Google/Apple nao depende do nosso link de confirmacao nem precisa configurar 2FA.
+	 */
+	private void markVerifiedByProvider(String userId) {
 		userProfileRepository.findById(userId).ifPresent(profile -> {
+			Instant now = clock.instant();
+			boolean changed = false;
 			if (!profile.emailVerified()) {
-				profile.markEmailVerified(clock.instant());
+				profile.markEmailVerified(now);
+				changed = true;
+			}
+			if (!profile.federatedSecondFactor()) {
+				profile.enableFederatedSecondFactor(now);
+				changed = true;
+			}
+			if (changed) {
 				userProfileRepository.save(profile);
 			}
 		});

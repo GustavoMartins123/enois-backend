@@ -98,6 +98,9 @@ class UserProfileJpaEntity {
 	@Column(name = "email_otp_enabled_at")
 	private Instant emailOtpEnabledAt;
 
+	@Column(name = "federated_second_factor_at")
+	private Instant federatedSecondFactorAt;
+
 	protected UserProfileJpaEntity() {
 	}
 
@@ -127,6 +130,7 @@ class UserProfileJpaEntity {
 		entity.emailVerifiedAt = profile.emailVerifiedAt();
 		entity.totpEnabledAt = profile.totpEnabledAt();
 		entity.emailOtpEnabledAt = profile.emailOtpEnabledAt();
+		entity.federatedSecondFactorAt = profile.federatedSecondFactorAt();
 		return entity;
 	}
 
@@ -143,6 +147,9 @@ class UserProfileJpaEntity {
 		}
 		if (emailOtpEnabledAt != null) {
 			profile.enableEmailOtp(emailOtpEnabledAt);
+		}
+		if (federatedSecondFactorAt != null) {
+			profile.enableFederatedSecondFactor(federatedSecondFactorAt);
 		}
 		return profile;
 	}

@@ -229,11 +229,18 @@ delete from flyway_schema_history where version = '<versao que falhou>';    # ou
   qualquer endpoint autenticado responde o mesmo via `CurrentUserResolver` (segunda barreira). Contas criadas
   **antes** desta migração foram marcadas como verificadas (ver V22) para ninguém perder o acesso; quem entra
   por Google/Apple nasce verificado, porque o provedor confirma o e-mail.
+- **Segundo fator pelo provedor**: quem entra por Google/Apple fica com `users.federated_second_factor_at`
+  preenchido — conta verificada e 2FA satisfeito, mas **sem** um código nosso para desafiar (por isso o
+  `requiredMethod` do login considera apenas TOTP e código por e-mail; o 2FA do provedor aparece como
+  `providerSecondFactor` no `GET /auth/2fa/status`).
 - **Login social**: todo fluxo começa em `GET /auth/oauth/{provider}/start`, que registra `state` + `nonce` no
   servidor (`oauth_authorization_requests`) e devolve a URL de autorização. O callback confere o `state`
   (existe, mesmo provedor, dentro de 15 min) e o `nonce` dentro do id_token, além de assinatura, emissor,
-  audience e validade. **Não há vínculo automático por e-mail**: se já existe conta com o e-mail declarado, o
-  login responde `409 ACCOUNT_EXISTS_LINK_REQUIRED` e a pessoa precisa entrar e vincular. `POST
+  audience e validade. **Vínculo com conta existente**: se já existe conta com o e-mail **e o provedor afirma
+  que ele é verificado** (claim `email_verified`), o login vincula as duas — a conta entra com o e-mail
+  confirmado e com o segundo fator delegado ao provedor (Google/Apple responde pela segunda etapa), sem
+  duplicar conta e sem pedir configuração. E-mail apenas *declarado*, sem essa garantia, **não** vincula:
+  responde `409 ACCOUNT_EXISTS_UNVERIFIED_EMAIL`. `POST
   /auth/oauth/{provider}/link` inicia a vinculação (o callback que usar esse state vincula em vez de entrar),
   `GET /auth/oauth/providers` lista os vínculos e `DELETE /auth/oauth/{provider}/link` desvincula — recusando
   com `409 LAST_LOGIN_METHOD` quando seria o último jeito de entrar (conta social não tem senha utilizável:

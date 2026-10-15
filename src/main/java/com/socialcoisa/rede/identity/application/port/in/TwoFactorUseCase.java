@@ -32,7 +32,8 @@ public interface TwoFactorUseCase {
 	 *                      isso para nao oferecer um caminho que terminaria em erro
 	 */
 	record TwoFactorStatus(boolean emailVerified, boolean totpEnabled, boolean emailOtpEnabled,
-			boolean twoFactorEnabled, boolean identityVerified, int backupCodesLeft, boolean totpAvailable) {
+			boolean providerSecondFactor, boolean twoFactorEnabled, boolean identityVerified, int backupCodesLeft,
+			boolean totpAvailable) {
 	}
 
 	record TotpSetup(String secret, String otpauthUri) {

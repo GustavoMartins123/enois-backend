@@ -110,21 +110,52 @@ class OAuthHardeningTests {
 	}
 
 	@Test
-	void doesNotLinkAnExistingAccountJustBecauseTheEmailMatches() throws Exception {
-		// Conta criada com senha, cujo e-mail o provedor vai declarar.
+	void linksAnExistingAccountWhenTheProviderConfirmsTheEmail() throws Exception {
+		// Conta criada com senha; o Google confirma que o e-mail e dela.
 		var existing = auth.authenticate("ja.existe");
 		when(googleValidator.validate(eq(OAuthProvider.GOOGLE), anyString(), anyString()))
 			.thenReturn(Optional.of(new TokenValidationResult("google-sub-existente", "ja.existe@test.com",
 				"Ja Existe", true)));
 
-		String state = startState();
+		MvcResult result = mockMvc.perform(get("/auth/oauth/google/callback")
+				.param("code", "codigo-valido").param("state", startState()))
+			.andExpect(status().isFound())
+			.andReturn();
+		String sessionToken = tokenFromRedirect(result.getResponse().getHeader("Location"));
 
-		mockMvc.perform(get("/auth/oauth/google/callback").param("code", "codigo-valido").param("state", state))
+		// Mesma conta (nao duplicou), agora vinculada, com e-mail confirmado e 2FA delegado ao provedor.
+		mockMvc.perform(get("/auth/me").header("X-Session-Token", sessionToken))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.id").value(existing.userId()))
+			.andExpect(jsonPath("$.emailVerified").value(true))
+			.andExpect(jsonPath("$.twoFactorEnabled").value(true))
+			.andExpect(jsonPath("$.identityVerified").value(true));
+
+		mockMvc.perform(get("/auth/oauth/providers").header("X-Session-Token", existing.token()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$[0].provider").value("GOOGLE"));
+
+		mockMvc.perform(get("/auth/2fa/status").header("X-Session-Token", sessionToken))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.providerSecondFactor").value(true))
+			// O provedor cobre a segunda etapa: nao oferecemos desativar o que nao foi ativado aqui.
+			.andExpect(jsonPath("$.totpEnabled").value(false))
+			.andExpect(jsonPath("$.emailOtpEnabled").value(false));
+	}
+
+	@Test
+	void refusesToLinkWhenTheProviderDoesNotConfirmTheEmail() throws Exception {
+		// Sem a garantia do provedor, o e-mail declarado nao entrega a conta para ninguem.
+		var existing = auth.authenticate("nao.confirmado");
+		when(googleValidator.validate(eq(OAuthProvider.GOOGLE), anyString(), anyString()))
+			.thenReturn(Optional.of(new TokenValidationResult("google-sub-nao-confirmado", "nao.confirmado@test.com",
+				"Nao Confirmado", false)));
+
+		mockMvc.perform(get("/auth/oauth/google/callback")
+				.param("code", "codigo-valido").param("state", startState()))
 			.andExpect(status().isConflict())
-			.andExpect(jsonPath("$.code").value("ACCOUNT_EXISTS_LINK_REQUIRED"));
+			.andExpect(jsonPath("$.code").value("ACCOUNT_EXISTS_UNVERIFIED_EMAIL"));
 
-		// E a conta original continua sem vinculo algum.
-		assertThat(existing.userId()).isNotBlank();
 		mockMvc.perform(get("/auth/oauth/providers").header("X-Session-Token", existing.token()))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$").isEmpty());

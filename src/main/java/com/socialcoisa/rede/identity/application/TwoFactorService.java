@@ -76,6 +76,7 @@ public class TwoFactorService implements TwoFactorUseCase {
 			profile.emailVerified(),
 			profile.totpEnabled(),
 			profile.emailOtpEnabled(),
+			profile.federatedSecondFactor(),
 			profile.twoFactorEnabled(),
 			profile.identityVerified(),
 			repository.countUnusedBackupCodes(userId),

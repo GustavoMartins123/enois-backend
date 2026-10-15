@@ -31,6 +31,7 @@ public class UserProfile {
 	private Instant emailVerifiedAt;
 	private Instant totpEnabledAt;
 	private Instant emailOtpEnabledAt;
+	private Instant federatedSecondFactorAt;
 
 	private UserProfile(String id, String username, String email, String name, String headline, String company,
 			String location, String avatar, String banner, String bio, List<String> skills, List<String> goals,
@@ -150,9 +151,34 @@ public class UserProfile {
 		this.emailOtpEnabledAt = null;
 	}
 
-	/** Tem segundo fator (por app ou por e-mail)? */
-	public boolean twoFactorEnabled() {
+	/** Segundo fator coberto pelo provedor (Google/Apple): vale para a verificacao da conta. */
+	public boolean federatedSecondFactor() {
+		return federatedSecondFactorAt != null;
+	}
+
+	public Instant federatedSecondFactorAt() {
+		return federatedSecondFactorAt;
+	}
+
+	public void enableFederatedSecondFactor(Instant at) {
+		this.federatedSecondFactorAt = at;
+	}
+
+	public void disableFederatedSecondFactor() {
+		this.federatedSecondFactorAt = null;
+	}
+
+	/**
+	 * Metodos que NOS desafiamos no login (aplicativo ou codigo por e-mail). O segundo fator do
+	 * provedor nao entra aqui: ele nao tem codigo nosso para conferir.
+	 */
+	public boolean challengeableTwoFactor() {
 		return totpEnabled() || emailOtpEnabled();
+	}
+
+	/** A conta tem segundo fator garantido (por app, por e-mail ou pelo provedor)? */
+	public boolean twoFactorEnabled() {
+		return challengeableTwoFactor() || federatedSecondFactor();
 	}
 
 	/**
