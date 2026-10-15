@@ -84,6 +84,7 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		String username = uniqueUsername(command.name(), email);
 		// Nao existe papel no schema; o headline deve ficar vazio ate o usuario preencher.
 		UserProfile profile = UserProfile.create(userId, username, email, command.name().trim(), null, now);
+		profile.acceptTerms(now);
 		UserProfile saved = userProfileRepository.save(profile);
 		credentialRepository.save(saved.id(), email, passwordHasher.hash(command.password()));
 		return createResponse(saved);
@@ -316,6 +317,10 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		}
 		if (!command.email().contains("@")) {
 			throw new ApiException(400, "INVALID_EMAIL", "Email invalido.");
+		}
+		if (!Boolean.TRUE.equals(command.acceptedTerms())) {
+			throw new ApiException(400, "TERMS_NOT_ACCEPTED",
+				"E necessario aceitar os termos de uso e confirmar que voce tem 18 anos ou mais.");
 		}
 	}
 

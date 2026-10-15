@@ -64,4 +64,39 @@ public class EmailService {
         context.setVariable("currentYear", java.time.Year.now().getValue());
         return templateEngine.process("password-reset", context);
     }
+
+	/** Notifica o time de suporte sobre um pedido aberto no app (responde para o usuario). */
+	public void sendSupportRequestEmail(String toEmail, String requestSubject, String requestMessage, String replyTo) {
+		String subject = "[Suporte] " + requestSubject;
+		String htmlBody = "<p>Novo pedido de suporte enviado pelo app.</p>"
+			+ "<ul>"
+			+ "<li><b>Usuario:</b> " + escape(replyTo) + "</li>"
+			+ "<li><b>Assunto:</b> " + escape(requestSubject) + "</li>"
+			+ "</ul>"
+			+ "<p><b>Mensagem:</b></p><pre style=\"white-space:pre-wrap\">" + escape(requestMessage)
+			+ "</pre>";
+
+		try {
+			MimeMessage message = mailSender.createMimeMessage();
+			MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+			helper.setFrom(fromEmail);
+			helper.setTo(toEmail);
+			if (replyTo != null && replyTo.contains("@")) {
+				helper.setReplyTo(replyTo);
+			}
+			helper.setSubject(subject);
+			helper.setText(htmlBody, true);
+			mailSender.send(message);
+		} catch (Exception e) {
+			// O pedido ja esta persistido (aparece em /admin/support): apenas registramos a falha.
+			LOG.error("Falha ao notificar o suporte ({}) sobre o pedido: {}", toEmail, e.getMessage(), e);
+		}
+	}
+
+	private String escape(String value) {
+		if (value == null) {
+			return "";
+		}
+		return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
+	}
 }

@@ -3,6 +3,7 @@ package com.socialcoisa.rede.jobs.adapters.in.web;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -51,9 +52,7 @@ class JobContractController {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		Job job = jobService.create(body.title(), body.company(), body.logo(), body.location(), body.type(), body.level(),
 			body.salary(), body.skills(), user.id().value());
-		return ResponseEntity.status(HttpStatus.CREATED)
-			.body(new JobView(job.id(), job.title(), job.company(), job.logo(), job.location(), job.type(),
-				job.level(), job.salary(), job.skills(), job.postedAt().toString(), 0));
+		return ResponseEntity.status(HttpStatus.CREATED).body(toView(job, user.id().value(), false, false, 0));
 	}
 
 	@GetMapping
@@ -61,23 +60,48 @@ class JobContractController {
 			@RequestParam(required = false) String type, @RequestParam(required = false) String level,
 			@RequestParam(required = false) String location,
 			@RequestParam(required = false) List<String> skills,
-			@RequestParam(required = false) String cursor, @RequestParam(defaultValue = "20") int limit) {
+			@RequestParam(required = false) String cursor, @RequestParam(defaultValue = "20") int limit,
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		Instant before = cursorCodec.decode(cursor).orElse(null);
 		List<Job> jobs = jobService.list(query, type, level, location, skills, before, limit);
-		var items = jobs.stream()
-			.map(j -> new JobView(j.id(), j.title(), j.company(), j.logo(), j.location(), j.type(), j.level(),
-				j.salary(), j.skills(), j.postedAt() != null ? j.postedAt().toString() : null, 0))
-			.toList();
-		String nextCursor = jobs.size() == limit
-			? cursorCodec.encode(jobs.get(jobs.size() - 1).postedAt()) : null;
-		return new PageResponse<>(items, nextCursor);
+		return page(jobs, limit, viewerId(userId, sessionToken), PageKind.LIST);
+	}
+
+	/** Vagas publicadas pelo usuario autenticado (com o total de candidaturas recebidas). */
+	@GetMapping("/mine")
+	PageResponse<JobView> mine(@RequestParam(required = false) String cursor,
+			@RequestParam(defaultValue = "20") int limit,
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		Instant before = cursorCodec.decode(cursor).orElse(null);
+		List<Job> jobs = jobService.listMine(user.id().value(), before, limit);
+		return page(jobs, limit, user.id().value(), PageKind.MINE);
+	}
+
+	/** Vagas em que o usuario autenticado se candidatou. */
+	@GetMapping("/applications")
+	PageResponse<JobView> applications(@RequestParam(required = false) String cursor,
+			@RequestParam(defaultValue = "20") int limit,
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		Instant before = cursorCodec.decode(cursor).orElse(null);
+		List<Job> jobs = jobService.listApplications(user.id().value(), before, limit);
+		return page(jobs, limit, user.id().value(), PageKind.APPLICATIONS);
 	}
 
 	@GetMapping("/{jobId}")
-	JobView job(@PathVariable String jobId) {
-		Job j = jobService.getById(jobId);
-		return new JobView(j.id(), j.title(), j.company(), j.logo(), j.location(), j.type(), j.level(),
-			j.salary(), j.skills(), j.postedAt() != null ? j.postedAt().toString() : null, 0);
+	JobView job(@PathVariable String jobId,
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		String viewer = viewerId(userId, sessionToken);
+		Job job = jobService.getById(jobId);
+		boolean owner = viewer != null && viewer.equals(job.postedBy());
+		boolean applied = viewer != null && jobService.appliedJobIds(viewer, List.of(job.id())).contains(job.id());
+		boolean saved = viewer != null && jobService.savedJobIds(viewer, List.of(job.id())).contains(job.id());
+		return toView(job, viewer, applied, saved, owner ? jobService.applicationsCount(job.id()) : 0);
 	}
 
 	@PutMapping("/{jobId}")
@@ -87,8 +111,7 @@ class JobContractController {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		Job job = jobService.update(jobId, body.title(), body.company(), body.logo(), body.location(), body.type(),
 			body.level(), body.salary(), body.skills(), user.id().value());
-		return ResponseEntity.ok(new JobView(job.id(), job.title(), job.company(), job.logo(), job.location(),
-			job.type(), job.level(), job.salary(), job.skills(), job.postedAt().toString(), 0));
+		return ResponseEntity.ok(toView(job, user.id().value(), false, false, jobService.applicationsCount(job.id())));
 	}
 
 	@DeleteMapping("/{jobId}")
@@ -142,8 +165,53 @@ class JobContractController {
 			});
 	}
 
+	private enum PageKind {
+		LIST, MINE, APPLICATIONS
+	}
+
+	private PageResponse<JobView> page(List<Job> jobs, int limit, String viewer, PageKind kind) {
+		List<String> ids = jobs.stream().map(Job::id).toList();
+		boolean authenticated = viewer != null;
+		Set<String> appliedIds = switch (kind) {
+			case APPLICATIONS -> Set.copyOf(ids);
+			case MINE -> Set.of();
+			case LIST -> authenticated ? jobService.appliedJobIds(viewer, ids) : Set.of();
+		};
+		Set<String> savedIds = authenticated ? jobService.savedJobIds(viewer, ids) : Set.of();
+		Map<String, Integer> counts = authenticated ? jobService.applicationsCountByJobIds(ids) : Map.of();
+		List<JobView> items = jobs.stream()
+			.map(job -> {
+				boolean owner = authenticated && viewer.equals(job.postedBy());
+				return new JobView(job.id(), job.title(), job.company(), job.logo(), job.location(), job.type(),
+					job.level(), job.salary(), job.skills(), job.postedAt() != null ? job.postedAt().toString() : null, 0,
+					appliedIds.contains(job.id()), savedIds.contains(job.id()), owner,
+					owner ? counts.getOrDefault(job.id(), 0) : 0);
+			})
+			.toList();
+		String nextCursor = jobs.size() == limit
+			? cursorCodec.encode(jobs.get(jobs.size() - 1).postedAt()) : null;
+		return new PageResponse<>(items, nextCursor);
+	}
+
+	private JobView toView(Job job, String viewer, boolean applied, boolean saved, int applicationsCount) {
+		return new JobView(job.id(), job.title(), job.company(), job.logo(), job.location(), job.type(), job.level(),
+			job.salary(), job.skills(), job.postedAt() != null ? job.postedAt().toString() : null, 0, applied, saved,
+			viewer != null && viewer.equals(job.postedBy()), applicationsCount);
+	}
+
+	/** Resolve o usuario quando ha sessao; listas publicas seguem funcionando sem login. */
+	private String viewerId(String userId, String sessionToken) {
+		try {
+			return currentUserResolver.resolve(userId, sessionToken).id().value();
+		}
+		catch (RuntimeException exception) {
+			return null;
+		}
+	}
+
 	record JobView(String id, String title, String company, String logo, String location, String type, String level,
-			String salary, List<String> skills, String postedAt, int matchScore) {
+			String salary, List<String> skills, String postedAt, int matchScore, boolean applied, boolean saved,
+			boolean owner, int applicationsCount) {
 	}
 
 	record CreateJobRequest(String title, String company, String logo, String location, String type, String level,

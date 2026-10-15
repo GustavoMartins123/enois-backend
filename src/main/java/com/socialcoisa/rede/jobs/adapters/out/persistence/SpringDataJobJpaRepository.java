@@ -28,6 +28,13 @@ interface SpringDataJobJpaRepository extends JpaRepository<JobJpaEntity, String>
 	List<JobJpaEntity> findByLocation(@Param("location") String location, @Param("before") Instant before,
 			Pageable pageable);
 
+	@Query("SELECT j FROM JobJpaEntity j WHERE j.postedBy = :postedBy AND (:before IS NULL OR j.postedAt < :before) ORDER BY j.postedAt DESC")
+	List<JobJpaEntity> findByPostedByAndPostedAtBeforeOrderByPostedAtDesc(@Param("postedBy") String postedBy,
+			@Param("before") Instant before, Pageable pageable);
+
+	@Query("SELECT j FROM JobJpaEntity j WHERE j.id IN :ids")
+	List<JobJpaEntity> findByIdIn(@Param("ids") java.util.Collection<String> ids);
+
 	@Query("SELECT DISTINCT j FROM JobJpaEntity j JOIN j.skills s WHERE s IN :skills "
 			+ "AND (:before IS NULL OR j.postedAt < :before) ORDER BY j.postedAt DESC")
 	List<JobJpaEntity> findBySkills(@Param("skills") List<String> skills, @Param("before") Instant before,

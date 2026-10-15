@@ -86,6 +86,9 @@ class UserProfileJpaEntity {
 	@Column(name = "updated_at", nullable = false)
 	private Instant updatedAt;
 
+	@Column(name = "terms_accepted_at")
+	private Instant termsAcceptedAt;
+
 	protected UserProfileJpaEntity() {
 	}
 
@@ -111,6 +114,7 @@ class UserProfileJpaEntity {
 		entity.reputation = profile.reputation();
 		entity.createdAt = profile.createdAt();
 		entity.updatedAt = profile.updatedAt();
+		entity.termsAcceptedAt = profile.termsAcceptedAt();
 		return entity;
 	}
 
@@ -118,6 +122,7 @@ class UserProfileJpaEntity {
 		UserProfile profile = UserProfile.restore(id, username, email, name, headline, company, location, avatar, banner,
 			bio, skills, goals, availability, portfolio, externalLinks, openToWork, mentor, createdAt, updatedAt);
 		profile.setCounts(profile.connectionsCount(), profile.followersCount(), reputation);
+		profile.acceptTerms(termsAcceptedAt);
 		return profile;
 	}
 }

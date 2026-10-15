@@ -98,4 +98,57 @@ class JobPersistenceAdapter implements JobRepository {
 		springData.deleteById(id);
 	}
 
+	@Override
+	public List<Job> findByPostedBy(String userId, Instant before, int limit) {
+		return springData.findByPostedByAndPostedAtBeforeOrderByPostedAtDesc(userId, before, PageRequest.of(0, limit))
+			.stream().map(JobJpaEntity::toDomain).toList();
+	}
+
+	@Override
+	public List<Job> findAppliedByUser(String userId, Instant before, int limit) {
+		List<String> jobIds = applicationRepo.findJobIdsByUserId(userId, PageRequest.of(0, limit));
+		if (jobIds.isEmpty()) {
+			return List.of();
+		}
+		java.util.Map<String, Job> byId = springData.findByIdIn(jobIds).stream()
+			.map(JobJpaEntity::toDomain)
+			.collect(java.util.stream.Collectors.toMap(Job::id, job -> job));
+		// Mantem a ordem das candidaturas (mais recentes primeiro), aplicando o cursor.
+		return jobIds.stream()
+			.map(byId::get)
+			.filter(java.util.Objects::nonNull)
+			.filter(job -> before == null || !job.postedAt().isAfter(before))
+			.toList();
+	}
+
+	@Override
+	public int countApplications(String jobId) {
+		return applicationRepo.countByJobId(jobId);
+	}
+
+	@Override
+	public java.util.Set<String> findAppliedJobIds(String userId, java.util.Collection<String> jobIds) {
+		if (jobIds == null || jobIds.isEmpty()) {
+			return java.util.Set.of();
+		}
+		return java.util.Set.copyOf(applicationRepo.findJobIdsByUserIdAndJobIdIn(userId, jobIds));
+	}
+
+	@Override
+	public java.util.Set<String> findSavedJobIds(String userId, java.util.Collection<String> jobIds) {
+		if (jobIds == null || jobIds.isEmpty()) {
+			return java.util.Set.of();
+		}
+		return java.util.Set.copyOf(saveRepo.findJobIdsByUserIdAndJobIdIn(userId, jobIds));
+	}
+
+	@Override
+	public java.util.Map<String, Integer> countApplicationsByJobIds(java.util.Collection<String> jobIds) {
+		if (jobIds == null || jobIds.isEmpty()) {
+			return java.util.Map.of();
+		}
+		return applicationRepo.countByJobIdGrouped(jobIds).stream()
+			.collect(java.util.stream.Collectors.toMap(row -> (String) row[0], row -> ((Number) row[1]).intValue()));
+	}
+
 }

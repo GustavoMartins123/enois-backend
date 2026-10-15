@@ -30,7 +30,8 @@ public class TestAuthHelper {
 			"name", userId,
 			"role", "USER",
 			"email", email,
-			"password", "Test1234!"
+			"password", "Test1234!",
+			"acceptedTerms", true
 		));
 
 		MvcResult result = mockMvc.perform(post("/auth/signup")

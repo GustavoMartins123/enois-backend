@@ -43,7 +43,8 @@ class ProfileControllerTests {
 			"name", "Profile Test User",
 			"role", "Engineer",
 			"email", unique + "@example.com",
-			"password", "senha-segura"));
+			"password", "senha-segura",
+			"acceptedTerms", true));
 
 		MvcResult signup = mockMvc.perform(post("/auth/signup")
 				.header("Idempotency-Key", "prof-setup-" + unique)

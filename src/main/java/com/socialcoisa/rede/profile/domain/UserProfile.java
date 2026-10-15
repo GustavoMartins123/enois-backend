@@ -27,6 +27,7 @@ public class UserProfile {
 	private int reputation;
 	private final Instant createdAt;
 	private Instant updatedAt;
+	private Instant termsAcceptedAt;
 
 	private UserProfile(String id, String username, String email, String name, String headline, String company,
 			String location, String avatar, String banner, String bio, List<String> skills, List<String> goals,
@@ -86,6 +87,15 @@ public class UserProfile {
 		this.mentor = mentor == null ? this.mentor : mentor;
 		this.username = keep(username, this.username);
 		this.updatedAt = now;
+	}
+
+	/** Instante em que o usuario aceitou os termos no cadastro (null para contas antigas). */
+	public void acceptTerms(Instant at) {
+		this.termsAcceptedAt = at;
+	}
+
+	public Instant termsAcceptedAt() {
+		return termsAcceptedAt;
 	}
 
 	public void changeEmail(String email, Instant now) {

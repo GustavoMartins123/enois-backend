@@ -98,7 +98,8 @@ class AuthController {
 		String scope = authScope(request.email());
 		String hash = idempotency.hash(request);
 		return idempotency.execute(scope, "POST", "/api/auth/signup", idempotencyKey, hash, () -> new CommandResponse(201,
-			signupUseCase.signup(new SignupCommand(request.name(), "USER", request.email(), request.password()))));
+			signupUseCase.signup(new SignupCommand(request.name(), "USER", request.email(), request.password(),
+				request.acceptedTerms()))));
 	}
 
 	@PostMapping("/login")

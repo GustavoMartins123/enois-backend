@@ -6,6 +6,7 @@ import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import com.socialcoisa.rede.jobs.application.port.out.JobRepository;
 import com.socialcoisa.rede.jobs.domain.Job;
@@ -30,6 +31,7 @@ public class JobService {
 	@Transactional
 	public Job create(String title, String company, String logo, String location, String type, String level,
 			String salary, List<String> skills, String userId) {
+		validate(title, company, type, level);
 		int reputation = reputationService.reputationOf(userId);
 		if (reputation <= MIN_REPUTATION_TO_CREATE_JOB) {
 			throw new ApiException(403, "LOW_REPUTATION", "E necessario ter mais de " + MIN_REPUTATION_TO_CREATE_JOB
@@ -44,6 +46,7 @@ public class JobService {
 	@Transactional
 	public Job update(String jobId, String title, String company, String logo, String location, String type, String level,
 			String salary, List<String> skills, String userId) {
+		validate(title, company, type, level);
 		Job existing = repository.findById(jobId)
 			.orElseThrow(() -> new ApiException(404, "JOB_NOT_FOUND", "Vaga nao encontrada."));
 		if (!existing.postedBy().equals(userId)) {
@@ -99,6 +102,53 @@ public class JobService {
 	public Job getById(String id) {
 		return repository.findById(id)
 			.orElseThrow(() -> new ApiException(404, "JOB_NOT_FOUND", "Vaga nao encontrada."));
+	}
+
+	/** Vagas publicadas pelo usuario (com quantas candidaturas receberam). */
+	public List<Job> listMine(String userId, java.time.Instant before, int limit) {
+		return repository.findByPostedBy(userId, before, limit);
+	}
+
+	/** Vagas em que o usuario se candidatou. */
+	public List<Job> listApplications(String userId, java.time.Instant before, int limit) {
+		return repository.findAppliedByUser(userId, before, limit);
+	}
+
+	public java.util.Set<String> appliedJobIds(String userId, java.util.List<String> jobIds) {
+		return repository.findAppliedJobIds(userId, jobIds);
+	}
+
+	public java.util.Set<String> savedJobIds(String userId, java.util.List<String> jobIds) {
+		return repository.findSavedJobIds(userId, jobIds);
+	}
+
+	public java.util.Map<String, Integer> applicationsCountByJobIds(java.util.List<String> jobIds) {
+		return repository.countApplicationsByJobIds(jobIds);
+	}
+
+	public int applicationsCount(String jobId) {
+		return repository.countApplications(jobId);
+	}
+
+	private void validate(String title, String company, String type, String level) {
+		if (!StringUtils.hasText(title)) {
+			throw new ApiException(400, "INVALID_JOB", "Titulo da vaga e obrigatorio.");
+		}
+		if (title.trim().length() > 255) {
+			throw new ApiException(400, "INVALID_JOB", "Titulo da vaga deve ter no maximo 255 caracteres.");
+		}
+		if (!StringUtils.hasText(company)) {
+			throw new ApiException(400, "INVALID_JOB", "Empresa e obrigatoria.");
+		}
+		if (company.trim().length() > 255) {
+			throw new ApiException(400, "INVALID_JOB", "Empresa deve ter no maximo 255 caracteres.");
+		}
+		if (!StringUtils.hasText(type)) {
+			throw new ApiException(400, "INVALID_JOB", "Tipo de contratacao e obrigatorio.");
+		}
+		if (!StringUtils.hasText(level)) {
+			throw new ApiException(400, "INVALID_JOB", "Nivel da vaga e obrigatorio.");
+		}
 	}
 
 }

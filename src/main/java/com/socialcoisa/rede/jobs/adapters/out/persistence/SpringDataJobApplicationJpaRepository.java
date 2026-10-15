@@ -1,6 +1,11 @@
 package com.socialcoisa.rede.jobs.adapters.out.persistence;
 
+import java.util.List;
+
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 interface SpringDataJobApplicationJpaRepository extends JpaRepository<JobApplicationJpaEntity, Long> {
 
@@ -9,5 +14,17 @@ interface SpringDataJobApplicationJpaRepository extends JpaRepository<JobApplica
 	void deleteByJobIdAndUserId(String jobId, String userId);
 
 	void deleteByJobId(String jobId);
+
+	int countByJobId(String jobId);
+
+	@Query("SELECT a.jobId FROM JobApplicationJpaEntity a WHERE a.userId = :userId AND a.jobId IN :jobIds")
+	List<String> findJobIdsByUserIdAndJobIdIn(@Param("userId") String userId,
+			@Param("jobIds") java.util.Collection<String> jobIds);
+
+	@Query("SELECT a.jobId FROM JobApplicationJpaEntity a WHERE a.userId = :userId ORDER BY a.appliedAt DESC")
+	List<String> findJobIdsByUserId(@Param("userId") String userId, Pageable pageable);
+
+	@Query("SELECT a.jobId, COUNT(a) FROM JobApplicationJpaEntity a WHERE a.jobId IN :jobIds GROUP BY a.jobId")
+	List<Object[]> countByJobIdGrouped(@Param("jobIds") java.util.Collection<String> jobIds);
 
 }

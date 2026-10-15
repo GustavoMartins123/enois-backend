@@ -148,6 +148,7 @@ backend expõe fica público em `https://enois.ia.br/api/...` — inclusive `/ap
 | `OAUTH_STATE_COOKIE_SECURE` | não | padrão `true`; use `false` só em dev http |
 | `SPRINGDOC_ENABLED` | não | padrão `false`. `true` liga `/api/openapi.json` + Swagger UI (use só em dev/VPN) |
 | `MANAGEMENT_ENDPOINTS` | não | padrão `health`. Para métricas use `health,prometheus` **e bloqueie `/api/actuator/*` no gateway** |
+| `SUPPORT_EMAIL` | não | e-mail do time que recebe os pedidos de suporte. Sem ele o pedido ainda fica registrado e visível em `/admin/support` |
 
 ### Passo a passo das ações manuais
 
@@ -163,6 +164,18 @@ backend expõe fica público em `https://enois.ia.br/api/...` — inclusive `/ap
 5. **Rotacionar segredos vazados** (ver seção "Segurança").
 6. Verificar o rollout: `kubectl -n forest-apps get pods -l app=socialcoiso-back` e
    `kubectl -n forest-apps logs deploy/socialcoiso-back`.
+
+## Fluxos de produto (referência rápida)
+
+- **Vagas**: `POST /jobs` (exige reputação > 150) cria; `GET /jobs` lista (com `applied`/`saved`/`owner` por
+  usuário); `GET /jobs/mine` = vagas que publiquei (traz `applicationsCount`); `GET /jobs/applications` = vagas
+  em que me candidatei; `POST /jobs/{id}/applications` é a inscrição (`409` se repetida); `PUT`/`DELETE /jobs/{id}`
+  são do autor. No app: `/vagas` (listar/criar/inscrever), `/vagas/{id}` (detalhe + inscrever/salvar/excluir) e
+  `/vagas/minhas` (minhas vagas e minhas candidaturas).
+- **Suporte**: `POST /support/requests` (autenticado) abre o pedido; `GET /admin/support` (admin) lista a fila em
+  aberto. No app: `/suporte`, alcançável pelo menu da conta.
+- **Consentimento**: `POST /auth/signup` exige `acceptedTerms: true` (termos + 18 anos); o instante do aceite é
+  gravado em `users.terms_accepted_at`. Sem esse campo a resposta é `400 TERMS_NOT_ACCEPTED`.
 
 ## Segurança — pendências que exigem ação manual
 

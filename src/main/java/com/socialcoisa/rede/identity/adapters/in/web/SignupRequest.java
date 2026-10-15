@@ -1,4 +1,4 @@
 package com.socialcoisa.rede.identity.adapters.in.web;
 
-public record SignupRequest(String name, String role, String email, String password) {
+public record SignupRequest(String name, String role, String email, String password, Boolean acceptedTerms) {
 }
