@@ -199,6 +199,14 @@ delete from flyway_schema_history where version = '<versao que falhou>';    # ou
   em que me candidatei; `POST /jobs/{id}/applications` é a inscrição (`409` se repetida); `PUT`/`DELETE /jobs/{id}`
   são do autor. No app: `/vagas` (listar/criar/inscrever), `/vagas/{id}` (detalhe + inscrever/salvar/excluir) e
   `/vagas/minhas` (minhas vagas e minhas candidaturas).
+- **Eventos vencidos são sanitizados**: o fim do evento vem da própria data (ISO `yyyy-MM-dd`, ou
+  `dd/MM/yyyy`; o horário é opcional e sem ele vale o fim do dia). Passado o fim, o evento **sai da vitrine**
+  (`GET /events` só devolve o que ainda vai acontecer; `includePast=true` traz o histórico com `expired: true`)
+  e não aceita mais confirmação de presença (`400 EVENT_FINISHED`). Depois de **24h de folga**, o
+  `EventSanitizationWorker` (agendado, roda no boot e a cada hora) apaga as presenças — dado pessoal de quem
+  confirmou — guardando apenas o total agregado em `events.final_attendees_count`, e marca `sanitized_at`
+  (idempotente). Após **365 dias** de retenção o evento é expurgado por inteiro. Data que não pode ser
+  interpretada **não vence**: apagar dado pessoal por palpite seria pior que manter.
 - **Candidatura com formulário próprio**: quem publica define campos personalizados (`applicationFields` no
   corpo de `POST /jobs`: `label`, `type` — TEXT, TEXTAREA, NUMBER ou LINK — e `required`), até 25, sem rótulos
   repetidos. `POST /jobs/{jobId}/applications` recebe `{message?, answers:[{fieldId,value}]}`: campos

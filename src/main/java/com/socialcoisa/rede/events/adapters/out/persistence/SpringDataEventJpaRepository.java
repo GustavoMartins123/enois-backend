@@ -10,6 +10,11 @@ import org.springframework.data.repository.query.Param;
 
 interface SpringDataEventJpaRepository extends JpaRepository<EventJpaEntity, String> {
 
+	List<EventJpaEntity> findBySanitizedAtIsNull();
+
+	List<EventJpaEntity> findBySanitizedAtBefore(java.time.Instant threshold);
+
+
 	@Query("SELECT e FROM EventJpaEntity e WHERE (:before IS NULL OR e.createdAt < :before) ORDER BY e.createdAt DESC")
 	List<EventJpaEntity> findAllBefore(@Param("before") Instant before, Pageable pageable);
 

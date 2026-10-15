@@ -8,6 +8,9 @@ interface SpringDataEventAttendeeJpaRepository extends JpaRepository<EventAttend
 
 	void deleteByEventIdAndUserId(String eventId, String userId);
 
+	/** Apaga todas as presencas de um evento (sanitizacao: some o vinculo com cada pessoa). */
+	void deleteByEventId(String eventId);
+
 	int countByEventId(String eventId);
 
 }

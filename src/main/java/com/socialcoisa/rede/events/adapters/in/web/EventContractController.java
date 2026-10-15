@@ -42,25 +42,31 @@ class EventContractController {
 		this.cursorCodec = cursorCodec;
 	}
 
+	/** Lista os eventos que ainda vao acontecer; `includePast=true` inclui o historico (com selo). */
 	@GetMapping
 	PageResponse<EventView> events(@RequestParam(required = false) String format,
-			@RequestParam(required = false) String cursor, @RequestParam(defaultValue = "20") int limit) {
+			@RequestParam(required = false) String cursor, @RequestParam(defaultValue = "20") int limit,
+			@RequestParam(defaultValue = "false") boolean includePast) {
 		Instant before = cursorCodec.decode(cursor).orElse(null);
-		List<Event> events = eventService.list(format, before, limit);
-		var items = events.stream()
-			.map(e -> new EventView(e.id(), e.title(), e.date(), e.time(), e.format(), e.host(),
-				eventService.countAttendees(e.id()), e.cover()))
-			.toList();
-		String nextCursor = events.size() == limit
-			? cursorCodec.encode(events.get(events.size() - 1).createdAt()) : null;
+		var page = eventService.list(format, before, limit, includePast);
+		var items = page.items().stream().map(this::toView).toList();
+		// Cursor pela pagina que veio do banco: esconder evento vencido nao pode encerrar a paginacao.
+		String nextCursor = page.fetched().size() == limit
+			? cursorCodec.encode(page.fetched().get(page.fetched().size() - 1).createdAt()) : null;
 		return new PageResponse<>(items, nextCursor);
+	}
+
+	private EventView toView(Event event) {
+		// Depois da sanitizacao as presencas somem: o numero guardado sustenta o total.
+		Integer finalCount = event.finalAttendeesCount();
+		int attendees = finalCount != null ? finalCount : eventService.countAttendees(event.id());
+		return new EventView(event.id(), event.title(), event.date(), event.time(), event.format(), event.host(),
+			attendees, event.cover(), eventService.hasEnded(event));
 	}
 
 	@GetMapping("/{eventId}")
 	EventView event(@PathVariable String eventId) {
-		Event e = eventService.getById(eventId);
-		return new EventView(e.id(), e.title(), e.date(), e.time(), e.format(), e.host(),
-			eventService.countAttendees(e.id()), e.cover());
+		return toView(eventService.getById(eventId));
 	}
 
 	@PostMapping
@@ -74,8 +80,7 @@ class EventContractController {
 			() -> {
 				Event e = eventService.create(request.title(), request.date(), request.time(), request.format(),
 					request.host(), request.cover(), user.id().value());
-				return new CommandResponse(201, new EventView(e.id(), e.title(), e.date(), e.time(), e.format(),
-					e.host(), 1, e.cover()));
+				return new CommandResponse(201, toView(e));
 			});
 	}
 
@@ -108,7 +113,7 @@ class EventContractController {
 	}
 
 	record EventView(String id, String title, String date, String time, String format, String host, int attendees,
-			String cover) {
+			String cover, boolean expired) {
 	}
 
 	record CreateEventRequest(String title, String date, String time, String format, String host, String cover) {

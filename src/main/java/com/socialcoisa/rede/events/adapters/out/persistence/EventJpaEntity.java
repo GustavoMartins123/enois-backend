@@ -44,6 +44,12 @@ class EventJpaEntity {
 	@Column(name = "updated_at", nullable = false)
 	private Instant updatedAt;
 
+	@Column(name = "sanitized_at")
+	private Instant sanitizedAt;
+
+	@Column(name = "final_attendees_count")
+	private Integer finalAttendeesCount;
+
 	protected EventJpaEntity() {
 	}
 
@@ -59,11 +65,17 @@ class EventJpaEntity {
 		e.createdBy = event.createdBy();
 		e.createdAt = event.createdAt();
 		e.updatedAt = event.updatedAt();
+		e.sanitizedAt = event.sanitizedAt();
+		e.finalAttendeesCount = event.finalAttendeesCount();
 		return e;
 	}
 
 	Event toDomain() {
-		return Event.restore(id, title, date, time, format, host, cover, createdBy, createdAt, updatedAt);
+		Event event = Event.restore(id, title, date, time, format, host, cover, createdBy, createdAt, updatedAt);
+		if (sanitizedAt != null) {
+			event.markSanitized(finalAttendeesCount == null ? 0 : finalAttendeesCount, sanitizedAt);
+		}
+		return event;
 	}
 
 }

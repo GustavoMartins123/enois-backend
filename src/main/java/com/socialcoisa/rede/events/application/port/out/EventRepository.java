@@ -22,4 +22,15 @@ public interface EventRepository {
 
 	int countAttendees(String eventId);
 
+	/** Eventos que ainda nao passaram pela sanitizacao (o vencimento e avaliado no dominio). */
+	List<Event> findNotSanitized();
+
+	/** Apaga as presencas de um evento (dado pessoal) sem apagar o evento. */
+	void deleteAttendees(String eventId);
+
+	/** Eventos sanitizados antes do instante informado (expurgo por retencao). */
+	List<Event> findSanitizedBefore(java.time.Instant threshold);
+
+	void deleteById(String eventId);
+
 }

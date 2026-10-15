@@ -77,6 +77,22 @@ public final class TestDatabase {
 		}
 	}
 
+	/** Muda a data de um evento direto no banco (para testar vencimento sem esperar o tempo passar). */
+	public static void setEventDate(String eventId, String date, String time) {
+		require().update("update events set date = ?, time = ? where id = ?", date, time, eventId);
+	}
+
+	/** Marca a sanitizacao como antiga, para exercitar o expurgo por retencao. */
+	public static void setEventSanitizedAt(String eventId, Instant sanitizedAt) {
+		require().update("update events set sanitized_at = ? where id = ?", sanitizedAt, eventId);
+	}
+
+	public static int countEventAttendees(String eventId) {
+		Integer count = require().queryForObject("select count(*) from event_attendees where event_id = ?",
+			Integer.class, eventId);
+		return count == null ? 0 : count;
+	}
+
 	public static Optional<String> userIdByEmail(String email) {
 		return require().query("select id from users where email = ?", (rs, row) -> rs.getString(1), email)
 			.stream()
