@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.Set;
 
 import com.socialcoisa.rede.feed.application.port.in.CommentOnPostUseCase;
 import com.socialcoisa.rede.feed.application.port.in.GetCommentsUseCase;
@@ -24,6 +25,7 @@ import com.socialcoisa.rede.feed.domain.CommentStatus;
 import com.socialcoisa.rede.feed.domain.Post;
 import com.socialcoisa.rede.feed.domain.PostId;
 import com.socialcoisa.rede.notifications.application.NotificationService;
+import com.socialcoisa.rede.shared.blocks.BlockedUsersReader;
 import com.socialcoisa.rede.shared.web.ApiException;
 import com.socialcoisa.rede.shared.web.CursorCodec;
 
@@ -41,12 +43,14 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 	private final Clock clock;
 	private final NotificationService notificationService;
 	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository;
+	private final BlockedUsersReader blockedUsersReader;
 
 	public PostInteractionService(PostRepository postRepository, CommentRepository commentRepository,
 			PostInteractionRepository postInteractionRepository, OutboxEventRepository outboxEventRepository,
 			CursorCodec cursorCodec, Clock clock,
 			NotificationService notificationService,
-			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository) {
+			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository,
+			BlockedUsersReader blockedUsersReader) {
 		this.postRepository = postRepository;
 		this.commentRepository = commentRepository;
 		this.postInteractionRepository = postInteractionRepository;
@@ -55,6 +59,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 		this.clock = clock;
 		this.notificationService = notificationService;
 		this.userProfileRepository = userProfileRepository;
+		this.blockedUsersReader = blockedUsersReader;
 	}
 
 	@Override
@@ -74,6 +79,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 		var profile = userProfileRepository.findById(command.authorId().value()).orElse(null);
 		return CommentView.from(saved,
 			profile != null ? profile.name() : null,
+			profile != null ? profile.username() : null,
 			profile != null ? profile.avatar() : null);
 	}
 
@@ -95,16 +101,23 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 		int limit = normalizeLimit(query.limit());
 		Instant before = query.before().orElse(DEFAULT_BEFORE);
 		activePost(query.postId());
-		var comments = commentRepository.findActiveByPost(query.postId(), before, limit).stream()
+		Set<String> hidden = query.viewerId()
+			.map(viewer -> blockedUsersReader.hiddenIdsFor(viewer.value()))
+			.orElse(Set.of());
+		var fetched = commentRepository.findActiveByPost(query.postId(), before, limit);
+		var comments = fetched.stream()
+			.filter(c -> !hidden.contains(c.authorId().value()))
 			.map(c -> {
 				var p = userProfileRepository.findById(c.authorId().value()).orElse(null);
 				return CommentView.from(c,
 					p != null ? p.name() : null,
+					p != null ? p.username() : null,
 					p != null ? p.avatar() : null);
 			})
 			.toList();
-		String nextCursor = comments.size() == limit ? cursorCodec.encode(comments.get(comments.size() - 1).createdAt())
-			: null;
+		// Cursor pela pagina do banco: comentario escondido nao pode encerrar a paginacao.
+		String nextCursor = fetched.size() == limit
+			? cursorCodec.encode(fetched.get(fetched.size() - 1).createdAt()) : null;
 		return new CommentsPage(comments, nextCursor);
 	}
 

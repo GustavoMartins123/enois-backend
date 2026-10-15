@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.socialcoisa.rede.idempotency.application.CommandResponse;
 import com.socialcoisa.rede.idempotency.application.IdempotencyApplicationService;
+import com.socialcoisa.rede.network.application.BlockService;
 import com.socialcoisa.rede.network.application.NetworkService;
 import com.socialcoisa.rede.network.domain.ConnectionSuggestion;
 import com.socialcoisa.rede.network.domain.ConnectionStatus;
@@ -41,14 +42,17 @@ class NetworkContractController {
 	private final IdempotencyApplicationService idempotency;
 	private final CurrentUserResolver currentUserResolver;
 	private final NetworkService networkService;
+	private final BlockService blockService;
 	private final UserProfileRepository userProfileRepository;
 	private final Clock clock;
 
 	NetworkContractController(IdempotencyApplicationService idempotency, CurrentUserResolver currentUserResolver,
-			NetworkService networkService, UserProfileRepository userProfileRepository, Clock clock) {
+			NetworkService networkService, BlockService blockService, UserProfileRepository userProfileRepository,
+			Clock clock) {
 		this.idempotency = idempotency;
 		this.currentUserResolver = currentUserResolver;
 		this.networkService = networkService;
+		this.blockService = blockService;
 		this.userProfileRepository = userProfileRepository;
 		this.clock = clock;
 	}
@@ -59,9 +63,11 @@ class NetworkContractController {
 			@RequestParam(required = false) String query,
 			@RequestParam(required = false) String cursor, @RequestParam(defaultValue = "20") int limit) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		Set<String> hidden = blockService.hiddenIdsFor(user.id().value());
 		List<UserConnection> connections = networkService.getConnections(user.id().value());
 		Set<String> connectedIds = connections.stream()
 			.map(c -> c.requesterUserId().equals(user.id().value()) ? c.receiverUserId() : c.requesterUserId())
+			.filter(id -> !hidden.contains(id))
 			.collect(Collectors.toSet());
 		Map<String, UserProfile> profiles = userProfileRepository.findAllByIds(connectedIds).stream()
 			.collect(Collectors.toMap(UserProfile::id, Function.identity()));
@@ -93,8 +99,12 @@ class NetworkContractController {
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestParam(defaultValue = "4") int limit) {
 		CurrentUser currentUser = currentUserResolver.resolve(userId, sessionToken);
+		Set<String> hidden = blockService.hiddenIdsFor(currentUser.id().value());
 		List<ConnectionSuggestion> suggestions = networkService.getSuggestions(currentUser.id().value(), limit);
-		Set<String> suggestedIds = suggestions.stream().map(ConnectionSuggestion::userId).collect(Collectors.toSet());
+		Set<String> suggestedIds = suggestions.stream()
+			.map(ConnectionSuggestion::userId)
+			.filter(id -> !hidden.contains(id))
+			.collect(Collectors.toSet());
 		Map<String, UserProfile> profiles = userProfileRepository.findAllByIds(suggestedIds).stream()
 			.collect(Collectors.toMap(UserProfile::id, Function.identity()));
 		return suggestedIds.stream()
@@ -165,7 +175,59 @@ class NetworkContractController {
 			@PathVariable String targetUserId) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		String status = networkService.getConnectionStatus(user.id().value(), targetUserId);
-		return new ConnectionStatusView(targetUserId, status);
+		boolean blocked = blockService.isBlockedBy(user.id().value(), targetUserId);
+		return new ConnectionStatusView(targetUserId, status, blocked);
+	}
+
+	/** Bloqueia um usuario: ele some do feed, dos comentarios, das notificacoes e da busca. */
+	@PostMapping("/blocks/{targetUserId}")
+	ResponseEntity<String> block(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@PathVariable String targetUserId) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		String hash = idempotency.hash(Map.of("targetUserId", targetUserId));
+		return idempotency.execute(user.id(), "POST", "/api/network/blocks/{userId}", idempotencyKey, hash,
+			() -> {
+				blockService.block(user.id().value(), targetUserId);
+				return new CommandResponse(201, new StatusResponse(targetUserId, "BLOCKED"));
+			});
+	}
+
+	@DeleteMapping("/blocks/{targetUserId}")
+	ResponseEntity<String> unblock(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@PathVariable String targetUserId) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		String hash = idempotency.hash(Map.of("targetUserId", targetUserId));
+		return idempotency.execute(user.id(), "DELETE", "/api/network/blocks/{userId}", idempotencyKey, hash,
+			() -> {
+				blockService.unblock(user.id().value(), targetUserId);
+				return new CommandResponse(200, new StatusResponse(targetUserId, "UNBLOCKED"));
+			});
+	}
+
+	/** Quem eu bloqueei (para poder desfazer). */
+	@GetMapping("/blocks")
+	List<BlockedUserView> blocks(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		var blocks = blockService.listBlocked(user.id().value());
+		Map<String, UserProfile> profiles = userProfileRepository
+			.findAllByIds(blocks.stream().map(com.socialcoisa.rede.network.domain.UserBlock::blockedId).toList())
+			.stream()
+			.collect(Collectors.toMap(UserProfile::id, Function.identity()));
+		return blocks.stream()
+			.map(b -> {
+				UserProfile p = profiles.get(b.blockedId());
+				return new BlockedUserView(b.blockedId(),
+					p != null ? p.username() : null,
+					p != null ? p.name() : null,
+					p != null ? p.avatar() : null,
+					b.createdAt() != null ? b.createdAt().toString() : null);
+			})
+			.toList();
 	}
 
 	@DeleteMapping("/connections/{targetUserId}")
@@ -186,12 +248,15 @@ class NetworkContractController {
 			int followers, boolean connected) {
 	}
 
+	record BlockedUserView(String userId, String username, String name, String avatar, String blockedAt) {
+	}
+
 	record NetworkSummaryView(String userId, int connections, int followers, int pendingRequests) {
 	}
 
 	record ConnectionRequestView(String id, String fromUserId, String toUserId, String status, String createdAt) {
 	}
 
-	record ConnectionStatusView(String targetUserId, String status) {
+	record ConnectionStatusView(String targetUserId, String status, boolean blocked) {
 	}
 }

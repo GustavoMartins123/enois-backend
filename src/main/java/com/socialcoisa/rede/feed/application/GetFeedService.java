@@ -33,6 +33,7 @@ import com.socialcoisa.rede.feed.domain.UserId;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.profile.domain.UserProfile;
 import com.socialcoisa.rede.shared.web.ApiException;
+import com.socialcoisa.rede.shared.blocks.BlockedUsersReader;
 import com.socialcoisa.rede.shared.web.CursorCodec;
 
 @Service
@@ -45,12 +46,13 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 	private final PostInteractionRepository postInteractionRepository;
 	private final CommentRepository commentRepository;
 	private final CursorCodec cursorCodec;
+	private final BlockedUsersReader blockedUsersReader;
 	private static final Instant DEFAULT_BEFORE = Instant.parse("9999-12-31T23:59:59Z");
 
 	public GetFeedService(PostRepository postRepository, FeedCacheRepository feedCacheRepository,
 			ConnectionGraphRepository connectionGraphRepository, UserProfileRepository userProfileRepository,
 			PostInteractionRepository postInteractionRepository, CommentRepository commentRepository,
-			CursorCodec cursorCodec) {
+			CursorCodec cursorCodec, BlockedUsersReader blockedUsersReader) {
 		this.postRepository = postRepository;
 		this.feedCacheRepository = feedCacheRepository;
 		this.connectionGraphRepository = connectionGraphRepository;
@@ -58,6 +60,7 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 		this.postInteractionRepository = postInteractionRepository;
 		this.commentRepository = commentRepository;
 		this.cursorCodec = cursorCodec;
+		this.blockedUsersReader = blockedUsersReader;
 	}
 
 	@Override
@@ -84,7 +87,7 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 			}
 			case PROJECTS -> postRepository.findActiveByType(PostType.PROJECT, before, limit);
 		};
-		return page(enrich(posts, query.userId()), limit);
+		return page(enrich(posts, query.userId()), posts, limit);
 	}
 
 	@Override
@@ -97,7 +100,7 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 			.map(com.socialcoisa.rede.profile.domain.UserProfile::id)
 			.orElse(query.username());
 		List<Post> posts = postRepository.findActiveByAuthor(new UserId(authorId), before, limit);
-		return page(enrich(posts, query.viewerId()), limit);
+		return page(enrich(posts, query.viewerId()), posts, limit);
 	}
 
 	@Override
@@ -106,6 +109,10 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 		Post post = postRepository.findById(new PostId(postId))
 			.filter(Post::isActive)
 			.orElseThrow(() -> new ApiException(404, "POST_NOT_FOUND", "Post nao encontrado."));
+		// Link direto (notificacao antiga, por exemplo) tambem respeita o bloqueio.
+		if (viewerId != null && blockedUsersReader.hiddenIdsFor(viewerId.value()).contains(post.authorId().value())) {
+			throw new ApiException(404, "POST_NOT_FOUND", "Post nao encontrado.");
+		}
 		List<PostView> enriched = enrich(List.of(post), viewerId);
 		return enriched.isEmpty() ? PostView.from(post) : enriched.get(0);
 	}
@@ -130,22 +137,28 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 		limit = normalizeLimit(limit);
 		before = before == null ? DEFAULT_BEFORE : before;
 		List<Post> posts = postRepository.findActiveByCommunity(communityId, before, limit);
-		return page(enrich(posts, currentUserId), limit);
+		return page(enrich(posts, currentUserId), posts, limit);
 	}
 
 	private List<PostView> enrich(List<Post> posts, UserId currentUserId) {
 		if (posts.isEmpty()) {
 			return List.of();
 		}
-		Set<String> authorIds = posts.stream()
+		Set<String> hidden = blockedUsersReader.hiddenIdsFor(currentUserId != null ? currentUserId.value() : null);
+		List<Post> visible = hidden.isEmpty() ? posts
+			: posts.stream().filter(post -> !hidden.contains(post.authorId().value())).toList();
+		if (visible.isEmpty()) {
+			return List.of();
+		}
+		Set<String> authorIds = visible.stream()
 			.map(p -> p.authorId().value())
 			.collect(Collectors.toSet());
 		Map<String, UserProfile> profiles = userProfileRepository.findAllByIds(authorIds).stream()
 			.collect(Collectors.toMap(UserProfile::id, Function.identity()));
-		List<PostId> postIds = posts.stream().map(Post::id).toList();
+		List<PostId> postIds = visible.stream().map(Post::id).toList();
 		Map<PostId, ReactionType> currentUserReactions = postInteractionRepository
 			.findReactionsByUserAndPostIds(currentUserId, postIds);
-		return posts.stream()
+		return visible.stream()
 			.map(post -> {
 				UserProfile profile = profiles.get(post.authorId().value());
 				PostView view = PostView.from(post,
@@ -200,9 +213,14 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 			.toList();
 	}
 
-	private FeedPage page(List<PostView> posts, int limit) {
-		String nextCursor = posts.size() == limit ? cursorCodec.encode(posts.get(posts.size() - 1).createdAt()) : null;
-		return new FeedPage(posts, nextCursor);
+	/**
+	 * O cursor sai da pagina que veio do banco, nao da lista exibida: quando um post e escondido por
+	 * bloqueio a pagina fica menor, e sem isso o scroll infinito acharia que chegou ao fim.
+	 */
+	private FeedPage page(List<PostView> views, List<Post> fetched, int limit) {
+		String nextCursor = fetched.size() == limit
+			? cursorCodec.encode(fetched.get(fetched.size() - 1).createdAt()) : null;
+		return new FeedPage(views, nextCursor);
 	}
 
 	private int normalizeLimit(int limit) {

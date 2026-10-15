@@ -51,7 +51,7 @@ class JobContractController {
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		Job job = jobService.create(body.title(), body.company(), body.logo(), body.location(), body.type(), body.level(),
-			body.salary(), body.skills(), user.id().value());
+			body.salary(), body.currency(), body.skills(), user.id().value(), body.communityAgreement());
 		return ResponseEntity.status(HttpStatus.CREATED).body(toView(job, user.id().value(), false, false, 0));
 	}
 
@@ -110,7 +110,7 @@ class JobContractController {
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		Job job = jobService.update(jobId, body.title(), body.company(), body.logo(), body.location(), body.type(),
-			body.level(), body.salary(), body.skills(), user.id().value());
+			body.level(), body.salary(), body.currency(), body.skills(), user.id().value());
 		return ResponseEntity.ok(toView(job, user.id().value(), false, false, jobService.applicationsCount(job.id())));
 	}
 
@@ -183,7 +183,8 @@ class JobContractController {
 			.map(job -> {
 				boolean owner = authenticated && viewer.equals(job.postedBy());
 				return new JobView(job.id(), job.title(), job.company(), job.logo(), job.location(), job.type(),
-					job.level(), job.salary(), job.skills(), job.postedAt() != null ? job.postedAt().toString() : null, 0,
+					job.level(), job.salary(), job.currency(), job.skills(),
+					job.postedAt() != null ? job.postedAt().toString() : null, 0,
 					appliedIds.contains(job.id()), savedIds.contains(job.id()), owner,
 					owner ? counts.getOrDefault(job.id(), 0) : 0);
 			})
@@ -195,8 +196,8 @@ class JobContractController {
 
 	private JobView toView(Job job, String viewer, boolean applied, boolean saved, int applicationsCount) {
 		return new JobView(job.id(), job.title(), job.company(), job.logo(), job.location(), job.type(), job.level(),
-			job.salary(), job.skills(), job.postedAt() != null ? job.postedAt().toString() : null, 0, applied, saved,
-			viewer != null && viewer.equals(job.postedBy()), applicationsCount);
+			job.salary(), job.currency(), job.skills(), job.postedAt() != null ? job.postedAt().toString() : null, 0,
+			applied, saved, viewer != null && viewer.equals(job.postedBy()), applicationsCount);
 	}
 
 	/** Resolve o usuario quando ha sessao; listas publicas seguem funcionando sem login. */
@@ -210,12 +211,12 @@ class JobContractController {
 	}
 
 	record JobView(String id, String title, String company, String logo, String location, String type, String level,
-			String salary, List<String> skills, String postedAt, int matchScore, boolean applied, boolean saved,
-			boolean owner, int applicationsCount) {
+			String salary, String currency, List<String> skills, String postedAt, int matchScore, boolean applied,
+			boolean saved, boolean owner, int applicationsCount) {
 	}
 
 	record CreateJobRequest(String title, String company, String logo, String location, String type, String level,
-			String salary, List<String> skills) {
+			String salary, String currency, List<String> skills, boolean communityAgreement) {
 	}
 
 }

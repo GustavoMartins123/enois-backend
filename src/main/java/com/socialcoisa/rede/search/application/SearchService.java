@@ -2,24 +2,33 @@ package com.socialcoisa.rede.search.application;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import org.springframework.stereotype.Service;
 
 import com.socialcoisa.rede.search.application.port.out.SearchRepository;
+import com.socialcoisa.rede.shared.blocks.BlockedUsersReader;
 import com.socialcoisa.rede.shared.web.ApiException;
 
 @Service
 public class SearchService {
 
 	private final SearchRepository repository;
+	private final BlockedUsersReader blockedUsersReader;
 
 	private static final List<String> VALID_TYPES = List.of("users", "communities", "jobs", "events", "mentors");
 
-	public SearchService(SearchRepository repository) {
+	public SearchService(SearchRepository repository, BlockedUsersReader blockedUsersReader) {
 		this.repository = repository;
+		this.blockedUsersReader = blockedUsersReader;
 	}
 
 	public List<SearchResult> search(String query, List<String> types, int limit) {
+		return search(query, types, limit, null);
+	}
+
+	/** @param viewerId quem esta buscando (nulo sem sessao); usado para esconder bloqueados. */
+	public List<SearchResult> search(String query, List<String> types, int limit, String viewerId) {
 		if (query == null || query.isBlank()) {
 			return List.of();
 		}
@@ -49,7 +58,11 @@ public class SearchService {
 		if (effectiveTypes.contains("mentors")) {
 			results.addAll(repository.searchMentors(q, limit));
 		}
-		return results.stream().limit(limit).toList();
+		Set<String> hidden = blockedUsersReader.hiddenIdsFor(viewerId);
+		return results.stream()
+			.filter(result -> !hidden.contains(result.id()))
+			.limit(limit)
+			.toList();
 	}
 
 	public record SearchResult(String id, String type, String title, String subtitle, String image, String href) {

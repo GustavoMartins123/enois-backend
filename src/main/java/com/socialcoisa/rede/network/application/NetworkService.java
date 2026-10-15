@@ -25,13 +25,16 @@ public class NetworkService {
 	private final ConnectionRepository connectionRepository;
 	private final UserProfileRepository userProfileRepository;
 	private final NotificationService notificationService;
+	private final com.socialcoisa.rede.network.application.port.out.UserBlockRepository blockRepository;
 	private final Clock clock;
 
 	public NetworkService(ConnectionRepository connectionRepository, UserProfileRepository userProfileRepository,
-			NotificationService notificationService, Clock clock) {
+			NotificationService notificationService,
+			com.socialcoisa.rede.network.application.port.out.UserBlockRepository blockRepository, Clock clock) {
 		this.connectionRepository = connectionRepository;
 		this.userProfileRepository = userProfileRepository;
 		this.notificationService = notificationService;
+		this.blockRepository = blockRepository;
 		this.clock = clock;
 	}
 
@@ -39,6 +42,10 @@ public class NetworkService {
 	public UserConnection requestConnection(String requesterUserId, String receiverUserId) {
 		if (requesterUserId.equals(receiverUserId)) {
 			throw new ApiException(400, "SELF_CONNECTION", "Nao e possivel conectar consigo mesmo.");
+		}
+		// Bloqueio vale para sempre: nao ha nova solicitacao nem notificacao de quem foi bloqueado.
+		if (blockRepository.hiddenBetween(requesterUserId, receiverUserId)) {
+			throw new ApiException(403, "BLOCKED", "Esta conexao nao esta disponivel.");
 		}
 		var existing = connectionRepository.findBetweenUsers(requesterUserId, receiverUserId);
 		if (existing.isPresent()) {
@@ -80,6 +87,9 @@ public class NetworkService {
 		}
 		if (!connection.requesterUserId().equals(targetUserId)) {
 			throw new ApiException(403, "FORBIDDEN", "Voce nao pode aceitar essa solicitacao.");
+		}
+		if (blockRepository.hiddenBetween(targetUserId, currentUserId)) {
+			throw new ApiException(403, "BLOCKED", "Esta conexao nao esta disponivel.");
 		}
 		var accepted = connection.accept(clock.instant());
 		connectionRepository.save(accepted);

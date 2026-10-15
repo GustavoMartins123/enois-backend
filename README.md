@@ -192,11 +192,22 @@ delete from flyway_schema_history where version = '<versao que falhou>';    # ou
 
 ## Fluxos de produto (referência rápida)
 
-- **Vagas**: `POST /jobs` (exige reputação > 150) cria; `GET /jobs` lista (com `applied`/`saved`/`owner` por
+- **Vagas**: `POST /jobs` (exige reputação **> 150**) cria; `GET /jobs` lista (com `applied`/`saved`/`owner` por
   usuário); `GET /jobs/mine` = vagas que publiquei (traz `applicationsCount`); `GET /jobs/applications` = vagas
   em que me candidatei; `POST /jobs/{id}/applications` é a inscrição (`409` se repetida); `PUT`/`DELETE /jobs/{id}`
   são do autor. No app: `/vagas` (listar/criar/inscrever), `/vagas/{id}` (detalhe + inscrever/salvar/excluir) e
   `/vagas/minhas` (minhas vagas e minhas candidaturas).
+- **Moeda da vaga**: o corpo de `POST /jobs` aceita `currency` (`BRL` padrão, `USD`, `EUR`) e `salary` só com os
+  números — a aplicação remove o símbolo que o autor digitar e a exibição remonta o texto com a moeda escolhida
+  (`R$ 8.000 – R$ 12.000`, `US$ 90,000`). O símbolo nunca fica duplicado nem trocado, inclusive em vagas antigas.
+- **Acordo com a comunidade**: além da reputação, `POST /jobs` exige `communityAgreement: true` — a declaração de
+  que a vaga é real e respeita as regras da comunidade. Sem ela a resposta é `400 COMMUNITY_RULES_NOT_ACCEPTED`,
+  e o instante da declaração fica em `jobs.community_agreed_at`.
+- **Bloqueio de usuário**: `POST /network/blocks/{userId}` bloqueia (definitivo), `DELETE …/{userId}` desbloqueia e
+  `GET /network/blocks` lista. Bloquear esconde os dois lados em todo lugar — feed, comentários, notificações,
+  busca e sugestões de conexão — derruba a conexão existente e impede nova solicitação (`403 BLOCKED`). O status
+  de conexão (`GET /network/connections/{userId}/status`) devolve `blocked` para a UI alternar o botão.
+  No app: botão no perfil (`/perfil/{username}`) e a lista em `/bloqueados`, no menu da conta.
 - **Suporte**: `POST /support/requests` (autenticado) abre o pedido; `GET /admin/support` (admin) lista a fila em
   aberto. No app: `/suporte`, alcançável pelo menu da conta.
 - **Consentimento**: `POST /auth/signup` exige `acceptedTerms: true` (termos + 18 anos); o instante do aceite é

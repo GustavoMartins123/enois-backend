@@ -5,6 +5,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -191,8 +192,21 @@ class FeedController {
 
 	@GetMapping("/feed/posts/{postId}/comments")
 	Object comments(@PathVariable String postId, @RequestParam(required = false) String cursor,
-			@RequestParam(defaultValue = "20") int limit) {
-		return getCommentsUseCase.getComments(new GetCommentsQuery(new PostId(postId), cursorCodec.decode(cursor), limit));
+			@RequestParam(defaultValue = "20") int limit,
+			@RequestHeader(value = USER_HEADER, required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		// Sessao opcional: ela so serve para esconder comentarios de quem o visitante bloqueou.
+		return getCommentsUseCase.getComments(new GetCommentsQuery(new PostId(postId), cursorCodec.decode(cursor), limit,
+			Optional.ofNullable(viewerId(userId, sessionToken))));
+	}
+
+	private com.socialcoisa.rede.feed.domain.UserId viewerId(String userId, String sessionToken) {
+		try {
+			return currentUserResolver.resolve(userId, sessionToken).id();
+		}
+		catch (RuntimeException exception) {
+			return null;
+		}
 	}
 
 	@PostMapping("/feed/posts/{postId}/reactions")

@@ -44,6 +44,12 @@ class JobJpaEntity {
 
 	private String salary;
 
+	@Column(nullable = false, length = 3)
+	private String currency;
+
+	@Column(name = "community_agreed_at")
+	private Instant communityAgreedAt;
+
 	@ElementCollection(fetch = FetchType.EAGER)
 	@CollectionTable(name = "job_skills", joinColumns = @JoinColumn(name = "job_id"),
 		indexes = @Index(name = "idx_job_skills_job", columnList = "job_id"))
@@ -72,6 +78,8 @@ class JobJpaEntity {
 		e.type = job.type();
 		e.level = job.level();
 		e.salary = job.salary();
+		e.currency = job.currency();
+		e.communityAgreedAt = job.communityAgreedAt();
 		e.skills = new ArrayList<>(job.skills());
 		e.postedBy = job.postedBy();
 		e.postedAt = job.postedAt();
@@ -80,7 +88,8 @@ class JobJpaEntity {
 	}
 
 	Job toDomain() {
-		return Job.restore(id, title, company, logo, location, type, level, salary, skills, postedBy, postedAt, updatedAt);
+		return Job.restore(id, title, company, logo, location, type, level, salary, currency, skills, postedBy,
+			communityAgreedAt, postedAt, updatedAt);
 	}
 
 }

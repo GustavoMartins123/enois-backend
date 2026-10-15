@@ -18,6 +18,15 @@ public class JobService {
 
 	public static final int MIN_REPUTATION_TO_CREATE_JOB = 150;
 
+	/** Moedas aceitas na faixa salarial. BRL e o padrao. */
+	public static final java.util.Set<String> SUPPORTED_CURRENCIES = java.util.Set.of("BRL", "USD", "EUR");
+
+	private static final int MAX_SALARY_LENGTH = 120;
+
+	/** Simbolos que o autor costuma digitar e que a exibicao remonta a partir da moeda. */
+	private static final java.util.regex.Pattern CURRENCY_SYMBOLS = java.util.regex.Pattern
+		.compile("(?i)(R\\$|US\\$|\\$|€)");
+
 	private final JobRepository repository;
 	private final ReputationService reputationService;
 	private final Clock clock;
@@ -30,30 +39,37 @@ public class JobService {
 
 	@Transactional
 	public Job create(String title, String company, String logo, String location, String type, String level,
-			String salary, List<String> skills, String userId) {
+			String salary, String currency, List<String> skills, String userId, boolean communityAgreement) {
 		validate(title, company, type, level);
 		int reputation = reputationService.reputationOf(userId);
 		if (reputation <= MIN_REPUTATION_TO_CREATE_JOB) {
 			throw new ApiException(403, "LOW_REPUTATION", "E necessario ter mais de " + MIN_REPUTATION_TO_CREATE_JOB
 				+ " de reputacao para criar vagas.");
 		}
+		// Publicar e afirmar que a vaga e real e respeita as regras da comunidade; guardamos o instante.
+		if (!communityAgreement) {
+			throw new ApiException(400, "COMMUNITY_RULES_NOT_ACCEPTED",
+				"E preciso declarar que a vaga e real e esta de acordo com as regras da comunidade.");
+		}
 		String id = "job_" + UUID.randomUUID().toString().replace("-", "");
-		Job job = Job.create(id, title, company, logo, location, type, level, salary, skills, userId, clock.instant());
+		Job job = Job.create(id, title, company, logo, location, type, level, normalizeSalary(salary),
+			normalizeCurrency(currency), skills, userId, clock.instant(), clock.instant());
 		repository.save(job);
 		return job;
 	}
 
 	@Transactional
 	public Job update(String jobId, String title, String company, String logo, String location, String type, String level,
-			String salary, List<String> skills, String userId) {
+			String salary, String currency, List<String> skills, String userId) {
 		validate(title, company, type, level);
 		Job existing = repository.findById(jobId)
 			.orElseThrow(() -> new ApiException(404, "JOB_NOT_FOUND", "Vaga nao encontrada."));
 		if (!existing.postedBy().equals(userId)) {
 			throw new ApiException(403, "NOT_OWNER", "Voce nao pode editar uma vaga que nao criou.");
 		}
-		Job updated = Job.restore(jobId, title, company, logo, location, type, level, salary, skills, userId,
-			existing.postedAt(), clock.instant());
+		Job updated = Job.restore(jobId, title, company, logo, location, type, level, normalizeSalary(salary),
+			normalizeCurrency(currency), skills, userId, existing.communityAgreedAt(), existing.postedAt(),
+			clock.instant());
 		repository.save(updated);
 		return updated;
 	}
@@ -149,6 +165,35 @@ public class JobService {
 		if (!StringUtils.hasText(level)) {
 			throw new ApiException(400, "INVALID_JOB", "Nivel da vaga e obrigatorio.");
 		}
+	}
+
+	/**
+	 * Deixa o valor da faixa salarial sem simbolo de moeda: o simbolo e escolhido no campo `currency`
+	 * e remontado na exibicao, entao a mesma vaga nunca aparece como "R$ R$ 8.000" nem com dois
+	 * simbolos diferentes.
+	 */
+	private static String normalizeSalary(String salary) {
+		if (!StringUtils.hasText(salary)) {
+			return null;
+		}
+		String cleaned = CURRENCY_SYMBOLS.matcher(salary).replaceAll(" ").replaceAll("\\s+", " ").trim();
+		if (cleaned.isEmpty()) {
+			return null;
+		}
+		return cleaned.length() > MAX_SALARY_LENGTH ? cleaned.substring(0, MAX_SALARY_LENGTH) : cleaned;
+	}
+
+	/** Moeda vigente da vaga: aceita apenas os codigos suportados; vazio vira BRL. */
+	private static String normalizeCurrency(String currency) {
+		if (!StringUtils.hasText(currency)) {
+			return "BRL";
+		}
+		String code = currency.trim().toUpperCase(java.util.Locale.ROOT);
+		if (!SUPPORTED_CURRENCIES.contains(code)) {
+			throw new ApiException(400, "INVALID_JOB_CURRENCY",
+				"Moeda nao suportada. Use BRL, USD ou EUR.");
+		}
+		return code;
 	}
 
 }
