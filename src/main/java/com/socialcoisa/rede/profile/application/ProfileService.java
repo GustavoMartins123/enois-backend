@@ -54,6 +54,40 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
 	}
 
+	/**
+	 * Limites de cada campo, com mensagem dizendo QUAL campo passou.
+	 *
+	 * Sem isso o valor longo chegava ao banco, estourava a coluna e virava um 409 generico — que a
+	 * tela antiga ainda rotulava como "nome de usuario ja esta em uso".
+	 */
+	private void validateLengths(UpdateProfileCommand command) {
+		check("nome", command.name(), 160);
+		check("headline", command.headline(), 180);
+		check("empresa", command.company(), 160);
+		check("local", command.location(), 160);
+		check("disponibilidade", command.availability(), 160);
+		check("portfolio", command.portfolio(), 500);
+		check("bio", command.bio(), 1024);
+		check("avatar", command.avatar(), 500);
+		check("banner", command.banner(), 500);
+		if (command.externalLinks() != null) {
+			command.externalLinks().forEach(link -> check("link", link, 500));
+		}
+		if (command.skills() != null) {
+			command.skills().forEach(skill -> check("habilidade", skill, 120));
+		}
+		if (command.goals() != null) {
+			command.goals().forEach(goal -> check("objetivo", goal, 160));
+		}
+	}
+
+	private void check(String field, String value, int max) {
+		if (value != null && value.length() > max) {
+			throw new ApiException(400, "FIELD_TOO_LONG",
+				"O campo " + field + " pode ter no maximo " + max + " caracteres.");
+		}
+	}
+
 	private UserProfile populateCounts(UserProfile profile) {
 		ReputationService.Counts counts = reputationService.countsFor(profile.id());
 		profile.setCounts(counts.connections(), counts.followers(), counts.reputation());
@@ -86,6 +120,7 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 			}
 			username = slug;
 		}
+		validateLengths(command);
 		profile.update(trim(command.name()), trim(command.headline()), trim(command.company()), trim(command.location()),
 			trim(command.avatar()), trim(command.banner()), trim(command.bio()), clean(command.skills()),
 			clean(command.goals()), trim(command.availability()), trim(command.portfolio()), clean(command.externalLinks()),

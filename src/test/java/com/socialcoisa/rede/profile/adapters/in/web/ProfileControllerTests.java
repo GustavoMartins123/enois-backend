@@ -69,6 +69,23 @@ class ProfileControllerTests {
 	}
 
 	@Test
+	void rejectsFieldOverTheLimitWithAClearMessage() throws Exception {
+		// Bio acima do limite: precisa dizer QUAL campo passou, nao virar um 409 generico (a tela
+		// antiga ainda rotulava isso como "nome de usuario ja esta em uso").
+		String payload = objectMapper.writeValueAsString(Map.of("bio", "a".repeat(2000)));
+
+		mockMvc.perform(patch("/me/profile")
+				.header("X-Session-Token", sessionToken)
+				.header("Idempotency-Key", "profile-bio-too-long")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(payload))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("FIELD_TOO_LONG"))
+			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("bio")))
+			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("1024")));
+	}
+
+	@Test
 	void updatesProfile() throws Exception {
 		String profilePayload = objectMapper.writeValueAsString(Map.of(
 			"headline", "Senior Engineer",

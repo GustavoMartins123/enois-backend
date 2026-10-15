@@ -199,6 +199,12 @@ delete from flyway_schema_history where version = '<versao que falhou>';    # ou
   em que me candidatei; `POST /jobs/{id}/applications` é a inscrição (`409` se repetida); `PUT`/`DELETE /jobs/{id}`
   são do autor. No app: `/vagas` (listar/criar/inscrever), `/vagas/{id}` (detalhe + inscrever/salvar/excluir) e
   `/vagas/minhas` (minhas vagas e minhas candidaturas).
+- **Erros com o motivo certo**: a API sempre devolve o `code`/`message` do backend — antes, qualquer 401/403
+  sem sessão virava "É necessário entrar para ver isso" e era assim que **senha errada no login** aparecia
+  (a resposta já dizia "Email ou senha inválidos"). Também: 403 não desconecta mais o usuário (era o efeito
+  colateral de tratar 403 como sessão), e `PATCH /me/profile` valida o tamanho de cada campo devolvendo
+  `400 FIELD_TOO_LONG` **com o nome do campo** ("O campo bio pode ter no máximo 1024 caracteres") em vez de
+  estourar a coluna e virar um 409 genérico.
 - **Eventos vencidos são sanitizados**: o fim do evento vem da própria data (ISO `yyyy-MM-dd`, ou
   `dd/MM/yyyy`; o horário é opcional e sem ele vale o fim do dia). Passado o fim, o evento **sai da vitrine**
   (`GET /events` só devolve o que ainda vai acontecer; `includePast=true` traz o histórico com `expired: true`)
