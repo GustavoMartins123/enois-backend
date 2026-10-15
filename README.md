@@ -174,6 +174,22 @@ backend expõe fica público em `https://enois.ia.br/api/...` — inclusive `/ap
    serviço de push) são removidas sozinhas. Vale para Chrome/Edge/Firefox no Android e desktop; no iOS só
    funciona com o app **instalado na tela de início** (iOS 16.4+).
 
+### Migrações travadas (rollout parado servindo versão antiga)
+
+O DDL do MariaDB não é transacional: quando uma migração quebra **no meio**, o Flyway deixa a versão marcada
+como `FAILED` em `flyway_schema_history` e passa a **recusar toda migração seguinte nesse banco**. O pod novo
+não sobe, o ArgoCD não consegue promover e o cluster segue servindo a imagem antiga — sem erro visível de fora
+(foi o que aconteceu com a V17, que tentava criar uma FK entre collations diferentes).
+
+`FlywayMigrationConfig` limpa esse marcador no boot: se houver alguma migração em estado `FAILED`, roda
+`repair()` (só remove entradas `FAILED` e realinha checksums) e migra de novo. Se ainda assim o pod não subir,
+o caminho manual é:
+
+```bash
+kubectl -n forest-apps logs deploy/socialcoiso-back | grep -i -A20 flyway   # ver o erro real
+delete from flyway_schema_history where version = '<versao que falhou>';    # ou flyway repair
+```
+
 ## Fluxos de produto (referência rápida)
 
 - **Vagas**: `POST /jobs` (exige reputação > 150) cria; `GET /jobs` lista (com `applied`/`saved`/`owner` por
