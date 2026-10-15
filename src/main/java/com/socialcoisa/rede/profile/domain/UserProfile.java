@@ -29,6 +29,8 @@ public class UserProfile {
 	private Instant updatedAt;
 	private Instant termsAcceptedAt;
 	private Instant emailVerifiedAt;
+	private Instant totpEnabledAt;
+	private Instant emailOtpEnabledAt;
 
 	private UserProfile(String id, String username, String email, String name, String headline, String company,
 			String location, String avatar, String banner, String bio, List<String> skills, List<String> goals,
@@ -112,6 +114,53 @@ public class UserProfile {
 		if (this.emailVerifiedAt == null) {
 			this.emailVerifiedAt = at;
 		}
+	}
+
+	/** Segundo fator ativo por aplicativo authenticator. */
+	public boolean totpEnabled() {
+		return totpEnabledAt != null;
+	}
+
+	public Instant totpEnabledAt() {
+		return totpEnabledAt;
+	}
+
+	public void enableTotp(Instant at) {
+		this.totpEnabledAt = at;
+	}
+
+	public void disableTotp() {
+		this.totpEnabledAt = null;
+	}
+
+	/** Segundo fator ativo por codigo enviado no e-mail. */
+	public boolean emailOtpEnabled() {
+		return emailOtpEnabledAt != null;
+	}
+
+	public Instant emailOtpEnabledAt() {
+		return emailOtpEnabledAt;
+	}
+
+	public void enableEmailOtp(Instant at) {
+		this.emailOtpEnabledAt = at;
+	}
+
+	public void disableEmailOtp() {
+		this.emailOtpEnabledAt = null;
+	}
+
+	/** Tem segundo fator (por app ou por e-mail)? */
+	public boolean twoFactorEnabled() {
+		return totpEnabled() || emailOtpEnabled();
+	}
+
+	/**
+	 * Conta "verificada": confirmou o e-mail ou ligou um segundo fator. E o que multiplica a
+	 * credibilidade — sem nenhum dos dois, a reputacao nao conta (regra pedida pelo produto).
+	 */
+	public boolean identityVerified() {
+		return emailVerified() || twoFactorEnabled();
 	}
 
 	public void changeEmail(String email, Instant now) {

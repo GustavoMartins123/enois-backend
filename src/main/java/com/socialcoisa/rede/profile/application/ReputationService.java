@@ -46,18 +46,26 @@ public class ReputationService {
 		int reports = profileRepository.countActiveReportsAgainst(userId);
 		int recommendations = recommendationRepository.findByRecommendedId(userId).size();
 		int reportPenalty = PENALTY_BASE_PER_REPORT * reports * (reports + 1) / 2;
-		int reputation = Math.max(0, Math.min(
+		int raw = Math.max(0, Math.min(
 			experiences * 10 + educations * 10 + certifications * 5 + connections + followers / 2
 				+ postInteractions + communities * 5 + events * 3 + mentoring * 10
 				- reportPenalty + recommendations * 20,
 			MAX_REPUTATION));
-		return new Counts(connections, followers, reputation);
+
+		// Regra de produto: credibilidade exige conta verificada — e-mail confirmado OU segundo fator
+		// ativo. Sem nenhum dos dois, a reputacao e multiplicada por zero. Fica aqui (fonte unica) para
+		// valer em tudo que depende de reputacao, inclusive a regra de publicar vaga.
+		boolean identityVerified = profileRepository.findById(userId)
+			.map(com.socialcoisa.rede.profile.domain.UserProfile::identityVerified)
+			.orElse(false);
+		int reputation = identityVerified ? raw : 0;
+		return new Counts(connections, followers, reputation, identityVerified);
 	}
 
 	public int reputationOf(String userId) {
 		return countsFor(userId).reputation();
 	}
 
-	public record Counts(int connections, int followers, int reputation) {
+	public record Counts(int connections, int followers, int reputation, boolean identityVerified) {
 	}
 }

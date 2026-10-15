@@ -27,6 +27,17 @@ public final class TestDatabase {
 		require().update("update users set email_verified_at = ? where id = ?", at, userId);
 	}
 
+	/** Devolve a conta ao estado "sem e-mail confirmado" (para testar a regra de credibilidade). */
+	public static void clearEmailVerification(String userId) {
+		require().update("update users set email_verified_at = null where id = ?", userId);
+	}
+
+	/** Liga um segundo fator sem passar pelo fluxo, para cenarios que so precisam do estado final. */
+	public static void enableTwoFactor(String userId, Instant at) {
+		require().update("update users set totp_enabled_at = ? where id = ?", at, userId);
+	}
+
+
 	/** Insere um token de confirmacao com o hash de um valor que o teste conhece. */
 	public static void insertVerificationToken(String rawToken, String userId, Instant expiresAt, Instant now) {
 		require().update("""

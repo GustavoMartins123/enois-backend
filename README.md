@@ -149,6 +149,7 @@ backend expõe fica público em `https://enois.ia.br/api/...` — inclusive `/ap
 | `MANAGEMENT_ENDPOINTS` | não | padrão `health`. Para métricas use `health,prometheus` **e bloqueie `/api/actuator/*` no gateway** |
 | `SUPPORT_EMAIL` | não | e-mail do time que recebe os pedidos de suporte. Sem ele o pedido ainda fica registrado e visível em `/admin/support` |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | p/ push no celular | par de chaves do Web Push (ver passo 7 abaixo). Sem elas o push fica desligado e só as notificações dentro do app funcionam |
+| `REDE_SECURITY_ENCRYPTION_KEY` | p/ 2FA por app | chave de 32 bytes em base64 (`openssl rand -base64 32`) que cifra os segredos TOTP em repouso (AES-GCM). **Sem ela, o 2FA por aplicativo authenticator fica indisponível** (erro explícito, sem guardar segredo em texto puro); o 2FA por código de e-mail continua funcionando |
 | `VAPID_SUBJECT` | não | contato do emissor VAPID, no formato `mailto:contato@dominio` (padrão `mailto:suporte@enois.ia.br`) |
 
 ### Passo a passo das ações manuais
@@ -237,6 +238,19 @@ delete from flyway_schema_history where version = '<versao que falhou>';    # ou
   `GET /auth/oauth/providers` lista os vínculos e `DELETE /auth/oauth/{provider}/link` desvincula — recusando
   com `409 LAST_LOGIN_METHOD` quando seria o último jeito de entrar (conta social não tem senha utilizável:
   `user_credentials.password_usable = false`). `POST /auth/oauth/{provider}/token` passou a exigir `state`.
+- **Conta verificada e credibilidade**: conta verificada = **e-mail confirmado OU segundo fator ativo**
+  (`users.email_verified_at`, `totp_enabled_at`, `email_otp_enabled_at`). Sem nenhum dos dois a reputação é
+  **multiplicada por zero** (regra em `ReputationService`, fonte única: vale para o perfil, o ranking e a regra
+  de publicar vaga) e as funcionalidades protegidas respondem `403 EMAIL_NOT_VERIFIED` no `CurrentUserResolver`.
+- **Segundo fator (2FA)**: `GET /auth/2fa/status` mostra o estado. Por aplicativo authenticator (TOTP RFC 6238,
+  segredo cifrado com `REDE_SECURITY_ENCRYPTION_KEY`): `POST /auth/2fa/totp/setup` devolve o segredo e a URI
+  `otpauth://`, `POST /auth/2fa/totp/enable` confirma um código e devolve 8 códigos de recuperação (uso único,
+  guardados como hash, mostrados uma vez). Por e-mail: `POST /auth/2fa/email/request` envia um código de 6
+  dígitos e `POST /auth/2fa/email/confirm` ativa. Desativar exige a senha. No login, quem tem 2FA recebe `202`
+  com `{twoFactorRequired, challengeId, method}` em vez da sessão e conclui em `POST /auth/2fa/verify`
+  (`POST /auth/2fa/resend` reenvia o código por e-mail). O desafio vale 10 minutos, é de uso único e morre
+  depois de 5 tentativas; um código de recuperação também conclui o login. No app: `/seguranca`, alcançável
+  pelo menu da conta e pelo botão "Verificar identidade" no próprio perfil.
 - **Push no celular**: `GET /push/config` (público) informa se o push está ligado e devolve a chave pública
   VAPID; `POST /push/subscriptions` (autenticado) registra o dispositivo (`endpoint` + `keys.p256dh`/`keys.auth`)
   e `DELETE /push/subscriptions?endpoint=...` remove. Toda notificação criada por `NotificationService` também
@@ -258,6 +272,9 @@ delete from flyway_schema_history where version = '<versao que falhou>';    # ou
 
 ### Já corrigido
 
+- **Credibilidade zerada sem verificação**: `ReputationService` passou a multiplicar a reputação por zero
+  quando a conta não tem e-mail confirmado **nem** segundo fator — a regra fica numa fonte única, então
+  perfil, ranking e o gate de publicar vaga concordam.
 - **Nenhum e-mail era enviado**: `InfrastructureConfig` declarava um `JavaMailSender` com
   `new JavaMailSenderImpl()` e sem host/porta. Por ser um bean do usuário, ele fazia o
   `MailSenderAutoConfiguration` recuar (`@ConditionalOnMissingBean`) e o envio caía nos padrões do

@@ -92,6 +92,12 @@ class UserProfileJpaEntity {
 	@Column(name = "email_verified_at")
 	private Instant emailVerifiedAt;
 
+	@Column(name = "totp_enabled_at")
+	private Instant totpEnabledAt;
+
+	@Column(name = "email_otp_enabled_at")
+	private Instant emailOtpEnabledAt;
+
 	protected UserProfileJpaEntity() {
 	}
 
@@ -119,6 +125,8 @@ class UserProfileJpaEntity {
 		entity.updatedAt = profile.updatedAt();
 		entity.termsAcceptedAt = profile.termsAcceptedAt();
 		entity.emailVerifiedAt = profile.emailVerifiedAt();
+		entity.totpEnabledAt = profile.totpEnabledAt();
+		entity.emailOtpEnabledAt = profile.emailOtpEnabledAt();
 		return entity;
 	}
 
@@ -129,6 +137,12 @@ class UserProfileJpaEntity {
 		profile.acceptTerms(termsAcceptedAt);
 		if (emailVerifiedAt != null) {
 			profile.markEmailVerified(emailVerifiedAt);
+		}
+		if (totpEnabledAt != null) {
+			profile.enableTotp(totpEnabledAt);
+		}
+		if (emailOtpEnabledAt != null) {
+			profile.enableEmailOtp(emailOtpEnabledAt);
 		}
 		return profile;
 	}

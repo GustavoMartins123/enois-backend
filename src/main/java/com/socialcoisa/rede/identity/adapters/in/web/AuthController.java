@@ -1,6 +1,7 @@
 package com.socialcoisa.rede.identity.adapters.in.web;
 
 import java.net.URI;
+import java.util.List;
 import java.util.Map;
 import java.util.Locale;
 
@@ -32,7 +33,10 @@ import com.socialcoisa.rede.identity.application.port.in.OAuthUseCase;
 import com.socialcoisa.rede.identity.application.port.in.RefreshSessionUseCase;
 import com.socialcoisa.rede.identity.application.port.in.RequestPasswordResetUseCase;
 import com.socialcoisa.rede.identity.application.port.in.ResetPasswordUseCase;
+import com.socialcoisa.rede.identity.application.LoginResult;
 import com.socialcoisa.rede.identity.application.port.in.SignupUseCase;
+import com.socialcoisa.rede.identity.application.port.in.TwoFactorLoginUseCase;
+import com.socialcoisa.rede.identity.application.port.in.TwoFactorUseCase;
 import com.socialcoisa.rede.identity.application.port.in.VerifyEmailUseCase;
 import com.socialcoisa.rede.identity.domain.OAuthProvider;
 import com.socialcoisa.rede.shared.web.ApiException;
@@ -48,6 +52,8 @@ class AuthController {
 
 	private final SignupUseCase signupUseCase;
 	private final VerifyEmailUseCase verifyEmailUseCase;
+	private final TwoFactorLoginUseCase twoFactorLoginUseCase;
+	private final TwoFactorUseCase twoFactorUseCase;
 	private final LoginUseCase loginUseCase;
 	private final LogoutUseCase logoutUseCase;
 	private final GetAuthenticatedUserUseCase getAuthenticatedUserUseCase;
@@ -61,8 +67,9 @@ class AuthController {
 	private final IdempotencyApplicationService idempotency;
 	private final OAuthProperties oAuthProperties;
 
-	AuthController(SignupUseCase signupUseCase, VerifyEmailUseCase verifyEmailUseCase, LoginUseCase loginUseCase,
-			LogoutUseCase logoutUseCase,
+	AuthController(SignupUseCase signupUseCase, VerifyEmailUseCase verifyEmailUseCase,
+			TwoFactorLoginUseCase twoFactorLoginUseCase, TwoFactorUseCase twoFactorUseCase,
+			LoginUseCase loginUseCase, LogoutUseCase logoutUseCase,
 			GetAuthenticatedUserUseCase getAuthenticatedUserUseCase,
 			OAuthUseCase oAuthUseCase,
 			RefreshSessionUseCase refreshSessionUseCase,
@@ -75,6 +82,8 @@ class AuthController {
 			OAuthProperties oAuthProperties) {
 		this.signupUseCase = signupUseCase;
 		this.verifyEmailUseCase = verifyEmailUseCase;
+		this.twoFactorLoginUseCase = twoFactorLoginUseCase;
+		this.twoFactorUseCase = twoFactorUseCase;
 		this.loginUseCase = loginUseCase;
 		this.logoutUseCase = logoutUseCase;
 		this.getAuthenticatedUserUseCase = getAuthenticatedUserUseCase;
@@ -122,14 +131,40 @@ class AuthController {
 		return ResponseEntity.accepted().body(new StatusResponse(null, "VERIFICATION_SENT"));
 	}
 
+	/**
+	 * Senha correta nao basta quando a conta tem segundo fator: nesse caso responde 202 com o desafio
+	 * (`twoFactorRequired`), e a sessao sai em {@code /auth/2fa/verify}.
+	 */
 	@PostMapping("/login")
 	@RateLimiter(name = "auth")
 	ResponseEntity<String> login(@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@RequestBody LoginRequest request) {
 		String scope = authScope(request.email());
 		String hash = idempotency.hash(request);
-		return idempotency.execute(scope, "POST", "/api/auth/login", idempotencyKey, hash, () -> new CommandResponse(200,
-			loginUseCase.login(new LoginCommand(request.email(), request.password()))));
+		return idempotency.execute(scope, "POST", "/api/auth/login", idempotencyKey, hash, () -> {
+			LoginResult result = loginUseCase.login(new LoginCommand(request.email(), request.password()));
+			return result.requiresTwoFactor()
+				? new CommandResponse(202, Map.of("twoFactorRequired", true,
+					"challengeId", result.challenge().challengeId(),
+					"method", result.challenge().method(),
+					"expiresAt", result.challenge().expiresAt().toString()))
+				: new CommandResponse(200, result.session());
+		});
+	}
+
+	/** Conclui o login com o codigo do segundo fator (ou com um codigo de recuperacao). */
+	@PostMapping("/2fa/verify")
+	@RateLimiter(name = "auth")
+	ResponseEntity<AuthResponse> verifyTwoFactor(@RequestBody VerifyTwoFactorRequest request) {
+		return ResponseEntity.ok(twoFactorLoginUseCase.verifyTwoFactor(request.challengeId(), request.code()));
+	}
+
+	/** Reenvia o codigo por e-mail do desafio em andamento. */
+	@PostMapping("/2fa/resend")
+	@RateLimiter(name = "email-sending")
+	ResponseEntity<StatusResponse> resendTwoFactor(@RequestBody ResendTwoFactorRequest request) {
+		twoFactorLoginUseCase.resendTwoFactorCode(request.challengeId());
+		return ResponseEntity.accepted().body(new StatusResponse(null, "CODE_SENT"));
 	}
 
 	@PostMapping("/logout")
@@ -165,6 +200,64 @@ class AuthController {
 		OAuthProvider oauthProvider = parseProvider(provider);
 		String userId = requireUserId(token);
 		return oAuthUseCase.startLink(userId, oauthProvider);
+	}
+
+	// ------------------------------------------------------------------ segundo fator (gestao)
+
+	@GetMapping("/2fa/status")
+	TwoFactorUseCase.TwoFactorStatus twoFactorStatus(
+			@RequestHeader(value = "X-Session-Token", required = false) String token) {
+		return twoFactorUseCase.status(requireUserId(token));
+	}
+
+	/** Comeca a configuracao do aplicativo authenticator (segredo pendente + URI otpauth). */
+	@PostMapping("/2fa/totp/setup")
+	@RateLimiter(name = "auth")
+	TwoFactorUseCase.TotpSetup startTotpSetup(
+			@RequestHeader(value = "X-Session-Token", required = false) String token) {
+		return twoFactorUseCase.startTotpSetup(requireUserId(token));
+	}
+
+	@PostMapping("/2fa/totp/enable")
+	@RateLimiter(name = "auth")
+	Map<String, Object> enableTotp(@RequestHeader(value = "X-Session-Token", required = false) String token,
+			@RequestBody TwoFactorCodeRequest request) {
+		List<String> backupCodes = twoFactorUseCase.enableTotp(requireUserId(token), request.code());
+		return Map.of("status", "TOTP_ENABLED", "backupCodes", backupCodes);
+	}
+
+	/** Desativar exige a senha: uma sessao roubada nao pode desligar o segundo fator sozinha. */
+	@PostMapping("/2fa/totp/disable")
+	@RateLimiter(name = "auth")
+	StatusResponse disableTotp(@RequestHeader(value = "X-Session-Token", required = false) String token,
+			@RequestBody PasswordConfirmationRequest request) {
+		twoFactorUseCase.disableTotp(requireUserId(token), request.password());
+		return new StatusResponse("2fa", "TOTP_DISABLED");
+	}
+
+	/** Envia o codigo que confirma a ativacao do segundo fator por e-mail. */
+	@PostMapping("/2fa/email/request")
+	@RateLimiter(name = "email-sending")
+	ResponseEntity<StatusResponse> requestEmailOtp(
+			@RequestHeader(value = "X-Session-Token", required = false) String token) {
+		twoFactorUseCase.requestEmailOtpSetup(requireUserId(token));
+		return ResponseEntity.accepted().body(new StatusResponse("2fa", "CODE_SENT"));
+	}
+
+	@PostMapping("/2fa/email/confirm")
+	@RateLimiter(name = "auth")
+	StatusResponse confirmEmailOtp(@RequestHeader(value = "X-Session-Token", required = false) String token,
+			@RequestBody TwoFactorCodeRequest request) {
+		twoFactorUseCase.confirmEmailOtpSetup(requireUserId(token), request.code());
+		return new StatusResponse("2fa", "EMAIL_OTP_ENABLED");
+	}
+
+	@PostMapping("/2fa/email/disable")
+	@RateLimiter(name = "auth")
+	StatusResponse disableEmailOtp(@RequestHeader(value = "X-Session-Token", required = false) String token,
+			@RequestBody PasswordConfirmationRequest request) {
+		twoFactorUseCase.disableEmailOtp(requireUserId(token), request.password());
+		return new StatusResponse("2fa", "EMAIL_OTP_DISABLED");
 	}
 
 	/** Provedores vinculados a conta (a tela mostra e permite desvincular). */
@@ -358,5 +451,17 @@ class AuthController {
 	}
 
 	record ResendVerificationRequest(String email) {
+	}
+
+	record VerifyTwoFactorRequest(String challengeId, String code) {
+	}
+
+	record ResendTwoFactorRequest(String challengeId) {
+	}
+
+	record TwoFactorCodeRequest(String code) {
+	}
+
+	record PasswordConfirmationRequest(String password) {
 	}
 }

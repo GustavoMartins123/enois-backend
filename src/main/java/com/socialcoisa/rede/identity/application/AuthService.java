@@ -23,6 +23,7 @@ import com.socialcoisa.rede.identity.application.port.in.RefreshSessionUseCase;
 import com.socialcoisa.rede.identity.application.port.in.RequestPasswordResetUseCase;
 import com.socialcoisa.rede.identity.application.port.in.ResetPasswordUseCase;
 import com.socialcoisa.rede.identity.application.port.in.SignupUseCase;
+import com.socialcoisa.rede.identity.application.port.in.TwoFactorLoginUseCase;
 import com.socialcoisa.rede.identity.application.port.in.VerifyEmailUseCase;
 import com.socialcoisa.rede.identity.application.port.out.AuthSessionRepository;
 import com.socialcoisa.rede.identity.application.port.out.CredentialRepository;
@@ -33,6 +34,7 @@ import com.socialcoisa.rede.identity.application.port.out.UserExternalIdentityRe
 import com.socialcoisa.rede.identity.application.EmailService;
 import com.socialcoisa.rede.identity.domain.EmailVerificationToken;
 import com.socialcoisa.rede.identity.domain.PasswordResetToken;
+import com.socialcoisa.rede.identity.domain.TwoFactorChallenge;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.profile.domain.UserProfile;
 import com.socialcoisa.rede.shared.web.ApiException;
@@ -40,7 +42,7 @@ import com.socialcoisa.rede.shared.web.ApiException;
 @Service
 public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, GetAuthenticatedUserUseCase,
 		RequestPasswordResetUseCase, ResetPasswordUseCase, RefreshSessionUseCase, ChangeEmailUseCase,
-		ChangePasswordUseCase, DeleteAccountUseCase, VerifyEmailUseCase {
+		ChangePasswordUseCase, DeleteAccountUseCase, VerifyEmailUseCase, TwoFactorLoginUseCase {
 
 	private static final Duration RESET_TOKEN_TTL = Duration.ofHours(24);
 
@@ -58,6 +60,7 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 	private final AuthSessionRepository authSessionRepository;
 	private final PasswordResetTokenRepository passwordResetTokenRepository;
 	private final EmailVerificationTokenRepository emailVerificationTokenRepository;
+	private final TwoFactorService twoFactorService;
 	private final UserExternalIdentityRepository externalIdentityRepository;
 	private final PasswordHasher passwordHasher;
 	private final EmailService emailService;
@@ -69,6 +72,7 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
                        UserProfileRepository userProfileRepository, CredentialRepository credentialRepository,
                        AuthSessionRepository authSessionRepository, PasswordResetTokenRepository passwordResetTokenRepository,
                        EmailVerificationTokenRepository emailVerificationTokenRepository,
+                       TwoFactorService twoFactorService,
                        UserExternalIdentityRepository externalIdentityRepository,
                        PasswordHasher passwordHasher, EmailService emailService, Clock clock) {
 		this.accessTokenTtl = Duration.ofMinutes(accessTokenTtlMinutes);
@@ -78,6 +82,7 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		this.authSessionRepository = authSessionRepository;
 		this.passwordResetTokenRepository = passwordResetTokenRepository;
 		this.emailVerificationTokenRepository = emailVerificationTokenRepository;
+		this.twoFactorService = twoFactorService;
 		this.externalIdentityRepository = externalIdentityRepository;
 		this.passwordHasher = passwordHasher;
         this.emailService = emailService;
@@ -107,7 +112,7 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 
 	@Override
 	@Transactional
-	public AuthResponse login(LoginCommand command) {
+	public LoginResult login(LoginCommand command) {
 		validateLogin(command);
 		String email = command.email().trim().toLowerCase(Locale.ROOT);
 		StoredCredential credential = credentialRepository.findByEmail(email)
@@ -117,8 +122,33 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		}
 		UserProfile profile = userProfileRepository.findById(credential.userId())
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
-		requireVerifiedEmail(profile);
+		requireVerifiedIdentity(profile);
+
+		// Senha correta e o primeiro passo: com segundo fator ativo, aqui sai um desafio, nao sessao.
+		var requiredMethod = twoFactorService.requiredMethod(profile.id());
+		if (requiredMethod.isPresent()) {
+			TwoFactorChallenge challenge = twoFactorService.startChallenge(profile.id(), requiredMethod.get());
+			return LoginResult.twoFactorRequired(challenge.id(), challenge.method().name(), challenge.expiresAt());
+		}
+		return LoginResult.authenticated(createResponse(profile));
+	}
+
+	/** Conclui o login com o codigo do segundo fator (ou um codigo de recuperacao). */
+	@Override
+	@Transactional
+	public AuthResponse verifyTwoFactor(String challengeId, String code) {
+		if (!StringUtils.hasText(challengeId)) {
+			throw new ApiException(400, "TWO_FACTOR_CHALLENGE_NOT_FOUND", "Informe o desafio do login.");
+		}
+		String userId = twoFactorService.verifyChallenge(challengeId.trim(), code);
+		UserProfile profile = userProfileRepository.findById(userId)
+			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
 		return createResponse(profile);
+	}
+
+	@Override
+	public void resendTwoFactorCode(String challengeId) {
+		twoFactorService.resendTwoFactorCode(challengeId);
 	}
 
 	@Override
@@ -319,10 +349,15 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		});
 	}
 
-	private void requireVerifiedEmail(UserProfile profile) {
-		if (!profile.emailVerified()) {
+	/**
+	 * Exige identidade verificada: e-mail confirmado OU segundo fator ativo. A mesma regra sustenta a
+	 * credibilidade (sem nenhum dos dois, a reputacao e zerada).
+	 */
+	private void requireVerifiedIdentity(UserProfile profile) {
+		if (!profile.identityVerified()) {
 			throw new ApiException(403, "EMAIL_NOT_VERIFIED",
-				"Confirme seu e-mail para entrar. Enviamos um link para " + normalizedEmail(profile) + ".");
+				"Confirme seu e-mail ou ative a verificacao em duas etapas para entrar. "
+					+ "Enviamos o link de confirmacao para " + normalizedEmail(profile) + ".");
 		}
 	}
 

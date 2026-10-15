@@ -7,10 +7,10 @@ import com.socialcoisa.rede.profile.domain.UserProfile;
  * proprio usuario; nunca deve ser montado a partir de uma projecao publica de terceiros.
  */
 public record AuthUserView(String id, String username, String name, String headline, String email,
-		boolean emailVerified) {
+		boolean emailVerified, boolean twoFactorEnabled, boolean identityVerified) {
 
 	public static AuthUserView from(UserProfile profile) {
 		return new AuthUserView(profile.id(), profile.username(), profile.name(), profile.headline(), profile.email(),
-			profile.emailVerified());
+			profile.emailVerified(), profile.twoFactorEnabled(), profile.identityVerified());
 	}
 }

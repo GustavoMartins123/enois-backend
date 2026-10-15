@@ -80,6 +80,33 @@ public class EmailService {
         }
     }
 
+    /**
+     * Codigo do segundo fator por e-mail.
+     *
+     * @return false quando o envio falha — o login com 2FA precisa saber que o codigo nao saiu, em
+     *         vez de deixar o usuario tentando um codigo que nunca chegou
+     */
+    public boolean sendTwoFactorCode(String toEmail, String userName, String code) {
+        Context context = new Context();
+        context.setVariable("userName", userName);
+        context.setVariable("code", code);
+        context.setVariable("currentYear", java.time.Year.now().getValue());
+
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject("Seu código de acesso: " + code);
+            helper.setText(templateEngine.process("two-factor-code", context), true);
+            mailSender.send(message);
+            return true;
+        } catch (Exception e) {
+            LOG.error("Falha ao enviar o codigo do segundo fator para {}: {}", toEmail, e.getMessage(), e);
+            return false;
+        }
+    }
+
     private String buildResetLink(String resetToken) {
         return frontendUrl + "/auth/reset?token=" + resetToken;
     }
