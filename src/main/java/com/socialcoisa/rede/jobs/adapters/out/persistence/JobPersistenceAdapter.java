@@ -154,8 +154,17 @@ class JobPersistenceAdapter implements JobRepository {
 	}
 
 	@Override
-	public void saveApplication(String jobId, String userId) {
-		applicationRepo.save(JobApplicationJpaEntity.create(jobId, userId, clock.instant()));
+	public String saveApplication(com.socialcoisa.rede.jobs.domain.JobApplication application) {
+		JobApplicationJpaEntity saved = applicationRepo.save(JobApplicationJpaEntity.fromDomain(application));
+		return saved.numericId() == null ? application.id() : String.valueOf(saved.numericId());
+	}
+
+	@Override
+	public List<com.socialcoisa.rede.jobs.domain.JobApplication> findApplicationsByJob(String jobId, int limit) {
+		return applicationRepo.findByJobIdOrderByAppliedAtDesc(jobId, org.springframework.data.domain.PageRequest.of(0, limit))
+			.stream()
+			.map(JobApplicationJpaEntity::toDomain)
+			.toList();
 	}
 
 	@Override

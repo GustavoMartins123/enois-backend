@@ -20,6 +20,9 @@ public interface MessagingRepository {
 
 	List<ConversationParticipant> findParticipantsByConversation(String conversationId);
 
+	/** Conversa DIRETA (1:1) entre dois usuarios, se existir. */
+	Optional<Conversation> findDirectBetween(String userA, String userB);
+
 	Optional<ConversationParticipant> findParticipant(String conversationId, String userId);
 
 	boolean isParticipant(String conversationId, String userId);

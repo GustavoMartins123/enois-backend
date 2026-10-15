@@ -2,14 +2,19 @@ package com.socialcoisa.rede.jobs.application;
 
 import java.time.Clock;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import com.socialcoisa.rede.jobs.application.port.out.JobApplicationDelivery;
 import com.socialcoisa.rede.jobs.application.port.out.JobRepository;
 import com.socialcoisa.rede.jobs.domain.Job;
+import com.socialcoisa.rede.jobs.domain.JobApplication;
+import com.socialcoisa.rede.jobs.domain.JobApplicationField;
 import com.socialcoisa.rede.profile.application.ReputationService;
 import com.socialcoisa.rede.shared.web.ApiException;
 
@@ -17,6 +22,9 @@ import com.socialcoisa.rede.shared.web.ApiException;
 public class JobService {
 
 	public static final int MIN_REPUTATION_TO_CREATE_JOB = 150;
+
+	/** Teto de campos personalizados: um formulario de vaga nao precisa de mais do que isso. */
+	public static final int MAX_APPLICATION_FIELDS = 25;
 
 	/** Moedas aceitas na faixa salarial. BRL e o padrao. */
 	public static final java.util.Set<String> SUPPORTED_CURRENCIES = java.util.Set.of("BRL", "USD", "EUR");
@@ -29,17 +37,29 @@ public class JobService {
 
 	private final JobRepository repository;
 	private final ReputationService reputationService;
+	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository;
+	private final com.socialcoisa.rede.profile.application.port.out.ProfileExtensionRepository extensionRepository;
+	private final JobApplicationDelivery delivery;
+	private final tools.jackson.databind.ObjectMapper objectMapper;
 	private final Clock clock;
 
-	public JobService(JobRepository repository, ReputationService reputationService, Clock clock) {
+	public JobService(JobRepository repository, ReputationService reputationService,
+			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository,
+			com.socialcoisa.rede.profile.application.port.out.ProfileExtensionRepository extensionRepository,
+			JobApplicationDelivery delivery, tools.jackson.databind.ObjectMapper objectMapper, Clock clock) {
 		this.repository = repository;
 		this.reputationService = reputationService;
+		this.userProfileRepository = userProfileRepository;
+		this.extensionRepository = extensionRepository;
+		this.delivery = delivery;
+		this.objectMapper = objectMapper;
 		this.clock = clock;
 	}
 
 	@Transactional
 	public Job create(String title, String company, String logo, String location, String type, String level,
-			String salary, String currency, List<String> skills, String userId, boolean communityAgreement) {
+			String salary, String currency, List<String> skills, List<JobFieldInput> fields, String userId,
+			boolean communityAgreement) {
 		validate(title, company, type, level);
 		int reputation = reputationService.reputationOf(userId);
 		if (reputation <= MIN_REPUTATION_TO_CREATE_JOB) {
@@ -53,14 +73,14 @@ public class JobService {
 		}
 		String id = "job_" + UUID.randomUUID().toString().replace("-", "");
 		Job job = Job.create(id, title, company, logo, location, type, level, normalizeSalary(salary),
-			normalizeCurrency(currency), skills, userId, clock.instant(), clock.instant());
+			normalizeCurrency(currency), skills, normalizeFields(id, fields), userId, clock.instant(), clock.instant());
 		repository.save(job);
 		return job;
 	}
 
 	@Transactional
 	public Job update(String jobId, String title, String company, String logo, String location, String type, String level,
-			String salary, String currency, List<String> skills, String userId) {
+			String salary, String currency, List<String> skills, List<JobFieldInput> fields, String userId) {
 		validate(title, company, type, level);
 		Job existing = repository.findById(jobId)
 			.orElseThrow(() -> new ApiException(404, "JOB_NOT_FOUND", "Vaga nao encontrada."));
@@ -68,8 +88,8 @@ public class JobService {
 			throw new ApiException(403, "NOT_OWNER", "Voce nao pode editar uma vaga que nao criou.");
 		}
 		Job updated = Job.restore(jobId, title, company, logo, location, type, level, normalizeSalary(salary),
-			normalizeCurrency(currency), skills, userId, existing.communityAgreedAt(), existing.postedAt(),
-			clock.instant());
+			normalizeCurrency(currency), skills, normalizeFields(jobId, fields), userId, existing.communityAgreedAt(),
+			existing.postedAt(), clock.instant());
 		repository.save(updated);
 		return updated;
 	}
@@ -84,14 +104,171 @@ public class JobService {
 		repository.deleteById(jobId);
 	}
 
+	/**
+	 * Candidatura: valida os campos que o autor definiu, congela o retrato do perfil do candidato e
+	 * entrega a candidatura ao empregador (e-mail + mensagem direta).
+	 */
 	@Transactional
-	public void apply(String jobId, String userId) {
-		repository.findById(jobId)
+	public JobApplication apply(String jobId, String userId, String message, List<JobAnswerInput> answers) {
+		Job job = repository.findById(jobId)
 			.orElseThrow(() -> new ApiException(404, "JOB_NOT_FOUND", "Vaga nao encontrada."));
+		if (job.postedBy().equals(userId)) {
+			throw new ApiException(400, "CANNOT_APPLY_TO_OWN_JOB", "Voce nao pode se candidatar a sua propria vaga.");
+		}
 		if (repository.hasApplied(jobId, userId)) {
 			throw new ApiException(409, "ALREADY_APPLIED", "Voce ja se candidatou a esta vaga.");
 		}
-		repository.saveApplication(jobId, userId);
+		List<JobApplication.JobApplicationAnswer> normalized = validateAnswers(job, answers);
+		String snapshot = snapshotOf(userId);
+		JobApplication application = JobApplication.create(null, jobId, userId, trimToNull(message, 2000), snapshot,
+			clock.instant(), normalized);
+		String applicationId = repository.saveApplication(application);
+		JobApplication saved = JobApplication.restore(applicationId, jobId, userId, application.message(), snapshot,
+			application.appliedAt(), normalized);
+
+		// Entrega: o empregador recebe por e-mail e na mensagem direta, com o perfil do candidato.
+		delivery.deliver(job, saved);
+		return saved;
+	}
+
+	/** Candidaturas recebidas por uma vaga: somente o autor da vaga ve quem se candidatou. */
+	public List<JobApplication> applicationsOf(String jobId, String requesterId, int limit) {
+		Job job = repository.findById(jobId)
+			.orElseThrow(() -> new ApiException(404, "JOB_NOT_FOUND", "Vaga nao encontrada."));
+		if (!job.postedBy().equals(requesterId)) {
+			throw new ApiException(403, "NOT_OWNER", "So quem publicou a vaga ve as candidaturas recebidas.");
+		}
+		return repository.findApplicationsByJob(jobId, Math.min(Math.max(limit, 1), 100));
+	}
+
+	/**
+	 * Valida as respostas contra os campos da vaga: obrigatorio sem resposta barra a candidatura, e o
+	 * valor precisa combinar com o tipo do campo (numero, link).
+	 */
+	private List<JobApplication.JobApplicationAnswer> validateAnswers(Job job, List<JobAnswerInput> answers) {
+		Map<String, String> byField = new java.util.LinkedHashMap<>();
+		if (answers != null) {
+			for (JobAnswerInput answer : answers) {
+				if (answer != null && StringUtils.hasText(answer.fieldId())) {
+					byField.put(answer.fieldId().trim(), answer.value() == null ? "" : answer.value().trim());
+				}
+			}
+		}
+
+		List<String> missing = new java.util.ArrayList<>();
+		List<JobApplication.JobApplicationAnswer> result = new java.util.ArrayList<>();
+		for (JobApplicationField field : job.applicationFields()) {
+			String value = byField.get(field.id());
+			if (!StringUtils.hasText(value)) {
+				if (field.required()) {
+					missing.add(field.label());
+				}
+				continue;
+			}
+			if (value.length() > 2000) {
+				throw new ApiException(400, "ANSWER_TOO_LONG",
+					"A resposta de \"" + field.label() + "\" passa de 2000 caracteres.");
+			}
+			if (field.type() == JobApplicationField.FieldType.NUMBER && !value.matches("[-+]?\\d+([.,]\\d+)?")) {
+				throw new ApiException(400, "INVALID_ANSWER",
+					"O campo \"" + field.label() + "\" espera um numero.");
+			}
+			if (field.type() == JobApplicationField.FieldType.LINK
+					&& !value.matches("(?i)^(https?://\\S+\\.\\S+|\\S+\\.\\S{2,}/?\\S*)$")) {
+				throw new ApiException(400, "INVALID_ANSWER",
+					"O campo \"" + field.label() + "\" espera um link.");
+			}
+			result.add(new JobApplication.JobApplicationAnswer(field.id(), field.label(), value, field.position()));
+		}
+
+		if (!missing.isEmpty()) {
+			throw new ApiException(400, "MISSING_REQUIRED_ANSWERS",
+				"Responda os campos obrigatorios: " + String.join(", ", missing) + ".");
+		}
+		return result;
+	}
+
+	/** Retrato do candidato no momento da inscricao: perfil, tempo de experiencia e credibilidade. */
+	private String snapshotOf(String userId) {
+		var profile = userProfileRepository.findById(userId).orElse(null);
+		int reputation = reputationService.reputationOf(userId);
+		int years = yearsOfExperience(userId);
+		Map<String, Object> snapshot = new java.util.LinkedHashMap<>();
+		snapshot.put("name", profile == null ? "" : profile.name());
+		snapshot.put("username", profile == null ? "" : profile.username());
+		snapshot.put("headline", profile == null ? "" : StringUtils.hasText(profile.headline()) ? profile.headline() : "");
+		snapshot.put("location", profile == null ? "" : StringUtils.hasText(profile.location()) ? profile.location() : "");
+		snapshot.put("avatar", profile == null ? "" : StringUtils.hasText(profile.avatar()) ? profile.avatar() : "");
+		snapshot.put("skills", profile == null ? List.of() : profile.skills());
+		snapshot.put("experienceYears", years);
+		snapshot.put("experiencesCount", extensionRepository.countExperiencesByUserId(userId));
+		snapshot.put("reputation", reputation);
+		snapshot.put("identityVerified", profile != null && profile.identityVerified());
+		try {
+			return objectMapper.writeValueAsString(snapshot);
+		}
+		catch (Exception exception) {
+			throw new ApiException(500, "SNAPSHOT_FAILURE", "Nao foi possivel montar o seu perfil para o envio.");
+		}
+	}
+
+	/** Anos de experiencia a partir da primeira experiencia registrada (0 quando nao ha nenhuma). */
+	private int yearsOfExperience(String userId) {
+		java.time.LocalDate earliest = extensionRepository.findExperiencesByUserId(userId).stream()
+			.map(experience -> experience.startDate())
+			.filter(java.util.Objects::nonNull)
+			.min(java.time.LocalDate::compareTo)
+			.orElse(null);
+		if (earliest == null) {
+			return 0;
+		}
+		return Math.max(0, java.time.Period.between(earliest, java.time.LocalDate.now()).getYears());
+	}
+
+	/** Campos enviados pelo autor: geram id proprio e entram na ordem em que foram criados. */
+	private List<JobApplicationField> normalizeFields(String jobId, List<JobFieldInput> fields) {
+		if (fields == null || fields.isEmpty()) {
+			return List.of();
+		}
+		if (fields.size() > MAX_APPLICATION_FIELDS) {
+			throw new ApiException(400, "TOO_MANY_FIELDS",
+				"O formulario aceita no maximo " + MAX_APPLICATION_FIELDS + " campos.");
+		}
+		List<JobApplicationField> normalized = new java.util.ArrayList<>();
+		Set<String> labels = new java.util.LinkedHashSet<>();
+		for (int index = 0; index < fields.size(); index++) {
+			JobFieldInput input = fields.get(index);
+			if (input == null || !StringUtils.hasText(input.label())) {
+				continue;
+			}
+			String label = input.label().trim();
+			if (label.length() > 160) {
+				throw new ApiException(400, "INVALID_FIELD_LABEL", "O campo deve ter no maximo 160 caracteres.");
+			}
+			if (!labels.add(label.toLowerCase(java.util.Locale.ROOT))) {
+				throw new ApiException(400, "DUPLICATE_FIELD_LABEL", "Ha dois campos com o mesmo nome: " + label + ".");
+			}
+			normalized.add(JobApplicationField.create(
+				"field_" + UUID.randomUUID().toString().replace("-", ""), jobId, label,
+				JobApplicationField.FieldType.from(input.type()), input.required(), index));
+		}
+		return normalized;
+	}
+
+	private String trimToNull(String value, int max) {
+		if (!StringUtils.hasText(value)) {
+			return null;
+		}
+		String trimmed = value.trim();
+		return trimmed.length() > max ? trimmed.substring(0, max) : trimmed;
+	}
+
+	/** Campos que o autor define no formulario de candidatura. */
+	public record JobFieldInput(String label, String type, boolean required) {
+	}
+
+	/** Resposta do candidato a um campo da vaga. */
+	public record JobAnswerInput(String fieldId, String value) {
 	}
 
 	@Transactional

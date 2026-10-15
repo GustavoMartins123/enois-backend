@@ -44,6 +44,23 @@ public class MessagingService {
 		return conversation;
 	}
 
+	/**
+	 * Conversa direta entre dois usuarios: devolve a existente ou cria (com os dois como
+	 * participantes). Usada, por exemplo, para entregar uma candidatura na DM de quem publicou.
+	 */
+	@Transactional
+	public String directConversationBetween(String userA, String userB) {
+		var existing = repository.findDirectBetween(userA, userB);
+		if (existing.isPresent()) {
+			return existing.get().id();
+		}
+		String id = "conversation_" + java.util.UUID.randomUUID().toString().replace("-", "");
+		repository.saveConversation(Conversation.create(id, "DIRECT", null, userA, clock.instant()));
+		repository.saveParticipant(ConversationParticipant.create(id, userA, clock.instant()));
+		repository.saveParticipant(ConversationParticipant.create(id, userB, clock.instant()));
+		return id;
+	}
+
 	@Transactional
 	public Message sendMessage(String conversationId, String senderId, String text) {
 		Conversation conversation = repository.findConversationById(conversationId)

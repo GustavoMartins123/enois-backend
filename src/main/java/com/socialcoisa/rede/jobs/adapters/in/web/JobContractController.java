@@ -36,13 +36,39 @@ class JobContractController {
 	private final CurrentUserResolver currentUserResolver;
 	private final JobService jobService;
 	private final CursorCodec cursorCodec;
+	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository;
+	private final com.socialcoisa.rede.profile.application.ReputationService reputationService;
+	private final tools.jackson.databind.ObjectMapper objectMapper;
 
 	JobContractController(IdempotencyApplicationService idempotency, CurrentUserResolver currentUserResolver,
-			JobService jobService, CursorCodec cursorCodec) {
+			JobService jobService, CursorCodec cursorCodec,
+			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository,
+			com.socialcoisa.rede.profile.application.ReputationService reputationService,
+			tools.jackson.databind.ObjectMapper objectMapper) {
 		this.idempotency = idempotency;
 		this.currentUserResolver = currentUserResolver;
 		this.jobService = jobService;
 		this.cursorCodec = cursorCodec;
+		this.userProfileRepository = userProfileRepository;
+		this.reputationService = reputationService;
+		this.objectMapper = objectMapper;
+	}
+
+	/** Candidaturas recebidas (somente quem publicou a vaga). */
+	@GetMapping("/{jobId}/applications")
+	List<ApplicationView> applications(@PathVariable String jobId,
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestParam(defaultValue = "50") int limit) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		return jobService.applicationsOf(jobId, user.id().value(), limit).stream()
+			.map(application -> new ApplicationView(application.id(), application.jobId(), "APPLIED",
+				application.appliedAt().toString(), application.answers().size(),
+				toCandidateView(application), application.message(),
+				application.answers().stream()
+					.map(answer -> new AnswerView(answer.label(), answer.value()))
+					.toList()))
+			.toList();
 	}
 
 	@PostMapping
@@ -51,7 +77,8 @@ class JobContractController {
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		Job job = jobService.create(body.title(), body.company(), body.logo(), body.location(), body.type(), body.level(),
-			body.salary(), body.currency(), body.skills(), user.id().value(), body.communityAgreement());
+			body.salary(), body.currency(), body.skills(), toFieldInputs(body.applicationFields()), user.id().value(),
+			body.communityAgreement());
 		return ResponseEntity.status(HttpStatus.CREATED).body(toView(job, user.id().value(), false, false, 0));
 	}
 
@@ -110,7 +137,8 @@ class JobContractController {
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		Job job = jobService.update(jobId, body.title(), body.company(), body.logo(), body.location(), body.type(),
-			body.level(), body.salary(), body.currency(), body.skills(), user.id().value());
+			body.level(), body.salary(), body.currency(), body.skills(), toFieldInputs(body.applicationFields()),
+			user.id().value());
 		return ResponseEntity.ok(toView(job, user.id().value(), false, false, jobService.applicationsCount(job.id())));
 	}
 
@@ -123,17 +151,24 @@ class JobContractController {
 		return ResponseEntity.noContent().build();
 	}
 
+	/**
+	 * Candidatura. O corpo traz a mensagem opcional e as respostas dos campos que o autor definiu —
+	 * os obrigatorios sao validados aqui, e a candidatura e entregue ao empregador por e-mail e DM.
+	 */
 	@PostMapping("/{jobId}/applications")
 	ResponseEntity<String> apply(@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
-			@PathVariable String jobId) {
+			@PathVariable String jobId,
+			@RequestBody(required = false) ApplyRequest body) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		String hash = idempotency.hash(Map.of("jobId", jobId));
+		String hash = idempotency.hash(Map.of("jobId", jobId, "body", body == null ? Map.of() : body));
 		return idempotency.execute(user.id(), "POST", "/api/jobs/{jobId}/applications", idempotencyKey, hash,
 			() -> {
-				jobService.apply(jobId, user.id().value());
-				return new CommandResponse(201, new StatusResponse(jobId, "APPLIED"));
+				var application = jobService.apply(jobId, user.id().value(), body == null ? null : body.message(),
+					toAnswerInputs(body == null ? null : body.answers()));
+				return new CommandResponse(201, new ApplicationView(application.id(), jobId, "APPLIED",
+					application.appliedAt().toString(), application.answers().size()));
 			});
 	}
 
@@ -186,7 +221,7 @@ class JobContractController {
 					job.level(), job.salary(), job.currency(), job.skills(),
 					job.postedAt() != null ? job.postedAt().toString() : null, 0,
 					appliedIds.contains(job.id()), savedIds.contains(job.id()), owner,
-					owner ? counts.getOrDefault(job.id(), 0) : 0);
+					owner ? counts.getOrDefault(job.id(), 0) : 0, authorOf(job), fieldViews(job));
 			})
 			.toList();
 		String nextCursor = jobs.size() == limit
@@ -197,7 +232,24 @@ class JobContractController {
 	private JobView toView(Job job, String viewer, boolean applied, boolean saved, int applicationsCount) {
 		return new JobView(job.id(), job.title(), job.company(), job.logo(), job.location(), job.type(), job.level(),
 			job.salary(), job.currency(), job.skills(), job.postedAt() != null ? job.postedAt().toString() : null, 0,
-			applied, saved, viewer != null && viewer.equals(job.postedBy()), applicationsCount);
+			applied, saved, viewer != null && viewer.equals(job.postedBy()), applicationsCount, authorOf(job),
+			fieldViews(job));
+	}
+
+	/** Quem criou a vaga (com reputacao e verificacao): o candidato precisa saber com quem fala. */
+	private AuthorView authorOf(Job job) {
+		var profile = userProfileRepository.findById(job.postedBy()).orElse(null);
+		if (profile == null) {
+			return null;
+		}
+		return new AuthorView(profile.id(), profile.username(), profile.name(), profile.avatar(), profile.headline(),
+			reputationService.reputationOf(profile.id()), profile.identityVerified());
+	}
+
+	private List<ApplicationFieldView> fieldViews(Job job) {
+		return job.applicationFields().stream()
+			.map(field -> new ApplicationFieldView(field.id(), field.label(), field.type().name(), field.required()))
+			.toList();
 	}
 
 	/** Resolve o usuario quando ha sessao; listas publicas seguem funcionando sem login. */
@@ -212,11 +264,87 @@ class JobContractController {
 
 	record JobView(String id, String title, String company, String logo, String location, String type, String level,
 			String salary, String currency, List<String> skills, String postedAt, int matchScore, boolean applied,
-			boolean saved, boolean owner, int applicationsCount) {
+			boolean saved, boolean owner, int applicationsCount, AuthorView author, List<ApplicationFieldView>
+			applicationFields) {
+	}
+
+	/** Quem publicou a vaga, com o que sustenta a credibilidade dele. */
+	record AuthorView(String id, String username, String name, String avatar, String headline, int reputation,
+			boolean identityVerified) {
+	}
+
+	record ApplicationFieldView(String id, String label, String type, boolean required) {
 	}
 
 	record CreateJobRequest(String title, String company, String logo, String location, String type, String level,
-			String salary, String currency, List<String> skills, boolean communityAgreement) {
+			String salary, String currency, List<String> skills, boolean communityAgreement,
+			List<ApplicationFieldRequest> applicationFields) {
+	}
+
+	record ApplicationFieldRequest(String label, String type, boolean required) {
+	}
+
+	record ApplyRequest(String message, List<AnswerRequest> answers) {
+	}
+
+	record AnswerRequest(String fieldId, String value) {
+	}
+
+	/** Candidatura como o empregador ve: o retrato do candidato + as respostas. */
+	record ApplicationView(String id, String jobId, String status, String appliedAt, int answersCount,
+			CandidateView candidate, String message, List<AnswerView> answers) {
+
+		ApplicationView(String id, String jobId, String status, String appliedAt, int answersCount) {
+			this(id, jobId, status, appliedAt, answersCount, null, null, List.of());
+		}
+	}
+
+	record CandidateView(String userId, String name, String username, String headline, String location, String avatar,
+			List<String> skills, int experienceYears, int experiencesCount, int reputation, boolean identityVerified) {
+	}
+
+	record AnswerView(String label, String value) {
+	}
+
+	private List<JobService.JobFieldInput> toFieldInputs(List<ApplicationFieldRequest> fields) {
+		if (fields == null) {
+			return List.of();
+		}
+		return fields.stream()
+			.map(field -> new JobService.JobFieldInput(field.label(), field.type(), field.required()))
+			.toList();
+	}
+
+	private List<JobService.JobAnswerInput> toAnswerInputs(List<AnswerRequest> answers) {
+		if (answers == null) {
+			return List.of();
+		}
+		return answers.stream()
+			.map(answer -> new JobService.JobAnswerInput(answer.fieldId(), answer.value()))
+			.toList();
+	}
+
+	/** Le o retrato do candidato congelado na candidatura (JSON gravado no envio). */
+	private CandidateView toCandidateView(com.socialcoisa.rede.jobs.domain.JobApplication application) {
+		try {
+			var snapshot = objectMapper.readTree(application.candidateSnapshot() == null ? "{}" : application.candidateSnapshot());
+			return new CandidateView(
+				application.userId(),
+				snapshot.path("name").asText(""),
+				snapshot.path("username").asText(""),
+				snapshot.path("headline").asText(""),
+				snapshot.path("location").asText(""),
+				snapshot.path("avatar").asText(""),
+				java.util.stream.StreamSupport.stream(snapshot.path("skills").spliterator(), false)
+					.map(node -> node.asText("")).filter(text -> !text.isBlank()).toList(),
+				snapshot.path("experienceYears").asInt(0),
+				snapshot.path("experiencesCount").asInt(0),
+				snapshot.path("reputation").asInt(0),
+				snapshot.path("identityVerified").asBoolean(false));
+		}
+		catch (Exception exception) {
+			return new CandidateView(application.userId(), "", "", "", "", "", List.of(), 0, 0, 0, false);
+		}
 	}
 
 }

@@ -199,6 +199,16 @@ delete from flyway_schema_history where version = '<versao que falhou>';    # ou
   em que me candidatei; `POST /jobs/{id}/applications` é a inscrição (`409` se repetida); `PUT`/`DELETE /jobs/{id}`
   são do autor. No app: `/vagas` (listar/criar/inscrever), `/vagas/{id}` (detalhe + inscrever/salvar/excluir) e
   `/vagas/minhas` (minhas vagas e minhas candidaturas).
+- **Candidatura com formulário próprio**: quem publica define campos personalizados (`applicationFields` no
+  corpo de `POST /jobs`: `label`, `type` — TEXT, TEXTAREA, NUMBER ou LINK — e `required`), até 25, sem rótulos
+  repetidos. `POST /jobs/{jobId}/applications` recebe `{message?, answers:[{fieldId,value}]}`: campos
+  obrigatórios barram o envio (`400 MISSING_REQUIRED_ANSWERS`), o valor é validado pelo tipo
+  (`400 INVALID_ANSWER`) e a candidatura grava um **retrato do perfil do candidato** naquele momento (nome,
+  headline, local, habilidades, **tempo de experiência**, reputação e verificação). O empregador recebe por
+  **e-mail** e na **conversa direta** (criada na hora entre os dois) e vê tudo em
+  `GET /jobs/{jobId}/applications` (só o autor). Candidatar-se à própria vaga é recusado
+  (`400 CANNOT_APPLY_TO_OWN_JOB`) e repetir devolve `409 ALREADY_APPLIED`. O detalhe da vaga traz
+  `author` (nome, usuário, reputação e verificação) e os campos do formulário.
 - **Busca booleana nas vagas**: `GET /jobs?query=...` entende `AND`/`E`, `OR`/`OU`, `NOT`/`NÃO`/`NAO`,
   `"frase exata"`, `-termo` (exclui), `+termo` (exige) e parênteses — sem operador, os termos valem como E
   (precedência: NOT > AND > OR). Os termos casam com título, empresa, local, tipo, nível e habilidades.

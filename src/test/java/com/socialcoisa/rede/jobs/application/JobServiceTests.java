@@ -29,11 +29,21 @@ class JobServiceTests {
 	@Mock
 	private ReputationService reputationService;
 
+	@Mock
+	private com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository;
+
+	@Mock
+	private com.socialcoisa.rede.profile.application.port.out.ProfileExtensionRepository extensionRepository;
+
+	@Mock
+	private com.socialcoisa.rede.jobs.application.port.out.JobApplicationDelivery delivery;
+
 	private JobService service;
 
 	@BeforeEach
 	void setUp() {
-		service = new JobService(repository, reputationService, Clock.systemUTC());
+		service = new JobService(repository, reputationService, userProfileRepository, extensionRepository, delivery,
+			new tools.jackson.databind.ObjectMapper(), Clock.systemUTC());
 	}
 
 	@Test
@@ -41,7 +51,7 @@ class JobServiceTests {
 		when(reputationService.reputationOf(USER)).thenReturn(300);
 
 		Job job = service.create("Pessoa Desenvolvedora", "Acme", null, "Remoto", "CLT", "PLENO",
-			"R$ 8.000 – R$ 12.000", "brl", List.of("Java"), USER, true);
+			"R$ 8.000 – R$ 12.000", "brl", List.of("Java"), List.of(), USER, true);
 
 		assertThat(job.salary()).isEqualTo("8.000 – 12.000");
 		assertThat(job.currency()).isEqualTo("BRL");
@@ -53,7 +63,7 @@ class JobServiceTests {
 		when(reputationService.reputationOf(USER)).thenReturn(300);
 
 		Job job = service.create("Backend Engineer", "Acme", null, "Remote", "PJ", "SENIOR",
-			"US$ 90,000/year", "usd", List.of("Go"), USER, true);
+			"US$ 90,000/year", "usd", List.of("Go"), List.of(), USER, true);
 
 		assertThat(job.salary()).isEqualTo("90,000/year");
 		assertThat(job.currency()).isEqualTo("USD");
@@ -63,8 +73,8 @@ class JobServiceTests {
 	void defaultsToBrlWhenCurrencyIsOmitted() {
 		when(reputationService.reputationOf(USER)).thenReturn(300);
 
-		Job job = service.create("Suporte", "Acme", null, "São Paulo", "CLT", "JUNIOR", null, null, List.of(), USER,
-			true);
+		Job job = service.create("Suporte", "Acme", null, "São Paulo", "CLT", "JUNIOR", null, null, List.of(),
+			List.of(), USER, true);
 
 		assertThat(job.currency()).isEqualTo("BRL");
 		assertThat(job.salary()).isNull();
@@ -75,7 +85,7 @@ class JobServiceTests {
 		when(reputationService.reputationOf(USER)).thenReturn(300);
 
 		assertThatThrownBy(() -> service.create("Vaga", "Acme", null, null, "CLT", "PLENO", null, "BRL", List.of(),
-			USER, false))
+			List.of(), USER, false))
 			.isInstanceOf(ApiException.class)
 			.hasMessageContaining("regras da comunidade");
 	}
@@ -85,7 +95,7 @@ class JobServiceTests {
 		when(reputationService.reputationOf(USER)).thenReturn(300);
 
 		assertThatThrownBy(() -> service.create("Vaga", "Acme", null, null, "CLT", "PLENO", "1000", "BTC", List.of(),
-			USER, true))
+			List.of(), USER, true))
 			.isInstanceOf(ApiException.class)
 			.hasMessageContaining("Moeda nao suportada");
 	}
@@ -95,7 +105,7 @@ class JobServiceTests {
 		when(reputationService.reputationOf(USER)).thenReturn(JobService.MIN_REPUTATION_TO_CREATE_JOB);
 
 		assertThatThrownBy(() -> service.create("Vaga", "Acme", null, null, "CLT", "PLENO", null, "BRL", List.of(),
-			USER, true))
+			List.of(), USER, true))
 			.isInstanceOf(ApiException.class)
 			.hasMessageContaining("reputacao");
 	}

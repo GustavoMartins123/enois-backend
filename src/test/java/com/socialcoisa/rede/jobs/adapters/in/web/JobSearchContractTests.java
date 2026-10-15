@@ -45,7 +45,9 @@ class JobSearchContractTests {
 
 	@BeforeEach
 	void seedJobs() {
-		base = Instant.parse("2026-01-10T12:00:00Z");
+		// Acervo do teste com data no futuro: outros testes criam vagas "agora" no mesmo banco, e assim
+		// a primeira pagina (limit 2) e sempre deste acervo — a paginacao fica determinista.
+		base = Instant.now().plusSeconds(3600);
 		// Cada teste roda uma vez; as vagas sao re-inseridas com ids estaveis.
 		job("java-pleno", "Pessoa Desenvolvedora Java", "Acme Tech", "São Paulo", "CLT", "PLENO",
 			List.of("Java", "Spring"), base);
@@ -128,22 +130,36 @@ class JobSearchContractTests {
 
 	@Test
 	void paginationStillWorksWithTheBooleanSearch() throws Exception {
-		MvcResult first = mockMvc.perform(get("/jobs").param("query", "developer OR java OR kotlin OR dados")
-				.param("limit", "2"))
-			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.items.length()").value(2))
-			.andReturn();
+		// Compara apenas o acervo deste teste: outros testes criam vagas no mesmo banco, entao a
+		// asserta nao pode depender de quais vagas a primeira pagina pega no total.
+		List<String> firstPage = idsFrom(page("developer OR java OR kotlin OR dados", null, null));
+		MvcResult first = page("developer OR java OR kotlin OR dados", null, null);
 		String cursor = objectMapper.readTree(first.getResponse().getContentAsString()).get("nextCursor").asText();
 
-		MvcResult second = mockMvc.perform(get("/jobs").param("query", "developer OR java OR kotlin OR dados")
-				.param("limit", "2").param("cursor", cursor))
-			.andExpect(status().isOk())
-			.andReturn();
-		JsonNode items = objectMapper.readTree(second.getResponse().getContentAsString()).get("items");
+		List<String> secondPage = idsFrom(page("developer OR java OR kotlin OR dados", cursor, null));
 
-		List<String> titles = new ArrayList<>();
-		items.forEach(item -> titles.add(item.get("title").asText()));
-		assertThat(titles).doesNotContain("Pessoa Desenvolvedora Java");
+		assertThat(firstPage).isNotEmpty();
+		assertThat(secondPage).doesNotContainAnyElementsOf(firstPage);
+	}
+
+	private MvcResult page(String query, String cursor, Void ignored) throws Exception {
+		var request = get("/jobs").param("query", query).param("limit", "2");
+		if (cursor != null) {
+			request = request.param("cursor", cursor);
+		}
+		return mockMvc.perform(request).andExpect(status().isOk()).andReturn();
+	}
+
+	private List<String> idsFrom(MvcResult result) throws Exception {
+		List<String> ids = new ArrayList<>();
+		objectMapper.readTree(result.getResponse().getContentAsString()).get("items")
+			.forEach(item -> {
+				String id = item.get("id").asText();
+				if (id.startsWith(PREFIX + "-")) {
+					ids.add(id);
+				}
+			});
+		return ids;
 	}
 
 	@Test

@@ -107,6 +107,30 @@ public class EmailService {
         }
     }
 
+    /**
+     * Envio de um HTML ja montado pelo chamador.
+     *
+     * Existe para modulos que precisam de um e-mail proprio (ex.: candidatura de vaga) sem que a
+     * identidade precise conhecer o dominio deles.
+     *
+     * @return false quando o envio falha (quem chamou decide o que fazer; o dado ja esta persistido)
+     */
+    public boolean sendHtml(String toEmail, String subject, String htmlBody) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject(subject);
+            helper.setText(htmlBody, true);
+            mailSender.send(message);
+            return true;
+        } catch (Exception e) {
+            LOG.error("Falha ao enviar email para {}: {}", toEmail, e.getMessage(), e);
+            return false;
+        }
+    }
+
     private String buildResetLink(String resetToken) {
         return frontendUrl + "/auth/reset?token=" + resetToken;
     }

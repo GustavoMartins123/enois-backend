@@ -17,6 +17,8 @@ interface SpringDataJobApplicationJpaRepository extends JpaRepository<JobApplica
 
 	int countByJobId(String jobId);
 
+	List<JobApplicationJpaEntity> findByJobIdOrderByAppliedAtDesc(String jobId, Pageable pageable);
+
 	@Query("SELECT a.jobId FROM JobApplicationJpaEntity a WHERE a.userId = :userId AND a.jobId IN :jobIds")
 	List<String> findJobIdsByUserIdAndJobIdIn(@Param("userId") String userId,
 			@Param("jobIds") java.util.Collection<String> jobIds);

@@ -10,6 +10,21 @@ import org.springframework.data.repository.query.Param;
 
 interface SpringDataConversationJpaRepository extends JpaRepository<ConversationJpaEntity, String> {
 
+	/**
+	 * Conversa DIRETA entre exatamente dois usuarios (usado ao entregar a candidatura na DM):
+	 * filtra por tipo, pelos dois participantes e pela contagem de participantes, para nao casar
+	 * com um grupo que tenha as mesmas duas pessoas.
+	 */
+	@Query("""
+			SELECT c FROM ConversationJpaEntity c
+			WHERE c.kind = 'DIRECT'
+			AND c.id IN (SELECT cp.conversationId FROM ConversationParticipantJpaEntity cp WHERE cp.userId = :userA)
+			AND c.id IN (SELECT cp.conversationId FROM ConversationParticipantJpaEntity cp WHERE cp.userId = :userB)
+			AND (SELECT COUNT(all_) FROM ConversationParticipantJpaEntity all_ WHERE all_.conversationId = c.id) = 2
+			ORDER BY c.updatedAt DESC""")
+	List<ConversationJpaEntity> findDirectBetween(@Param("userA") String userA, @Param("userB") String userB,
+			Pageable pageable);
+
 	@Query("""
 			SELECT c FROM ConversationJpaEntity c
 			WHERE c.id IN (SELECT cp.conversationId FROM ConversationParticipantJpaEntity cp WHERE cp.userId = :userId)

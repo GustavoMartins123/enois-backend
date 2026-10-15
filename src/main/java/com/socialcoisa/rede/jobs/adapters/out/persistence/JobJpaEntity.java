@@ -56,6 +56,11 @@ class JobJpaEntity {
 	@Column(name = "skill", nullable = false)
 	private List<String> skills = new ArrayList<>();
 
+	@ElementCollection(fetch = FetchType.EAGER)
+	@CollectionTable(name = "job_application_fields", joinColumns = @JoinColumn(name = "job_id"))
+	@jakarta.persistence.OrderBy("position")
+	private List<JobApplicationFieldEmbeddable> applicationFields = new ArrayList<>();
+
 	@Column(name = "posted_by", nullable = false)
 	private String postedBy;
 
@@ -81,6 +86,9 @@ class JobJpaEntity {
 		e.currency = job.currency();
 		e.communityAgreedAt = job.communityAgreedAt();
 		e.skills = new ArrayList<>(job.skills());
+		e.applicationFields = job.applicationFields().stream()
+			.map(JobApplicationFieldEmbeddable::fromDomain)
+			.collect(java.util.stream.Collectors.toCollection(ArrayList::new));
 		e.postedBy = job.postedBy();
 		e.postedAt = job.postedAt();
 		e.updatedAt = job.updatedAt();
@@ -88,7 +96,8 @@ class JobJpaEntity {
 	}
 
 	Job toDomain() {
-		return Job.restore(id, title, company, logo, location, type, level, salary, currency, skills, postedBy,
+		return Job.restore(id, title, company, logo, location, type, level, salary, currency, skills,
+			applicationFields.stream().map(JobApplicationFieldEmbeddable::toDomain).toList(), postedBy,
 			communityAgreedAt, postedAt, updatedAt);
 	}
 

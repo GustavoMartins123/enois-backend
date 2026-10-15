@@ -15,14 +15,15 @@ public class Job {
 	private final String salary;
 	private final String currency;
 	private final List<String> skills;
+	private final List<JobApplicationField> applicationFields;
 	private final String postedBy;
 	private final Instant communityAgreedAt;
 	private final Instant postedAt;
 	private final Instant updatedAt;
 
 	private Job(String id, String title, String company, String logo, String location, String type, String level,
-			String salary, String currency, List<String> skills, String postedBy, Instant communityAgreedAt,
-			Instant postedAt, Instant updatedAt) {
+			String salary, String currency, List<String> skills, List<JobApplicationField> applicationFields,
+			String postedBy, Instant communityAgreedAt, Instant postedAt, Instant updatedAt) {
 		this.id = id;
 		this.title = title;
 		this.company = company;
@@ -33,6 +34,7 @@ public class Job {
 		this.salary = salary;
 		this.currency = currency;
 		this.skills = skills;
+		this.applicationFields = List.copyOf(applicationFields);
 		this.postedBy = postedBy;
 		this.communityAgreedAt = communityAgreedAt;
 		this.postedAt = postedAt;
@@ -40,17 +42,17 @@ public class Job {
 	}
 
 	public static Job create(String id, String title, String company, String logo, String location, String type,
-			String level, String salary, String currency, List<String> skills, String postedBy,
-			Instant communityAgreedAt, Instant now) {
-		return new Job(id, title, company, logo, location, type, level, salary, currency, List.copyOf(skills), postedBy,
-			communityAgreedAt, now, now);
+			String level, String salary, String currency, List<String> skills, List<JobApplicationField> applicationFields,
+			String postedBy, Instant communityAgreedAt, Instant now) {
+		return new Job(id, title, company, logo, location, type, level, salary, currency, List.copyOf(skills),
+			applicationFields, postedBy, communityAgreedAt, now, now);
 	}
 
 	public static Job restore(String id, String title, String company, String logo, String location, String type,
-			String level, String salary, String currency, List<String> skills, String postedBy,
-			Instant communityAgreedAt, Instant postedAt, Instant updatedAt) {
-		return new Job(id, title, company, logo, location, type, level, salary, currency, skills, postedBy,
-			communityAgreedAt, postedAt, updatedAt);
+			String level, String salary, String currency, List<String> skills, List<JobApplicationField> applicationFields,
+			String postedBy, Instant communityAgreedAt, Instant postedAt, Instant updatedAt) {
+		return new Job(id, title, company, logo, location, type, level, salary, currency, skills, applicationFields,
+			postedBy, communityAgreedAt, postedAt, updatedAt);
 	}
 
 	public String id() { return id; }
@@ -76,6 +78,9 @@ public class Job {
 	public Instant communityAgreedAt() { return communityAgreedAt; }
 
 	public List<String> skills() { return skills; }
+
+	/** Campos que o autor definiu para o formulario de candidatura (pode ser vazio). */
+	public List<JobApplicationField> applicationFields() { return applicationFields; }
 
 	public String postedBy() { return postedBy; }
 

@@ -31,7 +31,11 @@ public interface JobRepository {
 
 	java.util.Map<String, Integer> countApplicationsByJobIds(java.util.Collection<String> jobIds);
 
-	void saveApplication(String jobId, String userId);
+	/** Grava a candidatura (com respostas e retrato do perfil) e devolve o id gerado. */
+	String saveApplication(com.socialcoisa.rede.jobs.domain.JobApplication application);
+
+	/** Candidaturas recebidas por uma vaga, mais recentes primeiro. */
+	List<com.socialcoisa.rede.jobs.domain.JobApplication> findApplicationsByJob(String jobId, int limit);
 
 	void removeApplication(String jobId, String userId);
 
