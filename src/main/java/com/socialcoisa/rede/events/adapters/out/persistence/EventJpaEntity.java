@@ -35,6 +35,12 @@ class EventJpaEntity {
 	@Column(length = 500)
 	private String cover;
 
+	@Column(name = "stream_url", length = 500)
+	private String streamUrl;
+
+	@Column(length = 255)
+	private String location;
+
 	@Column(name = "created_by", nullable = false)
 	private String createdBy;
 
@@ -62,6 +68,8 @@ class EventJpaEntity {
 		e.format = event.format();
 		e.host = event.host();
 		e.cover = event.cover();
+		e.streamUrl = event.streamUrl();
+		e.location = event.location();
 		e.createdBy = event.createdBy();
 		e.createdAt = event.createdAt();
 		e.updatedAt = event.updatedAt();
@@ -71,7 +79,8 @@ class EventJpaEntity {
 	}
 
 	Event toDomain() {
-		Event event = Event.restore(id, title, date, time, format, host, cover, createdBy, createdAt, updatedAt);
+		Event event = Event.restore(id, title, date, time, format, host, cover, streamUrl, location, createdBy,
+			createdAt, updatedAt);
 		if (sanitizedAt != null) {
 			event.markSanitized(finalAttendeesCount == null ? 0 : finalAttendeesCount, sanitizedAt);
 		}

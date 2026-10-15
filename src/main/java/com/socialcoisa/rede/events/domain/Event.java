@@ -11,6 +11,8 @@ public class Event {
 	private final String format;
 	private final String host;
 	private final String cover;
+	private final String streamUrl;
+	private final String location;
 	private final String createdBy;
 	private final Instant createdAt;
 	private final Instant updatedAt;
@@ -18,7 +20,7 @@ public class Event {
 	private Integer finalAttendeesCount;
 
 	private Event(String id, String title, String date, String time, String format, String host, String cover,
-			String createdBy, Instant createdAt, Instant updatedAt) {
+			String streamUrl, String location, String createdBy, Instant createdAt, Instant updatedAt) {
 		this.id = id;
 		this.title = title;
 		this.date = date;
@@ -26,19 +28,21 @@ public class Event {
 		this.format = format;
 		this.host = host;
 		this.cover = cover;
+		this.streamUrl = streamUrl;
+		this.location = location;
 		this.createdBy = createdBy;
 		this.createdAt = createdAt;
 		this.updatedAt = updatedAt;
 	}
 
 	public static Event create(String id, String title, String date, String time, String format, String host,
-			String cover, String createdBy, Instant now) {
-		return new Event(id, title, date, time, format, host, cover, createdBy, now, now);
+			String cover, String streamUrl, String location, String createdBy, Instant now) {
+		return new Event(id, title, date, time, format, host, cover, streamUrl, location, createdBy, now, now);
 	}
 
 	public static Event restore(String id, String title, String date, String time, String format, String host,
-			String cover, String createdBy, Instant createdAt, Instant updatedAt) {
-		return new Event(id, title, date, time, format, host, cover, createdBy, createdAt, updatedAt);
+			String cover, String streamUrl, String location, String createdBy, Instant createdAt, Instant updatedAt) {
+		return new Event(id, title, date, time, format, host, cover, streamUrl, location, createdBy, createdAt, updatedAt);
 	}
 
 	/**
@@ -125,6 +129,12 @@ public class Event {
 	public String host() { return host; }
 
 	public String cover() { return cover; }
+
+	/** Link da transmissao ao vivo (online/hibrido). */
+	public String streamUrl() { return streamUrl; }
+
+	/** Onde o evento acontece (presencial/hibrido). */
+	public String location() { return location; }
 
 	public String createdBy() { return createdBy; }
 

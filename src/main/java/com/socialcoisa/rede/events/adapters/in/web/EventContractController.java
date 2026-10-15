@@ -61,7 +61,7 @@ class EventContractController {
 		Integer finalCount = event.finalAttendeesCount();
 		int attendees = finalCount != null ? finalCount : eventService.countAttendees(event.id());
 		return new EventView(event.id(), event.title(), event.date(), event.time(), event.format(), event.host(),
-			attendees, event.cover(), eventService.hasEnded(event));
+			attendees, event.cover(), event.streamUrl(), event.location(), eventService.hasEnded(event));
 	}
 
 	@GetMapping("/{eventId}")
@@ -79,7 +79,8 @@ class EventContractController {
 		return idempotency.execute(user.id(), "POST", "/api/events", idempotencyKey, hash,
 			() -> {
 				Event e = eventService.create(request.title(), request.date(), request.time(), request.format(),
-					request.host(), request.cover(), user.id().value());
+					request.host(), request.cover(), request.streamUrl(), request.location(),
+					user.id().value());
 				return new CommandResponse(201, toView(e));
 			});
 	}
@@ -113,10 +114,11 @@ class EventContractController {
 	}
 
 	record EventView(String id, String title, String date, String time, String format, String host, int attendees,
-			String cover, boolean expired) {
+			String cover, String streamUrl, String location, boolean expired) {
 	}
 
-	record CreateEventRequest(String title, String date, String time, String format, String host, String cover) {
+	record CreateEventRequest(String title, String date, String time, String format, String host, String cover,
+			String streamUrl, String location) {
 	}
 
 }

@@ -31,9 +31,10 @@ public class EventService {
 
 	@Transactional
 	public Event create(String title, String date, String time, String format, String host, String cover,
-			String userId) {
+			String streamUrl, String location, String userId) {
 		String id = "event_" + UUID.randomUUID().toString().replace("-", "");
-		Event event = Event.create(id, title, date, time, format, host, cover, userId, clock.instant());
+		Event event = Event.create(id, title, date, time, format, host, cover, streamUrl, location, userId,
+			clock.instant());
 		repository.save(event);
 		return event;
 	}
