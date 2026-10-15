@@ -1,5 +1,6 @@
 package com.socialcoisa.rede.feed.adapters.in.web;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -61,6 +62,8 @@ import com.socialcoisa.rede.shared.web.CursorCodec;
 @RestController
 class FeedController {
 
+	private static final int MAX_COMMENT_LENGTH = 1024;
+
 	private static final String USER_HEADER = "X-User-Id";
 
 	private final PublishPostUseCase publishPostUseCase;
@@ -81,6 +84,7 @@ class FeedController {
 	private final CommentRepository commentRepository;
 	private final CursorCodec cursorCodec;
 	private final BlockedUsersReader blockedUsersReader;
+	private final Clock clock;
 
 	FeedController(PublishPostUseCase publishPostUseCase, GetFeedUseCase getFeedUseCase, GetPostUseCase getPostUseCase,
 			GetProfilePostsUseCase getProfilePostsUseCase, DeletePostUseCase deletePostUseCase,
@@ -90,7 +94,7 @@ class FeedController {
 			SavePostUseCase savePostUseCase, SharePostUseCase sharePostUseCase,
 			IdempotencyApplicationService idempotency, CurrentUserResolver currentUserResolver,
 			PostInteractionRepository postInteractionRepository, CommentRepository commentRepository,
-			CursorCodec cursorCodec, BlockedUsersReader blockedUsersReader) {
+			CursorCodec cursorCodec, BlockedUsersReader blockedUsersReader, Clock clock) {
 		this.publishPostUseCase = publishPostUseCase;
 		this.getFeedUseCase = getFeedUseCase;
 		this.getPostUseCase = getPostUseCase;
@@ -109,6 +113,7 @@ class FeedController {
 		this.commentRepository = commentRepository;
 		this.cursorCodec = cursorCodec;
 		this.blockedUsersReader = blockedUsersReader;
+		this.clock = clock;
 	}
 
 	@PostMapping("/feed/posts")
@@ -336,6 +341,37 @@ class FeedController {
 				}
 				commentRepository.deleteById(commentId);
 				return new CommandResponse(200, Map.of("status", "COMMENT_DELETED"));
+			});
+	}
+
+	/** Edicao de comentario proprio: so o autor, com as mesmas regras do comentario novo. */
+	@PatchMapping("/feed/posts/{postId}/comments/{commentId}")
+	ResponseEntity<String> editComment(@RequestHeader(value = USER_HEADER, required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@PathVariable String postId, @PathVariable String commentId,
+			@RequestBody EditCommentRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		Map<String, Object> payload = new LinkedHashMap<>();
+		payload.put("commentId", commentId);
+		payload.put("content", request.content() == null ? "" : request.content());
+		String hash = idempotency.hash(payload);
+		return idempotency.execute(user.id(), "PATCH", "/api/feed/posts/{postId}/comments/{commentId}",
+			idempotencyKey, hash,
+			() -> {
+				var comment = commentRepository.findById(commentId)
+					.orElseThrow(() -> new ApiException(404, "COMMENT_NOT_FOUND", "Comentario nao encontrado."));
+				if (!comment.authorId().equals(user.id())) {
+					throw new ApiException(403, "NOT_AUTHORIZED", "Voce nao pode editar este comentario.");
+				}
+				String content = request.content() == null ? "" : request.content().trim();
+				if (content.isEmpty() || content.length() > MAX_COMMENT_LENGTH) {
+					throw new ApiException(422, "INVALID_COMMENT",
+						"O comentario precisa ter de 1 a " + MAX_COMMENT_LENGTH + " caracteres.");
+				}
+				var saved = commentRepository.save(comment.edited(content, clock.instant()));
+				return new CommandResponse(200, Map.of("status", "COMMENT_EDITED", "content", saved.content(),
+					"editedAt", saved.editedAt().toString()));
 			});
 	}
 

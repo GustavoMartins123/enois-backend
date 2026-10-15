@@ -43,6 +43,9 @@ class CommentJpaEntity {
 	@Column(nullable = false)
 	private CommentStatus status;
 
+	@Column(name = "edited_at")
+	private Instant editedAt;
+
 	protected CommentJpaEntity() {
 	}
 
@@ -55,11 +58,13 @@ class CommentJpaEntity {
 		entity.content = comment.content();
 		entity.createdAt = comment.createdAt();
 		entity.status = comment.status();
+		entity.editedAt = comment.editedAt();
 		return entity;
 	}
 
 	Comment toDomain() {
-		return new Comment(id, new PostId(postId), new UserId(authorId), parentCommentId, content, createdAt, status);
+		return new Comment(id, new PostId(postId), new UserId(authorId), parentCommentId, content, createdAt, status,
+			editedAt);
 	}
 
 	String getPostId() { return postId; }
