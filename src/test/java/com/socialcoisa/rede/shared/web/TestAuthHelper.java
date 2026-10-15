@@ -24,6 +24,13 @@ public class TestAuthHelper {
 		this.objectMapper = objectMapper;
 	}
 
+	/**
+	 * Cria a conta e devolve uma sessao valida.
+	 *
+	 * O cadastro nasce pendente de confirmacao de e-mail e so emite sessao depois do link. Como o
+	 * token so existe no e-mail enviado, aqui confirmamos o e-mail direto no banco e entramos pelo
+	 * login normal; o fluxo real de confirmacao tem teste proprio (EmailVerificationFlowTests).
+	 */
 	public AuthSession authenticate(String userId) throws Exception {
 		String email = userId + "@test.com";
 		String payload = objectMapper.writeValueAsString(Map.of(
@@ -34,17 +41,24 @@ public class TestAuthHelper {
 			"acceptedTerms", true
 		));
 
-		MvcResult result = mockMvc.perform(post("/auth/signup")
+		mockMvc.perform(post("/auth/signup")
 				.header("Idempotency-Key", "signup-" + userId)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(payload))
-			.andExpect(status().isCreated())
+			.andExpect(status().isCreated());
+
+		String createdUserId = TestDatabase.userIdByEmail(email)
+			.orElseThrow(() -> new IllegalStateException("usuario nao criado: " + email));
+		TestDatabase.markEmailVerified(createdUserId, java.time.Instant.now());
+
+		MvcResult login = mockMvc.perform(post("/auth/login")
+				.header("Idempotency-Key", "login-" + userId)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("email", email, "password", "Test1234!"))))
+			.andExpect(status().isOk())
 			.andReturn();
 
-		JsonNode node = objectMapper.readTree(result.getResponse().getContentAsString());
-		return new AuthSession(
-			node.get("token").asText(),
-			node.get("user").get("id").asText()
-		);
+		JsonNode node = objectMapper.readTree(login.getResponse().getContentAsString());
+		return new AuthSession(node.get("token").asText(), createdUserId);
 	}
 }

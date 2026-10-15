@@ -53,8 +53,39 @@ public class EmailService {
         }
     }
 
+    /**
+     * Envia o link de confirmacao do e-mail do cadastro.
+     *
+     * @return false quando o envio falha — a conta continua pendente e a tela oferece reenviar,
+     *         em vez de deixar o usuario esperando um e-mail que nunca chegou
+     */
+    public boolean sendVerificationEmail(String toEmail, String userName, String verificationToken) {
+        Context context = new Context();
+        context.setVariable("userName", userName);
+        context.setVariable("verificationLink", buildVerificationLink(verificationToken));
+        context.setVariable("currentYear", java.time.Year.now().getValue());
+
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject("Confirme seu e-mail no Énóis");
+            helper.setText(templateEngine.process("email-verification", context), true);
+            mailSender.send(message);
+            return true;
+        } catch (Exception e) {
+            LOG.error("Falha ao enviar email de confirmacao para {}: {}", toEmail, e.getMessage(), e);
+            return false;
+        }
+    }
+
     private String buildResetLink(String resetToken) {
         return frontendUrl + "/auth/reset?token=" + resetToken;
+    }
+
+    private String buildVerificationLink(String verificationToken) {
+        return frontendUrl + "/auth/verify?token=" + verificationToken;
     }
 
     private String renderTemplate(String userName, String resetLink) {

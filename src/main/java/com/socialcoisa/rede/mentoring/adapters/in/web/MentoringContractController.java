@@ -51,7 +51,8 @@ class MentoringContractController {
 		Instant before = cursorCodec.decode(cursor).orElse(null);
 		List<Mentor> mentors = mentorService.list(expertise, before, limit);
 		var items = mentors.stream()
-			.map(m -> new MentorView(m.id(), m.userId(), m.expertise(), m.rating(), m.sessionsCount(), m.price(), null))
+			.map(m -> new MentorView(m.id(), m.userId(), m.expertise(), m.rating(), m.sessionsCount(), m.price(),
+				mentorService.nextAvailableSlot(m.id())))
 			.toList();
 		String nextCursor = mentors.size() == limit
 			? cursorCodec.encode(mentors.get(mentors.size() - 1).createdAt()) : null;
@@ -61,7 +62,8 @@ class MentoringContractController {
 	@GetMapping("/{mentorId}")
 	MentorView mentor(@PathVariable String mentorId) {
 		Mentor m = mentorService.getById(mentorId);
-		return new MentorView(m.id(), m.userId(), m.expertise(), m.rating(), m.sessionsCount(), m.price(), null);
+		return new MentorView(m.id(), m.userId(), m.expertise(), m.rating(), m.sessionsCount(), m.price(),
+			mentorService.nextAvailableSlot(m.id()));
 	}
 
 	@GetMapping("/{mentorId}/slots")
@@ -87,7 +89,7 @@ class MentoringContractController {
 			() -> {
 				Mentor m = mentorService.create(user.id().value(), request.expertise(), request.price());
 				return new CommandResponse(201, new MentorView(m.id(), m.userId(), m.expertise(), m.rating(),
-					m.sessionsCount(), m.price(), null));
+					m.sessionsCount(), m.price(), mentorService.nextAvailableSlot(m.id())));
 			});
 	}
 
@@ -102,7 +104,7 @@ class MentoringContractController {
 			() -> {
 				Mentor m = mentorService.update(mentorId, request.expertise(), request.price(), user.id().value());
 				return new CommandResponse(200, new MentorView(m.id(), m.userId(), m.expertise(), m.rating(),
-					m.sessionsCount(), m.price(), null));
+					m.sessionsCount(), m.price(), mentorService.nextAvailableSlot(m.id())));
 			});
 	}
 

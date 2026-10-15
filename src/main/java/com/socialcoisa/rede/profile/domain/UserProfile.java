@@ -28,6 +28,7 @@ public class UserProfile {
 	private final Instant createdAt;
 	private Instant updatedAt;
 	private Instant termsAcceptedAt;
+	private Instant emailVerifiedAt;
 
 	private UserProfile(String id, String username, String email, String name, String headline, String company,
 			String location, String avatar, String banner, String bio, List<String> skills, List<String> goals,
@@ -96,6 +97,21 @@ public class UserProfile {
 
 	public Instant termsAcceptedAt() {
 		return termsAcceptedAt;
+	}
+
+	/** Conta com e-mail confirmado (ou criada por um provedor que ja confirma o e-mail). */
+	public boolean emailVerified() {
+		return emailVerifiedAt != null;
+	}
+
+	public Instant emailVerifiedAt() {
+		return emailVerifiedAt;
+	}
+
+	public void markEmailVerified(Instant at) {
+		if (this.emailVerifiedAt == null) {
+			this.emailVerifiedAt = at;
+		}
 	}
 
 	public void changeEmail(String email, Instant now) {

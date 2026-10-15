@@ -1,6 +1,7 @@
 package com.socialcoisa.rede.identity.adapters.out.persistence;
 
 import java.time.Clock;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.stereotype.Repository;
@@ -32,6 +33,18 @@ class UserExternalIdentityPersistenceAdapter implements UserExternalIdentityRepo
 	@Override
 	public boolean existsByProviderAndExternalId(String provider, String externalUserId) {
 		return repository.existsByProviderAndExternalUserId(provider, externalUserId);
+	}
+
+	@Override
+	public List<LinkedIdentity> findByUserId(String userId) {
+		return repository.findByUserId(userId).stream()
+			.map(entity -> new LinkedIdentity(entity.provider(), entity.email(), entity.createdAt()))
+			.toList();
+	}
+
+	@Override
+	public void deleteByUserIdAndProvider(String userId, String provider) {
+		repository.deleteByUserIdAndProvider(userId, provider);
 	}
 
 	@Override

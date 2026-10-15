@@ -140,12 +140,11 @@ backend expõe fica público em `https://enois.ia.br/api/...` — inclusive `/ap
 | `REDE_FRONTEND_URL` | sim | base do front; o callback OAuth volta em `${REDE_FRONTEND_URL}/auth/callback` |
 | `REDE_BACKEND_URL` | sim | base pública do back; monta os redirect URIs do OAuth |
 | `FRONTEND_URL` | sim | link do e-mail de reset de senha: `${FRONTEND_URL}/auth/reset?token=...` |
-| `MAIL_HOST` / `MAIL_PORT` / `MAIL_USERNAME` / `MAIL_PASSWORD` | sim | SMTP do "esqueci minha senha". Sem isso o e-mail não sai (o erro é logado e engolido). |
+| `MAIL_HOST` / `MAIL_PORT` / `MAIL_USERNAME` / `MAIL_PASSWORD` | sim | SMTP dos e-mails de reset de senha e de confirmação de cadastro. Sem isso nenhum e-mail sai (o erro é logado e engolido). |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | p/ login Google | |
-| `APPLE_CLIENT_ID` / `APPLE_TEAM_ID` / `APPLE_KEY_ID` / `APPLE_PRIVATE_KEY` | p/ login Apple | |
+| `APPLE_CLIENT_ID` / `APPLE_TEAM_ID` / `APPLE_KEY_ID` / `APPLE_PRIVATE_KEY` | p/ login Apple | `APPLE_PRIVATE_KEY` é o **conteúdo** da chave `.p8` (PEM PKCS#8), com `\n` ou quebras reais. Ela é usada para montar o `client_secret` (JWT ES256) exigido na troca do `code`. |
 | `IMAGEKIT_URL_ENDPOINT` / `IMAGEKIT_PUBLIC_KEY` / `IMAGEKIT_PRIVATE_KEY` | p/ mídia | |
 | `CORS_ALLOWED_ORIGINS` | não | padrão `*` |
-| `OAUTH_STATE_COOKIE_SECURE` | não | padrão `true`; use `false` só em dev http |
 | `SPRINGDOC_ENABLED` | não | padrão `false`. `true` liga `/api/openapi.json` + Swagger UI (use só em dev/VPN) |
 | `MANAGEMENT_ENDPOINTS` | não | padrão `health`. Para métricas use `health,prometheus` **e bloqueie `/api/actuator/*` no gateway** |
 | `SUPPORT_EMAIL` | não | e-mail do time que recebe os pedidos de suporte. Sem ele o pedido ainda fica registrado e visível em `/admin/support` |
@@ -162,7 +161,9 @@ backend expõe fica público em `https://enois.ia.br/api/...` — inclusive `/ap
 4. **Configurar o OAuth**: criar as credenciais no Google Cloud e no Apple Developer e cadastrar os
    redirect URIs exatamente como
    `${REDE_BACKEND_URL}/api/auth/oauth/google/callback` e `.../apple/callback`. Para Apple, use
-   `response_mode=form_post` (o backend aceita o callback via POST).
+   `response_mode=form_post` (o backend aceita o callback via POST) e informe a chave `.p8` em
+   `APPLE_PRIVATE_KEY` — sem ela a troca do `code` responde `invalid_client` e o login Apple não
+   conclui. Depois de configurar, valide um login real: o backend não simula provedor.
 5. **Rotacionar segredos vazados** (ver seção "Segurança").
 6. Verificar o rollout: `kubectl -n forest-apps get pods -l app=socialcoiso-back` e
    `kubectl -n forest-apps logs deploy/socialcoiso-back`.
@@ -212,6 +213,24 @@ delete from flyway_schema_history where version = '<versao que falhou>';    # ou
   aberto. No app: `/suporte`, alcançável pelo menu da conta.
 - **Consentimento**: `POST /auth/signup` exige `acceptedTerms: true` (termos + 18 anos); o instante do aceite é
   gravado em `users.terms_accepted_at`. Sem esse campo a resposta é `400 TERMS_NOT_ACCEPTED`.
+- **Confirmação de e-mail**: o cadastro **não** emite sessão. `POST /auth/signup` responde
+  `{email, verificationRequired: true, emailSent}` e manda um link (`/auth/verify?token=...`) com token de
+  hash SHA-256, validade de 24h e uso único; o instante da confirmação fica em `users.email_verified_at`.
+  `POST /auth/email/verify` confirma **e já devolve a sessão**; `POST /auth/email/resend` reenvia (3 por hora
+  por usuário, contando o cadastro, e no máximo 5 por 15 min por IP) e responde 202 mesmo para e-mail
+  inexistente, para não virar oráculo de contas. Login de conta pendente responde `403 EMAIL_NOT_VERIFIED`, e
+  qualquer endpoint autenticado responde o mesmo via `CurrentUserResolver` (segunda barreira). Contas criadas
+  **antes** desta migração foram marcadas como verificadas (ver V22) para ninguém perder o acesso; quem entra
+  por Google/Apple nasce verificado, porque o provedor confirma o e-mail.
+- **Login social**: todo fluxo começa em `GET /auth/oauth/{provider}/start`, que registra `state` + `nonce` no
+  servidor (`oauth_authorization_requests`) e devolve a URL de autorização. O callback confere o `state`
+  (existe, mesmo provedor, dentro de 15 min) e o `nonce` dentro do id_token, além de assinatura, emissor,
+  audience e validade. **Não há vínculo automático por e-mail**: se já existe conta com o e-mail declarado, o
+  login responde `409 ACCOUNT_EXISTS_LINK_REQUIRED` e a pessoa precisa entrar e vincular. `POST
+  /auth/oauth/{provider}/link` inicia a vinculação (o callback que usar esse state vincula em vez de entrar),
+  `GET /auth/oauth/providers` lista os vínculos e `DELETE /auth/oauth/{provider}/link` desvincula — recusando
+  com `409 LAST_LOGIN_METHOD` quando seria o último jeito de entrar (conta social não tem senha utilizável:
+  `user_credentials.password_usable = false`). `POST /auth/oauth/{provider}/token` passou a exigir `state`.
 - **Push no celular**: `GET /push/config` (público) informa se o push está ligado e devolve a chave pública
   VAPID; `POST /push/subscriptions` (autenticado) registra o dispositivo (`endpoint` + `keys.p256dh`/`keys.auth`)
   e `DELETE /push/subscriptions?endpoint=...` remove. Toda notificação criada por `NotificationService` também
@@ -232,6 +251,20 @@ delete from flyway_schema_history where version = '<versao que falhou>';    # ou
   exibidas em perfis públicos — avalie se devem exigir login.
 
 ### Já corrigido
+
+- **Nenhum e-mail era enviado**: `InfrastructureConfig` declarava um `JavaMailSender` com
+  `new JavaMailSenderImpl()` e sem host/porta. Por ser um bean do usuário, ele fazia o
+  `MailSenderAutoConfiguration` recuar (`@ConditionalOnMissingBean`) e o envio caía nos padrões do
+  JavaMail (`localhost:25`), **ignorando `spring.mail.*`**. Resultado: reset de senha e confirmação de
+  cadastro nunca saíam, com o erro apenas logado. O bean foi removido e o SMTP configurado passou a
+  valer. O indicador `management.health.mail` também foi desligado: ele abria conexão com o SMTP a cada
+  consulta e, com o servidor fora do ar, `/actuator/health` respondia 503 — tirando do ar uma aplicação
+  saudável por causa de e-mail.
+- **Mentoria sem agendamento**: `nextSlot` era sempre `null` (hardcoded) e o botão "Agendar" do app não
+  tinha ação — agora o campo traz o próximo horário livre real e a agenda pode ser publicada e usada.
+- **Login social vinculava conta pelo e-mail**: `findOrCreateUser` ligava a identidade a qualquer conta
+  que tivesse o mesmo e-mail declarado pelo provedor, sem prova de posse. Agora esse caso responde
+  `409 ACCOUNT_EXISTS_LINK_REQUIRED` e a vinculação é explícita, com `state`/`nonce` no servidor.
 
 - **Doc da API público**: `GET /api/openapi.json` (stub manual) e `GET /api/api/openapi.json` + Swagger UI
   (springdoc) respondiam 200 sem autenticação, entregando o mapa completo da API. Agora o stub foi removido

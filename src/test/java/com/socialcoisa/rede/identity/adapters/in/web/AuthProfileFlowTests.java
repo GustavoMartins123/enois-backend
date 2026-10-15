@@ -19,6 +19,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 import tools.jackson.databind.JsonNode;
+import com.socialcoisa.rede.shared.web.TestDatabase;
 import tools.jackson.databind.ObjectMapper;
 
 @SpringBootTest
@@ -40,16 +41,17 @@ class AuthProfileFlowTests {
 			"password", "senha-segura",
 			"acceptedTerms", true));
 
+		// O cadastro nasce pendente: devolve para onde o link foi enviado, sem sessao.
 		MvcResult signup = mockMvc.perform(post("/auth/signup")
 				.header("Idempotency-Key", "auth-signup-flow-1")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(signupPayload))
 			.andExpect(status().isCreated())
-			.andExpect(jsonPath("$.user.username").value("ana-souza"))
+			.andExpect(jsonPath("$.email").value("ana.flow@example.com"))
+			.andExpect(jsonPath("$.verificationRequired").value(true))
 			.andReturn();
 
-		JsonNode signupNode = objectMapper.readTree(signup.getResponse().getContentAsString());
-		String firstToken = signupNode.get("token").asText();
+		assertThat(signup.getResponse().getContentAsString()).doesNotContain("token");
 
 		MvcResult replay = mockMvc.perform(post("/auth/signup")
 				.header("Idempotency-Key", "auth-signup-flow-1")
@@ -64,16 +66,28 @@ class AuthProfileFlowTests {
 			"email", "ana.flow@example.com",
 			"password", "senha-segura"));
 
-		MvcResult login = mockMvc.perform(post("/auth/login")
+		mockMvc.perform(post("/auth/login")
 				.header("Idempotency-Key", "auth-login-flow-1")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(loginPayload))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("EMAIL_NOT_VERIFIED"));
+
+		// Confirmacao do e-mail (o token real tem teste proprio em EmailVerificationFlowTests).
+		String userId = TestDatabase.userIdByEmail("ana.flow@example.com").orElseThrow();
+		TestDatabase.markEmailVerified(userId, java.time.Instant.now());
+
+		MvcResult login = mockMvc.perform(post("/auth/login")
+				.header("Idempotency-Key", "auth-login-flow-2")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(loginPayload))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.user.email").value("ana.flow@example.com"))
+			.andExpect(jsonPath("$.user.emailVerified").value(true))
 			.andReturn();
 
 		String token = objectMapper.readTree(login.getResponse().getContentAsString()).get("token").asText();
-		assertThat(token).isNotBlank().isNotEqualTo(firstToken);
+		assertThat(token).isNotBlank();
 
 		mockMvc.perform(get("/auth/me")
 				.header("X-Session-Token", token))
@@ -107,6 +121,6 @@ class AuthProfileFlowTests {
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(postPayload))
 			.andExpect(status().isCreated())
-			.andExpect(jsonPath("$.authorId").value(signupNode.get("user").get("id").asText()));
+			.andExpect(jsonPath("$.authorId").value(userId));
 	}
 }

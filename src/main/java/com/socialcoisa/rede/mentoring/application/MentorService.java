@@ -99,4 +99,21 @@ public class MentorService {
 		return repository.findSlotsByMentor(mentorId);
 	}
 
+	/**
+	 * Proximo horario livre do mentor (ISO-8601) ou null quando nao ha agenda publicada.
+	 *
+	 * Antes o campo vinha sempre nulo na resposta, entao a tela nao tinha como dizer quando a pessoa
+	 * atende nem por onde comecar o agendamento.
+	 */
+	public String nextAvailableSlot(String mentorId) {
+		java.time.Instant now = clock.instant();
+		return repository.findSlotsByMentor(mentorId).stream()
+			.filter(MentorSlot::available)
+			.filter(slot -> slot.startsAt() != null && slot.startsAt().isAfter(now))
+			.sorted(java.util.Comparator.comparing(MentorSlot::startsAt))
+			.map(slot -> slot.startsAt().toString())
+			.findFirst()
+			.orElse(null);
+	}
+
 }

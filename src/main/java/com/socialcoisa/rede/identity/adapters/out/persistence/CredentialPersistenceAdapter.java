@@ -20,20 +20,22 @@ class CredentialPersistenceAdapter implements CredentialRepository {
 	}
 
 	@Override
-	public void save(String userId, String email, String passwordHash) {
-		repository.save(new UserCredentialJpaEntity(userId, email, passwordHash, clock.instant()));
+	public void save(String userId, String email, String passwordHash, boolean passwordUsable) {
+		repository.save(new UserCredentialJpaEntity(userId, email, passwordHash, passwordUsable, clock.instant()));
 	}
 
 	@Override
 	public Optional<StoredCredential> findByEmail(String email) {
-		return repository.findByEmail(email)
-			.map(entity -> new StoredCredential(entity.userId(), entity.email(), entity.passwordHash()));
+		return repository.findByEmail(email).map(this::toDomain);
 	}
 
 	@Override
 	public Optional<StoredCredential> findByUserId(String userId) {
-		return repository.findById(userId)
-			.map(entity -> new StoredCredential(entity.userId(), entity.email(), entity.passwordHash()));
+		return repository.findById(userId).map(this::toDomain);
+	}
+
+	private StoredCredential toDomain(UserCredentialJpaEntity entity) {
+		return new StoredCredential(entity.userId(), entity.email(), entity.passwordHash(), entity.passwordUsable());
 	}
 
 	@Override

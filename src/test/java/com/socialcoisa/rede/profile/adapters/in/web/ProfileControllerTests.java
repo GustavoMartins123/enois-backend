@@ -21,6 +21,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 import tools.jackson.databind.JsonNode;
+import com.socialcoisa.rede.shared.web.TestDatabase;
 import tools.jackson.databind.ObjectMapper;
 
 @SpringBootTest
@@ -39,23 +40,32 @@ class ProfileControllerTests {
 	@BeforeEach
 	void setUp() throws Exception {
 		String unique = "prof_" + System.nanoTime();
+		String email = unique + "@example.com";
 		String signupPayload = objectMapper.writeValueAsString(Map.of(
 			"name", "Profile Test User",
 			"role", "Engineer",
-			"email", unique + "@example.com",
+			"email", email,
 			"password", "senha-segura",
 			"acceptedTerms", true));
 
-		MvcResult signup = mockMvc.perform(post("/auth/signup")
+		mockMvc.perform(post("/auth/signup")
 				.header("Idempotency-Key", "prof-setup-" + unique)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(signupPayload))
-			.andExpect(status().isCreated())
+			.andExpect(status().isCreated());
+
+		// Conta pendente de confirmacao: confirmamos o e-mail para entrar pelo login normal.
+		userId = TestDatabase.userIdByEmail(email).orElseThrow();
+		TestDatabase.markEmailVerified(userId, java.time.Instant.now());
+
+		MvcResult login = mockMvc.perform(post("/auth/login")
+				.header("Idempotency-Key", "prof-login-" + unique)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("email", email, "password", "senha-segura"))))
+			.andExpect(status().isOk())
 			.andReturn();
 
-		JsonNode node = objectMapper.readTree(signup.getResponse().getContentAsString());
-		sessionToken = node.get("token").asText();
-		userId = node.get("user").get("id").asText();
+		sessionToken = objectMapper.readTree(login.getResponse().getContentAsString()).get("token").asText();
 	}
 
 	@Test

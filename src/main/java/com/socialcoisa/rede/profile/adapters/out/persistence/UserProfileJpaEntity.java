@@ -89,6 +89,9 @@ class UserProfileJpaEntity {
 	@Column(name = "terms_accepted_at")
 	private Instant termsAcceptedAt;
 
+	@Column(name = "email_verified_at")
+	private Instant emailVerifiedAt;
+
 	protected UserProfileJpaEntity() {
 	}
 
@@ -115,6 +118,7 @@ class UserProfileJpaEntity {
 		entity.createdAt = profile.createdAt();
 		entity.updatedAt = profile.updatedAt();
 		entity.termsAcceptedAt = profile.termsAcceptedAt();
+		entity.emailVerifiedAt = profile.emailVerifiedAt();
 		return entity;
 	}
 
@@ -123,6 +127,9 @@ class UserProfileJpaEntity {
 			bio, skills, goals, availability, portfolio, externalLinks, openToWork, mentor, createdAt, updatedAt);
 		profile.setCounts(profile.connectionsCount(), profile.followersCount(), reputation);
 		profile.acceptTerms(termsAcceptedAt);
+		if (emailVerifiedAt != null) {
+			profile.markEmailVerified(emailVerifiedAt);
+		}
 		return profile;
 	}
 }

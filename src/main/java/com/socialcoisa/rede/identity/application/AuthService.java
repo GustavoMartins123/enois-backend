@@ -23,12 +23,15 @@ import com.socialcoisa.rede.identity.application.port.in.RefreshSessionUseCase;
 import com.socialcoisa.rede.identity.application.port.in.RequestPasswordResetUseCase;
 import com.socialcoisa.rede.identity.application.port.in.ResetPasswordUseCase;
 import com.socialcoisa.rede.identity.application.port.in.SignupUseCase;
+import com.socialcoisa.rede.identity.application.port.in.VerifyEmailUseCase;
 import com.socialcoisa.rede.identity.application.port.out.AuthSessionRepository;
 import com.socialcoisa.rede.identity.application.port.out.CredentialRepository;
+import com.socialcoisa.rede.identity.application.port.out.EmailVerificationTokenRepository;
 import com.socialcoisa.rede.identity.application.port.out.PasswordResetTokenRepository;
 import com.socialcoisa.rede.identity.application.port.out.StoredCredential;
 import com.socialcoisa.rede.identity.application.port.out.UserExternalIdentityRepository;
 import com.socialcoisa.rede.identity.application.EmailService;
+import com.socialcoisa.rede.identity.domain.EmailVerificationToken;
 import com.socialcoisa.rede.identity.domain.PasswordResetToken;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.profile.domain.UserProfile;
@@ -37,9 +40,16 @@ import com.socialcoisa.rede.shared.web.ApiException;
 @Service
 public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, GetAuthenticatedUserUseCase,
 		RequestPasswordResetUseCase, ResetPasswordUseCase, RefreshSessionUseCase, ChangeEmailUseCase,
-		ChangePasswordUseCase, DeleteAccountUseCase {
+		ChangePasswordUseCase, DeleteAccountUseCase, VerifyEmailUseCase {
 
 	private static final Duration RESET_TOKEN_TTL = Duration.ofHours(24);
+
+	/** Validade do link de confirmacao de e-mail. */
+	private static final Duration VERIFICATION_TOKEN_TTL = Duration.ofHours(24);
+
+	/** Janela do limite de reenvio do link de confirmacao. */
+	private static final Duration VERIFICATION_RESEND_WINDOW = Duration.ofHours(1);
+	private static final int VERIFICATION_RESEND_LIMIT = 3;
 
 	private final Duration accessTokenTtl;
 	private final Duration refreshTokenTtl;
@@ -47,6 +57,7 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 	private final CredentialRepository credentialRepository;
 	private final AuthSessionRepository authSessionRepository;
 	private final PasswordResetTokenRepository passwordResetTokenRepository;
+	private final EmailVerificationTokenRepository emailVerificationTokenRepository;
 	private final UserExternalIdentityRepository externalIdentityRepository;
 	private final PasswordHasher passwordHasher;
 	private final EmailService emailService;
@@ -57,6 +68,7 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
                        @Value("${rede.auth.refresh-token-ttl-days:30}") int refreshTokenTtlDays,
                        UserProfileRepository userProfileRepository, CredentialRepository credentialRepository,
                        AuthSessionRepository authSessionRepository, PasswordResetTokenRepository passwordResetTokenRepository,
+                       EmailVerificationTokenRepository emailVerificationTokenRepository,
                        UserExternalIdentityRepository externalIdentityRepository,
                        PasswordHasher passwordHasher, EmailService emailService, Clock clock) {
 		this.accessTokenTtl = Duration.ofMinutes(accessTokenTtlMinutes);
@@ -65,6 +77,7 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		this.credentialRepository = credentialRepository;
 		this.authSessionRepository = authSessionRepository;
 		this.passwordResetTokenRepository = passwordResetTokenRepository;
+		this.emailVerificationTokenRepository = emailVerificationTokenRepository;
 		this.externalIdentityRepository = externalIdentityRepository;
 		this.passwordHasher = passwordHasher;
         this.emailService = emailService;
@@ -73,7 +86,7 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 
 	@Override
 	@Transactional
-	public AuthResponse signup(SignupCommand command) {
+	public SignupResult signup(SignupCommand command) {
 		validateSignup(command);
 		String email = command.email().trim().toLowerCase(Locale.ROOT);
 		if (userProfileRepository.existsByEmail(email) || credentialRepository.existsByEmail(email)) {
@@ -87,7 +100,9 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		profile.acceptTerms(now);
 		UserProfile saved = userProfileRepository.save(profile);
 		credentialRepository.save(saved.id(), email, passwordHasher.hash(command.password()));
-		return createResponse(saved);
+		// A conta fica pendente ate confirmar o e-mail: nenhuma sessao e emitida aqui.
+		boolean emailSent = issueVerificationToken(saved, now);
+		return new SignupResult(normalizedEmail(saved), true, emailSent);
 	}
 
 	@Override
@@ -102,7 +117,56 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		}
 		UserProfile profile = userProfileRepository.findById(credential.userId())
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
+		requireVerifiedEmail(profile);
 		return createResponse(profile);
+	}
+
+	@Override
+	@Transactional
+	public AuthResponse verifyEmail(String token) {
+		if (!StringUtils.hasText(token)) {
+			throw new ApiException(400, "INVALID_TOKEN", "Token de confirmacao obrigatorio.");
+		}
+		String tokenHash = hashToken(token.trim());
+		EmailVerificationToken verification = emailVerificationTokenRepository.findByToken(tokenHash)
+			.orElseThrow(() -> new ApiException(404, "INVALID_TOKEN", "Link de confirmacao invalido."));
+		if (verification.isUsed()) {
+			throw new ApiException(409, "TOKEN_ALREADY_USED", "Este link de confirmacao ja foi usado.");
+		}
+		if (verification.isExpired(clock.instant())) {
+			throw new ApiException(410, "TOKEN_EXPIRED", "Link de confirmacao expirado. Peca um novo.");
+		}
+		UserProfile profile = userProfileRepository.findById(verification.userId())
+			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
+		Instant now = clock.instant();
+		if (!profile.emailVerified()) {
+			profile.markEmailVerified(now);
+			userProfileRepository.save(profile);
+		}
+		// Uso unico: consome o token antes de emitir a sessao.
+		emailVerificationTokenRepository.markUsed(tokenHash);
+		return createResponse(profile);
+	}
+
+	@Override
+	@Transactional
+	public void resendVerification(String email) {
+		if (!StringUtils.hasText(email) || !email.contains("@")) {
+			throw new ApiException(400, "INVALID_EMAIL", "Email invalido.");
+		}
+		String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
+		// Resposta neutra: nao confirmamos se o e-mail existe (evita enumeracao de contas).
+		userProfileRepository.findByEmail(normalizedEmail)
+			.filter(profile -> !profile.emailVerified())
+			.ifPresent(profile -> {
+				Instant now = clock.instant();
+				if (emailVerificationTokenRepository.countByUserIdSince(profile.id(),
+						now.minus(VERIFICATION_RESEND_WINDOW)) >= VERIFICATION_RESEND_LIMIT) {
+					throw new ApiException(429, "TOO_MANY_REQUESTS",
+						"Limite de reenvios atingido. Tente novamente mais tarde.");
+				}
+				issueVerificationToken(profile, now);
+			});
 	}
 
 	@Override
@@ -230,6 +294,42 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		userProfileRepository.save(profile);
 	}
 
+	/**
+	 * Cria um novo token de confirmacao (invalidando o anterior) e envia o link.
+	 *
+	 * @return false quando o envio do e-mail falhou — a conta continua pendente e a tela oferece reenviar
+	 */
+	private boolean issueVerificationToken(UserProfile profile, Instant now) {
+		String rawToken = newVerificationToken();
+		// Um token valido por vez: reenviar invalida o link anterior (marcado como usado).
+		emailVerificationTokenRepository.markAllUsedByUserId(profile.id(), now);
+		emailVerificationTokenRepository.save(EmailVerificationToken.create(hashToken(rawToken), profile.id(),
+			now.plus(VERIFICATION_TOKEN_TTL), now));
+		return emailService.sendVerificationEmail(profile.email(), profile.name(), rawToken);
+	}
+
+	/** Chamado pelo login social: o provedor ja confirmou o e-mail, entao a conta nasce verificada. */
+	@Transactional
+	public void markEmailVerifiedForProvider(String userId, Instant now) {
+		userProfileRepository.findById(userId).ifPresent(profile -> {
+			if (!profile.emailVerified()) {
+				profile.markEmailVerified(now);
+				userProfileRepository.save(profile);
+			}
+		});
+	}
+
+	private void requireVerifiedEmail(UserProfile profile) {
+		if (!profile.emailVerified()) {
+			throw new ApiException(403, "EMAIL_NOT_VERIFIED",
+				"Confirme seu e-mail para entrar. Enviamos um link para " + normalizedEmail(profile) + ".");
+		}
+	}
+
+	private String normalizedEmail(UserProfile profile) {
+		return profile.email() == null ? "" : profile.email().trim().toLowerCase(Locale.ROOT);
+	}
+
 	private String requireUserId(String sessionToken) {
 		if (!StringUtils.hasText(sessionToken)) {
 			throw new ApiException(401, "UNAUTHENTICATED", "Sessao invalida ou expirada.");
@@ -276,6 +376,12 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		byte[] bytes = new byte[48];
 		secureRandom.nextBytes(bytes);
 		return "reset_" + Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+	}
+
+	private String newVerificationToken() {
+		byte[] bytes = new byte[48];
+		secureRandom.nextBytes(bytes);
+		return "verify_" + Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
 	}
 
 	private String uniqueUsername(String name, String email) {

@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -25,11 +26,23 @@ class SupportController {
 	private final SupportService supportService;
 	private final CurrentUserResolver currentUserResolver;
 	private final AdminGuard adminGuard;
+	private final String supportEmail;
 
-	SupportController(SupportService supportService, CurrentUserResolver currentUserResolver, AdminGuard adminGuard) {
+	SupportController(SupportService supportService, CurrentUserResolver currentUserResolver, AdminGuard adminGuard,
+			@org.springframework.beans.factory.annotation.Value("${rede.support.email:}") String supportEmail) {
 		this.supportService = supportService;
 		this.currentUserResolver = currentUserResolver;
 		this.adminGuard = adminGuard;
+		this.supportEmail = supportEmail;
+	}
+
+	/**
+	 * Canal de contato publico. Serve para a pagina /contato oferecer o e-mail do time a quem ainda
+	 * nao tem conta (o formulario exige sessao). Devolve null quando o time nao configurou um e-mail.
+	 */
+	@GetMapping("/support/config")
+	SupportConfigView config() {
+		return new SupportConfigView(StringUtils.hasText(supportEmail) ? supportEmail.trim() : null);
 	}
 
 	/** Abre um pedido de ajuda para ser atendido por uma pessoa do time. */
@@ -52,6 +65,9 @@ class SupportController {
 		return supportService.listByStatus(SupportStatus.OPEN, limit).stream()
 			.map(SupportRequestView::from)
 			.toList();
+	}
+
+	record SupportConfigView(String email) {
 	}
 
 	record CreateSupportRequest(String subject, String message, String contactEmail) {

@@ -27,13 +27,17 @@ class UserCredentialJpaEntity {
 	@Column(name = "updated_at", nullable = false)
 	private Instant updatedAt;
 
+	@Column(name = "password_usable", nullable = false)
+	private boolean passwordUsable = true;
+
 	protected UserCredentialJpaEntity() {
 	}
 
-	UserCredentialJpaEntity(String userId, String email, String passwordHash, Instant now) {
+	UserCredentialJpaEntity(String userId, String email, String passwordHash, boolean passwordUsable, Instant now) {
 		this.userId = userId;
 		this.email = email;
 		this.passwordHash = passwordHash;
+		this.passwordUsable = passwordUsable;
 		this.createdAt = now;
 		this.updatedAt = now;
 	}
@@ -48,5 +52,9 @@ class UserCredentialJpaEntity {
 
 	String passwordHash() {
 		return passwordHash;
+	}
+
+	boolean passwordUsable() {
+		return passwordUsable;
 	}
 }

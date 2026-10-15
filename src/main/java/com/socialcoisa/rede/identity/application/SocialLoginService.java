@@ -2,6 +2,7 @@ package com.socialcoisa.rede.identity.application;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -17,37 +18,57 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import com.socialcoisa.rede.identity.adapters.out.oauth.OAuthProperties;
+import com.socialcoisa.rede.identity.application.port.in.LinkedProviderView;
 import com.socialcoisa.rede.identity.application.port.in.OAuthStartResponse;
 import com.socialcoisa.rede.identity.application.port.in.OAuthUseCase;
 import com.socialcoisa.rede.identity.application.port.out.AuthSessionRepository;
 import com.socialcoisa.rede.identity.application.port.out.CredentialRepository;
+import com.socialcoisa.rede.identity.application.port.out.OAuthAuthorizationRequestRepository;
+import com.socialcoisa.rede.identity.application.port.out.StoredCredential;
 import com.socialcoisa.rede.identity.application.port.out.TokenValidationResult;
 import com.socialcoisa.rede.identity.application.port.out.TokenValidator;
 import com.socialcoisa.rede.identity.application.port.out.UserExternalIdentityRepository;
+import com.socialcoisa.rede.identity.domain.OAuthAuthorizationRequest;
 import com.socialcoisa.rede.identity.domain.OAuthProvider;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.profile.domain.UserProfile;
 import com.socialcoisa.rede.shared.web.ApiException;
 
+/**
+ * Login e vinculacao por Google/Apple.
+ *
+ * Regras que valem a pena ter em mente:
+ * - todo fluxo comeca em {@link #start}/{@link #startLink}, que registram `state` + `nonce` no
+ *   servidor; o callback so aceita um state que existe, e de uso unico;
+ * - o id_token e validado com assinatura, emissor, audience, validade e nonce (ver os validadores);
+ * - NUNCA vinculamos uma identidade a uma conta existente so porque o e-mail declarado bate: e-mail
+ *   nao e prova de posse. Se a conta ja existe, o dono precisa entrar e vincular de proposito.
+ */
 @Service
 public class SocialLoginService implements OAuthUseCase {
+
+	/** Tempo que o usuario tem para concluir a tela do provedor. */
+	private static final Duration STATE_TTL = Duration.ofMinutes(15);
 
 	private final Duration accessTokenTtl;
 	private final Duration refreshTokenTtl;
 
 	private final List<TokenValidator> tokenValidators;
 	private final UserExternalIdentityRepository externalIdentityRepository;
+	private final OAuthAuthorizationRequestRepository authorizationRequestRepository;
 	private final UserProfileRepository userProfileRepository;
 	private final CredentialRepository credentialRepository;
 	private final AuthSessionRepository authSessionRepository;
 	private final PasswordHasher passwordHasher;
 	private final OAuthProperties oAuthProperties;
 	private final Clock clock;
+	private final SecureRandom secureRandom = new SecureRandom();
 
 	public SocialLoginService(@Value("${rede.auth.access-token-ttl-minutes:60}") int accessTokenTtlMinutes,
 			@Value("${rede.auth.refresh-token-ttl-days:30}") int refreshTokenTtlDays,
 			List<TokenValidator> tokenValidators,
 			UserExternalIdentityRepository externalIdentityRepository,
+			OAuthAuthorizationRequestRepository authorizationRequestRepository,
 			UserProfileRepository userProfileRepository,
 			CredentialRepository credentialRepository,
 			AuthSessionRepository authSessionRepository,
@@ -58,6 +79,7 @@ public class SocialLoginService implements OAuthUseCase {
 		this.refreshTokenTtl = Duration.ofDays(refreshTokenTtlDays);
 		this.tokenValidators = tokenValidators;
 		this.externalIdentityRepository = externalIdentityRepository;
+		this.authorizationRequestRepository = authorizationRequestRepository;
 		this.userProfileRepository = userProfileRepository;
 		this.credentialRepository = credentialRepository;
 		this.authSessionRepository = authSessionRepository;
@@ -67,13 +89,32 @@ public class SocialLoginService implements OAuthUseCase {
 	}
 
 	@Override
+	@Transactional
 	public OAuthStartResponse start(OAuthProvider provider) {
-		String state = "state_" + UUID.randomUUID().toString().replace("-", "");
-		String authorizationUrl = buildAuthorizationUrl(provider, state);
-		return new OAuthStartResponse(provider, state, authorizationUrl);
+		return startRequest(provider, null);
 	}
 
-	private String buildAuthorizationUrl(OAuthProvider provider, String state) {
+	@Override
+	@Transactional
+	public OAuthStartResponse startLink(String userId, OAuthProvider provider) {
+		if (!StringUtils.hasText(userId)) {
+			throw new ApiException(401, "UNAUTHENTICATED", "Sessao invalida ou expirada.");
+		}
+		return startRequest(provider, userId);
+	}
+
+	private OAuthStartResponse startRequest(OAuthProvider provider, String linkUserId) {
+		String state = randomToken();
+		String nonce = randomToken();
+		Instant now = clock.instant();
+		authorizationRequestRepository.save(OAuthAuthorizationRequest.create(state, provider, nonce, linkUserId,
+			now.plus(STATE_TTL), now));
+		// Faxina oportunista: o state nao precisa sobreviver no banco depois de vencer.
+		authorizationRequestRepository.deleteExpired(now);
+		return new OAuthStartResponse(provider, state, buildAuthorizationUrl(provider, state, nonce));
+	}
+
+	private String buildAuthorizationUrl(OAuthProvider provider, String state, String nonce) {
 		return switch (provider) {
 			case GOOGLE -> {
 				var config = oAuthProperties.getGoogle();
@@ -81,12 +122,10 @@ public class SocialLoginService implements OAuthUseCase {
 					throw new ApiException(501, "OAUTH_NOT_CONFIGURED",
 						"Login com Google nao configurado. Configure GOOGLE_CLIENT_ID.");
 				}
-				yield String.format(
-					"https://accounts.google.com/o/oauth2/v2/auth?client_id=%s&redirect_uri=%s&response_type=code&scope=openid+email+profile&state=%s",
-					urlEncode(config.getClientId()),
-					urlEncode(config.getRedirectUri()),
-					urlEncode(state)
-				);
+				yield "https://accounts.google.com/o/oauth2/v2/auth?client_id=" + urlEncode(config.getClientId())
+					+ "&redirect_uri=" + urlEncode(config.getRedirectUri())
+					+ "&response_type=code&scope=openid+email+profile"
+					+ "&state=" + urlEncode(state) + "&nonce=" + urlEncode(nonce);
 			}
 			case APPLE -> {
 				var config = oAuthProperties.getApple();
@@ -94,95 +133,234 @@ public class SocialLoginService implements OAuthUseCase {
 					throw new ApiException(501, "OAUTH_NOT_CONFIGURED",
 						"Login com Apple nao configurado. Configure APPLE_CLIENT_ID.");
 				}
-				yield String.format(
-					"https://appleid.apple.com/auth/authorize?client_id=%s&redirect_uri=%s&response_type=code&scope=name+email&response_mode=form_post&state=%s",
-					urlEncode(config.getClientId()),
-					urlEncode(config.getRedirectUri()),
-					urlEncode(state)
-				);
+				yield "https://appleid.apple.com/auth/authorize?client_id=" + urlEncode(config.getClientId())
+					+ "&redirect_uri=" + urlEncode(config.getRedirectUri())
+					+ "&response_type=code&scope=name+email&response_mode=form_post"
+					+ "&state=" + urlEncode(state) + "&nonce=" + urlEncode(nonce);
 			}
 		};
 	}
 
 	private String urlEncode(String value) {
-		return URLEncoder.encode(value, StandardCharsets.UTF_8);
+		return URLEncoder.encode(value == null ? "" : value, StandardCharsets.UTF_8);
 	}
 
 	@Override
 	@Transactional
-	public AuthResponse callback(OAuthProvider provider, String code, String state) {
-		// O state e comparado com o cookie definido em /oauth/{provider}/start pelo controller.
+	public AuthResponse callback(OAuthProvider provider, String code, String state, String appleUserPayload) {
 		if (!StringUtils.hasText(code)) {
 			throw new ApiException(400, "INVALID_OAUTH_CODE", "Codigo de autorizacao obrigatorio.");
 		}
-		return completeLogin(provider, code);
+		OAuthAuthorizationRequest request = consumeAuthorizationRequest(provider, state);
+		TokenValidationResult validation = validate(provider, code, request.nonce());
+		if (request.isLinkRequest()) {
+			return attachIdentity(request.userId(), provider, validation);
+		}
+		return login(provider, validation, appleUserPayload);
 	}
 
 	@Override
 	@Transactional
-	public AuthResponse tokenLogin(OAuthProvider provider, String idToken) {
+	public AuthResponse tokenLogin(OAuthProvider provider, String idToken, String state) {
 		if (!StringUtils.hasText(idToken)) {
 			throw new ApiException(400, "INVALID_OAUTH_TOKEN", "id_token obrigatorio.");
 		}
-		return completeLogin(provider, idToken);
+		// Sem state nao ha como conferir o nonce: um id_token solto pode ter sido emitido para outro
+		// pedido. Aceitamos o login por id_token apenas quando ele veio do nosso /start.
+		OAuthAuthorizationRequest request = consumeAuthorizationRequest(provider, state);
+		TokenValidationResult validation = validate(provider, idToken, request.nonce());
+		if (request.isLinkRequest()) {
+			return attachIdentity(request.userId(), provider, validation);
+		}
+		return login(provider, validation, null);
 	}
 
-	private AuthResponse completeLogin(OAuthProvider provider, String credential) {
-		TokenValidationResult validation = tokenValidators.stream()
-			.map(v -> v.validate(provider, credential))
+	/**
+	 * Confere o state no servidor: precisa existir, ser do mesmo provedor e estar dentro da validade.
+	 * O registro e apagado na mesma transacao (uso unico), o que tambem inviabiliza reenvio.
+	 */
+	private OAuthAuthorizationRequest consumeAuthorizationRequest(OAuthProvider provider, String state) {
+		if (!StringUtils.hasText(state)) {
+			throw new ApiException(400, "INVALID_OAUTH_STATE", "Requisicao de login invalida ou expirada.");
+		}
+		OAuthAuthorizationRequest request = authorizationRequestRepository.findByState(state.trim())
+			.orElseThrow(() -> new ApiException(400, "INVALID_OAUTH_STATE",
+				"Requisicao de login invalida ou expirada."));
+		authorizationRequestRepository.deleteByState(request.state());
+		if (request.provider() != provider) {
+			throw new ApiException(400, "INVALID_OAUTH_STATE", "Requisicao de login invalida ou expirada.");
+		}
+		if (request.isExpired(clock.instant())) {
+			throw new ApiException(410, "OAUTH_STATE_EXPIRED", "Esta tentativa de login expirou. Tente de novo.");
+		}
+		return request;
+	}
+
+	private TokenValidationResult validate(OAuthProvider provider, String credential, String expectedNonce) {
+		return tokenValidators.stream()
+			.map(validator -> validator.validate(provider, credential, expectedNonce))
 			.filter(Optional::isPresent)
+			.map(Optional::get)
 			.findFirst()
 			.orElseThrow(() -> new ApiException(401, "INVALID_OAUTH_TOKEN",
-				"Falha ao validar token do " + provider.name() + "."))
-			.get();
-		String userId = findOrCreateUser(provider, validation);
+				"Nao foi possivel validar sua conta " + provider.name() + ". Tente novamente."));
+	}
+
+	/** Login/cadastro pelo provedor (nao e vinculacao). */
+	private AuthResponse login(OAuthProvider provider, TokenValidationResult validation, String appleUserPayload) {
+		String userId = externalIdentityRepository
+			.findUserIdByProviderAndExternalId(provider.name(), validation.externalUserId())
+			.orElseGet(() -> createAccountForProvider(provider, validation, appleUserPayload));
+		// O provedor confirma o e-mail: quem entra assim nao precisa passar pela confirmacao.
+		markVerified(userId);
 		return createSession(userId);
 	}
 
-	private String findOrCreateUser(OAuthProvider provider, TokenValidationResult validation) {
-		Optional<String> existingUserId = externalIdentityRepository
-			.findUserIdByProviderAndExternalId(provider.name(), validation.externalUserId());
-		if (existingUserId.isPresent()) {
-			return existingUserId.get();
+	private String createAccountForProvider(OAuthProvider provider, TokenValidationResult validation,
+			String appleUserPayload) {
+		String email = normalizeEmail(validation.email());
+		if (!StringUtils.hasText(email)) {
+			throw new ApiException(409, "OAUTH_EMAIL_REQUIRED",
+				"O provedor nao informou um e-mail. Entre com e-mail e senha e vincule a conta depois.");
 		}
-		String email = validation.email();
-		if (StringUtils.hasText(email) && userProfileRepository.existsByEmail(email.trim().toLowerCase(Locale.ROOT))) {
-			String existingUser = userProfileRepository.findByEmail(email.trim().toLowerCase(Locale.ROOT))
-				.map(UserProfile::id)
-				.orElseThrow();
-			externalIdentityRepository.save(existingUser, provider.name(), validation.externalUserId(), email);
-			return existingUser;
+		// Conta existente com este e-mail: vinculamos apenas se a pessoa pedir de proposito.
+		if (userProfileRepository.existsByEmail(email) || credentialRepository.existsByEmail(email)) {
+			throw new ApiException(409, "ACCOUNT_EXISTS_LINK_REQUIRED",
+				"Ja existe uma conta com este e-mail. Entre com e-mail e senha e vincule o "
+					+ provider.name() + " no seu perfil.");
 		}
 		Instant now = clock.instant();
 		String userId = "user_" + UUID.randomUUID().toString().replace("-", "");
-		String username = uniqueUsername(validation.name(), email);
-		String safeName = StringUtils.hasText(validation.name()) ? validation.name().trim() : "User";
-		UserProfile profile = UserProfile.create(userId, username, email, safeName, "", now);
+		String name = StringUtils.hasText(validation.name()) ? validation.name().trim()
+			: nameFromApplePayload(appleUserPayload);
+		String username = uniqueUsername(StringUtils.hasText(name) ? name : email, email);
+		UserProfile profile = UserProfile.create(userId, username, email,
+			StringUtils.hasText(name) ? name : "Pessoa", null, now);
+		// A conta nasce de um provedor que validou o e-mail; o aceite dos termos vem no primeiro acesso.
 		userProfileRepository.save(profile);
-		String randomPassword = Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[32]);
-		credentialRepository.save(userId, email, passwordHasher.hash(randomPassword));
+		// Senha aleatoria que o usuario nao conhece: a marca `passwordUsable=false` impede que
+		// desvincular o provedor deixe a conta inacessivel.
+		credentialRepository.save(userId, email, passwordHasher.hash(randomToken()), false);
 		externalIdentityRepository.save(userId, provider.name(), validation.externalUserId(), email);
 		return userId;
+	}
+
+	private String nameFromApplePayload(String appleUserPayload) {
+		if (!StringUtils.hasText(appleUserPayload)) {
+			return "";
+		}
+		try {
+			@SuppressWarnings("unchecked")
+			var payload = new com.fasterxml.jackson.databind.ObjectMapper().readValue(appleUserPayload, java.util.Map.class);
+			Object name = payload.get("name");
+			if (name instanceof java.util.Map<?, ?> nameMap) {
+				String firstName = stringValue(nameMap.get("firstName"));
+				String lastName = stringValue(nameMap.get("lastName"));
+				if (StringUtils.hasText(firstName)) {
+					return StringUtils.hasText(lastName) ? firstName + " " + lastName : firstName;
+				}
+			}
+		}
+		catch (Exception ignored) {
+			// Payload opcional (a Apple so manda nome na primeira autorizacao).
+		}
+		return "";
+	}
+
+	private String stringValue(Object value) {
+		return value == null ? "" : String.valueOf(value);
+	}
+
+	/** Vincula o provedor a conta de quem ja esta logado e pediu a vinculacao. */
+	private AuthResponse attachIdentity(String userId, OAuthProvider provider, TokenValidationResult validation) {
+		Optional<String> owner = externalIdentityRepository
+			.findUserIdByProviderAndExternalId(provider.name(), validation.externalUserId());
+		if (owner.isPresent() && !owner.get().equals(userId)) {
+			throw new ApiException(409, "OAUTH_IDENTITY_IN_USE",
+				"Esta conta " + provider.name() + " ja esta vinculada a outro usuario.");
+		}
+		if (owner.isPresent()) {
+			// Já vinculada a esta mesma conta: nada a fazer.
+			return createSession(userId);
+		}
+		if (externalIdentityRepository.findByUserId(userId).stream()
+				.anyMatch(identity -> identity.provider().equals(provider.name()))) {
+			throw new ApiException(409, "OAUTH_ALREADY_LINKED",
+				"Voce ja tem uma conta " + provider.name() + " vinculada.");
+		}
+		externalIdentityRepository.save(userId, provider.name(), validation.externalUserId(),
+			normalizeEmail(validation.email()));
+		markVerified(userId);
+		return createSession(userId);
+	}
+
+	@Override
+	@Transactional
+	public void unlink(String userId, OAuthProvider provider) {
+		List<UserExternalIdentityRepository.LinkedIdentity> linked = externalIdentityRepository.findByUserId(userId);
+		boolean hasProvider = linked.stream().anyMatch(identity -> identity.provider().equals(provider.name()));
+		if (!hasProvider) {
+			throw new ApiException(404, "OAUTH_NOT_LINKED",
+				"Sua conta nao esta vinculada ao " + provider.name() + ".");
+		}
+		// Protecao contra perda de acesso: precisa sobrar outro jeito de entrar.
+		boolean hasAnotherProvider = linked.stream().anyMatch(identity -> !identity.provider().equals(provider.name()));
+		boolean hasUsablePassword = credentialRepository.findByUserId(userId)
+			.map(StoredCredential::passwordUsable)
+			.orElse(false);
+		if (!hasAnotherProvider && !hasUsablePassword) {
+			throw new ApiException(409, "LAST_LOGIN_METHOD",
+				"Este e o unico jeito de entrar na sua conta. Defina uma senha antes de desvincular.");
+		}
+		externalIdentityRepository.deleteByUserIdAndProvider(userId, provider.name());
+	}
+
+	@Override
+	@Transactional(readOnly = true)
+	public List<LinkedProviderView> linkedProviders(String userId) {
+		boolean hasUsablePassword = credentialRepository.findByUserId(userId)
+			.map(StoredCredential::passwordUsable)
+			.orElse(false);
+		return externalIdentityRepository.findByUserId(userId).stream()
+			.map(identity -> new LinkedProviderView(identity.provider(), identity.email(),
+				identity.createdAt() != null ? identity.createdAt().toString() : null, hasUsablePassword))
+			.toList();
+	}
+
+	private void markVerified(String userId) {
+		userProfileRepository.findById(userId).ifPresent(profile -> {
+			if (!profile.emailVerified()) {
+				profile.markEmailVerified(clock.instant());
+				userProfileRepository.save(profile);
+			}
+		});
+	}
+
+	private String normalizeEmail(String email) {
+		return StringUtils.hasText(email) ? email.trim().toLowerCase(Locale.ROOT) : "";
 	}
 
 	private AuthResponse createSession(String userId) {
 		Instant now = clock.instant();
 		Instant expiresAt = now.plus(accessTokenTtl);
 		Instant refreshExpiresAt = now.plus(refreshTokenTtl);
-		byte[] bytes = new byte[32];
-		new java.security.SecureRandom().nextBytes(bytes);
-		String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-		byte[] refreshBytes = new byte[32];
-		new java.security.SecureRandom().nextBytes(refreshBytes);
-		String refreshToken = Base64.getUrlEncoder().withoutPadding().encodeToString(refreshBytes);
+		String token = randomToken();
+		String refreshToken = randomToken();
 		authSessionRepository.save(token, refreshToken, userId, now, expiresAt);
 		UserProfile profile = userProfileRepository.findById(userId)
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
 		return new AuthResponse(token, refreshToken, expiresAt, refreshExpiresAt, AuthUserView.from(profile));
 	}
 
+	private String randomToken() {
+		byte[] bytes = new byte[32];
+		secureRandom.nextBytes(bytes);
+		return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+	}
+
 	private String uniqueUsername(String name, String email) {
-		String base = slug(StringUtils.hasText(name) ? name : (StringUtils.hasText(email) ? email.substring(0, email.indexOf('@')) : "user"));
+		String base = slug(StringUtils.hasText(name) ? name
+			: (StringUtils.hasText(email) ? email.substring(0, email.indexOf('@')) : "user"));
 		String candidate = base;
 		int suffix = 1;
 		while (userProfileRepository.existsByUsername(candidate)) {
