@@ -2,6 +2,10 @@ package com.socialcoisa.rede.jobs.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Clock;
@@ -15,6 +19,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.socialcoisa.rede.jobs.application.port.out.JobRepository;
 import com.socialcoisa.rede.jobs.domain.Job;
+import com.socialcoisa.rede.jobs.domain.JobApplication;
+import com.socialcoisa.rede.jobs.domain.JobStatus;
 import com.socialcoisa.rede.profile.application.ReputationService;
 import com.socialcoisa.rede.shared.web.ApiException;
 
@@ -108,5 +114,86 @@ class JobServiceTests {
 			List.of(), USER, true))
 			.isInstanceOf(ApiException.class)
 			.hasMessageContaining("reputacao");
+	}
+
+	// ---------------- Ciclo de vida da vaga (Fase 3) ----------------
+
+	private Job openJob() {
+		java.time.Instant now = java.time.Instant.now();
+		return Job.create("job_1", "Backend", "Acme", null, "Remoto", "CLT", "SENIOR", null, "BRL",
+			List.of("Java"), List.of(), USER, now, now);
+	}
+
+	@Test
+	void closesTheJobAndRecordsWhen() {
+		Job open = openJob();
+		when(repository.findById("job_1")).thenReturn(java.util.Optional.of(open));
+
+		Job closed = service.close("job_1", USER);
+
+		assertThat(closed.status()).isEqualTo(JobStatus.CLOSED);
+		assertThat(closed.closedAt()).isNotNull();
+		verify(repository).save(closed);
+	}
+
+	@Test
+	void refusesCloseFromSomeoneElse() {
+		when(repository.findById("job_1")).thenReturn(java.util.Optional.of(openJob()));
+
+		assertThatThrownBy(() -> service.close("job_1", "user_outro"))
+			.isInstanceOf(ApiException.class)
+			.hasMessageContaining("nao criou");
+
+		verify(repository, never()).save(any());
+	}
+
+	@Test
+	void refusesClosingTwice() {
+		Job closed = openJob().closed(java.time.Instant.now());
+		when(repository.findById("job_1")).thenReturn(java.util.Optional.of(closed));
+
+		assertThatThrownBy(() -> service.close("job_1", USER))
+			.isInstanceOf(ApiException.class)
+			.hasMessageContaining("ja esta encerrada");
+	}
+
+	@Test
+	void editingDoesNotReopenAClosedJob() {
+		Job closed = openJob().closed(java.time.Instant.now());
+		when(repository.findById("job_1")).thenReturn(java.util.Optional.of(closed));
+
+		Job updated = service.update("job_1", "Backend II", "Acme", null, "Remoto", "CLT", "SENIOR", null, "BRL",
+			List.of("Java"), List.of(), USER);
+
+		assertThat(updated.status()).isEqualTo(JobStatus.CLOSED);
+		assertThat(updated.closedAt()).isEqualTo(closed.closedAt());
+	}
+
+	@Test
+	void refusesApplicationWhenTheJobIsClosed() {
+		Job closed = openJob().closed(java.time.Instant.now());
+		when(repository.findById("job_1")).thenReturn(java.util.Optional.of(closed));
+
+		assertThatThrownBy(() -> service.apply("job_1", "user_candidato", "oi", List.of()))
+			.isInstanceOf(ApiException.class)
+			.hasMessageContaining("encerrada");
+
+		// O ponto da regra: nada e gravado e o empregador nao e notificado.
+		verify(repository, never()).saveApplication(any());
+		verifyNoInteractions(delivery);
+	}
+
+	@Test
+	void stillAcceptsApplicationWhileTheJobIsOpen() {
+		Job open = openJob();
+		when(repository.findById("job_1")).thenReturn(java.util.Optional.of(open));
+		when(repository.hasApplied("job_1", "user_candidato")).thenReturn(false);
+		when(repository.saveApplication(any())).thenReturn("app_1");
+		when(userProfileRepository.findById("user_candidato")).thenReturn(java.util.Optional.empty());
+
+		JobApplication application = service.apply("job_1", "user_candidato", "oi", List.of());
+
+		assertThat(application.jobId()).isEqualTo("job_1");
+		verify(delivery).deliver(any(), any());
 	}
 }

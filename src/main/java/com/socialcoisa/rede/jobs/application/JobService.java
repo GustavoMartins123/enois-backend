@@ -87,11 +87,34 @@ public class JobService {
 		if (!existing.postedBy().equals(userId)) {
 			throw new ApiException(403, "NOT_OWNER", "Voce nao pode editar uma vaga que nao criou.");
 		}
+		// Editar NAO mexe no ciclo de vida: status e closedAt vem do registro atual, nunca do
+		// corpo da requisicao — senao bastava mandar status=OPEN para reabrir uma vaga encerrada.
 		Job updated = Job.restore(jobId, title, company, logo, location, type, level, normalizeSalary(salary),
 			normalizeCurrency(currency), skills, normalizeFields(jobId, fields), userId, existing.communityAgreedAt(),
-			existing.postedAt(), clock.instant());
+			existing.status(), existing.closedAt(), existing.postedAt(), clock.instant());
 		repository.save(updated);
 		return updated;
+	}
+
+	/**
+	 * Encerra o processo seletivo. Encerrar preserva tudo: as candidaturas ja recebidas continuam
+	 * disponiveis para a triagem — quem exclui e o `delete`, que e outra operacao.
+	 */
+	@Transactional
+	public Job close(String jobId, String userId) {
+		Job existing = repository.findById(jobId)
+			.orElseThrow(() -> new ApiException(404, "JOB_NOT_FOUND", "Vaga nao encontrada."));
+		if (!existing.postedBy().equals(userId)) {
+			throw new ApiException(403, "NOT_OWNER", "Voce nao pode encerrar uma vaga que nao criou.");
+		}
+		// Repetir o encerramento e erro de estado, nao sucesso silencioso: o autor precisa saber
+		// que a acao nao mudou nada agora.
+		if (!existing.isOpen()) {
+			throw new ApiException(409, "JOB_ALREADY_CLOSED", "Esta vaga ja esta encerrada.");
+		}
+		Job closed = existing.closed(clock.instant());
+		repository.save(closed);
+		return closed;
 	}
 
 	@Transactional
@@ -112,6 +135,11 @@ public class JobService {
 	public JobApplication apply(String jobId, String userId, String message, List<JobAnswerInput> answers) {
 		Job job = repository.findById(jobId)
 			.orElseThrow(() -> new ApiException(404, "JOB_NOT_FOUND", "Vaga nao encontrada."));
+		// Encerrada nao aceita candidatura — e o bloqueio e aqui, antes de gravar e antes de
+		// entregar ao empregador: esconder o botao no app nao impediria a chamada direta.
+		if (!job.isOpen()) {
+			throw new ApiException(409, "JOB_CLOSED", "Esta vaga foi encerrada e nao recebe mais candidaturas.");
+		}
 		if (job.postedBy().equals(userId)) {
 			throw new ApiException(400, "CANNOT_APPLY_TO_OWN_JOB", "Voce nao pode se candidatar a sua propria vaga.");
 		}

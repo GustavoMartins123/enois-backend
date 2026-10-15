@@ -5,9 +5,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.socialcoisa.rede.jobs.domain.Job;
+import com.socialcoisa.rede.jobs.domain.JobStatus;
 
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -70,6 +73,13 @@ class JobJpaEntity {
 	@Column(name = "updated_at", nullable = false)
 	private Instant updatedAt;
 
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false, length = 16)
+	private JobStatus status;
+
+	@Column(name = "closed_at")
+	private Instant closedAt;
+
 	protected JobJpaEntity() {
 	}
 
@@ -92,13 +102,15 @@ class JobJpaEntity {
 		e.postedBy = job.postedBy();
 		e.postedAt = job.postedAt();
 		e.updatedAt = job.updatedAt();
+		e.status = job.status();
+		e.closedAt = job.closedAt();
 		return e;
 	}
 
 	Job toDomain() {
 		return Job.restore(id, title, company, logo, location, type, level, salary, currency, skills,
 			applicationFields.stream().map(JobApplicationFieldEmbeddable::toDomain).toList(), postedBy,
-			communityAgreedAt, postedAt, updatedAt);
+			communityAgreedAt, status, closedAt, postedAt, updatedAt);
 	}
 
 }

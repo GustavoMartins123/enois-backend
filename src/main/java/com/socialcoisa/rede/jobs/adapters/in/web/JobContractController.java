@@ -142,6 +142,20 @@ class JobContractController {
 		return ResponseEntity.ok(toView(job, user.id().value(), false, false, jobService.applicationsCount(job.id())));
 	}
 
+	/**
+	 * Encerra a vaga. Usa `resolve` (que lanca) e nao o `viewerId` tolerante: autorizacao nao pode
+	 * ser "nao resolvi a sessao, entao trato como se nao fosse o dono".
+	 */
+	@PostMapping("/{jobId}/close")
+	ResponseEntity<JobView> close(@PathVariable String jobId,
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		Job job = jobService.close(jobId, user.id().value());
+		return ResponseEntity.ok(
+			toView(job, user.id().value(), false, false, jobService.applicationsCount(job.id())));
+	}
+
 	@DeleteMapping("/{jobId}")
 	ResponseEntity<Void> delete(@PathVariable String jobId,
 			@RequestHeader(value = "X-User-Id", required = false) String userId,
@@ -221,7 +235,8 @@ class JobContractController {
 					job.level(), job.salary(), job.currency(), job.skills(),
 					job.postedAt() != null ? job.postedAt().toString() : null, 0,
 					appliedIds.contains(job.id()), savedIds.contains(job.id()), owner,
-					owner ? counts.getOrDefault(job.id(), 0) : 0, authorOf(job), fieldViews(job));
+					owner ? counts.getOrDefault(job.id(), 0) : 0, authorOf(job), fieldViews(job),
+					job.status().name(), job.closedAt() != null ? job.closedAt().toString() : null);
 			})
 			.toList();
 		String nextCursor = jobs.size() == limit
@@ -233,7 +248,7 @@ class JobContractController {
 		return new JobView(job.id(), job.title(), job.company(), job.logo(), job.location(), job.type(), job.level(),
 			job.salary(), job.currency(), job.skills(), job.postedAt() != null ? job.postedAt().toString() : null, 0,
 			applied, saved, viewer != null && viewer.equals(job.postedBy()), applicationsCount, authorOf(job),
-			fieldViews(job));
+			fieldViews(job), job.status().name(), job.closedAt() != null ? job.closedAt().toString() : null);
 	}
 
 	/** Quem criou a vaga (com reputacao e verificacao): o candidato precisa saber com quem fala. */
@@ -265,7 +280,7 @@ class JobContractController {
 	record JobView(String id, String title, String company, String logo, String location, String type, String level,
 			String salary, String currency, List<String> skills, String postedAt, int matchScore, boolean applied,
 			boolean saved, boolean owner, int applicationsCount, AuthorView author, List<ApplicationFieldView>
-			applicationFields) {
+			applicationFields, String status, String closedAt) {
 	}
 
 	/** Quem publicou a vaga, com o que sustenta a credibilidade dele. */

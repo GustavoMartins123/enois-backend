@@ -20,10 +20,14 @@ public class Job {
 	private final Instant communityAgreedAt;
 	private final Instant postedAt;
 	private final Instant updatedAt;
+	/** Estado do processo seletivo; comeca OPEN. */
+	private JobStatus status;
+	private Instant closedAt;
 
 	private Job(String id, String title, String company, String logo, String location, String type, String level,
 			String salary, String currency, List<String> skills, List<JobApplicationField> applicationFields,
-			String postedBy, Instant communityAgreedAt, Instant postedAt, Instant updatedAt) {
+			String postedBy, Instant communityAgreedAt, JobStatus status, Instant closedAt, Instant postedAt,
+			Instant updatedAt) {
 		this.id = id;
 		this.title = title;
 		this.company = company;
@@ -39,20 +43,23 @@ public class Job {
 		this.communityAgreedAt = communityAgreedAt;
 		this.postedAt = postedAt;
 		this.updatedAt = updatedAt;
+		this.status = status == null ? JobStatus.OPEN : status;
+		this.closedAt = closedAt;
 	}
 
 	public static Job create(String id, String title, String company, String logo, String location, String type,
 			String level, String salary, String currency, List<String> skills, List<JobApplicationField> applicationFields,
 			String postedBy, Instant communityAgreedAt, Instant now) {
 		return new Job(id, title, company, logo, location, type, level, salary, currency, List.copyOf(skills),
-			applicationFields, postedBy, communityAgreedAt, now, now);
+			applicationFields, postedBy, communityAgreedAt, JobStatus.OPEN, null, now, now);
 	}
 
 	public static Job restore(String id, String title, String company, String logo, String location, String type,
 			String level, String salary, String currency, List<String> skills, List<JobApplicationField> applicationFields,
-			String postedBy, Instant communityAgreedAt, Instant postedAt, Instant updatedAt) {
+			String postedBy, Instant communityAgreedAt, JobStatus status, Instant closedAt, Instant postedAt,
+			Instant updatedAt) {
 		return new Job(id, title, company, logo, location, type, level, salary, currency, skills, applicationFields,
-			postedBy, communityAgreedAt, postedAt, updatedAt);
+			postedBy, communityAgreedAt, status, closedAt, postedAt, updatedAt);
 	}
 
 	public String id() { return id; }
@@ -87,5 +94,21 @@ public class Job {
 	public Instant postedAt() { return postedAt; }
 
 	public Instant updatedAt() { return updatedAt; }
+
+	public JobStatus status() { return status; }
+
+	/** Quando o autor encerrou o processo seletivo (nulo enquanto aberta). */
+	public Instant closedAt() { return closedAt; }
+
+	public boolean isOpen() { return status == JobStatus.OPEN; }
+
+	/**
+	 * Encerra a vaga registrando o instante. Encerrar nao apaga nem altera candidaturas: elas
+	 * continuam disponiveis para a triagem de quem publicou.
+	 */
+	public Job closed(Instant at) {
+		return new Job(id, title, company, logo, location, type, level, salary, currency, skills,
+			applicationFields, postedBy, communityAgreedAt, JobStatus.CLOSED, at, postedAt, updatedAt);
+	}
 
 }
