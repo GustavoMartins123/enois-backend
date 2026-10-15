@@ -154,6 +154,47 @@ class CommunityContractController {
 			});
 	}
 
+	/** Comunidades favoritadas pelo usuario (bookmark), para o menu lateral e a estrela dos cards. */
+	@GetMapping("/favorites")
+	PageResponse<CommunityView> favorites(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestParam(defaultValue = "50") int limit) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		var items = communityService.listFavorites(user.id().value(), limit).stream()
+			.map(c -> new CommunityView(c.id(), c.name(), c.description(), communityService.countMembers(c.id()),
+				c.topic(), c.cover(), c.avatar(), communityService.isMember(c.id(), user.id().value())))
+			.toList();
+		return new PageResponse<>(items, null);
+	}
+
+	@PostMapping("/{communityId}/favorite")
+	ResponseEntity<String> favorite(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@PathVariable String communityId) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		String hash = idempotency.hash(Map.of("communityId", communityId, "op", "favorite"));
+		return idempotency.execute(user.id(), "POST", "/api/communities/{communityId}/favorite", idempotencyKey, hash,
+			() -> {
+				communityService.favorite(communityId, user.id().value());
+				return new CommandResponse(200, new StatusResponse(communityId, "FAVORITED"));
+			});
+	}
+
+	@DeleteMapping("/{communityId}/favorite")
+	ResponseEntity<String> unfavorite(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@PathVariable String communityId) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		String hash = idempotency.hash(Map.of("communityId", communityId, "op", "unfavorite"));
+		return idempotency.execute(user.id(), "DELETE", "/api/communities/{communityId}/favorite", idempotencyKey, hash,
+			() -> {
+				communityService.unfavorite(communityId, user.id().value());
+				return new CommandResponse(200, new StatusResponse(communityId, "UNFAVORITED"));
+			});
+	}
+
 	/** Comunidades do usuario (menu lateral). Exige sessao: e a lista pessoal, nao o catalogo publico. */
 	@GetMapping("/mine")
 	PageResponse<CommunityView> mine(@RequestHeader(value = "X-User-Id", required = false) String userId,

@@ -18,11 +18,14 @@ class CommunityPersistenceAdapter implements CommunityRepository {
 
 	private final SpringDataCommunityJpaRepository springData;
 	private final SpringDataCommunityMemberJpaRepository memberRepo;
+	private final SpringDataFavoriteCommunityJpaRepository favoriteRepo;
 
 	CommunityPersistenceAdapter(SpringDataCommunityJpaRepository springData,
-			SpringDataCommunityMemberJpaRepository memberRepo) {
+			SpringDataCommunityMemberJpaRepository memberRepo,
+			SpringDataFavoriteCommunityJpaRepository favoriteRepo) {
 		this.springData = springData;
 		this.memberRepo = memberRepo;
+		this.favoriteRepo = favoriteRepo;
 	}
 
 	@Override
@@ -75,6 +78,40 @@ class CommunityPersistenceAdapter implements CommunityRepository {
 	@Override
 	public void removeAllMembers(String communityId) {
 		memberRepo.deleteByCommunityId(communityId);
+	}
+
+	@Override
+	public void addFavorite(String communityId, String userId, Instant createdAt) {
+		if (favoriteRepo.existsByUserIdAndCommunityId(userId, communityId)) {
+			return;
+		}
+		String id = "fav_" + java.util.UUID.randomUUID().toString().replace("-", "");
+		favoriteRepo.save(new FavoriteCommunityJpaEntity(id, communityId, userId, createdAt));
+	}
+
+	@Override
+	public boolean removeFavorite(String communityId, String userId) {
+		if (!favoriteRepo.existsByUserIdAndCommunityId(userId, communityId)) {
+			return false;
+		}
+		favoriteRepo.deleteByUserIdAndCommunityId(userId, communityId);
+		return true;
+	}
+
+	@Override
+	public List<Community> findFavorites(String userId, int limit) {
+		List<String> ids = favoriteRepo.findByUserIdOrderByCreatedAtDesc(userId).stream()
+			.map(FavoriteCommunityJpaEntity::getCommunityId)
+			.limit(limit)
+			.toList();
+		if (ids.isEmpty()) {
+			return List.of();
+		}
+		// findById em lote preservando a ordem de favoritagem.
+		var byId = springData.findAllById(ids).stream()
+			.collect(java.util.stream.Collectors.toMap(entity -> entity.toDomain().id(), entity -> entity));
+		return ids.stream().map(byId::get).filter(java.util.Objects::nonNull)
+			.map(CommunityJpaEntity::toDomain).toList();
 	}
 
 	@Override

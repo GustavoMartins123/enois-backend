@@ -27,6 +27,15 @@ public interface CommunityRepository {
 	/** Remove todos os vinculos de membros (ao excluir a comunidade, evita referencia orfa). */
 	void removeAllMembers(String communityId);
 
+	/** Favoritar (bookmark) uma comunidade, independente de participar dela. */
+	void addFavorite(String communityId, String userId, Instant createdAt);
+
+	/** Desfavoritar. Retorna true se havia favorito. */
+	boolean removeFavorite(String communityId, String userId);
+
+	/** Comunidades favoritadas pelo usuario, mais recentes primeiro. */
+	List<Community> findFavorites(String userId, int limit);
+
 	void removeMember(String communityId, String userId);
 
 	boolean isMember(String communityId, String userId);

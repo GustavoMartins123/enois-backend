@@ -132,6 +132,22 @@ public class CommunityService {
 		return repository.findByMember(userId, limit);
 	}
 
+	/** Favorita (salva) uma comunidade para acesso rapido. Nao exige participar dela. */
+	@Transactional
+	public void favorite(String communityId, String userId) {
+		getById(communityId);
+		repository.addFavorite(communityId, userId, clock.instant());
+	}
+
+	@Transactional
+	public void unfavorite(String communityId, String userId) {
+		repository.removeFavorite(communityId, userId);
+	}
+
+	public List<Community> listFavorites(String userId, int limit) {
+		return repository.findFavorites(userId, limit);
+	}
+
 	public List<Community> list(String topic, java.time.Instant before, int limit) {
 		return repository.findAll(topic, before, limit);
 	}
