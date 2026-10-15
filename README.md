@@ -149,6 +149,8 @@ backend expõe fica público em `https://enois.ia.br/api/...` — inclusive `/ap
 | `SPRINGDOC_ENABLED` | não | padrão `false`. `true` liga `/api/openapi.json` + Swagger UI (use só em dev/VPN) |
 | `MANAGEMENT_ENDPOINTS` | não | padrão `health`. Para métricas use `health,prometheus` **e bloqueie `/api/actuator/*` no gateway** |
 | `SUPPORT_EMAIL` | não | e-mail do time que recebe os pedidos de suporte. Sem ele o pedido ainda fica registrado e visível em `/admin/support` |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | p/ push no celular | par de chaves do Web Push (ver passo 7 abaixo). Sem elas o push fica desligado e só as notificações dentro do app funcionam |
+| `VAPID_SUBJECT` | não | contato do emissor VAPID, no formato `mailto:contato@dominio` (padrão `mailto:suporte@enois.ia.br`) |
 
 ### Passo a passo das ações manuais
 
@@ -164,6 +166,13 @@ backend expõe fica público em `https://enois.ia.br/api/...` — inclusive `/ap
 5. **Rotacionar segredos vazados** (ver seção "Segurança").
 6. Verificar o rollout: `kubectl -n forest-apps get pods -l app=socialcoiso-back` e
    `kubectl -n forest-apps logs deploy/socialcoiso-back`.
+7. **Ligar as notificações push no celular (Web Push)**: gerar um par de chaves VAPID
+   (`npx web-push generate-vapid-keys`), guardar a privada como Secret e definir `VAPID_PUBLIC_KEY`,
+   `VAPID_PRIVATE_KEY` (e `VAPID_SUBJECT`) no Deployment. A chave **pública** é entregue ao app por
+   `GET /push/config` — não precisa de variável no front. Depois de trocar as chaves, todas as inscrições
+   antigas param de receber push (o usuário reativa no menu da conta); as inscrições expiradas (404/410 do
+   serviço de push) são removidas sozinhas. Vale para Chrome/Edge/Firefox no Android e desktop; no iOS só
+   funciona com o app **instalado na tela de início** (iOS 16.4+).
 
 ## Fluxos de produto (referência rápida)
 
@@ -176,6 +185,11 @@ backend expõe fica público em `https://enois.ia.br/api/...` — inclusive `/ap
   aberto. No app: `/suporte`, alcançável pelo menu da conta.
 - **Consentimento**: `POST /auth/signup` exige `acceptedTerms: true` (termos + 18 anos); o instante do aceite é
   gravado em `users.terms_accepted_at`. Sem esse campo a resposta é `400 TERMS_NOT_ACCEPTED`.
+- **Push no celular**: `GET /push/config` (público) informa se o push está ligado e devolve a chave pública
+  VAPID; `POST /push/subscriptions` (autenticado) registra o dispositivo (`endpoint` + `keys.p256dh`/`keys.auth`)
+  e `DELETE /push/subscriptions?endpoint=...` remove. Toda notificação criada por `NotificationService` também
+  é enviada como push depois do commit (`PushNotificationListener` → `WebPushSender`); falha de push é logada e
+  nunca quebra o fluxo que gerou a notificação. No app: menu da conta → "Ativar notificações no celular".
 
 ## Segurança — pendências que exigem ação manual
 

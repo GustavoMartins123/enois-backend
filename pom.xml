@@ -81,6 +81,20 @@
 			<version>9.37.3</version>
 		</dependency>
 
+		<!-- Web Push (VAPID + payload criptografado) para as notificacoes no celular -->
+		<dependency>
+			<groupId>nl.martijndwars</groupId>
+			<artifactId>web-push</artifactId>
+			<version>5.1.1</version>
+		</dependency>
+
+		<!-- BouncyCastle: exigido em runtime pelo web-push para a criptografia do payload. -->
+		<dependency>
+			<groupId>org.bouncycastle</groupId>
+			<artifactId>bcprov-jdk18on</artifactId>
+			<version>1.84</version>
+		</dependency>
+
 		<dependency>
 			<groupId>com.h2database</groupId>
 			<artifactId>h2</artifactId>
