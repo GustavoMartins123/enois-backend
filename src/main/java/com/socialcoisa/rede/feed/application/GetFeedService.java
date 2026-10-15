@@ -33,6 +33,7 @@ import com.socialcoisa.rede.feed.domain.UserId;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.profile.domain.UserProfile;
 import com.socialcoisa.rede.shared.web.ApiException;
+import com.socialcoisa.rede.feed.application.port.out.PostCommunityReader;
 import com.socialcoisa.rede.shared.blocks.BlockedUsersReader;
 import com.socialcoisa.rede.shared.web.CursorCodec;
 
@@ -47,12 +48,13 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 	private final CommentRepository commentRepository;
 	private final CursorCodec cursorCodec;
 	private final BlockedUsersReader blockedUsersReader;
+	private final PostCommunityReader postCommunityReader;
 	private static final Instant DEFAULT_BEFORE = Instant.parse("9999-12-31T23:59:59Z");
 
 	public GetFeedService(PostRepository postRepository, FeedCacheRepository feedCacheRepository,
 			ConnectionGraphRepository connectionGraphRepository, UserProfileRepository userProfileRepository,
 			PostInteractionRepository postInteractionRepository, CommentRepository commentRepository,
-			CursorCodec cursorCodec, BlockedUsersReader blockedUsersReader) {
+			CursorCodec cursorCodec, BlockedUsersReader blockedUsersReader, PostCommunityReader postCommunityReader) {
 		this.postRepository = postRepository;
 		this.feedCacheRepository = feedCacheRepository;
 		this.connectionGraphRepository = connectionGraphRepository;
@@ -61,6 +63,7 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 		this.commentRepository = commentRepository;
 		this.cursorCodec = cursorCodec;
 		this.blockedUsersReader = blockedUsersReader;
+		this.postCommunityReader = postCommunityReader;
 	}
 
 	@Override
@@ -155,6 +158,15 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 			.collect(Collectors.toSet());
 		Map<String, UserProfile> profiles = userProfileRepository.findAllByIds(authorIds).stream()
 			.collect(Collectors.toMap(UserProfile::id, Function.identity()));
+		// Comunidade dos posts da pagina: nome para o "publicou em ..." e se o leitor ja participa
+		// (a consulta e em lote, uma para a pagina inteira).
+		java.util.Set<String> communityIds = visible.stream()
+			.map(Post::communityId)
+			.filter(java.util.Objects::nonNull)
+			.collect(Collectors.toSet());
+		Map<String, PostCommunityReader.CommunityRef> communities = postCommunityReader
+			.byIds(communityIds, currentUserId == null ? null : currentUserId.value());
+
 		List<PostId> postIds = visible.stream().map(Post::id).toList();
 		// Sem sessao (link compartilhado aberto por quem recebeu) nao ha reacao do visitante para
 		// buscar: a leitura publica nao pode depender de um usuario logado.
@@ -168,7 +180,12 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 					profile != null ? profile.name() : post.authorId().value(),
 					profile != null ? profile.avatar() : null);
 				ReactionType reaction = currentUserReactions.get(post.id());
-				return reaction != null ? view.withCurrentUserReaction(reaction) : view;
+				PostView withReaction = reaction != null ? view.withCurrentUserReaction(reaction) : view;
+				PostCommunityReader.CommunityRef community = post.communityId() == null ? null
+					: communities.get(post.communityId());
+				return community == null ? withReaction
+					: withReaction.withCommunity(community.id(),
+						new PostView.CommunityView(community.id(), community.name(), community.joined()));
 			})
 			.toList();
 	}

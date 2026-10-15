@@ -77,6 +77,15 @@ public final class TestDatabase {
 		}
 	}
 
+	/**
+	 * Apaga uma comunidade criada pelo teste. O banco dos testes e compartilhado entre as classes,
+	 * entao deixar uma comunidade para tras quebra o contrato que espera a lista vazia.
+	 */
+	public static void deleteCommunity(String communityId) {
+		require().update("delete from community_members where community_id = ?", communityId);
+		require().update("delete from communities where id = ?", communityId);
+	}
+
 	/** Muda a data de um evento direto no banco (para testar vencimento sem esperar o tempo passar). */
 	public static void setEventDate(String eventId, String date, String time) {
 		require().update("update events set date = ?, time = ? where id = ?", date, time, eventId);
