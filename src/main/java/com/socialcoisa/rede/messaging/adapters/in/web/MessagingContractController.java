@@ -125,12 +125,16 @@ class MessagingContractController {
 		if (!messagingService.isParticipant(conversationId, user.id().value())) {
 			throw new ApiException(403, "NOT_PARTICIPANT", "Voce nao participa desta conversa.");
 		}
-		List<Message> msgs = messagingService.getMessages(conversationId, cursor, limit);
+		Instant before = cursorCodec.decode(cursor).orElse(null);
+		List<Message> msgs = messagingService.getMessages(conversationId, before, limit);
 		var items = msgs.stream()
 			.map(m -> new MessageView(m.id(), m.conversationId(), m.senderId(), m.text(),
 				m.createdAt() != null ? m.createdAt().toString() : null))
 			.toList();
-		return new PageResponse<>(items, null);
+		// Pagina cheia => ainda ha mensagens mais antigas: o cursor aponta para a mais antiga desta pagina.
+		String nextCursor = msgs.size() == limit && !msgs.isEmpty()
+			? cursorCodec.encode(msgs.get(msgs.size() - 1).createdAt()) : null;
+		return new PageResponse<>(items, nextCursor);
 	}
 
 	@PostMapping("/{conversationId}/messages")

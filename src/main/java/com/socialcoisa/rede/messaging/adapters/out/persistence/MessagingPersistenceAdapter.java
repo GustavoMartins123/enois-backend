@@ -107,8 +107,11 @@ class MessagingPersistenceAdapter implements MessagingRepository {
 	}
 
 	@Override
-	public List<Message> findMessagesByConversation(String conversationId, String cursor, int limit) {
-		var messages = messageRepo.findByConversationIdOrderByCreatedAtDesc(conversationId, PageRequest.of(0, limit));
+	public List<Message> findMessagesByConversation(String conversationId, java.time.Instant before, int limit) {
+		var page = PageRequest.of(0, limit);
+		var messages = before == null
+			? messageRepo.findByConversationIdOrderByCreatedAtDesc(conversationId, page)
+			: messageRepo.findByConversationIdAndCreatedAtLessThanOrderByCreatedAtDesc(conversationId, before, page);
 		return messages.stream().map(MessageJpaEntity::toDomain).toList();
 	}
 

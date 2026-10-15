@@ -111,11 +111,11 @@ public class MessagingService {
 		return repository.countUnread(conversationId, userId);
 	}
 
-	public List<Message> getMessages(String conversationId, String cursor, int limit) {
+	public List<Message> getMessages(String conversationId, java.time.Instant before, int limit) {
 		if (!repository.findConversationById(conversationId).isPresent()) {
 			throw new ApiException(404, "CONVERSATION_NOT_FOUND", "Conversa nao encontrada.");
 		}
-		return repository.findMessagesByConversation(conversationId, cursor, limit);
+		return repository.findMessagesByConversation(conversationId, before, limit);
 	}
 
 	public String getLastMessageText(String conversationId) {

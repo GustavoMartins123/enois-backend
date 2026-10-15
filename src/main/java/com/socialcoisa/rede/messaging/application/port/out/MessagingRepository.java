@@ -33,7 +33,7 @@ public interface MessagingRepository {
 
 	void saveMessage(Message message);
 
-	List<Message> findMessagesByConversation(String conversationId, String cursor, int limit);
+	List<Message> findMessagesByConversation(String conversationId, java.time.Instant before, int limit);
 
 	Optional<Message> findLastMessage(String conversationId);
 

@@ -12,6 +12,9 @@ interface SpringDataMessageJpaRepository extends JpaRepository<MessageJpaEntity,
 	List<MessageJpaEntity> findByConversationIdOrderByCreatedAtDesc(String conversationId,
 			org.springframework.data.domain.Pageable pageable);
 
+	List<MessageJpaEntity> findByConversationIdAndCreatedAtLessThanOrderByCreatedAtDesc(String conversationId,
+			java.time.Instant before, org.springframework.data.domain.Pageable pageable);
+
 	Optional<MessageJpaEntity> findTopByConversationIdOrderByCreatedAtDesc(String conversationId);
 
 	@Query("""
