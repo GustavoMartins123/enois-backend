@@ -276,4 +276,75 @@ class JobApplicationFlowTests {
 		}
 		return objectMapper.writeValueAsString(Map.of("message", "Quero muito essa vaga", "answers", answers));
 	}
+
+	@Test
+	void closingStopsNewApplicationsAndPreservesTheOnesAlreadyReceived() throws Exception {
+		var employer = auth.authenticate("close_employer");
+		var candidate = auth.authenticate("close_candidate");
+		var outsider = auth.authenticate("close_outsider");
+
+		String jobId = createJob(employer, "[]");
+
+		// Candidatura recebida ANTES do encerramento: precisa sobreviver a ele.
+		mockMvc.perform(post("/jobs/" + jobId + "/applications")
+				.header("X-Session-Token", candidate.token())
+				.header("Idempotency-Key", "close-apply-1")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("message", "Tenho interesse", "answers", List.of()))))
+			.andExpect(status().isCreated());
+
+		// Terceiro nao encerra vaga alheia.
+		mockMvc.perform(post("/jobs/" + jobId + "/close").header("X-Session-Token", outsider.token()))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("NOT_OWNER"));
+
+		// Sem sessao tambem nao.
+		mockMvc.perform(post("/jobs/" + jobId + "/close"))
+			.andExpect(status().isUnauthorized());
+
+		// Vaga recem-publicada nasce aberta.
+		mockMvc.perform(get("/jobs/" + jobId).header("X-Session-Token", employer.token()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.status").value("OPEN"));
+
+		// O dono encerra, e o instante fica registrado.
+		mockMvc.perform(post("/jobs/" + jobId + "/close").header("X-Session-Token", employer.token()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.status").value("CLOSED"))
+			.andExpect(jsonPath("$.closedAt").isNotEmpty());
+
+		// Encerrada continua legivel por qualquer um (a consulta e publica).
+		mockMvc.perform(get("/jobs/" + jobId))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.status").value("CLOSED"));
+
+		// Candidatura nova em vaga encerrada e recusada...
+		mockMvc.perform(post("/jobs/" + jobId + "/applications")
+				.header("X-Session-Token", outsider.token())
+				.header("Idempotency-Key", "close-apply-2")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("message", "Tarde demais", "answers", List.of()))))
+			.andExpect(status().isConflict())
+			.andExpect(jsonPath("$.code").value("JOB_CLOSED"));
+
+		// ... e o encerrado vence o "ja se candidatou": quem ja tinha aplicado tambem recebe o
+		// motivo certo, senao a pessoa tentaria de novo achando que o problema era duplicidade.
+		mockMvc.perform(post("/jobs/" + jobId + "/applications")
+				.header("X-Session-Token", candidate.token())
+				.header("Idempotency-Key", "close-apply-3")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("message", "De novo", "answers", List.of()))))
+			.andExpect(status().isConflict())
+			.andExpect(jsonPath("$.code").value("JOB_CLOSED"));
+
+		// Encerrar de novo e erro de estado, nao sucesso silencioso.
+		mockMvc.perform(post("/jobs/" + jobId + "/close").header("X-Session-Token", employer.token()))
+			.andExpect(status().isConflict())
+			.andExpect(jsonPath("$.code").value("JOB_ALREADY_CLOSED"));
+
+		// A candidatura anterior segue com o empregador — encerrar nao apaga nada.
+		mockMvc.perform(get("/jobs/" + jobId + "/applications").header("X-Session-Token", employer.token()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.length()").value(1));
+	}
 }
