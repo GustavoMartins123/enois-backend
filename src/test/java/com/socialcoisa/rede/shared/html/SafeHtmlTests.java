@@ -167,7 +167,7 @@ class SafeHtmlTests {
 	 * app. Host que nao e provedor conhecido nao vira marcador: sai fora.
 	 */
 	@Test
-	void keepsProviderEmbedAsMarkerAndDropsUnknownOnes() {
+	void keepsProviderEmbedAndDropsUnknownOnes() {
 		String clean = SafeHtml.sanitizePageHtml("""
 			<iframe width="560" height="315" src="https://www.youtube.com/embed/aqz-KE-bpKQ" frameborder="0"></iframe>
 			<iframe src="https://player.vimeo.com/video/76979871"></iframe>
@@ -177,13 +177,13 @@ class SafeHtmlTests {
 			<iframe src="https://evil.test/y"></iframe>
 			""");
 
-		assertThat(clean).doesNotContain("<iframe").doesNotContain("<embed").doesNotContain("malicioso.test")
-			.doesNotContain("evil.test");
-		// Provedores conhecidos viram marcador com a URL; http e host desconhecido nao viram nada.
-		assertThat(clean).contains("data-enois-embed=\"https://www.youtube.com/embed/aqz-KE-bpKQ\"");
-		assertThat(clean).contains("data-enois-embed=\"https://player.vimeo.com/video/76979871\"");
-		assertThat(clean).contains("data-enois-embed=\"https://open.spotify.com/embed/track/4cOdK2wGLETKBW3PvgPWqT\"");
-		assertThat(clean.split("data-enois-embed", -1).length - 1).isEqualTo(3);
+		assertThat(clean).doesNotContain("<embed").doesNotContain("malicioso.test").doesNotContain("evil.test");
+		// Provedores conhecidos ficam (o player roda DENTRO da pagina, na origem de conteudo); http e
+		// host desconhecido saem fora.
+		assertThat(clean).contains("src=\"https://www.youtube.com/embed/aqz-KE-bpKQ\"");
+		assertThat(clean).contains("src=\"https://player.vimeo.com/video/76979871\"");
+		assertThat(clean).contains("src=\"https://open.spotify.com/embed/track/4cOdK2wGLETKBW3PvgPWqT\"");
+		assertThat(clean.split("<iframe", -1).length - 1).isEqualTo(3);
 	}
 
 	@Test
@@ -194,7 +194,9 @@ class SafeHtmlTests {
 			""");
 
 		assertThat(clean).doesNotContain("<script").doesNotContain("alert").doesNotContain("onload");
-		assertThat(clean).contains("data-enois-embed=\"https://www.youtube.com/embed/aqz-KE-bpKQ\"");
+		assertThat(clean).contains("src=\"https://www.youtube.com/embed/aqz-KE-bpKQ\"");
+		// O embed com endereco adulterado (entidade no lugar de aspas) nao vira iframe nenhum.
+		assertThat(clean.split("<iframe", -1).length - 1).isEqualTo(1);
 	}
 
 	@Test

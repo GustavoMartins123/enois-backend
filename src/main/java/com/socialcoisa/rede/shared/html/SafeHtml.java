@@ -82,6 +82,10 @@ public final class SafeHtml {
 	 */
 	private static final Pattern ENTITY_LIKE = Pattern.compile("&(?:#[0-9]+|[a-zA-Z][a-zA-Z0-9]{1,30});");
 
+	/** Quadro (para descartar o que nao for embed de provedor) e o `src` dentro dele. */
+	private static final Pattern IFRAME_TAG = Pattern.compile("(?is)<iframe\\b[^>]*>");
+	private static final Pattern IFRAME_SRC = Pattern.compile("(?is)\\ssrc\\s*=\\s*(\"([^\"]*)\"|'([^']*)')");
+
 	/** Tag de link aberta, para reescrever alvo e `rel`. */
 	private static final Pattern LINK_TAG = Pattern.compile("(?is)<a\\b[^>]*>");
 
@@ -143,14 +147,15 @@ public final class SafeHtml {
 		String css = sanitizeCss(collectCss(raw));
 		// O <style> sai do markup antes da limpeza e volta sanitizado, no formato que o front espera.
 		String withoutStyles = STYLE_ELEMENT.matcher(raw).replaceAll("");
-		// Embed de provedor conhecido vira marcador (ver keepProviderEmbedAsMarker): o quadro do post
-		// nao roda script, entao o player de terceiros e montado pelo propio app, fora do isolamento.
+		// Embed de provedor conhecido e PRESERVADO (com o endereco validado), porque a pagina e servida
+		// na origem de conteudo: ali o quadro pode rodar o script do player sem que isso signifique
+		// acesso ao app. Host desconhecido sai fora.
 		String withMarkers = EMBED_TAG.matcher(withoutStyles)
-			.replaceAll(match -> keepProviderEmbedAsMarker(match.group(1) != null ? match.group(1) : match.group(2)));
+			.replaceAll(match -> keepProviderEmbed(match.group(1) != null ? match.group(1) : match.group(2)));
 		Document clean = new Cleaner(PAGE_ALLOWLIST).clean(Jsoup.parse(withMarkers));
 		clean.outputSettings().prettyPrint(false);
 
-		String markup = hardenLinks(clean.body().html().trim());
+		String markup = hardenLinks(dropUnknownIframes(clean.body().html().trim()));
 		String result = (css.isEmpty() ? "" : "<style>" + css + "</style>") + sanitizeStyleAttributes(markup);
 		if (result.length() > maxLength) {
 			throw new ApiException(400, tooLongCode,
@@ -160,22 +165,20 @@ public final class SafeHtml {
 	}
 
 	/**
-	 * Troca um embed de provedor conhecido por um marcador vazio com o endereco no atributo.
+	 * Mantem o embed de provedor conhecido, com o endereco validado; host desconhecido sai fora.
 	 *
-	 * Por que assim: o quadro da pagina roda sem script, e player de terceiros exige script — entao
-	 * ele nao pode morar dentro do quadro sem abrir mao da garantia que sustenta a seguranca. O que
-	 * a pagina guarda e so a INTENCAO ("aqui vai um video do YouTube"); quem monta o player e o
-	 * front, com o mesmo componente que ja usa nos posts, a partir do id extraido da URL — nunca de
-	 * um endereco cru. Embed de host desconhecido nao vira marcador nem nada: sai fora.
+	 * Player de terceiros exige script, e a pagina NAO roda script proprio (`script-src 'none'` na
+	 * politica servida) — o script do player roda no documento dele, dentro do quadro do provedor.
+	 * Como a pagina e servida numa origem separada da do app, ter script aqui dentro nao da acesso a
+	 * sessao de ninguem. O endereco e restrito a host de provedor conhecido, em https, sem aspas ou
+	 * entidade HTML no meio (o valor e reserializado pelo jsoup depois disso).
 	 */
-	private static String keepProviderEmbedAsMarker(String url) {
+	private static String keepProviderEmbed(String url) {
 		if (url == null || !PROVIDER_EMBED_URL.matcher(url).matches() || ENTITY_LIKE.matcher(url).find()) {
 			return "";
 		}
-		// O valor vem de texto colado e ainda vai ser lido como HTML: sem escapar, um `&quot;` no
-		// lugar de aspas fecharia o atributo e o resto viraria tag de verdade (`<script>` incluido).
-		// Escapar aqui e o que separa "marcador" de "porta de entrada".
-		return "<div " + EMBED_MARKER_ATTRIBUTE + "=\"" + escapeAttribute(url) + "\"></div>";
+		return "<iframe src=\"" + escapeAttribute(url) + "\" allowfullscreen loading=\"lazy\" "
+			+ "referrerpolicy=\"no-referrer\"></iframe>";
 	}
 
 	/** Escape minimo de valor de atributo: `&` primeiro, senao os outros escapes sao re-escapes. */
@@ -185,6 +188,26 @@ public final class SafeHtml {
 			.replace("'", "&#39;")
 			.replace("<", "&lt;")
 			.replace(">", "&gt;");
+	}
+
+	/**
+	 * Quadro que nao seja embed de provedor conhecido sai fora.
+	 *
+	 * A allowlist permite `iframe` porque o embed de provedor fica (o player roda dentro da pagina),
+	 * mas quem garante isso e esta passagem: sobrou `<iframe>` sem `src` de provedor — inclusive o
+	 * caso de `srcdoc`, cujo atributo cai na limpeza — e o quadro inteiro e descartado.
+	 */
+	private static String dropUnknownIframes(String markup) {
+		return IFRAME_TAG.matcher(markup).replaceAll(match -> {
+			Matcher src = IFRAME_SRC.matcher(match.group(0));
+			if (!src.find()) {
+				return "";
+			}
+			String url = src.group(2) != null ? src.group(2) : src.group(3);
+			return url != null && PROVIDER_EMBED_URL.matcher(url).matches() && !ENTITY_LIKE.matcher(url).find()
+				? match.group(0)
+				: "";
+		});
 	}
 
 	/**
@@ -250,6 +273,7 @@ public final class SafeHtml {
 			// SEM script: o player e o proprio navegador (controles nativos), entao a promessa de
 			// "nenhum script executa" continua valendo com midia embutida.
 			addTags("a", "abbr", "article", "aside", "audio", "b", "blockquote", "br", "caption", "cite", "code",
+				"iframe",
 				"col", "colgroup", "dd", "del", "details", "dfn", "div", "dl", "dt", "em", "figcaption", "figure",
 				"footer", "h1", "h2", "h3", "h4", "h5", "h6", "header", "hr", "i", "img", "ins", "kbd", "li",
 				"main", "mark", "ol", "p", "picture", "pre", "q", "s", "samp", "section", "small", "source",
@@ -259,6 +283,7 @@ public final class SafeHtml {
 				EMBED_MARKER_ATTRIBUTE);
 			addAttributes("a", "href");
 			addAttributes("img", "src", "alt", "loading");
+			addAttributes("iframe", "src", "allowfullscreen", "loading", "referrerpolicy");
 			addAttributes("video", "src", "poster", "controls", "preload", "loop", "muted", "playsinline");
 			addAttributes("audio", "src", "controls", "preload", "loop", "muted");
 			addAttributes("source", "src", "type", "media");
@@ -280,6 +305,8 @@ public final class SafeHtml {
 			addProtocols("audio", "src", "https", "data");
 			addProtocols("source", "src", "https", "data");
 			addProtocols("track", "src", "https");
+			// O src do iframe so passa em https, e a checagem de host acontece antes (keepProviderEmbed).
+			addProtocols("iframe", "src", "https");
 		}
 	}
 

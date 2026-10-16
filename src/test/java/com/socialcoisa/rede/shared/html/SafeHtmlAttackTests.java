@@ -57,7 +57,10 @@ class SafeHtmlAttackTests {
 
 			String checked = clean == null ? "" : clean.toLowerCase();
 			assertThat(checked.contains("<script")).as("script em: %s", payload).isFalse();
-			assertThat(checked.contains("<iframe")).as("quadro em: %s", payload).isFalse();
+			// Quadro de host DESCONHECIDO continua proibido; embed de provedor conhecido e permitido
+			// por desenho (o player roda dentro da pagina, e a pagina vive em origem separada).
+			assertThat(checked.contains("<iframe") && !checked.contains("youtube") && !checked.contains("vimeo"))
+				.as("quadro de host desconhecido em: %s", payload).isFalse();
 			assertThat(checked.contains("<object") || checked.contains("<embed")).as("plugin em: %s", payload)
 				.isFalse();
 			assertThat(checked.contains("<form") || checked.contains("<input")).as("formulario em: %s", payload)
