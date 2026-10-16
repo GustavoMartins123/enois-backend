@@ -30,10 +30,14 @@ public class CacheConfig {
 	/** Frescor do contador da comunidade: o numero pode ficar ate 10 min atras do banco. */
 	private static final Duration COMMUNITY_STATS_TTL = Duration.ofMinutes(10);
 
+	/** Vagas externas so mudam na importacao (boot/meia-noite): 5 min de cache evitam bater no banco. */
+	private static final Duration EXTERNAL_JOBS_TTL = Duration.ofMinutes(5);
+
 	@Bean
 	CacheManager cacheManager() {
 		SimpleCacheManager manager = new SimpleCacheManager();
-		manager.setCaches(List.of(cache("communityStats", COMMUNITY_STATS_TTL)));
+		manager.setCaches(List.of(cache("communityStats", COMMUNITY_STATS_TTL),
+			cache("externalJobs", EXTERNAL_JOBS_TTL)));
 		return manager;
 	}
 

@@ -29,6 +29,7 @@ class ExternalJobPersistenceAdapter implements ExternalJobRepository {
 	}
 
 	@Override
+	@org.springframework.cache.annotation.Cacheable("externalJobs")
 	public List<ExternalJob> search(String query, int limit) {
 		return repository
 			.findByTitleContainingIgnoreCaseOrderByLastCheckedAtDesc(query, PageRequest.of(0, Math.max(1, limit)))
@@ -36,6 +37,7 @@ class ExternalJobPersistenceAdapter implements ExternalJobRepository {
 	}
 
 	@Override
+	@org.springframework.cache.annotation.Cacheable("externalJobs")
 	public List<ExternalJob> findRecent(int limit) {
 		return repository.findAllByOrderByLastCheckedAtDesc(PageRequest.of(0, Math.max(1, limit))).stream()
 			.map(ExternalJobJpaEntity::toDomain)
