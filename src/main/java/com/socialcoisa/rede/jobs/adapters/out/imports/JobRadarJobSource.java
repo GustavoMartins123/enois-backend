@@ -62,7 +62,8 @@ public class JobRadarJobSource implements JobImportSource {
 
 	@Override
 	public List<ExternalJob> discover(int limit) {
-		int capped = Math.max(1, Math.min(limit, 500));
+		// limit <= 0 = TODAS as vagas do sitemap (o requisito e carregar tudo).
+		int capped = limit <= 0 ? Integer.MAX_VALUE : limit;
 		String body;
 		try {
 			HttpRequest request = HttpRequest.newBuilder(URI.create(sitemapUrl))
