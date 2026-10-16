@@ -14,4 +14,7 @@ public interface ExternalJobRepository {
 
 	/** Vagas externas mais recentes primeiro (o que sera listado depois das internas). */
 	List<ExternalJob> findRecent(int limit);
+
+	/** Busca por TITULO (as externas nao tem tipo/nivel/local/salario para filtrar). */
+	List<ExternalJob> search(String query, int limit);
 }

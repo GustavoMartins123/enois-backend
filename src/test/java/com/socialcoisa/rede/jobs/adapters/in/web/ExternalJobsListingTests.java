@@ -41,6 +41,48 @@ class ExternalJobsListingTests {
 	private ExternalJobRepository externalJobs;
 
 	@Test
+	void searchFiltersExternalJobsByTitle() throws Exception {
+		externalJobs.save(new ExternalJob("ext_search_java", "BuscaExterna", "java-1", "Desenvolvedor Java Senior",
+			null, null, null, null, "https://exemplo.test/vaga/java", Instant.now(), Instant.now(),
+			ExternalJob.FOUND));
+		externalJobs.save(new ExternalJob("ext_search_design", "BuscaExterna", "design-1", "Designer de Produto",
+			null, null, null, null, "https://exemplo.test/vaga/design", Instant.now(), Instant.now(),
+			ExternalJob.FOUND));
+
+		MvcResult result = mockMvc.perform(get("/jobs").param("query", "java").param("limit", "50"))
+			.andExpect(status().isOk()).andReturn();
+		JsonNode items = objectMapper.readTree(result.getResponse().getContentAsString()).get("items");
+
+		boolean javaFound = false;
+		for (int i = 0; i < items.size(); i++) {
+			JsonNode item = items.get(i);
+			String title = item.path("title").asString();
+			if ("EXTERNAL".equals(item.path("sourceType").asString())) {
+				// So a externa que casa com "java" pode aparecer.
+				assertThat(title).containsIgnoringCase("java");
+				javaFound = true;
+			}
+		}
+		assertThat(javaFound).isTrue();
+	}
+
+	@Test
+	void structuralFilterExcludesExternalJobs() throws Exception {
+		String id = "ext_structural_" + System.nanoTime();
+		externalJobs.save(new ExternalJob(id, "BuscaExterna", "s-1", "Vaga Externa Sem Tipo",
+			null, null, null, null, "https://exemplo.test/vaga/s", Instant.now(), Instant.now(),
+			ExternalJob.FOUND));
+
+		MvcResult result = mockMvc.perform(get("/jobs").param("type", "FULL_TIME").param("limit", "50"))
+			.andExpect(status().isOk()).andReturn();
+		JsonNode items = objectMapper.readTree(result.getResponse().getContentAsString()).get("items");
+		for (int i = 0; i < items.size(); i++) {
+			// Externas nao tem tipo: nao podem aparecer quando o filtro exige um tipo.
+			assertThat(items.get(i).path("sourceType").asString()).isNotEqualTo("EXTERNAL");
+		}
+	}
+
+	@Test
 	void externalJobsComeAfterInternalOnes() throws Exception {
 		String internalId = "job_ext_listing_internal";
 		TestDatabase.insertJob(internalId, "Vaga Interna", "Coiso", "Remoto", "FULL_TIME", "MID",
@@ -55,18 +97,21 @@ class ExternalJobsListingTests {
 		JsonNode items = objectMapper.readTree(result.getResponse().getContentAsString()).get("items");
 
 		int internalIndex = -1;
-		int externalIndex = -1;
+		int firstExternalIndex = -1;
+		java.util.Set<String> externalUrls = new java.util.HashSet<>();
 		for (int i = 0; i < items.size(); i++) {
 			JsonNode item = items.get(i);
 			if (internalId.equals(item.path("id").asString())) internalIndex = i;
 			if ("EXTERNAL".equals(item.path("sourceType").asString())) {
-				externalIndex = i;
-				assertThat(item.path("sourceUrl").asString()).isEqualTo("https://exemplo.test/vaga/1");
-				assertThat(item.path("sourcePlatform").asString()).isEqualTo("ListagemExterna");
+				if (firstExternalIndex < 0) firstExternalIndex = i;
+				externalUrls.add(item.path("sourceUrl").asString());
 			}
 		}
 		assertThat(internalIndex).isGreaterThanOrEqualTo(0);
-		assertThat(externalIndex).isGreaterThanOrEqualTo(0);
-		assertThat(internalIndex).isLessThan(externalIndex);
+		assertThat(firstExternalIndex).isGreaterThanOrEqualTo(0);
+		// Internas primeiro: o bloco de externas comeca depois da interna.
+		assertThat(internalIndex).isLessThan(firstExternalIndex);
+		// O banco de teste e compartilhado: valida a URL da vaga deste teste, nao "a primeira".
+		assertThat(externalUrls).contains("https://exemplo.test/vaga/1");
 	}
 }

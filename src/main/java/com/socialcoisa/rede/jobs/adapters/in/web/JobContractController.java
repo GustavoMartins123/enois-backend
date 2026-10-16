@@ -110,7 +110,14 @@ class JobContractController {
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		Instant before = cursorCodec.decode(cursor).orElse(null);
 		List<Job> jobs = jobService.list(query, type, level, location, skills, before, limit);
-		return page(jobs, limit, viewerId(userId, sessionToken), PageKind.LIST);
+		// Externas nao tem tipo/nivel/local/skills: se o usuario filtrou por isso, elas nao entram.
+		boolean structuralFilters = org.springframework.util.StringUtils.hasText(type)
+			|| org.springframework.util.StringUtils.hasText(level)
+			|| org.springframework.util.StringUtils.hasText(location)
+			|| (skills != null && !skills.isEmpty());
+		boolean firstPage = cursor == null;
+		return page(jobs, limit, viewerId(userId, sessionToken), PageKind.LIST,
+			firstPage && !structuralFilters, query);
 	}
 
 	/** Vagas publicadas pelo usuario autenticado (com o total de candidaturas recebidas). */
@@ -122,7 +129,7 @@ class JobContractController {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		Instant before = cursorCodec.decode(cursor).orElse(null);
 		List<Job> jobs = jobService.listMine(user.id().value(), before, limit);
-		return page(jobs, limit, user.id().value(), PageKind.MINE);
+		return page(jobs, limit, user.id().value(), PageKind.MINE, false, null);
 	}
 
 	/** Vagas em que o usuario autenticado se candidatou. */
@@ -134,7 +141,7 @@ class JobContractController {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		Instant before = cursorCodec.decode(cursor).orElse(null);
 		List<Job> jobs = jobService.listApplications(user.id().value(), before, limit);
-		return page(jobs, limit, user.id().value(), PageKind.APPLICATIONS);
+		return page(jobs, limit, user.id().value(), PageKind.APPLICATIONS, false, null);
 	}
 
 	@GetMapping("/{jobId}")
@@ -272,7 +279,8 @@ class JobContractController {
 		LIST, MINE, APPLICATIONS
 	}
 
-	private PageResponse<JobView> page(List<Job> jobs, int limit, String viewer, PageKind kind) {
+	private PageResponse<JobView> page(List<Job> jobs, int limit, String viewer, PageKind kind,
+			boolean includeExternal, String externalQuery) {
 		List<String> ids = jobs.stream().map(Job::id).toList();
 		boolean authenticated = viewer != null;
 		Set<String> appliedIds = switch (kind) {
@@ -296,12 +304,13 @@ class JobContractController {
 			.toList();
 		String nextCursor = jobs.size() == limit
 			? cursorCodec.encode(jobs.get(jobs.size() - 1).postedAt()) : null;
-		// Vagas externas (ex.: JobRadar) entram DEPOIS das nossas, e so na busca publica.
-		if (kind != PageKind.LIST || !externalListingEnabled) {
+		// Vagas externas entram DEPOIS das internas, so na 1a pagina da busca publica, e respeitando
+		// a pesquisa por titulo (elas nao tem tipo/nivel/local para filtrar).
+		if (!includeExternal || !externalListingEnabled) {
 			return new PageResponse<>(items, nextCursor);
 		}
 		List<JobView> merged = new java.util.ArrayList<>(items);
-		merged.addAll(externalJobViews());
+		merged.addAll(externalJobViews(externalQuery));
 		return new PageResponse<>(merged, nextCursor);
 	}
 
@@ -309,9 +318,12 @@ class JobContractController {
 	 * Vagas externas JA SALVAS no banco (tabela propria, atualizadas pelo worker da meia-noite) —
 	 * nao buscamos a fonte a cada requisicao. Entram DEPOIS das internas.
 	 */
-	private List<JobView> externalJobViews() {
+	private List<JobView> externalJobViews(String query) {
 		List<JobView> external = new java.util.ArrayList<>();
-		for (ExternalJob job : externalJobRepository.findRecent(externalListingLimit)) {
+		var found = org.springframework.util.StringUtils.hasText(query)
+			? externalJobRepository.search(query.trim(), externalListingLimit)
+			: externalJobRepository.findRecent(externalListingLimit);
+		for (ExternalJob job : found) {
 			external.add(new JobView(job.id(), job.title(), job.company(), null, job.location(), null, null,
 				job.salary(), job.currency(), List.of(),
 				job.importedAt() != null ? job.importedAt().toString() : null, 0, false, false, false, 0, null,
