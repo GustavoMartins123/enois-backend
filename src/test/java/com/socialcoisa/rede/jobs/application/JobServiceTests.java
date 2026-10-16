@@ -3,6 +3,7 @@ package com.socialcoisa.rede.jobs.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -20,6 +21,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.socialcoisa.rede.jobs.application.port.out.JobRepository;
 import com.socialcoisa.rede.jobs.domain.Job;
 import com.socialcoisa.rede.jobs.domain.JobApplication;
+import com.socialcoisa.rede.jobs.domain.JobApplicationStatus;
 import com.socialcoisa.rede.jobs.domain.JobStatus;
 import com.socialcoisa.rede.profile.application.ReputationService;
 import com.socialcoisa.rede.shared.web.ApiException;
@@ -44,12 +46,16 @@ class JobServiceTests {
 	@Mock
 	private com.socialcoisa.rede.jobs.application.port.out.JobApplicationDelivery delivery;
 
+	/** Notificacao ao CANDIDATO (a `delivery` acima e a do empregador). */
+	@Mock
+	private com.socialcoisa.rede.jobs.application.port.out.JobApplicationStatusNotifier statusNotifier;
+
 	private JobService service;
 
 	@BeforeEach
 	void setUp() {
 		service = new JobService(repository, reputationService, userProfileRepository, extensionRepository, delivery,
-			new tools.jackson.databind.ObjectMapper(), Clock.systemUTC());
+			statusNotifier, new tools.jackson.databind.ObjectMapper(), Clock.systemUTC());
 	}
 
 	@Test
@@ -195,5 +201,128 @@ class JobServiceTests {
 
 		assertThat(application.jobId()).isEqualTo("job_1");
 		verify(delivery).deliver(any(), any());
+	}
+
+	// ---------------- Triagem: ciclo de vida da candidatura (Fase 4) ----------------
+
+	/** Monta a candidatura no estado pedido percorrendo o caminho VALIDO (o dominio recusa atalhos). */
+	private JobApplication applicationIn(JobApplicationStatus status) {
+		JobApplication applied = JobApplication.create("app_1", "job_1", "user_candidato", "oi", "{}",
+			java.time.Instant.now(), List.of());
+		if (status == JobApplicationStatus.APPLIED) {
+			return applied;
+		}
+		JobApplication inReview = applied.withStatus(JobApplicationStatus.IN_REVIEW);
+		return switch (status) {
+			case IN_REVIEW -> inReview;
+			case ADVANCED -> inReview.withStatus(JobApplicationStatus.ADVANCED);
+			case NOT_SELECTED -> inReview.withStatus(JobApplicationStatus.NOT_SELECTED);
+			case APPLIED -> applied;
+		};
+	}
+
+	private void givenApplication(JobApplication application) {
+		when(repository.findByIdForUpdate("job_1")).thenReturn(java.util.Optional.of(openJob()));
+		when(repository.findApplicationById("app_1")).thenReturn(java.util.Optional.of(application));
+	}
+
+	@Test
+	void newApplicationStartsAsApplied() {
+		assertThat(applicationIn(JobApplicationStatus.APPLIED).status())
+			.isEqualTo(JobApplicationStatus.APPLIED);
+	}
+
+	@Test
+	void ownerMovesTheApplicationAndTheCandidateIsNotified() {
+		givenApplication(applicationIn(JobApplicationStatus.APPLIED));
+
+		JobApplication moved = service.updateApplicationStatus("job_1", "app_1", USER,
+			JobApplicationStatus.IN_REVIEW);
+
+		assertThat(moved.status()).isEqualTo(JobApplicationStatus.IN_REVIEW);
+		verify(repository).updateApplicationStatus("app_1", JobApplicationStatus.IN_REVIEW);
+		verify(statusNotifier).notifyStatusChange(any(), any(), eq(JobApplicationStatus.IN_REVIEW));
+	}
+
+	@Test
+	void walksTheWholeHappyPath() {
+		// APPLIED -> IN_REVIEW -> ADVANCED, e o recuo de etapa tambem e permitido.
+		JobApplication inReview = applicationIn(JobApplicationStatus.IN_REVIEW);
+		when(repository.findByIdForUpdate("job_1")).thenReturn(java.util.Optional.of(openJob()));
+		when(repository.findApplicationById("app_1")).thenReturn(java.util.Optional.of(inReview));
+
+		assertThat(service.updateApplicationStatus("job_1", "app_1", USER, JobApplicationStatus.ADVANCED).status())
+			.isEqualTo(JobApplicationStatus.ADVANCED);
+
+		when(repository.findApplicationById("app_1"))
+			.thenReturn(java.util.Optional.of(applicationIn(JobApplicationStatus.ADVANCED)));
+		assertThat(service.updateApplicationStatus("job_1", "app_1", USER, JobApplicationStatus.IN_REVIEW).status())
+			.isEqualTo(JobApplicationStatus.IN_REVIEW);
+	}
+
+	@Test
+	void refusesATransitionThatSkipsAStage() {
+		givenApplication(applicationIn(JobApplicationStatus.APPLIED));
+
+		assertThatThrownBy(() -> service.updateApplicationStatus("job_1", "app_1", USER,
+			JobApplicationStatus.ADVANCED))
+			.isInstanceOf(ApiException.class)
+			.hasMessageContaining("nao pode passar");
+
+		// Transicao invalida nao grava e NAO avisa o candidato.
+		verify(repository, never()).updateApplicationStatus(any(), any());
+		verifyNoInteractions(statusNotifier);
+	}
+
+	@Test
+	void repeatingTheSameStatusIsRefusedAndDoesNotNotifyAgain() {
+		givenApplication(applicationIn(JobApplicationStatus.IN_REVIEW));
+
+		assertThatThrownBy(() -> service.updateApplicationStatus("job_1", "app_1", USER,
+			JobApplicationStatus.IN_REVIEW))
+			.isInstanceOf(ApiException.class);
+
+		// E o que impede o clique repetido de virar mensagem repetida para o candidato.
+		verifyNoInteractions(statusNotifier);
+	}
+
+	@Test
+	void notSelectedIsTerminal() {
+		givenApplication(applicationIn(JobApplicationStatus.NOT_SELECTED));
+
+		assertThatThrownBy(() -> service.updateApplicationStatus("job_1", "app_1", USER,
+			JobApplicationStatus.IN_REVIEW))
+			.isInstanceOf(ApiException.class);
+
+		verifyNoInteractions(statusNotifier);
+	}
+
+	@Test
+	void refusesTriageFromSomeoneElse() {
+		when(repository.findByIdForUpdate("job_1")).thenReturn(java.util.Optional.of(openJob()));
+
+		assertThatThrownBy(() -> service.updateApplicationStatus("job_1", "app_1", "user_outro",
+			JobApplicationStatus.IN_REVIEW))
+			.isInstanceOf(ApiException.class)
+			.hasMessageContaining("So quem publicou");
+
+		verify(repository, never()).updateApplicationStatus(any(), any());
+		verifyNoInteractions(statusNotifier);
+	}
+
+	@Test
+	void refusesAnApplicationThatBelongsToAnotherJob() {
+		when(repository.findByIdForUpdate("job_1")).thenReturn(java.util.Optional.of(openJob()));
+		// Candidatura de OUTRA vaga: o caminho da URL nao pode alcancar candidatura alheia.
+		when(repository.findApplicationById("app_1")).thenReturn(java.util.Optional.of(
+			JobApplication.create("app_1", "job_2", "user_candidato", "oi", "{}", java.time.Instant.now(),
+				List.of())));
+
+		assertThatThrownBy(() -> service.updateApplicationStatus("job_1", "app_1", USER,
+			JobApplicationStatus.IN_REVIEW))
+			.isInstanceOf(ApiException.class)
+			.hasMessageContaining("Candidatura nao encontrada");
+
+		verifyNoInteractions(statusNotifier);
 	}
 }

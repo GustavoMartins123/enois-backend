@@ -4,12 +4,16 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.socialcoisa.rede.jobs.domain.JobApplicationStatus;
+
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -35,8 +39,9 @@ class JobApplicationJpaEntity {
 	@Column(name = "user_id", nullable = false)
 	private String userId;
 
-	@Column(nullable = false)
-	private String status;
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false, length = 32)
+	private JobApplicationStatus status;
 
 	@Column(name = "applied_at", nullable = false)
 	private Instant appliedAt;
@@ -59,7 +64,7 @@ class JobApplicationJpaEntity {
 		JobApplicationJpaEntity e = new JobApplicationJpaEntity();
 		e.jobId = jobId;
 		e.userId = userId;
-		e.status = "APPLIED";
+		e.status = JobApplicationStatus.APPLIED;
 		e.appliedAt = now;
 		return e;
 	}
@@ -68,7 +73,7 @@ class JobApplicationJpaEntity {
 		JobApplicationJpaEntity e = new JobApplicationJpaEntity();
 		e.jobId = application.jobId();
 		e.userId = application.userId();
-		e.status = "APPLIED";
+		e.status = application.status();
 		e.appliedAt = application.appliedAt();
 		e.message = application.message();
 		e.candidateSnapshot = application.candidateSnapshot();
@@ -82,10 +87,15 @@ class JobApplicationJpaEntity {
 		return id;
 	}
 
+	/** Troca so o estado; as respostas e o retrato do candidato ficam como estao. */
+	void changeStatus(JobApplicationStatus next) {
+		this.status = next;
+	}
+
 	com.socialcoisa.rede.jobs.domain.JobApplication toDomain() {
 		return com.socialcoisa.rede.jobs.domain.JobApplication.restore(
 			id == null ? null : String.valueOf(id), jobId, userId, message, candidateSnapshot, appliedAt,
-			answers.stream().map(JobApplicationAnswerEmbeddable::toDomain).toList());
+			answers.stream().map(JobApplicationAnswerEmbeddable::toDomain).toList(), status);
 	}
 
 }

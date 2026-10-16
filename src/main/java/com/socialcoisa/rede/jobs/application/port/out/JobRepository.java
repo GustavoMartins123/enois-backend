@@ -43,6 +43,12 @@ public interface JobRepository {
 	/** Candidaturas recebidas por uma vaga, mais recentes primeiro. */
 	List<com.socialcoisa.rede.jobs.domain.JobApplication> findApplicationsByJob(String jobId, int limit);
 
+	/** Uma candidatura pelo id, para a triagem do empregador. */
+	Optional<com.socialcoisa.rede.jobs.domain.JobApplication> findApplicationById(String applicationId);
+
+	/** Grava so o estado da candidatura (nao mexe nos outros campos nem nas respostas). */
+	void updateApplicationStatus(String applicationId, com.socialcoisa.rede.jobs.domain.JobApplicationStatus status);
+
 	void removeApplication(String jobId, String userId);
 
 	boolean hasApplied(String jobId, String userId);

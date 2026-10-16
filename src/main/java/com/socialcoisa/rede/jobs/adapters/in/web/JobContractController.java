@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -22,6 +23,9 @@ import com.socialcoisa.rede.idempotency.application.CommandResponse;
 import com.socialcoisa.rede.idempotency.application.IdempotencyApplicationService;
 import com.socialcoisa.rede.jobs.application.JobService;
 import com.socialcoisa.rede.jobs.domain.Job;
+import com.socialcoisa.rede.jobs.domain.JobApplicationStatus;
+import com.socialcoisa.rede.jobs.domain.JobApplication;
+import com.socialcoisa.rede.shared.web.ApiException;
 import com.socialcoisa.rede.shared.web.CurrentUser;
 import com.socialcoisa.rede.shared.web.CurrentUserResolver;
 import com.socialcoisa.rede.shared.web.CursorCodec;
@@ -62,7 +66,7 @@ class JobContractController {
 			@RequestParam(defaultValue = "50") int limit) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		return jobService.applicationsOf(jobId, user.id().value(), limit).stream()
-			.map(application -> new ApplicationView(application.id(), application.jobId(), "APPLIED",
+			.map(application -> new ApplicationView(application.id(), application.jobId(), application.status().name(),
 				application.appliedAt().toString(), application.answers().size(),
 				toCandidateView(application), application.message(),
 				application.answers().stream()
@@ -143,6 +147,39 @@ class JobContractController {
 	}
 
 	/**
+	 * Triagem: o dono da vaga move a candidatura de estado.
+	 *
+	 * Usa `resolve` (que lanca) como o encerramento — autorizacao nao pode ser "nao resolvi a sessao,
+	 * entao trato como se nao fosse o dono". O estado e validado no dominio, e o candidato e avisado
+	 * depois de a mudanca estar persistida.
+	 */
+	@PatchMapping("/{jobId}/applications/{applicationId}")
+	ResponseEntity<ApplicationView> updateApplicationStatus(@PathVariable String jobId,
+			@PathVariable String applicationId,
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestBody UpdateApplicationStatusRequest body) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		JobApplicationStatus status = parseStatus(body == null ? null : body.status());
+		JobApplication updated = jobService.updateApplicationStatus(jobId, applicationId, user.id().value(), status);
+		return ResponseEntity.ok(new ApplicationView(updated.id(), updated.jobId(), updated.status().name(),
+			updated.appliedAt().toString(), updated.answers().size()));
+	}
+
+	/** Estado desconhecido e erro do cliente (422), nao erro interno. */
+	private JobApplicationStatus parseStatus(String raw) {
+		if (raw == null || raw.isBlank()) {
+			throw new ApiException(422, "INVALID_STATUS", "Informe o novo estado da candidatura.");
+		}
+		try {
+			return JobApplicationStatus.valueOf(raw.trim().toUpperCase(java.util.Locale.ROOT));
+		}
+		catch (IllegalArgumentException exception) {
+			throw new ApiException(422, "INVALID_STATUS", "Estado de candidatura desconhecido: " + raw);
+		}
+	}
+
+	/**
 	 * Encerra a vaga. Usa `resolve` (que lanca) e nao o `viewerId` tolerante: autorizacao nao pode
 	 * ser "nao resolvi a sessao, entao trato como se nao fosse o dono".
 	 */
@@ -181,7 +218,7 @@ class JobContractController {
 			() -> {
 				var application = jobService.apply(jobId, user.id().value(), body == null ? null : body.message(),
 					toAnswerInputs(body == null ? null : body.answers()));
-				return new CommandResponse(201, new ApplicationView(application.id(), jobId, "APPLIED",
+				return new CommandResponse(201, new ApplicationView(application.id(), jobId, application.status().name(),
 					application.appliedAt().toString(), application.answers().size()));
 			});
 	}
@@ -300,6 +337,9 @@ class JobContractController {
 	}
 
 	record ApplyRequest(String message, List<AnswerRequest> answers) {
+	}
+
+	record UpdateApplicationStatusRequest(String status) {
 	}
 
 	record AnswerRequest(String fieldId, String value) {

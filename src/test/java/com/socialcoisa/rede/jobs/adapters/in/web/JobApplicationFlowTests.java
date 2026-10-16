@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -51,6 +52,7 @@ class JobApplicationFlowTests {
 	@MockitoBean
 	private EmailService emailService;
 
+	private final List<String> sentTo = new ArrayList<>();
 	private final List<String> sentSubjects = new ArrayList<>();
 	private final List<String> sentBodies = new ArrayList<>();
 
@@ -58,10 +60,12 @@ class JobApplicationFlowTests {
 
 	@BeforeEach
 	void setUp() {
+		sentTo.clear();
 		sentSubjects.clear();
 		sentBodies.clear();
 		when(reputationService.reputationOf(anyString())).thenReturn(300);
 		when(emailService.sendHtml(anyString(), anyString(), anyString())).thenAnswer(invocation -> {
+			sentTo.add(invocation.getArgument(0, String.class));
 			sentSubjects.add(invocation.getArgument(1, String.class));
 			sentBodies.add(invocation.getArgument(2, String.class));
 			return true;
@@ -346,5 +350,81 @@ class JobApplicationFlowTests {
 		mockMvc.perform(get("/jobs/" + jobId + "/applications").header("X-Session-Token", employer.token()))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.length()").value(1));
+	}
+
+	@Test
+	void employerTriagesTheApplicationAndTheCandidateIsTold() throws Exception {
+		var employer = auth.authenticate("tri_employer");
+		var candidate = auth.authenticate("tri_candidate");
+		var outsider = auth.authenticate("tri_outsider");
+
+		String jobId = createJob(employer, "[]");
+		MvcResult applied = mockMvc.perform(post("/jobs/" + jobId + "/applications")
+				.header("X-Session-Token", candidate.token())
+				.header("Idempotency-Key", "tri-apply")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("message", "Tenho interesse", "answers", List.of()))))
+			.andExpect(status().isCreated())
+			// O estado vem do dominio, nao mais de um literal no controller.
+			.andExpect(jsonPath("$.status").value("APPLIED"))
+			.andReturn();
+		String applicationId = objectMapper.readTree(applied.getResponse().getContentAsString()).get("id").asText();
+
+		String url = "/jobs/" + jobId + "/applications/" + applicationId;
+
+		// Sem sessao: 401. Terceiro e o proprio candidato: 403 (so o dono da vaga triagem).
+		mockMvc.perform(patch(url).contentType(MediaType.APPLICATION_JSON).content(statusBody("IN_REVIEW")))
+			.andExpect(status().isUnauthorized());
+		mockMvc.perform(patch(url).header("X-Session-Token", outsider.token())
+				.contentType(MediaType.APPLICATION_JSON).content(statusBody("IN_REVIEW")))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("NOT_OWNER"));
+		mockMvc.perform(patch(url).header("X-Session-Token", candidate.token())
+				.contentType(MediaType.APPLICATION_JSON).content(statusBody("ADVANCED")))
+			.andExpect(status().isForbidden());
+
+		// Estado que nao existe e erro do cliente (422), nao erro interno.
+		mockMvc.perform(patch(url).header("X-Session-Token", employer.token())
+				.contentType(MediaType.APPLICATION_JSON).content(statusBody("QUEM_SABE")))
+			.andExpect(status().isUnprocessableEntity())
+			.andExpect(jsonPath("$.code").value("INVALID_STATUS"));
+
+		// Pular etapa: 409 e nada muda.
+		mockMvc.perform(patch(url).header("X-Session-Token", employer.token())
+				.contentType(MediaType.APPLICATION_JSON).content(statusBody("ADVANCED")))
+			.andExpect(status().isConflict())
+			.andExpect(jsonPath("$.code").value("INVALID_STATUS_TRANSITION"));
+
+		// Caminho valido.
+		mockMvc.perform(patch(url).header("X-Session-Token", employer.token())
+				.contentType(MediaType.APPLICATION_JSON).content(statusBody("IN_REVIEW")))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.status").value("IN_REVIEW"));
+
+		// Persistiu de verdade: a lista do empregador mostra o novo estado.
+		mockMvc.perform(get("/jobs/" + jobId + "/applications").header("X-Session-Token", employer.token()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$[0].status").value("IN_REVIEW"));
+
+		// Repetir o mesmo estado: 409 (senao cada clique viraria mensagem nova).
+		mockMvc.perform(patch(url).header("X-Session-Token", employer.token())
+				.contentType(MediaType.APPLICATION_JSON).content(statusBody("IN_REVIEW")))
+			.andExpect(status().isConflict());
+
+		// Candidatura de outra vaga / inexistente: 404.
+		mockMvc.perform(patch("/jobs/" + jobId + "/applications/999999").header("X-Session-Token", employer.token())
+				.contentType(MediaType.APPLICATION_JSON).content(statusBody("IN_REVIEW")))
+			.andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.code").value("APPLICATION_NOT_FOUND"));
+
+		// Dois e-mails: o do empregador (candidatura nova) e o do CANDIDATO (mudanca de estado).
+		assertThat(sentTo).hasSize(2);
+		assertThat(sentTo.get(0)).contains("tri_employer");
+		assertThat(sentTo.get(1)).contains("tri_candidate");
+		assertThat(sentSubjects.get(1)).contains("análise");
+	}
+
+	private String statusBody(String value) throws Exception {
+		return objectMapper.writeValueAsString(Map.of("status", value));
 	}
 }

@@ -173,6 +173,26 @@ class JobPersistenceAdapter implements JobRepository {
 	}
 
 	@Override
+	public Optional<com.socialcoisa.rede.jobs.domain.JobApplication> findApplicationById(String applicationId) {
+		try {
+			return applicationRepo.findById(Long.valueOf(applicationId)).map(JobApplicationJpaEntity::toDomain);
+		}
+		catch (NumberFormatException exception) {
+			// Id que nao e numerico nunca existiu: o contrato da API e 404, nao erro interno.
+			return Optional.empty();
+		}
+	}
+
+	@Override
+	public void updateApplicationStatus(String applicationId,
+			com.socialcoisa.rede.jobs.domain.JobApplicationStatus status) {
+		applicationRepo.findById(Long.valueOf(applicationId)).ifPresent(entity -> {
+			entity.changeStatus(status);
+			applicationRepo.save(entity);
+		});
+	}
+
+	@Override
 	public void removeApplication(String jobId, String userId) {
 		applicationRepo.deleteByJobIdAndUserId(jobId, userId);
 	}

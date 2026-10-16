@@ -11,9 +11,11 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import com.socialcoisa.rede.jobs.application.port.out.JobApplicationDelivery;
+import com.socialcoisa.rede.jobs.application.port.out.JobApplicationStatusNotifier;
 import com.socialcoisa.rede.jobs.application.port.out.JobRepository;
 import com.socialcoisa.rede.jobs.domain.Job;
 import com.socialcoisa.rede.jobs.domain.JobApplication;
+import com.socialcoisa.rede.jobs.domain.JobApplicationStatus;
 import com.socialcoisa.rede.jobs.domain.JobApplicationField;
 import com.socialcoisa.rede.profile.application.ReputationService;
 import com.socialcoisa.rede.shared.web.ApiException;
@@ -40,18 +42,21 @@ public class JobService {
 	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository;
 	private final com.socialcoisa.rede.profile.application.port.out.ProfileExtensionRepository extensionRepository;
 	private final JobApplicationDelivery delivery;
+	private final JobApplicationStatusNotifier statusNotifier;
 	private final tools.jackson.databind.ObjectMapper objectMapper;
 	private final Clock clock;
 
 	public JobService(JobRepository repository, ReputationService reputationService,
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository,
 			com.socialcoisa.rede.profile.application.port.out.ProfileExtensionRepository extensionRepository,
-			JobApplicationDelivery delivery, tools.jackson.databind.ObjectMapper objectMapper, Clock clock) {
+			JobApplicationDelivery delivery, JobApplicationStatusNotifier statusNotifier,
+			tools.jackson.databind.ObjectMapper objectMapper, Clock clock) {
 		this.repository = repository;
 		this.reputationService = reputationService;
 		this.userProfileRepository = userProfileRepository;
 		this.extensionRepository = extensionRepository;
 		this.delivery = delivery;
+		this.statusNotifier = statusNotifier;
 		this.objectMapper = objectMapper;
 		this.clock = clock;
 	}
@@ -118,6 +123,35 @@ public class JobService {
 		return closed;
 	}
 
+	/**
+	 * Move a candidatura de estado. So o dono da vaga; a transicao e validada no dominio
+	 * ({@link JobApplication#withStatus}), entao nao existe caminho que grave estado arbitrario.
+	 *
+	 * O lock da vaga e o mesmo do encerramento: duas triagens concorrentes na mesma vaga
+	 * serializam, e uma triagem nao passa por fora de um encerramento em andamento.
+	 */
+	@Transactional
+	public JobApplication updateApplicationStatus(String jobId, String applicationId, String userId,
+			JobApplicationStatus newStatus) {
+		Job job = repository.findByIdForUpdate(jobId)
+			.orElseThrow(() -> new ApiException(404, "JOB_NOT_FOUND", "Vaga nao encontrada."));
+		if (!job.postedBy().equals(userId)) {
+			throw new ApiException(403, "NOT_OWNER", "So quem publicou a vaga pode gerenciar as candidaturas.");
+		}
+		// A candidatura tem que ser DESTA vaga: sem isso, um id de outra vaga seria alcancavel
+		// pelo caminho da URL.
+		JobApplication application = repository.findApplicationById(applicationId)
+			.filter(found -> found.jobId().equals(jobId))
+			.orElseThrow(() -> new ApiException(404, "APPLICATION_NOT_FOUND", "Candidatura nao encontrada."));
+
+		JobApplication moved = application.withStatus(newStatus);
+		repository.updateApplicationStatus(applicationId, moved.status());
+
+		// So depois de persistir: o estado e a fonte da verdade, a notificacao vem dele.
+		statusNotifier.notifyStatusChange(job, moved, moved.status());
+		return moved;
+	}
+
 	@Transactional
 	public void delete(String jobId, String userId) {
 		Job existing = repository.findById(jobId)
@@ -154,8 +188,9 @@ public class JobService {
 		JobApplication application = JobApplication.create(null, jobId, userId, trimToNull(message, 2000), snapshot,
 			clock.instant(), normalized);
 		String applicationId = repository.saveApplication(application);
+		// Candidatura nova nasce sempre APPLIED: o estado nao vem de fora.
 		JobApplication saved = JobApplication.restore(applicationId, jobId, userId, application.message(), snapshot,
-			application.appliedAt(), normalized);
+			application.appliedAt(), normalized, JobApplicationStatus.APPLIED);
 
 		// Entrega: o empregador recebe por e-mail e na mensagem direta, com o perfil do candidato.
 		delivery.deliver(job, saved);
