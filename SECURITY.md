@@ -35,3 +35,12 @@ OWASP API Security Top 10 e OWASP ASVS 5.0 (nível 2 como referência mínima de
 ## Rotação e revogação
 Revogação de sessão e de credenciais de integração é suportada pelo backend; segredos ficam em
 gerenciador/secret do ambiente, nunca no repositório, no bundle do frontend ou nos logs.
+
+## Política de publicações (anti-automação)
+**Permitido:** criar e **agendar posts pela funcionalidade oficial do Énóis** (fluxo interativo, com
+o usuário no controle). **Proibido:** gerar e publicar posts automaticamente por **IA, bots ou
+integrações**, inclusive por endpoints alternativos, tarefas agendadas, webhooks ou serviços internos;
+automação de comentários/curtidas/compartilhamentos para simular engajamento.
+**Controle:** publicar exige **sessão de usuário** no backend; **não existe** caminho de token de
+integração que publique. **Punição:** banimento da conta responsável, **após verificação de
+evidências** e o procedimento de moderação. Detalhes em `docs/PUBLISHING_POLICY.md`.

@@ -42,8 +42,10 @@ dependência externa, está marcado como **BLOQUEADO** (não é código meu).
   dono nunca "Inscrito" na própria vaga; **apagar conversas em massa ("para mim")**.
 
 ## Proibições que valem para tudo acima
-- **Sem automação de posts** (nem agendamento de posts), comentários, curtidas ou engajamento.
-  Automação só de **processos** (ex.: importar vagas), nunca para fabricar interação social.
+- **Proibido automatizar a criação/publicação de posts** (IA, bots, integrações, endpoints
+  alternativos, tarefas agendadas, webhooks), comentários, curtidas ou engajamento.
+- **Permitido**: criar e **agendar posts pela funcionalidade oficial** do Énóis (fluxo interativo, com
+  o usuário no controle) e automações de **processo** (ex.: importar vagas). Ver `docs/PUBLISHING_POLICY.md`.
 - Publicar vaga exige **identidade verificada** + **credibilidade ≥ 150** (conferido no backend).
 
 ## Bloqueados por dependência externa
