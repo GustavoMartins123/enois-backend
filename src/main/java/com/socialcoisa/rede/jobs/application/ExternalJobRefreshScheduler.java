@@ -3,6 +3,8 @@ package com.socialcoisa.rede.jobs.application;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -16,12 +18,31 @@ public class ExternalJobRefreshScheduler {
 	private static final Logger LOG = LoggerFactory.getLogger(ExternalJobRefreshScheduler.class);
 
 	private final ExternalJobImportService importService;
+	private final com.socialcoisa.rede.jobs.application.port.out.ExternalJobRepository repository;
 	private final boolean enabled;
 
 	public ExternalJobRefreshScheduler(ExternalJobImportService importService,
+			com.socialcoisa.rede.jobs.application.port.out.ExternalJobRepository repository,
 			@Value("${rede.jobs.import.external-refresh-enabled:true}") boolean enabled) {
 		this.importService = importService;
+		this.repository = repository;
 		this.enabled = enabled;
+	}
+
+	/** Primeira carga: se ainda nao houver vaga externa salva, importa no boot (sem esperar a meia-noite). */
+	@EventListener(ApplicationReadyEvent.class)
+	public void seedIfEmpty() {
+		if (!enabled) {
+			return;
+		}
+		try {
+			if (repository.findRecent(1).isEmpty()) {
+				LOG.info("Primeira carga de vagas externas: {}", importService.refresh());
+			}
+		}
+		catch (RuntimeException failure) {
+			LOG.warn("Falha na primeira carga de vagas externas (segue sem elas).");
+		}
 	}
 
 	/** Cron padrao: 00:00 todos os dias (fuso do servidor). */
