@@ -49,7 +49,7 @@ class JobApplicationDeliveryAdapter implements JobApplicationDelivery {
 		String summary = summaryText(job, application, candidate == null ? application.userId() : candidate.name());
 
 		try {
-			String conversationId = messagingService.directConversationBetween(application.userId(), job.postedBy());
+			String conversationId = messagingService.directConversationBetween(application.userId(), job.postedBy(), "JOB");
 			messagingService.sendMessage(conversationId, application.userId(), summary);
 		}
 		catch (RuntimeException exception) {

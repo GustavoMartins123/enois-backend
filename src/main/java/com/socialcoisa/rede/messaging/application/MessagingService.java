@@ -50,12 +50,21 @@ public class MessagingService {
 	 */
 	@Transactional
 	public String directConversationBetween(String userA, String userB) {
+		return directConversationBetween(userA, userB, "DIRECT");
+	}
+
+	/**
+	 * Conversa direta marcada com a origem. A candidatura de vaga usa kind = "JOB" para o inbox
+	 * poder separar as conversas de vaga das conversas com pessoas.
+	 */
+	@Transactional
+	public String directConversationBetween(String userA, String userB, String kind) {
 		var existing = repository.findDirectBetween(userA, userB);
 		if (existing.isPresent()) {
 			return existing.get().id();
 		}
 		String id = "conversation_" + java.util.UUID.randomUUID().toString().replace("-", "");
-		repository.saveConversation(Conversation.create(id, "DIRECT", null, userA, clock.instant()));
+		repository.saveConversation(Conversation.create(id, kind, null, userA, clock.instant()));
 		repository.saveParticipant(ConversationParticipant.create(id, userA, clock.instant()));
 		repository.saveParticipant(ConversationParticipant.create(id, userB, clock.instant()));
 		return id;
