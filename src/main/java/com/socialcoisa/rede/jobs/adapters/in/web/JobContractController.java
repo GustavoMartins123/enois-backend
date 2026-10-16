@@ -42,13 +42,19 @@ class JobContractController {
 	private final CursorCodec cursorCodec;
 	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository;
 	private final com.socialcoisa.rede.profile.application.ReputationService reputationService;
+	private final List<com.socialcoisa.rede.jobs.application.port.out.JobImportSource> jobImportSources;
+	private final boolean externalListingEnabled;
+	private final int externalListingLimit;
 	private final tools.jackson.databind.ObjectMapper objectMapper;
 
 	JobContractController(IdempotencyApplicationService idempotency, CurrentUserResolver currentUserResolver,
 			JobService jobService, CursorCodec cursorCodec,
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository,
 			com.socialcoisa.rede.profile.application.ReputationService reputationService,
-			tools.jackson.databind.ObjectMapper objectMapper) {
+			tools.jackson.databind.ObjectMapper objectMapper,
+			List<com.socialcoisa.rede.jobs.application.port.out.JobImportSource> jobImportSources,
+			@org.springframework.beans.factory.annotation.Value("${rede.jobs.import.external-listing-enabled:false}") boolean externalListingEnabled,
+			@org.springframework.beans.factory.annotation.Value("${rede.jobs.import.external-listing-limit:20}") int externalListingLimit) {
 		this.idempotency = idempotency;
 		this.currentUserResolver = currentUserResolver;
 		this.jobService = jobService;
@@ -56,6 +62,9 @@ class JobContractController {
 		this.userProfileRepository = userProfileRepository;
 		this.reputationService = reputationService;
 		this.objectMapper = objectMapper;
+		this.jobImportSources = jobImportSources;
+		this.externalListingEnabled = externalListingEnabled;
+		this.externalListingLimit = externalListingLimit;
 	}
 
 	/** Candidaturas recebidas (somente quem publicou a vaga). */
@@ -276,19 +285,49 @@ class JobContractController {
 					job.postedAt() != null ? job.postedAt().toString() : null, 0,
 					!owner && appliedIds.contains(job.id()), savedIds.contains(job.id()), owner,
 					owner ? counts.getOrDefault(job.id(), 0) : 0, authorOf(job), fieldViews(job),
-					job.status().name(), job.closedAt() != null ? job.closedAt().toString() : null);
+					job.status().name(), job.closedAt() != null ? job.closedAt().toString() : null,
+					"INTERNAL", null, null);
 			})
 			.toList();
 		String nextCursor = jobs.size() == limit
 			? cursorCodec.encode(jobs.get(jobs.size() - 1).postedAt()) : null;
-		return new PageResponse<>(items, nextCursor);
+		// Vagas externas (ex.: JobRadar) entram DEPOIS das nossas, e so na busca publica.
+		if (kind != PageKind.LIST || !externalListingEnabled) {
+			return new PageResponse<>(items, nextCursor);
+		}
+		List<JobView> merged = new java.util.ArrayList<>(items);
+		merged.addAll(externalJobViews());
+		return new PageResponse<>(merged, nextCursor);
+	}
+
+	/** Monta as vagas externas (listagem + redirecionamento). Falha na fonte NAO derruba as internas. */
+	private List<JobView> externalJobViews() {
+		List<JobView> external = new java.util.ArrayList<>();
+		for (com.socialcoisa.rede.jobs.application.port.out.JobImportSource source : jobImportSources) {
+			if (!source.available()) {
+				continue;
+			}
+			try {
+				for (var job : source.discover(externalListingLimit)) {
+					external.add(new JobView("ext_" + source.name() + "_" + job.externalId(), job.title(),
+						job.company(), null, job.location(), null, null, job.salary(), null, List.of(), null, 0,
+						false, false, false, 0, null, List.of(), "OPEN", null, "EXTERNAL", job.url(),
+						source.name()));
+				}
+			}
+			catch (RuntimeException failure) {
+				// Fonte indisponivel: seguimos com as vagas internas (nao inventa, nao quebra).
+			}
+		}
+		return external;
 	}
 
 	private JobView toView(Job job, String viewer, boolean applied, boolean saved, int applicationsCount) {
 		return new JobView(job.id(), job.title(), job.company(), job.logo(), job.location(), job.type(), job.level(),
 			job.salary(), job.currency(), job.skills(), job.postedAt() != null ? job.postedAt().toString() : null, 0,
 			applied, saved, viewer != null && viewer.equals(job.postedBy()), applicationsCount, authorOf(job),
-			fieldViews(job), job.status().name(), job.closedAt() != null ? job.closedAt().toString() : null);
+			fieldViews(job), job.status().name(), job.closedAt() != null ? job.closedAt().toString() : null,
+			"INTERNAL", null, null);
 	}
 
 	/** Quem criou a vaga (com reputacao e verificacao): o candidato precisa saber com quem fala. */
@@ -320,7 +359,8 @@ class JobContractController {
 	record JobView(String id, String title, String company, String logo, String location, String type, String level,
 			String salary, String currency, List<String> skills, String postedAt, int matchScore, boolean applied,
 			boolean saved, boolean owner, int applicationsCount, AuthorView author, List<ApplicationFieldView>
-			applicationFields, String status, String closedAt) {
+			applicationFields, String status, String closedAt, String sourceType, String sourceUrl,
+			String sourcePlatform) {
 	}
 
 	/** Quem publicou a vaga, com o que sustenta a credibilidade dele. */

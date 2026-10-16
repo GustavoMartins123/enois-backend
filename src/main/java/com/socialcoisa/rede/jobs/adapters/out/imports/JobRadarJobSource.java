@@ -37,13 +37,16 @@ public class JobRadarJobSource implements JobImportSource {
 
 	private final String sitemapUrl;
 	private final String userAgent;
+	private final boolean enabled;
 	private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
 	public JobRadarJobSource(
 			@Value("${rede.jobs.import.jobradar.sitemap-url:https://jobradar.com.br/sitemap-vagas.xml}") String sitemapUrl,
-			@Value("${rede.jobs.import.jobradar.user-agent:EnóisBot/1.0 (+https://enois.ia.br/developers)}") String userAgent) {
+			@Value("${rede.jobs.import.jobradar.user-agent:EnóisBot/1.0 (+https://enois.ia.br/developers)}") String userAgent,
+			@Value("${rede.jobs.import.jobradar.enabled:true}") boolean enabled) {
 		this.sitemapUrl = sitemapUrl;
 		this.userAgent = userAgent;
+		this.enabled = enabled;
 	}
 
 	@Override
@@ -51,10 +54,10 @@ public class JobRadarJobSource implements JobImportSource {
 		return "JobRadar";
 	}
 
-	/** O sitemap e publico (feito para indexadores), entao a fonte esta sempre disponivel. */
+	/** Ligada por configuracao (e o sitemap e publico). Em teste, desligamos para nao ir a rede. */
 	@Override
 	public boolean available() {
-		return true;
+		return enabled;
 	}
 
 	@Override
