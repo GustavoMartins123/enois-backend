@@ -164,6 +164,18 @@ class PostInteractionPersistenceAdapter implements PostInteractionRepository {
 	}
 
 	@Override
+	public Map<String, ReactionType> findCommentReactionsByUser(UserId userId, Collection<String> commentIds) {
+		if (commentIds == null || commentIds.isEmpty()) {
+			return Map.of();
+		}
+		Map<String, ReactionType> result = new HashMap<>();
+		for (CommentReactionJpaEntity r : commentReactionRepository.findByCommentIdInAndUserId(commentIds, userId.value())) {
+			result.put(r.getCommentId(), r.getReactionType());
+		}
+		return result;
+	}
+
+	@Override
 	public List<ReactionSummary> findReactionsByCommentId(String commentId) {
 		return commentReactionRepository.findByCommentIdOrderByCreatedAtDesc(commentId).stream()
 			.map(r -> new ReactionSummary(r.getUserId(), r.getReactionType(), r.getCreatedAt()))

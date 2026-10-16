@@ -135,10 +135,19 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 					p != null ? p.avatar() : null);
 			})
 			.toList();
+		// Reacao do proprio leitor: sem isso o front nao sabe que ele ja reagiu e a reacao
+		// "desaparece" ao recarregar a pagina.
+		var reactions = query.viewerId()
+			.map(viewer -> postInteractionRepository.findCommentReactionsByUser(viewer,
+				comments.stream().map(CommentView::id).toList()))
+			.orElse(java.util.Map.of());
+		var withReactions = comments.stream()
+			.map(cv -> reactions.containsKey(cv.id()) ? cv.withCurrentUserReaction(reactions.get(cv.id())) : cv)
+			.toList();
 		// Cursor pela pagina do banco: comentario escondido nao pode encerrar a paginacao.
 		String nextCursor = fetched.size() == limit
 			? cursorCodec.encode(fetched.get(fetched.size() - 1).createdAt()) : null;
-		return new CommentsPage(comments, nextCursor);
+		return new CommentsPage(withReactions, nextCursor);
 	}
 
 	@Override

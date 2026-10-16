@@ -43,6 +43,9 @@ public interface PostInteractionRepository {
 
 	boolean addCommentReaction(String id, String commentId, UserId userId, ReactionType type, Instant createdAt);
 	boolean removeCommentReaction(String commentId, UserId userId);
+
+	/** Reacoes do usuario para varios comentarios (id do comentario -> tipo), em uma consulta. */
+	Map<String, ReactionType> findCommentReactionsByUser(UserId userId, Collection<String> commentIds);
 	List<ReactionSummary> findReactionsByCommentId(String commentId);
 
 	record ReactionSummary(String userId, ReactionType type, Instant createdAt) {
