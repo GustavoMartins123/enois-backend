@@ -30,6 +30,9 @@
 		<java.version>25</java.version>
 		<resilience4j.version>2.4.0</resilience4j.version>
 		<jsoup.version>1.19.1</jsoup.version>
+		<!-- Cache em memoria dos agregados da landing (ver CacheConfig). 2.9.x porque e a versao
+		     que ja esta no repositorio local; a API usada e a mesma das 3.x. -->
+		<caffeine.version>2.9.3</caffeine.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -114,6 +117,12 @@
 		<dependency>
 			<groupId>org.flywaydb</groupId>
 			<artifactId>flyway-mysql</artifactId>
+		</dependency>
+		<!-- Cache em memoria (contador de usuarios ativos da landing). -->
+		<dependency>
+			<groupId>com.github.ben-manes.caffeine</groupId>
+			<artifactId>caffeine</artifactId>
+			<version>${caffeine.version}</version>
 		</dependency>
 		<!-- Limpeza do HTML das paginas coladas pelos usuarios. O render acontece num iframe
 		     sandboxed, mas sanitizar no servidor evita guardar/entregar markup perigoso. -->
