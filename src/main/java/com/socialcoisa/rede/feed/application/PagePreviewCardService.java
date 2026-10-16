@@ -53,7 +53,9 @@ public class PagePreviewCardService {
 	 */
 	@Cacheable(value = "pagePreviewCards", key = "#postId")
 	public byte[] render(String postId, String html, String authorName) {
-		String text = Jsoup.parse(html == null ? "" : html).text().trim();
+		// Sem tirar o que a fonte nao desenha, emoji vira quadradinho no cartao (a Liberation nao tem
+		// emoji): melhor sumir com o caractere do que imprimir uma caixa vazia.
+		String text = keepDrawable(Jsoup.parse(html == null ? "" : html).text().trim());
 		String title = excerpt(text, TITLE_CHARS);
 		String body = text.length() > TITLE_CHARS ? excerpt(text.substring(TITLE_CHARS), BODY_CHARS) : "";
 
@@ -73,10 +75,16 @@ public class PagePreviewCardService {
 			g.setColor(Color.WHITE);
 			int y = drawWrapped(g, title.isEmpty() ? "Página no Énóis" : title, 112, 200, WIDTH - 224, 3, 74);
 
+			// O corpo entra só se sobrar espaço acima do rodapé; senão o cartão fica com o título e a
+			// assinatura, sem texto colado na borda.
 			if (!body.isEmpty()) {
-				g.setFont(BOLD.deriveFont(34f));
-				g.setColor(BODY_TINT);
-				drawWrapped(g, body, 112, y + 40, WIDTH - 224, 2, 46);
+				int bodyTop = y + 40;
+				int linhasQueCabem = Math.max(0, (HEIGHT - 200 - bodyTop) / 46);
+				if (linhasQueCabem > 0) {
+					g.setFont(BOLD.deriveFont(34f));
+					g.setColor(BODY_TINT);
+					drawWrapped(g, body, 112, bodyTop, WIDTH - 224, Math.min(2, linhasQueCabem), 46);
+				}
 			}
 
 			g.setFont(BOLD.deriveFont(28f));
@@ -142,6 +150,19 @@ public class PagePreviewCardService {
 		String cut = collapsed.substring(0, limit);
 		int lastSpace = cut.lastIndexOf(' ');
 		return (lastSpace > limit / 2 ? cut.substring(0, lastSpace) : cut).trim();
+	}
+
+	/** Mantem so o que a fonte sabe desenhar (e espaco), para nao imprimir caixa vazia. */
+	private static String keepDrawable(String text) {
+		StringBuilder out = new StringBuilder(text.length());
+		for (int index = 0; index < text.length(); ) {
+			int codePoint = text.codePointAt(index);
+			index += Character.charCount(codePoint);
+			if (Character.isWhitespace(codePoint) || BOLD.canDisplay(codePoint)) {
+				out.appendCodePoint(codePoint);
+			}
+		}
+		return out.toString().replaceAll("\\s+", " ").trim();
 	}
 
 	private static Font loadBundledFont() {
