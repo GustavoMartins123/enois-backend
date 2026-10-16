@@ -10,6 +10,9 @@ public interface ExternalJobRepository {
 
 	Optional<ExternalJob> findBySource(String platform, String externalId);
 
+	/** Deduplicacao GLOBAL: mesma vaga (mesma URL canonica) achada por outra fonte. */
+	Optional<ExternalJob> findByCanonicalUrl(String canonicalUrl);
+
 	void save(ExternalJob job);
 
 	/** Vagas externas mais recentes primeiro (o que sera listado depois das internas). */

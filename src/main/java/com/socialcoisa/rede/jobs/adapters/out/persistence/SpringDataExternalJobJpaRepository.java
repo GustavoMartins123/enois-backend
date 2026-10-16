@@ -10,6 +10,8 @@ interface SpringDataExternalJobJpaRepository extends JpaRepository<ExternalJobJp
 
 	Optional<ExternalJobJpaEntity> findByPlatformAndExternalId(String platform, String externalId);
 
+	Optional<ExternalJobJpaEntity> findFirstByCanonicalUrl(String canonicalUrl);
+
 	List<ExternalJobJpaEntity> findAllByOrderByLastCheckedAtDesc(Pageable pageable);
 
 	List<ExternalJobJpaEntity> findByTitleContainingIgnoreCaseOrderByLastCheckedAtDesc(String query, Pageable pageable);

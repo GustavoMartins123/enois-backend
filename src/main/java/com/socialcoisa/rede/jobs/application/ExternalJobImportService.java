@@ -72,12 +72,36 @@ public class ExternalJobImportService {
 			if (external.externalId() == null || external.title() == null) {
 				continue; // sem id/titulo nao da para deduplicar nem mostrar: ignora
 			}
-			var existing = repository.findBySource(platform, external.externalId());
-			String id = existing.map(ExternalJob::id).orElseGet(() -> "ext_" + platform + "_" + external.externalId());
-			var importedAt = existing.map(ExternalJob::importedAt).orElseGet(clock::instant);
-			repository.save(new ExternalJob(id, platform, external.externalId(), external.title(),
-				external.company(), external.location(), external.salary(), null, external.url(), importedAt,
-				clock.instant(), ExternalJob.FOUND));
+			String canonicalUrl = com.socialcoisa.rede.jobs.domain.UrlCanonicalizer
+				.canonicalize(external.url());
+			var sameSource = repository.findBySource(platform, external.externalId());
+			if (sameSource.isPresent()) {
+				// Mesma fonte e mesmo id: atualiza os dados e a verificacao (upsert).
+				ExternalJob current = sameSource.get();
+				repository.save(new ExternalJob(current.id(), current.platform(), current.externalId(),
+					external.title(), external.company(), external.location(), external.salary(),
+					current.currency(), external.url(), current.importedAt(), clock.instant(),
+					ExternalJob.FOUND, canonicalUrl));
+				saved++;
+				continue;
+			}
+			// Dedupe GLOBAL: a MESMA vaga pode aparecer em outra plataforma (mesma URL canonica).
+			// Nesse caso NAO criamos duplicata nem sobrescrevemos a procedencia original.
+			var otherSource = canonicalUrl == null ? java.util.Optional.<ExternalJob>empty()
+				: repository.findByCanonicalUrl(canonicalUrl);
+			if (otherSource.isPresent()) {
+				ExternalJob original = otherSource.get();
+				repository.save(new ExternalJob(original.id(), original.platform(), original.externalId(),
+					original.title(), original.company(), original.location(), original.salary(),
+					original.currency(), original.url(), original.importedAt(), clock.instant(),
+					original.status(), original.canonicalUrl()));
+				saved++;
+				continue;
+			}
+			repository.save(new ExternalJob("ext_" + platform + "_" + external.externalId(), platform,
+				external.externalId(), external.title(), external.company(), external.location(),
+				external.salary(), null, external.url(), clock.instant(), clock.instant(), ExternalJob.FOUND,
+				canonicalUrl));
 			saved++;
 		}
 		return saved;

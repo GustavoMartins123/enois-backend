@@ -9,8 +9,13 @@ import java.time.Instant;
  */
 public record ExternalJob(String id, String platform, String externalId, String title, String company,
 		String location, String salary, String currency, String url, Instant importedAt, Instant lastCheckedAt,
-		String status) {
+		String status, String canonicalUrl) {
 
 	public static final String FOUND = "FOUND";
 	public static final String POSSIBLY_CLOSED = "POSSIBLY_CLOSED";
+
+	/** Chave de deduplicacao entre fontes: a URL normalizada (ver UrlCanonicalizer). */
+	public String dedupeKey() {
+		return canonicalUrl != null && !canonicalUrl.isBlank() ? canonicalUrl : url;
+	}
 }

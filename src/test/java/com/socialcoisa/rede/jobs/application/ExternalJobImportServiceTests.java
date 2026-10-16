@@ -19,7 +19,11 @@ import com.socialcoisa.rede.jobs.application.port.out.JobImportSource;
  * (dedupe por plataforma + id externo).
  */
 @SpringBootTest
-@TestPropertySource(properties = "rede.jobs.import.jobradar.enabled=false")
+@TestPropertySource(properties = {
+	"rede.jobs.import.jobradar.enabled=false",
+	// Desliga o seed/cron: no teste o refresh e chamado explicitamente (evita corrida paralela).
+	"rede.jobs.import.external-refresh-enabled=false"
+})
 class ExternalJobImportServiceTests {
 
 	@TestConfiguration

@@ -29,6 +29,11 @@ class ExternalJobPersistenceAdapter implements ExternalJobRepository {
 	}
 
 	@Override
+	public Optional<ExternalJob> findByCanonicalUrl(String canonicalUrl) {
+		return repository.findFirstByCanonicalUrl(canonicalUrl).map(ExternalJobJpaEntity::toDomain);
+	}
+
+	@Override
 	@org.springframework.cache.annotation.Cacheable("externalJobs")
 	public List<ExternalJob> search(String query, int limit) {
 		return repository
