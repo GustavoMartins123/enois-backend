@@ -30,6 +30,9 @@
 		<java.version>25</java.version>
 		<resilience4j.version>2.4.0</resilience4j.version>
 		<jsoup.version>1.19.1</jsoup.version>
+		<!-- O parent do Spring Boot 4 nao gerencia o SDK do AWS, entao a versao e fixada aqui.
+		     Precisa bater com o apache-client que ja esta no cache do Maven (evita baixar duas linhas). -->
+		<awssdk.version>2.21.1</awssdk.version>
 		<!-- Cache em memoria dos agregados da landing (ver CacheConfig). 2.9.x porque e a versao
 		     que ja esta no repositorio local; a API usada e a mesma das 3.x. -->
 		<caffeine.version>2.9.3</caffeine.version>
@@ -117,6 +120,17 @@
 		<dependency>
 			<groupId>org.flywaydb</groupId>
 			<artifactId>flyway-mysql</artifactId>
+		</dependency>
+		<!-- SDK do S3 (upload por URL assinada + migracao). Versao vem do BOM do Spring Boot. -->
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>s3</artifactId>
+			<version>${awssdk.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>apache-client</artifactId>
+			<version>${awssdk.version}</version>
 		</dependency>
 		<!-- Cache em memoria (contador de usuarios ativos da landing). -->
 		<dependency>

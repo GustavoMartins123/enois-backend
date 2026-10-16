@@ -18,6 +18,7 @@ import com.socialcoisa.rede.media.application.port.in.RequestMediaDeletionUseCas
 import com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseCase;
 import com.socialcoisa.rede.media.application.port.out.MediaAssetRepository;
 import com.socialcoisa.rede.media.application.port.out.MediaDeletionJobRepository;
+import com.socialcoisa.rede.media.application.port.out.MediaUploadSigner;
 import com.socialcoisa.rede.media.application.port.out.StorageUrlFactory;
 import com.socialcoisa.rede.media.domain.MediaAsset;
 import com.socialcoisa.rede.shared.web.ApiException;
@@ -30,13 +31,16 @@ public class MediaService implements CreateMediaUploadUseCase, GetMediaAssetUseC
 	private final MediaAssetRepository mediaAssetRepository;
 	private final MediaDeletionJobRepository mediaDeletionJobRepository;
 	private final StorageUrlFactory storageUrlFactory;
+	/** So existe com storage S3 (ver S3StorageConfig); sem ele, o fluxo do ImageKit segue igual. */
+	private final java.util.Optional<MediaUploadSigner> uploadSigner;
 	private final Clock clock;
 
 	public MediaService(MediaAssetRepository mediaAssetRepository, MediaDeletionJobRepository mediaDeletionJobRepository,
-			StorageUrlFactory storageUrlFactory, Clock clock) {
+			StorageUrlFactory storageUrlFactory, java.util.Optional<MediaUploadSigner> uploadSigner, Clock clock) {
 		this.mediaAssetRepository = mediaAssetRepository;
 		this.mediaDeletionJobRepository = mediaDeletionJobRepository;
 		this.storageUrlFactory = storageUrlFactory;
+		this.uploadSigner = uploadSigner;
 		this.clock = clock;
 	}
 
@@ -50,7 +54,11 @@ public class MediaService implements CreateMediaUploadUseCase, GetMediaAssetUseC
 			command.mimeType().trim(), command.size(), normalize(command.purpose()), objectKey,
 			storageUrlFactory.cdnUrl(objectKey), clock.instant(), clock.instant().plus(Duration.ofMinutes(15)));
 		MediaAsset saved = mediaAssetRepository.save(asset);
-		return MediaUploadView.from(saved, storageUrlFactory.uploadUrl(objectKey));
+		// Com S3, quem sobe o arquivo e o browser com URL assinada; com ImageKit, o front segue o
+		// fluxo multipart de sempre — por isso o `provider` na resposta.
+		return uploadSigner
+			.map(signer -> MediaUploadView.fromSigned(saved, signer.sign(objectKey, saved.mimeType())))
+			.orElseGet(() -> MediaUploadView.from(saved, storageUrlFactory.uploadUrl(objectKey)));
 	}
 
 	@Override

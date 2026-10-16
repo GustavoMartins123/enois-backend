@@ -6,31 +6,40 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+
+import com.socialcoisa.rede.media.application.port.out.MediaUploadSigner;
 import com.socialcoisa.rede.media.application.port.out.StorageUrlFactory;
 
 /**
- * Storage S3, ligado por `REDE_MEDIA_STORAGE=s3`.
+ * Storage S3, ligado por `REDE_MEDIA_STORAGE=s3` (ver docs/MIDIA-S3.md).
  *
- * O padrão continua sendo o ImageKit: virar o storage é uma decisão de operação, tomada por
- * variável de ambiente, e voltar atrás é trocar a variável de novo — nenhum código muda. Enquanto
- * estiver em `imagekit`, este bloco nem é criado.
+ * O padrao continua sendo o ImageKit: virar o storage e decisao de operacao, por variavel de
+ * ambiente, e voltar atras e trocar a variavel de novo — nenhum codigo muda. Enquanto estiver em
+ * `imagekit`, este bloco nem e criado e o app se comporta exatamente como hoje.
+ *
+ * Credencial nao aparece aqui: o S3Presigner resolve pela cadeia padrao do SDK dentro do pod.
  */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(S3StorageConfig.S3Properties.class)
 @ConditionalOnProperty(name = "rede.media.storage", havingValue = "s3")
 class S3StorageConfig {
 
-	/**
-	 * Só o endereço dos objetos novos. O upload ainda não tem caminho S3 — e é de propósito que
-	 * ligar o S3 hoje FALHE no boot: subir com os objetos apontando para o S3 enquanto o arquivo
-	 * continua indo para o ImageKit gravaria mídia quebrada, e o erro apareceria no post do usuário,
-	 * não aqui. Esta trava sai quando o upload por URL assinada entrar (próximo passo).
-	 */
 	@Bean
 	StorageUrlFactory storageUrlFactory(S3Properties props) {
-		// ignore: props validam bucket/regiao quando o caminho existir.
-		throw new IllegalStateException("rede.media.storage=s3 ainda nao tem caminho de upload: "
-			+ "mantenha imagekit ate o upload por URL assinada entrar.");
+		return new S3StorageUrlFactory(props.getBucket(), props.getRegion(), props.getPrefix(),
+			props.getPublicBaseUrl());
+	}
+
+	@Bean
+	S3Presigner s3Presigner(S3Properties props) {
+		return S3Presigner.builder().region(Region.of(props.getRegion())).build();
+	}
+
+	@Bean
+	MediaUploadSigner mediaUploadSigner(S3Presigner presigner, S3Properties props) {
+		return new S3UploadSigner(presigner, props.getBucket(), props.getPrefix());
 	}
 
 	@ConfigurationProperties(prefix = "rede.media.s3")
