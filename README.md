@@ -105,6 +105,39 @@ src/main/java/com/socialcoisa/rede/
 
 Modules: `identity`, `feed`, `media`, `network`, `profile`, `messaging`, `notifications`, `search`, `community`, `admin`.
 
+## Media storage (ImageKit → S3)
+
+Media has two storage providers and the choice is an **environment variable**, no code change:
+`imagekit` (the current one) and `s3` (the new standard). Assets already stored keep their own URL in
+the database, so **anything uploaded before the switch keeps being served by ImageKit** — that is the
+fallback, and it is structural rather than a special code path.
+
+> Status: the signed-upload path is implemented but **has not been run against a real bucket yet**,
+> and migrating the existing objects is **not implemented yet**. First environment flip is the debut —
+> read [docs/MIDIA-S3.md](docs/MIDIA-S3.md) (in Portuguese) before turning it on; it has the step by
+> step, the checks and the rollback.
+
+**What the bucket needs:** CORS allowing `PUT` from `https://enois.ia.br` (the browser uploads
+straight to the bucket), public read on the prefix **or** CloudFront in front of it (the stored
+`cdnUrl` has to be stable — a signed URL would expire), and `s3:PutObject`/`GetObject`/`DeleteObject`
+for the pod. Credentials are never configured: the pod resolves them through the SDK's default chain
+(IRSA in the service account).
+
+| Variable | Example | Notes |
+|---|---|---|
+| `REDE_MEDIA_STORAGE` | `s3` | absent = `imagekit` |
+| `REDE_MEDIA_S3_BUCKET` | `enois-media` | required when storage is `s3` — the app refuses to boot without it |
+| `REDE_MEDIA_S3_REGION` | `sa-east-1` | defaults to `us-east-1` |
+| `REDE_MEDIA_S3_PREFIX` | `uploads/` | defaults to `uploads/`; `/` means the bucket root |
+| `REDE_MEDIA_S3_PUBLIC_BASE_URL` | `https://cdn.enois.ia.br` | empty = the bucket address |
+
+**Turning it on:** set the variables → deploy → publish one photo on staging and check that
+`POST /api/media/uploads` answers `"provider":"S3"` with an `uploadUrl` in the bucket/CDN, that the
+browser does a `PUT` with the **exact** signed `Content-Type`, and that `cdnUrl` opens. **Rolling
+back** is setting `REDE_MEDIA_STORAGE=imagekit` and restarting: objects already moved to S3 keep being
+served through their stored address. A `403` on upload is almost always bucket CORS or a
+`Content-Type` different from the signed one.
+
 ## Deploy (EKS via GitOps)
 
 O deploy **não** se faz por `fly deploy`. O fluxo é:
