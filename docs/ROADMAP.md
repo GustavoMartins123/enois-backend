@@ -1,5 +1,7 @@
 # Roadmap de implementação — estado real
 
+> Ordem de execução (mais fácil → mais difícil): `docs/BACKLOG.md`.
+
 Cada frente é entregue **uma por passada**, compilando, com testes verdes e publicada. Onde há
 dependência externa, está marcado como **BLOQUEADO** (não é código meu).
 
