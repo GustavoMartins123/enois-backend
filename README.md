@@ -370,6 +370,7 @@ o considera indisponível.
 | `GOVBR_CLIENT_SECRET` | `client_secret` da credencial |
 | `GOVBR_REDIRECT_URI` | URL de retorno cadastrada: `https://enois.ia.br/api/identity/govbr/callback` |
 | `IDENTITY_ENFORCEMENT_ENABLED` | `true` para exigir identidade verificada ao publicar vaga (padrão `false`) |
+| `VITE_IDENTITY_ENABLED` (front) | `true` para **mostrar** a seção de identidade no app. Padrão oculto: toda a UI fica pronta mas invisível até a funcionalidade estar homologada |
 
 Sem `GOVBR_CLIENT_ID`/`SECRET`/`REDIRECT_URI` preenchidos, o provedor fica **indisponível** — e é
 isso que aparece no app.
