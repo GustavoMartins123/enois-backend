@@ -14,20 +14,25 @@ Classificação pedida pelo brief. **Estado real de cada fonte (investigado em 2
 - Implementado: `JobRadarJobSource` (sitemap), tabela `external_jobs`, selo "Vaga externa · JobRadar"
   + botão "Visitar vaga", busca por título, cache e refresh periódico.
 
-## Jooble — **DISPONÍVEL (sitemap) / CONDICIONAL (API oficial)**
-- `robots.txt` 200, permissivo (bloqueia só `/*.ashx`); **sitemap index público** (`/sitemap.xml`)
-  apontando para `sitemap_tree_jdp_pt_BR_*.xml` (árvore de páginas de vaga).
-- Existe **API oficial** (chave; a página `/api/about` fica atrás de challenge Cloudflare). Caminho
-  limpo = pedir a **API key**; alternativa imediata = ler o **sitemap público** como no JobRadar.
-- **Ainda não implementado.** Adaptador é o próximo passo (mesma porta).
+## Jooble — **CONDICIONAL** (só com a API oficial)
+- `robots.txt` 200, permissivo (bloqueia só `/*.ashx`); **sitemap index público** com filhos
+  `sitemap_tree_jdp_pt_BR_*.xml` — testado: o filho responde 200 e traz URLs `/jdp/<numero>`.
+- **MAS** (duas coisas decidem):
+  1. a URL é **opaca** (`/jdp/6125900633590463951`): **não traz título** — diferente do JobRadar, cujo
+     slug carrega o título. Só com o sitemap teríamos "vaga sem título".
+  2. a **página da vaga responde 403 "Just a moment..."** — é o **desafio do Cloudflare (anti-bot)**.
+     O brief proíbe contornar bloqueios ⇒ **não lemos a página**.
+- Conclusão: o caminho legítimo é a **API oficial do Jooble** (`client key`), via `/api/<key>`. Sem a
+  chave, a fonte fica **desabilitada**. **Ainda não implementado.**
 
-## Remotar — **A CONFIRMAR (provável DISPONÍVEL via páginas SSR)**
-- **Sem `robots.txt` e sem `sitemap.xml` (404)** — não há mecanismo publicado para indexar; por isso
-  **não** é "disponível" por sitemap.
-- É um app **Next.js com SSR** (HTML de 44 KB) — páginas de vaga podem trazer dados no HTML
-  (`__NEXT_DATA__`/JSON-LD). Requer inspeção de uma página de vaga real para decidir entre
-  **Disponível** (extração da página pública) ou **Manual**.
-- **Ainda não implementado.** Precisa de uma passada de investigação da página de vaga.
+## Remotar — **A CONFIRMAR / provável MANUAL**
+- **Sem `robots.txt` e sem `sitemap.xml` (404)** — não há mecanismo publicado para indexar.
+- É **Next.js (Pages Router)** (`__NEXT_DATA__` no HTML), mas a **home não expõe links de vaga**
+  (só páginas institucionais) e `/vagas`, `/remote-jobs`, `/vagas-remotas` respondem **404** — a
+  listagem parece ser montada no **cliente**. **Sem navegador eu não confirmo o formato real** da
+  listagem/detalhe.
+- Próximo passo: inspecionar a listagem real (com browser headless) para achar o path e ver se há
+  dados no HTML. Até lá, **MANUAL** (cadastro por URL) é o que se pode afirmar.
 
 ## Indeed — **CONDICIONAL**
 - `robots.txt` com vários `Disallow`; **sem sitemap (404)**; termos restritivos.
