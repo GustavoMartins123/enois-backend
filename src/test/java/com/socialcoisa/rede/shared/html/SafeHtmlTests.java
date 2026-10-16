@@ -54,6 +54,46 @@ class SafeHtmlTests {
 		assertThat(clean).contains("href=\"https://exemplo.com\"");
 	}
 
+	/**
+	 * Midia embutida: imagem, video e audio rodam no navegador sem script nenhum (quem toca e o
+	 * proprio navegador, com controles nativos), entao a promessa de "nenhum script executa"
+	 * continua valendo com elas.
+	 */
+	@Test
+	void keepsNativeMediaSoItPlaysInTheBrowser() {
+		String clean = SafeHtml.sanitizePageHtml("""
+			<figure><img src="https://exemplo.com/foto.png" alt="foto"><figcaption>A foto</figcaption></figure>
+			<video controls poster="https://exemplo.com/capa.jpg" src="https://exemplo.com/clipe.mp4">texto</video>
+			<audio controls src="https://exemplo.com/musica.mp3"></audio>
+			<picture><source src="https://exemplo.com/foto.webp" type="image/webp"><img src="https://exemplo.com/foto.png" alt=""></picture>
+			<video controls><source src="https://exemplo.com/b.webm" type="video/webm"><track src="https://exemplo.com/leg.vtt" kind="captions"></video>
+			""");
+
+		assertThat(clean).contains("<figcaption>A foto</figcaption>");
+		assertThat(clean).contains("controls");
+		assertThat(clean).contains("poster=\"https://exemplo.com/capa.jpg\"");
+		assertThat(clean).contains("<audio");
+		assertThat(clean).contains("<source src=\"https://exemplo.com/b.webm\"");
+		assertThat(clean).contains("<track src=\"https://exemplo.com/leg.vtt\"");
+		assertThat(clean).doesNotContain("autoplay");
+	}
+
+	@Test
+	void mediaOnlyByHttpsAndDocumentsStayAsLinks() {
+		// http nao carregaria numa pagina https (conteudo misto): o atributo sai.
+		String httpMedia = SafeHtml.sanitizePageHtml("<video controls src=\"http://exemplo.com/clipe.mp4\"></video>");
+		assertThat(httpMedia).doesNotContain("http://");
+
+		// Quadro dentro de quadro exigiria liberar script (player de terceiros) e o visualizador de
+		// PDF do Chrome tambem nao roda no sandbox: documento vai como link, que abre no navegador.
+		String embeds = SafeHtml.sanitizePageHtml(
+			"<iframe src=\"https://exemplo.com/doc.pdf\"></iframe><embed src=\"https://exemplo.com/doc.pdf\">"
+				+ "<object data=\"https://exemplo.com/doc.pdf\"></object><a href=\"https://exemplo.com/doc.pdf\">Abrir</a>");
+
+		assertThat(embeds).doesNotContain("<iframe").doesNotContain("<embed").doesNotContain("<object");
+		assertThat(embeds).contains("href=\"https://exemplo.com/doc.pdf\"");
+	}
+
 	@Test
 	void keepsSafeInlineStyleAndDropsRemoteCss() {
 		String clean = SafeHtml.sanitizePageHtml(
@@ -102,14 +142,18 @@ class SafeHtmlTests {
 
 	@Test
 	void rejectsHugePastesWithoutParsing() {
-		assertThatThrownBy(() -> SafeHtml.sanitizePageHtml("<p>" + "a".repeat(200_001) + "</p>"))
+		assertThatThrownBy(() -> SafeHtml.sanitizePageHtml("<p>" + "a".repeat(400_001) + "</p>"))
 			.isInstanceOf(ApiException.class);
 	}
 
 	@Test
-	void rejectsSanitizedResultAboveColumnLimit() {
-		assertThatThrownBy(() -> SafeHtml.sanitizePageHtml("<p>" + "a".repeat(12_500) + "</p>"))
+	void acceptsPageNearTheLimitAndRejectsOnlyAboveIt() {
+		// O teto e um so para todo mundo: abaixo dele a pagina passa, acima e recusada — sem
+		// faixa intermediaria, sem excecao por conta.
+		assertThat(SafeHtml.sanitizePageHtml("<p>" + "a".repeat(SafeHtml.MAX_PAGE_HTML - 10) + "</p>"))
+			.isNotNull();
+		assertThatThrownBy(() -> SafeHtml.sanitizePageHtml("<p>" + "a".repeat(SafeHtml.MAX_PAGE_HTML) + "</p>"))
 			.isInstanceOf(ApiException.class)
-			.hasMessageContaining("12000");
+			.hasMessageContaining(String.valueOf(SafeHtml.MAX_PAGE_HTML));
 	}
 }

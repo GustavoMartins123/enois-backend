@@ -117,7 +117,8 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 			throw new ApiException(404, "POST_NOT_FOUND", "Post nao encontrado.");
 		}
 		List<PostView> enriched = enrich(List.of(post), viewerId);
-		return enriched.isEmpty() ? PostView.from(post) : enriched.get(0);
+		// Unico lugar que devolve o corpo da pagina (ver PostView.from): e a leitura de um post so.
+		return (enriched.isEmpty() ? PostView.from(post) : enriched.get(0)).withPageHtml(post.pageHtml());
 	}
 
 	@Transactional(readOnly = true)

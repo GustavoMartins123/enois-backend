@@ -44,8 +44,12 @@ class PostJpaEntity {
 	@Column(nullable = false, length = 1200)
 	private String content;
 
-	/** So preenchido em posts do tipo PAGE (largura = SafeHtml.MAX_PAGE_HTML). */
-	@Column(name = "page_html", length = 12000)
+	/**
+	 * So preenchido em posts do tipo PAGE. HTML de verdade nao cabe em varchar (esbarraria no
+	 * tamanho maximo da linha) e uma pagina colada ocupa espaco: guardado como texto grande, fora
+	 * da linha, o tamanho da pagina nao disputa espaco com as outras colunas de `posts`.
+	 */
+	@Column(name = "page_html", columnDefinition = "longtext")
 	private String pageHtml;
 
 	@ElementCollection(fetch = FetchType.EAGER)

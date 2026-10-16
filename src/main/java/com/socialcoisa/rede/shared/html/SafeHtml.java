@@ -28,11 +28,19 @@ import com.socialcoisa.rede.shared.web.ApiException;
  */
 public final class SafeHtml {
 
-	/** Limite do que e gravado: bate com a largura da coluna posts.page_html. */
-	public static final int MAX_PAGE_HTML = 12_000;
+	/**
+	 * Teto de HTML renderizado por pagina, em caracteres, para TODO MUNDO: nao ha excecao por
+	 * reputacao, tipo de conta ou idade da conta, e o mesmo numero vale na publicacao e na edicao.
+	 * O front usa o mesmo valor no campo de escrita (`PAGE_HTML_MAX_LENGTH`), para ninguem digitar
+	 * algo que o servidor vai recusar depois.
+	 */
+	public static final int MAX_PAGE_HTML = 100_000;
 
-	/** Corte do texto cru antes de parsear: evita gastar CPU com um paste gigante. */
-	private static final int MAX_RAW_INPUT = 200_000;
+	/**
+	 * Corte do texto cru antes de parsear: evita gastar CPU com um paste gigante. Fica acima do
+	 * teto porque a limpeza costuma encolher o markup (scripts fora, tags nao permitidas fora).
+	 */
+	private static final int MAX_RAW_INPUT = 400_000;
 
 	private static final Pattern STYLE_IMPORT = Pattern.compile("(?is)@import\\b[^;]*;?");
 	private static final Pattern STYLE_DANGEROUS = Pattern
@@ -124,21 +132,39 @@ public final class SafeHtml {
 	private static final class PageSafelist extends Safelist {
 
 		PageSafelist() {
-			addTags("a", "abbr", "article", "aside", "b", "blockquote", "br", "caption", "cite", "code", "col",
-				"colgroup", "dd", "del", "details", "dfn", "div", "dl", "dt", "em", "figcaption", "figure",
+			// `video`, `audio` e `picture` entram porque sao a forma de midia que roda no navegador
+			// SEM script: o player e o proprio navegador (controles nativos), entao a promessa de
+			// "nenhum script executa" continua valendo com midia embutida.
+			addTags("a", "abbr", "article", "aside", "audio", "b", "blockquote", "br", "caption", "cite", "code",
+				"col", "colgroup", "dd", "del", "details", "dfn", "div", "dl", "dt", "em", "figcaption", "figure",
 				"footer", "h1", "h2", "h3", "h4", "h5", "h6", "header", "hr", "i", "img", "ins", "kbd", "li",
-				"main", "mark", "ol", "p", "pre", "q", "s", "samp", "section", "small", "span", "strong", "sub",
-				"summary", "sup", "table", "tbody", "td", "tfoot", "th", "thead", "time", "tr", "u", "ul", "wbr");
+				"main", "mark", "ol", "p", "picture", "pre", "q", "s", "samp", "section", "small", "source",
+				"span", "strong", "sub", "summary", "sup", "table", "tbody", "td", "tfoot", "th", "thead", "time",
+				"tr", "track", "u", "ul", "video", "wbr");
 			addAttributes(":all", "class", "style", "title", "dir", "lang", "align", "width", "height");
 			addAttributes("a", "href", "target", "rel");
 			addAttributes("img", "src", "alt", "loading");
+			addAttributes("video", "src", "poster", "controls", "preload", "loop", "muted", "playsinline");
+			addAttributes("audio", "src", "controls", "preload", "loop", "muted");
+			addAttributes("source", "src", "type", "media");
+			addAttributes("track", "src", "kind", "srclang", "label", "default");
 			addAttributes("ol", "start", "type", "reversed");
 			addAttributes("li", "value");
 			addAttributes("table", "border", "cellpadding", "cellspacing");
 			addAttributes("td", "colspan", "rowspan", "headers");
 			addAttributes("th", "colspan", "rowspan", "scope", "headers");
 			addProtocols("a", "href", "http", "https", "mailto");
-			addProtocols("img", "src", "http", "https", "data");
+			// Midia e documento so por https (ou embutido em data:). Endereco http nao carregaria de
+			// qualquer forma numa pagina https — o navegador bloqueia como conteudo misto — e deixar o
+			// atributo passar so esconderia o problema. `<iframe>`/`<embed>`/`<object>` ficam de fora:
+			// o visualizador de PDF do Chrome nao roda dentro do sandbox (conferido no navegador), e
+			// entao documento fica como link, que abre no visualizador nativo em outra aba.
+			addProtocols("img", "src", "https", "data");
+			addProtocols("video", "src", "https", "data");
+			addProtocols("video", "poster", "https", "data");
+			addProtocols("audio", "src", "https", "data");
+			addProtocols("source", "src", "https", "data");
+			addProtocols("track", "src", "https");
 		}
 	}
 
