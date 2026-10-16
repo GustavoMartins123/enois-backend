@@ -76,12 +76,13 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 			command.externalLinks().forEach(link -> check("link", link, 500));
 		}
 		if (command.skills() != null) {
-			// Mesmo teto do campo no front: o textarea aceita 800 caracteres, entao um item pode
-			// ocupar o campo inteiro (quem escreve "habilidades" como frase, e nao como tags).
-			command.skills().forEach(skill -> check("habilidade", skill, 800));
+			// Mesmo teto do campo no front: o texto livre la aceita 1600 caracteres, entao um item
+			// pode ocupar o campo inteiro (quem escreve habilidades como frase, nao como tags).
+			command.skills().forEach(skill -> check("habilidade", skill, 1600));
 		}
 		if (command.goals() != null) {
-			command.goals().forEach(goal -> check("objetivo", goal, 160));
+			// Mesmo caso das habilidades: o campo e texto livre e aceita 1600.
+			command.goals().forEach(goal -> check("objetivo", goal, 1600));
 		}
 	}
 

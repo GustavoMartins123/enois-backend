@@ -23,14 +23,15 @@ import tools.jackson.databind.ObjectMapper;
 import com.socialcoisa.rede.shared.web.TestAuthHelper;
 
 /**
- * Campo "Habilidades": 800 caracteres, o mesmo teto do campo no front.
+ * Campos de texto livre do perfil ("Habilidades" e "Objetivos"): 1600 caracteres cada item, o mesmo
+ * teto do campo no front.
  *
- * Antes eram 120 por item, o que recusava quem escreve as habilidades como uma frase em vez de
- * tags soltas — o campo deixava digitar e o servidor recusava no fim.
+ * Antes eram 120/160 por item, o que recusava quem escreve uma frase em vez de etiquetas soltas —
+ * o campo deixava digitar e o servidor recusava no fim, com um limite que a tela nao mostrava.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
-class ProfileSkillsLengthTests {
+class ProfileTextFieldsLengthTests {
 
 	@Autowired
 	private MockMvc mockMvc;
@@ -46,13 +47,13 @@ class ProfileSkillsLengthTests {
 	}
 
 	@Test
-	void acceptsASkillWithUpToEightHundredCharacters() throws Exception {
+	void acceptsASkillWithUpToTheFieldLimit() throws Exception {
 		var user = auth.authenticate("user_skills_length1");
-		String longSkill = "a".repeat(800);
+		String longSkill = "a".repeat(1600);
 
 		mockMvc.perform(patch("/me/profile")
 				.header("X-Session-Token", user.token())
-				.header("Idempotency-Key", "skills-800")
+				.header("Idempotency-Key", "skills-1600")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(objectMapper.writeValueAsString(Map.of("skills", List.of(longSkill)))))
 			.andExpect(status().isOk());
@@ -61,7 +62,7 @@ class ProfileSkillsLengthTests {
 			.andExpect(status().isOk())
 			.andReturn();
 		JsonNode skills = objectMapper.readTree(read.getResponse().getContentAsString()).get("skills");
-		assertThat(skills.get(0).asText()).hasSize(800);
+		assertThat(skills.get(0).asText()).hasSize(1600);
 	}
 
 	@Test
@@ -70,11 +71,29 @@ class ProfileSkillsLengthTests {
 
 		mockMvc.perform(patch("/me/profile")
 				.header("X-Session-Token", user.token())
-				.header("Idempotency-Key", "skills-801")
+				.header("Idempotency-Key", "skills-1601")
 				.contentType(MediaType.APPLICATION_JSON)
-				.content(objectMapper.writeValueAsString(Map.of("skills", List.of("a".repeat(801))))))
+				.content(objectMapper.writeValueAsString(Map.of("skills", List.of("a".repeat(1601))))))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("FIELD_TOO_LONG"))
-			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("800")));
+			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("1600")));
+	}
+
+	@Test
+	void acceptsAGoalWithUpToTheSameLimit() throws Exception {
+		var user = auth.authenticate("user_goals_length1");
+
+		mockMvc.perform(patch("/me/profile")
+				.header("X-Session-Token", user.token())
+				.header("Idempotency-Key", "goals-1600")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("goals", List.of("b".repeat(1600))))))
+			.andExpect(status().isOk());
+
+		MvcResult read = mockMvc.perform(get("/me").header("X-Session-Token", user.token()))
+			.andExpect(status().isOk())
+			.andReturn();
+		JsonNode goals = objectMapper.readTree(read.getResponse().getContentAsString()).get("goals");
+		assertThat(goals.get(0).asText()).hasSize(1600);
 	}
 }

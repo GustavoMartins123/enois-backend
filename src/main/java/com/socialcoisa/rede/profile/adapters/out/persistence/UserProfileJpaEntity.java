@@ -56,12 +56,12 @@ class UserProfileJpaEntity {
 
 	@ElementCollection(fetch = FetchType.EAGER)
 	@CollectionTable(name = "user_skills", joinColumns = @JoinColumn(name = "user_id"))
-	@Column(name = "skill", nullable = false, length = 800)
+	@Column(name = "skill", nullable = false, length = 1600)
 	private List<String> skills = new ArrayList<>();
 
 	@ElementCollection(fetch = FetchType.EAGER)
 	@CollectionTable(name = "user_goals", joinColumns = @JoinColumn(name = "user_id"))
-	@Column(name = "goal", nullable = false, length = 160)
+	@Column(name = "goal", nullable = false, length = 1600)
 	private List<String> goals = new ArrayList<>();
 
 	@Column(length = 160)
