@@ -54,7 +54,7 @@ public class EditPostService implements EditPostUseCase {
 		if (!post.isActive()) {
 			throw new ApiException(404, "POST_NOT_FOUND", "Post nao encontrado.");
 		}
-		String content = validateContent(command.content());
+		String content = validateContent(command.content(), post.type());
 		List<String> tags = normalizeTags(command.tags());
 
 		Post edited = post.edited(content, pageHtml(post, command), tags, clock.instant());
@@ -79,8 +79,15 @@ public class EditPostService implements EditPostUseCase {
 		return SafeHtml.requirePageHtml(command.pageHtml());
 	}
 
-	private String validateContent(String content) {
+	/**
+	 * Texto do post editado. Num post de pagina ele pode ficar vazio (pagina e uma coisa OU outra:
+	 * o HTML e o conteudo), mas em qualquer outro tipo continua obrigatorio.
+	 */
+	private String validateContent(String content, PostType type) {
 		if (!StringUtils.hasText(content)) {
+			if (type == PostType.PAGE) {
+				return "";
+			}
 			throw new ApiException(400, "INVALID_CONTENT", "Conteudo obrigatorio.");
 		}
 		String normalized = content.trim();

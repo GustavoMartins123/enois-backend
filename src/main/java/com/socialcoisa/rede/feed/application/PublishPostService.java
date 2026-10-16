@@ -62,7 +62,7 @@ public class PublishPostService implements PublishPostUseCase {
 			.toList();
 		validateMediaOwnershipUseCase.validateOwnedBy(command.authorId(), mediaIds);
 		String communityId = StringUtils.hasText(command.communityId()) ? command.communityId().trim() : null;
-		Post post = Post.publish(idGenerator.newPostId(), command.authorId(), command.type(), command.content().trim(),
+		Post post = Post.publish(idGenerator.newPostId(), command.authorId(), command.type(), textOf(command),
 			pageHtml(command), tags, mediaIds, communityId, clock.instant());
 		Post saved = postRepository.save(post);
 		feedDistributionService.distribute(saved);
@@ -89,8 +89,19 @@ public class PublishPostService implements PublishPostUseCase {
 	}
 
 	/**
+	 * Texto do post. Num post comum ele e obrigatorio; num post de pagina e opcional, porque pagina
+	 * e uma coisa OU outra: o HTML e o conteudo, e o texto (quando vem) e so um titulo acima dele.
+	 * A coluna e `not null`, entao a ausencia vira string vazia — nunca nulo.
+	 */
+	private String textOf(PublishPostCommand command) {
+		if (command.type() == PostType.PAGE) {
+			return StringUtils.hasText(command.content()) ? command.content().trim() : "";
+		}
+		return command.content().trim();
+	}
+
+	/**
 	 * Pagina so existe em posts do tipo PAGE; nos outros o HTML e ignorado (nao vira lixo guardado).
-	 * Em PAGE o texto obrigatorio continua sendo o titulo/legenda que aparece no card.
 	 */
 	private String pageHtml(PublishPostCommand command) {
 		if (command.type() != PostType.PAGE) {
@@ -103,10 +114,11 @@ public class PublishPostService implements PublishPostUseCase {
 		if (command.type() == null) {
 			throw new ApiException(400, "INVALID_POST_TYPE", "Tipo de post obrigatorio.");
 		}
-		if (!StringUtils.hasText(command.content())) {
+		// Post de pagina e uma coisa OU outra: o HTML e obrigatorio e o texto nao (ver textOf).
+		if (command.type() != PostType.PAGE && !StringUtils.hasText(command.content())) {
 			throw new ApiException(400, "INVALID_CONTENT", "Conteudo obrigatorio.");
 		}
-		if (command.content().trim().length() > 1200) {
+		if (command.content() != null && command.content().trim().length() > 1200) {
 			throw new ApiException(400, "CONTENT_TOO_LONG", "Conteudo deve ter no maximo 1200 caracteres.");
 		}
 		if (command.tags() != null && command.tags().stream().filter(StringUtils::hasText).distinct().count() > 5) {

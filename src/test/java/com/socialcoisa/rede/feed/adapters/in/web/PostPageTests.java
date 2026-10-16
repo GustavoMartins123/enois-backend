@@ -101,6 +101,50 @@ class PostPageTests {
 		assertThat(item.get("pageHtml") == null || item.get("pageHtml").isNull()).isTrue();
 	}
 
+	/**
+	 * Pagina e uma coisa OU outra: o HTML e o conteudo do post, entao o texto nao e exigido. Antes
+	 * disso, publicar uma pagina obrigava a inventar um "texto de post" que nao tinha funcao.
+	 */
+	@Test
+	void pageWithoutPostTextIsAccepted() throws Exception {
+		var author = auth.authenticate("user_page_notext");
+
+		MvcResult created = mockMvc.perform(post("/feed/posts")
+				.header("X-Session-Token", author.token())
+				.header("Idempotency-Key", "page-notext")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(json(Map.of("type", "PAGE", "pageHtml", "<h1>So a pagina</h1>"))))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.type").value("PAGE"))
+			.andExpect(jsonPath("$.content").value(""))
+			.andReturn();
+
+		String postId = objectMapper.readTree(created.getResponse().getContentAsString()).get("id").asText();
+		assertThat(readPage(author, postId)).isEqualTo("<h1>So a pagina</h1>");
+
+		// Editar a pagina sem texto tambem passa.
+		mockMvc.perform(patch("/feed/posts/" + postId)
+				.header("X-Session-Token", author.token())
+				.header("Idempotency-Key", "page-notext-edit")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(json(Map.of("content", "", "pageHtml", "<h1>So a pagina v2</h1>"))))
+			.andExpect(status().isOk());
+		assertThat(readPage(author, postId)).isEqualTo("<h1>So a pagina v2</h1>");
+	}
+
+	@Test
+	void postTextIsStillRequiredForOtherTypes() throws Exception {
+		var author = auth.authenticate("user_post_notext");
+
+		mockMvc.perform(post("/feed/posts")
+				.header("X-Session-Token", author.token())
+				.header("Idempotency-Key", "post-notext")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(json(Map.of("type", "INSIGHT", "content", "   "))))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_CONTENT"));
+	}
+
 	@Test
 	void pageWithoutHtmlIsRejected() throws Exception {
 		var author = auth.authenticate("user_page_owner2");
