@@ -3,6 +3,10 @@ package com.socialcoisa.rede.identity.adapters.in.web;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import java.net.URI;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.util.StringUtils;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -95,6 +99,28 @@ class IdentityContractController {
 		return new IdentityStatusView(verification.state().name(), verification.state().isVerified(),
 			identityService.providerAvailable(), verification.provider(), verification.reasonCode(),
 			verification.completedAt() != null ? verification.completedAt().toString() : null);
+	}
+
+	/**
+	 * Retorno do provedor (gov.br) — PUBLICO de proposito: o navegador chega aqui redirecionado,
+	 * sem a nossa sessao. A tentativa e identificada pelo `state` de uso unico (nao pelo cliente).
+	 */
+	@GetMapping("/govbr/callback")
+	ResponseEntity<Void> govbrCallback(@RequestParam(required = false) String code,
+			@RequestParam(required = false) String state,
+			@Value("${rede.frontend.url:}") String frontendUrl) {
+		String outcome = "ok";
+		try {
+			identityService.completeCallback(state, code);
+		}
+		catch (RuntimeException failure) {
+			outcome = "erro";
+		}
+		if (StringUtils.hasText(frontendUrl)) {
+			String base = frontendUrl.endsWith("/") ? frontendUrl.substring(0, frontendUrl.length() - 1) : frontendUrl;
+			return ResponseEntity.status(302).location(URI.create(base + "/seguranca?identidade=" + outcome)).build();
+		}
+		return ResponseEntity.ok().build();
 	}
 
 	record IdentityStatusView(String state, boolean verified, boolean providerAvailable, String provider,

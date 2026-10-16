@@ -337,3 +337,57 @@ delete from flyway_schema_history where version = '<versao que falhou>';    # ou
 - **`/admin/reports/**`** exigia apenas sessão: agora exige admin (`REDE_ADMIN_EMAILS`).
 
 Testes de regressão cobrem os dois primeiros itens em `ContractControllerTests`.
+
+## Verificação de identidade e Login gov.br
+
+O Énóis tem uma camada de **verificação de identidade civil** independente de fornecedor
+(`IdentityVerificationProvider`), com estados explícitos e **fail-safe**: sem provedor autorizado
+configurado, a verificação aparece como **indisponível** e nada é marcado como verificado. O Énóis
+**não** guarda CPF, documentos, selfie, biometria nem tokens do provedor — só o estado, o provedor e
+as datas.
+
+O provedor do **Login Único do gov.br** (OAuth 2.0 / OpenID Connect, Authorization Code) já está
+implementado em `GovBrIdentityProvider`. Ele **só fica ativo com credenciais**; sem elas, o registro
+o considera indisponível.
+
+### O que já está implementado
+- `GovBrIdentityProvider`: monta a URL de autorização com `state` **imprevisível e de uso único**,
+  troca o `code` por token **no backend** (Basic `client_id:client_secret`) e lê `/userinfo`. Só o
+  `sub` confirmado leva a `VERIFIED`; falha técnica vira `ERROR` (nunca aprova).
+- Endpoints: `GET /identity` (estado), `POST /identity/verification` (inicia → devolve
+  `redirectUrl`), `POST /identity/verification/refresh` (provedores por consulta),
+  `DELETE /identity/verification` (desvincula), `GET /identity/eligibility` (política de vaga) e
+  **`GET /identity/govbr/callback`** (retorno do provedor — público de propósito; a tentativa é
+  identificada pelo `state`).
+- Política central: publicar vaga exige `reputação >= 150` **E** identidade verificada — a exigência
+  de identidade fica atrás de `IDENTITY_ENFORCEMENT_ENABLED` (padrão `false`).
+
+### Configuração (variáveis de ambiente)
+| Variável | Descrição |
+|---|---|
+| `GOVBR_BASE_URL` | `https://sso.staging.acesso.gov.br` (homologação) ou `https://sso.acesso.gov.br` (produção) |
+| `GOVBR_CLIENT_ID` | `client_id` da credencial do gov.br |
+| `GOVBR_CLIENT_SECRET` | `client_secret` da credencial |
+| `GOVBR_REDIRECT_URI` | URL de retorno cadastrada: `https://enois.ia.br/api/identity/govbr/callback` |
+| `IDENTITY_ENFORCEMENT_ENABLED` | `true` para exigir identidade verificada ao publicar vaga (padrão `false`) |
+
+Sem `GOVBR_CLIENT_ID`/`SECRET`/`REDIRECT_URI` preenchidos, o provedor fica **indisponível** — e é
+isso que aparece no app.
+
+### Como habilitar (passo a passo)
+1. **Formalizar o pedido** ao programa gov.br por um **representante legal** da Énóis (órgãos e
+   entidades públicas/privadas com serviço de relevância/benefício social). É a etapa administrativa.
+2. Receber as credenciais de **homologação** (`client_id`/`client_secret`) e **cadastrar a
+   redirect URI** `https://enois.ia.br/api/identity/govbr/callback`.
+3. Preencher as variáveis acima no ambiente (staging) e validar o fluxo: botão → gov.br → retorno →
+   estado `VERIFIED` só após confirmação do provedor.
+4. **Homologação**: enviar telas/fluxo para validação oficial e obter as credenciais de **produção**;
+   trocar `GOVBR_BASE_URL` para `https://sso.acesso.gov.br`.
+5. Ligar `IDENTITY_ENFORCEMENT_ENABLED=true` quando quiser exigir identidade para publicar vaga.
+
+> Observação: o **Login Único (SSO)** usa OAuth 2.0/OIDC com `client_id`/`client_secret` e
+> `redirect_uri`. As **chaves PGP** e o manual de **assinatura eletrônica (ITI)** são de outra
+> integração (assinatura de documentos), não do Login Único.
+
+> Status: **implementado no backend e desligado** até existirem credenciais. A integração **não** é
+> declarada concluída enquanto não passar pela homologação do gov.br. Não há simulação em produção.

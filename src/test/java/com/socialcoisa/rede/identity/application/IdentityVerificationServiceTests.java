@@ -99,6 +99,46 @@ class IdentityVerificationServiceTests {
 	}
 
 	@Test
+	void callbackVerifiesAndCannotBeReplayed() {
+		FakeProvider provider = new FakeProvider();
+		IdentityVerificationService service = serviceWith(provider);
+		var started = service.start(USER, "v1");
+		assertThat(service.statusOf(USER)).isEqualTo(IdentityVerificationStatus.PENDING);
+
+		provider.callbackOutcome = Optional.of(new IdentityVerificationProvider.Outcome(
+			IdentityVerificationStatus.VERIFIED, null));
+		assertThat(service.completeCallback(started.attemptId(), "codigo").state())
+			.isEqualTo(IdentityVerificationStatus.VERIFIED);
+		assertThat(service.isVerified(USER)).isTrue();
+
+		// Uso unico: repetir o mesmo state nao pode reconcluir.
+		assertThatThrownBy(() -> service.completeCallback(started.attemptId(), "codigo"))
+			.isInstanceOf(ApiException.class)
+			.satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("IDENTITY_ATTEMPT_USED"));
+	}
+
+	@Test
+	void callbackWithUnknownStateIsRejected() {
+		FakeProvider provider = new FakeProvider();
+		IdentityVerificationService service = serviceWith(provider);
+		assertThatThrownBy(() -> service.completeCallback("state-desconhecido", "codigo"))
+			.isInstanceOf(ApiException.class)
+			.satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("IDENTITY_ATTEMPT_NOT_FOUND"));
+	}
+
+	@Test
+	void providerFailureDoesNotVerify() {
+		FakeProvider provider = new FakeProvider();
+		IdentityVerificationService service = serviceWith(provider);
+		var started = service.start(USER, "v1");
+		provider.callbackOutcome = Optional.of(new IdentityVerificationProvider.Outcome(
+			IdentityVerificationStatus.ERROR, "PROVIDER_UNAVAILABLE"));
+		assertThat(service.completeCallback(started.attemptId(), "codigo").state())
+			.isEqualTo(IdentityVerificationStatus.ERROR);
+		assertThat(service.isVerified(USER)).isFalse();
+	}
+
+	@Test
 	void invalidTransitionIsRejected() {
 		IdentityVerification notVerified = IdentityVerification.notVerified("id", USER, clock.instant());
 		assertThatThrownBy(() -> notVerified.transitionTo(IdentityVerificationStatus.VERIFIED, "p", "a",
@@ -114,6 +154,10 @@ class IdentityVerificationServiceTests {
 		@Override public Optional<IdentityVerification> findByUserId(String userId) {
 			return stored != null && stored.userId().equals(userId) ? Optional.of(stored) : Optional.empty();
 		}
+		@Override public Optional<IdentityVerification> findByAttemptId(String attemptId) {
+			return stored != null && attemptId != null && attemptId.equals(stored.attemptId())
+				? Optional.of(stored) : Optional.empty();
+		}
 		@Override public void save(IdentityVerification verification) {
 			this.stored = verification;
 		}
@@ -123,8 +167,10 @@ class IdentityVerificationServiceTests {
 		IdentityVerificationProvider.Start startResult =
 			new IdentityVerificationProvider.Start("attempt-x", "https://provedor/exemplo");
 		Optional<IdentityVerificationProvider.Outcome> outcome = Optional.empty();
+		Optional<IdentityVerificationProvider.Outcome> callbackOutcome = Optional.empty();
 		@Override public String name() { return "fake-test-provider"; }
 		@Override public Start start(String userId, String consentVersion) { return startResult; }
 		@Override public Optional<Outcome> fetchOutcome(String attemptId) { return outcome; }
+		@Override public Optional<Outcome> handleCallback(String attemptId, String code) { return callbackOutcome; }
 	}
 }

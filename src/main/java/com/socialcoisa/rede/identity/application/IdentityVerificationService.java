@@ -96,6 +96,35 @@ public class IdentityVerificationService {
 		return updated;
 	}
 
+	/**
+	 * Conclui um retorno por callback (OAuth/OIDC): localiza a tentativa pelo state (uso unico),
+	 * troca o codigo no backend e aplica o desfecho. O navegador nao decide nada.
+	 */
+	@Transactional
+	public IdentityVerification completeCallback(String state, String code) {
+		if (state == null || state.isBlank() || code == null || code.isBlank()) {
+			throw new ApiException(400, "INVALID_IDENTITY_CALLBACK", "Retorno de verificacao invalido.");
+		}
+		IdentityVerification verification = repository.findByAttemptId(state)
+			.orElseThrow(() -> new ApiException(404, "IDENTITY_ATTEMPT_NOT_FOUND",
+				"Verificacao nao encontrada ou ja concluida."));
+		// Uso unico: so vale a partir de PENDING.
+		if (verification.state() != IdentityVerificationStatus.PENDING) {
+			throw new ApiException(409, "IDENTITY_ATTEMPT_USED", "Esta verificacao ja foi concluida.");
+		}
+		IdentityVerificationProvider provider = providers.active()
+			.orElseThrow(() -> new ApiException(503, "IDENTITY_PROVIDER_UNAVAILABLE",
+				"A verificacao de identidade nao esta disponivel."));
+		var outcome = provider.handleCallback(state, code)
+			.orElseThrow(() -> new ApiException(502, "IDENTITY_PROVIDER_ERROR",
+				"Nao foi possivel confirmar a verificacao com o provedor."));
+		IdentityVerification updated = verification
+			.transitionTo(outcome.status(), null, null, clock.instant())
+			.withReason(outcome.reasonCode(), clock.instant());
+		repository.save(updated);
+		return updated;
+	}
+
 	/** Desvincula a identidade: a conta volta a nao verificada (nao apaga historico sensivel). */
 	@Transactional
 	public IdentityVerification revoke(String userId) {

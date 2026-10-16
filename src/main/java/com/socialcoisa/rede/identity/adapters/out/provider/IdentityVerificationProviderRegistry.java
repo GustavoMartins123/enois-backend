@@ -22,7 +22,7 @@ public class IdentityVerificationProviderRegistry {
 	}
 
 	public Optional<IdentityVerificationProvider> active() {
-		return providers.stream().findFirst();
+		return providers.stream().filter(IdentityVerificationProvider::available).findFirst();
 	}
 
 	public boolean isAvailable() {

@@ -11,6 +11,11 @@ import com.socialcoisa.rede.identity.domain.IdentityVerificationStatus;
  */
 public interface IdentityVerificationProvider {
 
+	/** Se o provedor esta realmente configurado (credenciais presentes). */
+	default boolean available() {
+		return true;
+	}
+
 	String name();
 
 	/** Inicia uma verificacao e devolve a tentativa e o destino para o usuario concluir no provedor. */
@@ -18,6 +23,14 @@ public interface IdentityVerificationProvider {
 
 	/** Consulta o desfecho confirmado pelo provedor para uma tentativa (nao confia no navegador). */
 	Optional<Outcome> fetchOutcome(String attemptId);
+
+	/**
+	 * Provedores com retorno por callback (OAuth/OIDC) trocam o codigo no backend e devolvem o
+	 * desfecho. O `attemptId` aqui e o `state` de uso unico gravado no inicio. Padrao: vazio.
+	 */
+	default Optional<Outcome> handleCallback(String attemptId, String code) {
+		return Optional.empty();
+	}
 
 	/** Cancela/limpa uma tentativa pendente, quando suportado. */
 	default void cancel(String attemptId) {

@@ -22,6 +22,11 @@ class IdentityVerificationPersistenceAdapter implements IdentityVerificationRepo
 	}
 
 	@Override
+	public Optional<IdentityVerification> findByAttemptId(String attemptId) {
+		return repository.findByAttemptId(attemptId).map(IdentityVerificationJpaEntity::toDomain);
+	}
+
+	@Override
 	public void save(IdentityVerification verification) {
 		repository.save(IdentityVerificationJpaEntity.fromDomain(verification));
 	}

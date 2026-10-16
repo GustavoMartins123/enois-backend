@@ -8,5 +8,8 @@ public interface IdentityVerificationRepository {
 
 	Optional<IdentityVerification> findByUserId(String userId);
 
+	/** Localiza pela tentativa/state (callback do provedor chega sem sessao). */
+	Optional<IdentityVerification> findByAttemptId(String attemptId);
+
 	void save(IdentityVerification verification);
 }
