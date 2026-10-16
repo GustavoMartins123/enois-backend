@@ -14,6 +14,7 @@ import com.socialcoisa.rede.moderation.domain.Report;
 import com.socialcoisa.rede.moderation.domain.ReportReason;
 import com.socialcoisa.rede.moderation.domain.ReportStatus;
 import com.socialcoisa.rede.moderation.domain.TargetType;
+import com.socialcoisa.rede.identity.application.EmailService;
 import com.socialcoisa.rede.shared.web.ApiException;
 
 @Service
@@ -21,13 +22,38 @@ public class ModerationService {
 
 	private final ReportRepository reportRepository;
 	private final ModerationRemovePostUseCase moderationRemovePostUseCase;
+	private final EmailService emailService;
+	private final String supportEmail;
 	private final Clock clock;
 
 	public ModerationService(ReportRepository reportRepository,
-			ModerationRemovePostUseCase moderationRemovePostUseCase, Clock clock) {
+			ModerationRemovePostUseCase moderationRemovePostUseCase, EmailService emailService,
+			@org.springframework.beans.factory.annotation.Value("${rede.support.email:}") String supportEmail,
+			Clock clock) {
 		this.reportRepository = reportRepository;
 		this.moderationRemovePostUseCase = moderationRemovePostUseCase;
+		this.emailService = emailService;
+		this.supportEmail = supportEmail;
 		this.clock = clock;
+	}
+
+	/** Aviso ao suporte: best-effort. A denuncia JA ESTA salva; falha de e-mail nao perde nada. */
+	private void notifySupport(Report report) {
+		if (!org.springframework.util.StringUtils.hasText(supportEmail)) {
+			return;
+		}
+		try {
+			emailService.sendSupportRequestEmail(supportEmail,
+				"[Denúncia " + report.id() + "] " + report.reason().name() + " em " + report.targetType().name(),
+				"Denúncia: " + report.id() + "\nRegistrada em: " + report.createdAt() + "\nAlvo: "
+					+ report.targetType().name() + "/" + report.targetId() + "\nCategoria: "
+					+ report.reason().name() + "\nStatus: " + report.status().name() + "\nResumo: "
+					+ report.description(), null);
+		}
+		catch (RuntimeException failure) {
+			org.slf4j.LoggerFactory.getLogger(ModerationService.class)
+				.warn("Falha ao avisar o suporte sobre a denuncia {} (ela segue registrada).", report.id());
+		}
 	}
 
 	@Transactional
@@ -48,7 +74,15 @@ public class ModerationService {
 		String id = "report_" + UUID.randomUUID().toString().replace("-", "");
 		Report report = Report.create(id, reporterId, targetType, targetId, reason,
 			description != null ? description : "", Instant.now(clock));
-		return reportRepository.save(report);
+		Report saved = reportRepository.save(report);
+		notifySupport(saved);
+		return saved;
+	}
+
+	/** Denuncias do proprio usuario (mais recentes primeiro). Nao expõe dados de terceiros. */
+	@Transactional(readOnly = true)
+	public List<Report> reportsOf(String reporterId, int limit) {
+		return reportRepository.findByReporter(reporterId, limit);
 	}
 
 	@Transactional

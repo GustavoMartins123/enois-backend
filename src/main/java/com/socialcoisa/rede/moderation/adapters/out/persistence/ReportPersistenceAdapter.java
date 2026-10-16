@@ -3,6 +3,7 @@ package com.socialcoisa.rede.moderation.adapters.out.persistence;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
 
 import com.socialcoisa.rede.moderation.application.port.out.ReportRepository;
@@ -35,6 +36,20 @@ class ReportPersistenceAdapter implements ReportRepository {
 			.map(ReportJpaEntity::toDomain)
 			.limit(limit)
 			.toList();
+	}
+
+	@Override
+	public List<com.socialcoisa.rede.moderation.domain.Report> findPendingWithoutAiTriage(int limit) {
+		return jpaRepository
+			.findByStatusAndAiTriagedAtIsNullOrderByCreatedAtAsc(ReportStatus.PENDING, PageRequest.of(0, limit))
+			.stream().map(ReportJpaEntity::toDomain).toList();
+	}
+
+	@Override
+	public List<com.socialcoisa.rede.moderation.domain.Report> findByReporter(String reporterId, int limit) {
+		return jpaRepository
+			.findByReporterIdOrderByCreatedAtDesc(reporterId, PageRequest.of(0, Math.max(1, limit)))
+			.stream().map(ReportJpaEntity::toDomain).toList();
 	}
 
 	@Override

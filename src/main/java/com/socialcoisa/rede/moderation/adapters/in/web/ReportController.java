@@ -51,6 +51,14 @@ class ReportController {
 				request.targetType(), request.targetId(), request.reason(), request.description()))));
 	}
 
+	/** Denuncias do proprio usuario (acompanhamento; sem dados de terceiros nem triagem interna). */
+	@GetMapping("/reports/mine")
+	List<ReporterReportView> mine(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		return moderationService.reportsOf(user.id().value(), 100).stream().map(ReporterReportView::from).toList();
+	}
+
 	@GetMapping("/admin/reports")
 	List<ReportView> listPending(@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken,
@@ -93,11 +101,21 @@ class ReportController {
 	record ReviewRequest(String note) {
 	}
 
-	record ReportView(String id, String reporterId, String targetType, String targetId, String reason,
+	/** Visao do denunciante: sem reporterId (e ele mesmo) e sem aiTriage (uso interno). */
+	record ReporterReportView(String id, String targetType, String targetId, String reason,
 			String description, String status, String createdAt) {
+		static ReporterReportView from(Report r) {
+			return new ReporterReportView(r.id(), r.targetType().name(), r.targetId(), r.reason().name(),
+				r.description(), r.status().name(), r.createdAt().toString());
+		}
+	}
+
+	record ReportView(String id, String reporterId, String targetType, String targetId, String reason,
+			String description, String status, String createdAt, String aiTriage, String aiTriagedAt) {
 		static ReportView from(Report r) {
 			return new ReportView(r.id(), r.reporterId(), r.targetType().name(), r.targetId(), r.reason().name(),
-				r.description(), r.status().name(), r.createdAt().toString());
+				r.description(), r.status().name(), r.createdAt().toString(),
+				r.aiTriage(), r.aiTriagedAt() != null ? r.aiTriagedAt().toString() : null);
 		}
 	}
 }

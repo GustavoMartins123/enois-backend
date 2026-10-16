@@ -15,10 +15,13 @@ public class Report {
 	private String reviewedBy;
 	private Instant reviewedAt;
 	private String resolutionNote;
+	/** Palpite estruturado do agente de IA (JSON validado). Nao e prova nem acao. */
+	private String aiTriage;
+	private Instant aiTriagedAt;
 
 	private Report(String id, String reporterId, TargetType targetType, String targetId, ReportReason reason,
 			String description, ReportStatus status, Instant createdAt, String reviewedBy, Instant reviewedAt,
-			String resolutionNote) {
+			String resolutionNote, String aiTriage, Instant aiTriagedAt) {
 		this.id = id;
 		this.reporterId = reporterId;
 		this.targetType = targetType;
@@ -30,19 +33,27 @@ public class Report {
 		this.reviewedBy = reviewedBy;
 		this.reviewedAt = reviewedAt;
 		this.resolutionNote = resolutionNote;
+		this.aiTriage = aiTriage;
+		this.aiTriagedAt = aiTriagedAt;
 	}
 
 	public static Report create(String id, String reporterId, TargetType targetType, String targetId,
 			ReportReason reason, String description, Instant createdAt) {
 		return new Report(id, reporterId, targetType, targetId, reason, description, ReportStatus.PENDING, createdAt,
-			null, null, null);
+			null, null, null, null, null);
 	}
 
 	public static Report restore(String id, String reporterId, TargetType targetType, String targetId,
 			ReportReason reason, String description, ReportStatus status, Instant createdAt, String reviewedBy,
-			Instant reviewedAt, String resolutionNote) {
+			Instant reviewedAt, String resolutionNote, String aiTriage, Instant aiTriagedAt) {
 		return new Report(id, reporterId, targetType, targetId, reason, description, status, createdAt, reviewedBy,
-			reviewedAt, resolutionNote);
+			reviewedAt, resolutionNote, aiTriage, aiTriagedAt);
+	}
+
+	/** Guarda o palpite estruturado do agente de IA (JSON ja validado pelo backend). */
+	public void attachAiTriage(String triageJson, Instant at) {
+		this.aiTriage = triageJson;
+		this.aiTriagedAt = at;
 	}
 
 	public void approve(String reviewerId, String note) {
@@ -70,4 +81,6 @@ public class Report {
 	public String reviewedBy() { return reviewedBy; }
 	public Instant reviewedAt() { return reviewedAt; }
 	public String resolutionNote() { return resolutionNote; }
+	public String aiTriage() { return aiTriage; }
+	public Instant aiTriagedAt() { return aiTriagedAt; }
 }
