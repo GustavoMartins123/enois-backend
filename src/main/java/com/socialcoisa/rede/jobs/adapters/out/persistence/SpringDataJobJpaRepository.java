@@ -2,11 +2,15 @@ package com.socialcoisa.rede.jobs.adapters.out.persistence;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+
+import jakarta.persistence.LockModeType;
 
 interface SpringDataJobJpaRepository extends JpaRepository<JobJpaEntity, String> {
 
@@ -21,5 +25,14 @@ interface SpringDataJobJpaRepository extends JpaRepository<JobJpaEntity, String>
 
 	@Query("SELECT j FROM JobJpaEntity j WHERE j.id IN :ids")
 	List<JobJpaEntity> findByIdIn(@Param("ids") java.util.Collection<String> ids);
+
+	/**
+	 * Le a vaga travando a linha ate o fim da transacao. E o ponto de serializacao entre
+	 * candidatar-se e encerrar: quem pega o lock primeiro decide, e o outro le o estado ja mudado —
+	 * sem isso uma candidatura podia ler OPEN, o encerramento commitar no meio e ela gravar depois.
+	 */
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("SELECT j FROM JobJpaEntity j WHERE j.id = :id")
+	Optional<JobJpaEntity> findByIdForUpdate(@Param("id") String id);
 
 }

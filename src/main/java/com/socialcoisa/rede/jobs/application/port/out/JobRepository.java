@@ -11,6 +11,12 @@ public interface JobRepository {
 
 	Optional<Job> findById(String id);
 
+	/**
+	 * Igual ao findById, mas travando a linha da vaga ate o fim da transacao. Usado por
+	 * candidatar-se e encerrar para serializar as duas operacoes.
+	 */
+	Optional<Job> findByIdForUpdate(String id);
+
 	List<Job> findAll(String query, String type, String level, String location, List<String> skills,
 			java.time.Instant before, int limit);
 

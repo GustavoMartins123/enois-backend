@@ -127,7 +127,7 @@ class JobServiceTests {
 	@Test
 	void closesTheJobAndRecordsWhen() {
 		Job open = openJob();
-		when(repository.findById("job_1")).thenReturn(java.util.Optional.of(open));
+		when(repository.findByIdForUpdate("job_1")).thenReturn(java.util.Optional.of(open));
 
 		Job closed = service.close("job_1", USER);
 
@@ -138,7 +138,7 @@ class JobServiceTests {
 
 	@Test
 	void refusesCloseFromSomeoneElse() {
-		when(repository.findById("job_1")).thenReturn(java.util.Optional.of(openJob()));
+		when(repository.findByIdForUpdate("job_1")).thenReturn(java.util.Optional.of(openJob()));
 
 		assertThatThrownBy(() -> service.close("job_1", "user_outro"))
 			.isInstanceOf(ApiException.class)
@@ -150,7 +150,7 @@ class JobServiceTests {
 	@Test
 	void refusesClosingTwice() {
 		Job closed = openJob().closed(java.time.Instant.now());
-		when(repository.findById("job_1")).thenReturn(java.util.Optional.of(closed));
+		when(repository.findByIdForUpdate("job_1")).thenReturn(java.util.Optional.of(closed));
 
 		assertThatThrownBy(() -> service.close("job_1", USER))
 			.isInstanceOf(ApiException.class)
@@ -172,7 +172,7 @@ class JobServiceTests {
 	@Test
 	void refusesApplicationWhenTheJobIsClosed() {
 		Job closed = openJob().closed(java.time.Instant.now());
-		when(repository.findById("job_1")).thenReturn(java.util.Optional.of(closed));
+		when(repository.findByIdForUpdate("job_1")).thenReturn(java.util.Optional.of(closed));
 
 		assertThatThrownBy(() -> service.apply("job_1", "user_candidato", "oi", List.of()))
 			.isInstanceOf(ApiException.class)
@@ -186,7 +186,7 @@ class JobServiceTests {
 	@Test
 	void stillAcceptsApplicationWhileTheJobIsOpen() {
 		Job open = openJob();
-		when(repository.findById("job_1")).thenReturn(java.util.Optional.of(open));
+		when(repository.findByIdForUpdate("job_1")).thenReturn(java.util.Optional.of(open));
 		when(repository.hasApplied("job_1", "user_candidato")).thenReturn(false);
 		when(repository.saveApplication(any())).thenReturn("app_1");
 		when(userProfileRepository.findById("user_candidato")).thenReturn(java.util.Optional.empty());

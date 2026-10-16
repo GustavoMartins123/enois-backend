@@ -102,7 +102,8 @@ public class JobService {
 	 */
 	@Transactional
 	public Job close(String jobId, String userId) {
-		Job existing = repository.findById(jobId)
+		// Mesmo lock do apply: encerrar e candidatar-se disputam o mesmo ponto de serializacao.
+		Job existing = repository.findByIdForUpdate(jobId)
 			.orElseThrow(() -> new ApiException(404, "JOB_NOT_FOUND", "Vaga nao encontrada."));
 		if (!existing.postedBy().equals(userId)) {
 			throw new ApiException(403, "NOT_OWNER", "Voce nao pode encerrar uma vaga que nao criou.");
@@ -133,7 +134,9 @@ public class JobService {
 	 */
 	@Transactional
 	public JobApplication apply(String jobId, String userId, String message, List<JobAnswerInput> answers) {
-		Job job = repository.findById(jobId)
+		// Trava a linha da vaga: a checagem de "esta aberta" e a gravacao da candidatura acontecem
+		// na mesma transacao, entao um encerramento concorrente espera em vez de passar por fora.
+		Job job = repository.findByIdForUpdate(jobId)
 			.orElseThrow(() -> new ApiException(404, "JOB_NOT_FOUND", "Vaga nao encontrada."));
 		// Encerrada nao aceita candidatura — e o bloqueio e aqui, antes de gravar e antes de
 		// entregar ao empregador: esconder o botao no app nao impediria a chamada direta.

@@ -54,6 +54,11 @@ class JobPersistenceAdapter implements JobRepository {
 		return springData.findById(id).map(JobJpaEntity::toDomain);
 	}
 
+	@Override
+	public Optional<Job> findByIdForUpdate(String id) {
+		return springData.findByIdForUpdate(id).map(JobJpaEntity::toDomain);
+	}
+
 	/**
 	 * Lista as vagas aplicando TODOS os filtros informados.
 	 *
