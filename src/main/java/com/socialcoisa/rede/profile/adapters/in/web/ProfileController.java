@@ -104,7 +104,8 @@ class ProfileController {
 		return idempotency.execute(user.id(), "PATCH", "/api/me/profile", idempotencyKey, hash,
 			() -> new CommandResponse(200, updateProfileUseCase.update(new UpdateProfileCommand(user.id().value(),
 				request.name(), request.headline(), request.company(), request.location(), request.avatar(),
-				request.banner(), request.bio(), request.skills(), request.goals(), request.availability(),
+				request.banner(), request.bio(), request.bioHtml(), request.skills(), request.goals(),
+				request.availability(),
 				request.portfolio(), request.externalLinks(), request.openToWork(), request.isMentor(),
 				request.username()))));
 	}

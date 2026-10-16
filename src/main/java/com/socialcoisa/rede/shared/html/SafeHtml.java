@@ -37,6 +37,13 @@ public final class SafeHtml {
 	public static final int MAX_PAGE_HTML = 100_000;
 
 	/**
+	 * Teto do HTML da bio do perfil. E o mesmo para todo mundo, como o da pagina; e menor porque o
+	 * perfil e aberto em muito mais telas (lista de conexoes, busca, sugestoes) do que um post.
+	 * O front espelha esse numero em `PROFILE_HTML_MAX_LENGTH`.
+	 */
+	public static final int MAX_PROFILE_HTML = 20_000;
+
+	/**
 	 * Corte do texto cru antes de parsear: evita gastar CPU com um paste gigante. Fica acima do
 	 * teto porque a limpeza costuma encolher o markup (scripts fora, tags nao permitidas fora).
 	 */
@@ -59,11 +66,46 @@ public final class SafeHtml {
 	 * O conteudo do {@code <style>} do documento colado e preservado e reanexado no inicio.
 	 */
 	public static String sanitizePageHtml(String raw) {
+		return sanitize(raw, MAX_PAGE_HTML, "PAGE_HTML_TOO_LONG", "HTML da pagina");
+	}
+
+	/** HTML obrigatorio (posts do tipo PAGE): mesma limpeza, mas recusa quando nao sobra nada. */
+	public static String requirePageHtml(String raw) {
+		String sanitized = sanitizePageHtml(raw);
+		if (sanitized == null) {
+			throw new ApiException(400, "INVALID_PAGE_HTML", "Pagina precisa de HTML valido.");
+		}
+		return sanitized;
+	}
+
+	/**
+	 * HTML da bio do perfil: mesma limpeza e mesma renderizacao isolada do post de pagina, com teto
+	 * proprio. Devolve {@code null} quando nao sobra nada util (o perfil volta a mostrar a bio de
+	 * texto, que continua existindo ao lado).
+	 */
+	public static String sanitizeProfileHtml(String raw) {
+		return sanitize(raw, MAX_PROFILE_HTML, "PROFILE_HTML_TOO_LONG", "HTML do perfil");
+	}
+
+	public static String requireProfileHtml(String raw) {
+		String sanitized = sanitizeProfileHtml(raw);
+		if (sanitized == null) {
+			throw new ApiException(400, "INVALID_PROFILE_HTML", "Bio em HTML precisa de conteudo valido.");
+		}
+		return sanitized;
+	}
+
+	/**
+	 * Limpeza em si, compartilhada entre pagina e bio: allowlist de tags/atributos, protocolos
+	 * restritos, CSS sem import/expression/url remota, e teto aplicado sobre o RESULTADO (que e o
+	 * valor guardado e renderizado).
+	 */
+	private static String sanitize(String raw, int maxLength, String tooLongCode, String label) {
 		if (!StringUtils.hasText(raw)) {
 			return null;
 		}
 		if (raw.length() > MAX_RAW_INPUT) {
-			throw new ApiException(400, "PAGE_HTML_TOO_LONG", "HTML da pagina e grande demais.");
+			throw new ApiException(400, tooLongCode, label + " e grande demais.");
 		}
 
 		String css = sanitizeCss(collectCss(raw));
@@ -74,20 +116,11 @@ public final class SafeHtml {
 
 		String markup = clean.body().html().trim();
 		String result = (css.isEmpty() ? "" : "<style>" + css + "</style>") + sanitizeStyleAttributes(markup);
-		if (result.length() > MAX_PAGE_HTML) {
-			throw new ApiException(400, "PAGE_HTML_TOO_LONG",
-				"HTML da pagina deve ter no maximo " + MAX_PAGE_HTML + " caracteres.");
+		if (result.length() > maxLength) {
+			throw new ApiException(400, tooLongCode,
+				label + " deve ter no maximo " + maxLength + " caracteres.");
 		}
 		return result.isEmpty() ? null : result;
-	}
-
-	/** HTML obrigatorio (posts do tipo PAGE): mesma limpeza, mas recusa quando nao sobra nada. */
-	public static String requirePageHtml(String raw) {
-		String sanitized = sanitizePageHtml(raw);
-		if (sanitized == null) {
-			throw new ApiException(400, "INVALID_PAGE_HTML", "Pagina precisa de HTML valido.");
-		}
-		return sanitized;
 	}
 
 	/** Junta o CSS de todos os blocos {@code <style>} do documento colado (head e body). */

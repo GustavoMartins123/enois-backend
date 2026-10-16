@@ -15,6 +15,8 @@ public class UserProfile {
 	private String avatar;
 	private String banner;
 	private String bio;
+	/** Bio em HTML/CSS (ja sanitizada no servidor); quando presente, o perfil mostra ela no lugar do texto. */
+	private String bioHtml;
 	private List<String> skills;
 	private List<String> goals;
 	private String availability;
@@ -34,7 +36,8 @@ public class UserProfile {
 	private Instant federatedSecondFactorAt;
 
 	private UserProfile(String id, String username, String email, String name, String headline, String company,
-			String location, String avatar, String banner, String bio, List<String> skills, List<String> goals,
+			String location, String avatar, String banner, String bio, String bioHtml, List<String> skills,
+			List<String> goals,
 			String availability, String portfolio, List<String> externalLinks, boolean openToWork, boolean mentor,
 			Instant createdAt, Instant updatedAt) {
 		this.id = id;
@@ -47,6 +50,7 @@ public class UserProfile {
 		this.avatar = avatar;
 		this.banner = banner;
 		this.bio = bio;
+		this.bioHtml = bioHtml;
 		this.skills = List.copyOf(skills);
 		this.goals = List.copyOf(goals);
 		this.availability = availability;
@@ -60,16 +64,16 @@ public class UserProfile {
 
 	public static UserProfile create(String id, String username, String email, String name, String headline,
 			Instant now) {
-		return new UserProfile(id, username, email, name, headline, null, null, null, null, null, List.of(), List.of(),
-			null, null, List.of(), false, false, now, now);
+		return new UserProfile(id, username, email, name, headline, null, null, null, null, null, null, List.of(),
+			List.of(), null, null, List.of(), false, false, now, now);
 	}
 
 	public static UserProfile restore(String id, String username, String email, String name, String headline,
-			String company, String location, String avatar, String banner, String bio, List<String> skills,
-			List<String> goals, String availability, String portfolio, List<String> externalLinks, boolean openToWork,
-			boolean mentor, Instant createdAt, Instant updatedAt) {
-		return new UserProfile(id, username, email, name, headline, company, location, avatar, banner, bio, skills,
-			goals, availability, portfolio, externalLinks, openToWork, mentor, createdAt, updatedAt);
+			String company, String location, String avatar, String banner, String bio, String bioHtml,
+			List<String> skills, List<String> goals, String availability, String portfolio, List<String> externalLinks,
+			boolean openToWork, boolean mentor, Instant createdAt, Instant updatedAt) {
+		return new UserProfile(id, username, email, name, headline, company, location, avatar, banner, bio, bioHtml,
+			skills, goals, availability, portfolio, externalLinks, openToWork, mentor, createdAt, updatedAt);
 	}
 
 	public void update(String name, String headline, String company, String location, String avatar, String banner,
@@ -90,6 +94,15 @@ public class UserProfile {
 		this.openToWork = openToWork == null ? this.openToWork : openToWork;
 		this.mentor = mentor == null ? this.mentor : mentor;
 		this.username = keep(username, this.username);
+		this.updatedAt = now;
+	}
+
+	/**
+	 * Bio em HTML/CSS. Diferente dos outros campos, aqui `null` e uma intencao legitima: limpar o
+	 * HTML e voltar para a bio de texto, entao nao ha o "manter o que ja estava" do `keep`.
+	 */
+	public void updateBioHtml(String sanitizedHtml, Instant now) {
+		this.bioHtml = sanitizedHtml;
 		this.updatedAt = now;
 	}
 
@@ -260,6 +273,10 @@ public class UserProfile {
 
 	public String bio() {
 		return bio;
+	}
+
+	public String bioHtml() {
+		return bioHtml;
 	}
 
 	public List<String> skills() {

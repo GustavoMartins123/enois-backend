@@ -50,6 +50,10 @@ class UserProfileJpaEntity {
 	@Column(length = 1024)
 	private String bio;
 
+	/** Bio em HTML/CSS, ja sanitizada (ver SafeHtml). */
+	@Column(name = "bio_html", columnDefinition = "longtext")
+	private String bioHtml;
+
 	@ElementCollection(fetch = FetchType.EAGER)
 	@CollectionTable(name = "user_skills", joinColumns = @JoinColumn(name = "user_id"))
 	@Column(name = "skill", nullable = false, length = 120)
@@ -116,6 +120,7 @@ class UserProfileJpaEntity {
 		entity.avatar = profile.avatar();
 		entity.banner = profile.banner();
 		entity.bio = profile.bio();
+		entity.bioHtml = profile.bioHtml();
 		entity.skills = new ArrayList<>(profile.skills());
 		entity.goals = new ArrayList<>(profile.goals());
 		entity.availability = profile.availability();
@@ -136,7 +141,8 @@ class UserProfileJpaEntity {
 
 	UserProfile toDomain() {
 		UserProfile profile = UserProfile.restore(id, username, email, name, headline, company, location, avatar, banner,
-			bio, skills, goals, availability, portfolio, externalLinks, openToWork, mentor, createdAt, updatedAt);
+			bio, bioHtml, skills, goals, availability, portfolio, externalLinks, openToWork, mentor, createdAt,
+			updatedAt);
 		profile.setCounts(profile.connectionsCount(), profile.followersCount(), reputation);
 		profile.acceptTerms(termsAcceptedAt);
 		if (emailVerifiedAt != null) {

@@ -12,6 +12,7 @@ import com.socialcoisa.rede.profile.application.port.in.GetUserProfileUseCase;
 import com.socialcoisa.rede.profile.application.port.in.UpdateProfileUseCase;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.profile.domain.UserProfile;
+import com.socialcoisa.rede.shared.html.SafeHtml;
 import com.socialcoisa.rede.shared.web.ApiException;
 
 @Service
@@ -30,28 +31,29 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 	@Override
 	@Transactional(readOnly = true)
 	public OwnProfileView getMe(String userId) {
-		return repository.findById(userId)
+		UserProfile profile = repository.findById(userId)
 			.map(this::populateCounts)
-			.map(OwnProfileView::from)
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
+		// A bio em HTML so vai na leitura (ver OwnProfileView.withBioHtml).
+		return OwnProfileView.from(profile).withBioHtml(profile.bioHtml());
 	}
 
 	@Override
 	@Transactional(readOnly = true)
 	public UserProfileView getByUsername(String username) {
-		return repository.findByUsername(username)
+		UserProfile profile = repository.findByUsername(username)
 			.map(this::populateCounts)
-			.map(UserProfileView::from)
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
+		return UserProfileView.from(profile).withBioHtml(profile.bioHtml());
 	}
 
 	@Override
 	@Transactional(readOnly = true)
 	public UserProfileView getById(String userId) {
-		return repository.findById(userId)
+		UserProfile profile = repository.findById(userId)
 			.map(this::populateCounts)
-			.map(UserProfileView::from)
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
+		return UserProfileView.from(profile).withBioHtml(profile.bioHtml());
 	}
 
 	/**
@@ -125,6 +127,13 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 			trim(command.avatar()), trim(command.banner()), trim(command.bio()), clean(command.skills()),
 			clean(command.goals()), trim(command.availability()), trim(command.portfolio()), clean(command.externalLinks()),
 			command.openToWork(), command.isMentor(), username, clock.instant());
+		// A bio em HTML e sanitizada aqui, como o HTML do post de pagina: allowlist de tags e CSS.
+		// Vazio limpa (o perfil volta para a bio de texto); ausente no corpo da requisicao mantem.
+		if (command.bioHtml() != null) {
+			profile.updateBioHtml(StringUtils.hasText(command.bioHtml())
+				? SafeHtml.requireProfileHtml(command.bioHtml())
+				: null, clock.instant());
+		}
 		return OwnProfileView.from(repository.save(profile));
 	}
 
