@@ -95,13 +95,17 @@ class SafeHtmlTests {
 	}
 
 	@Test
-	void keepsSafeInlineStyleAndDropsRemoteCss() {
+	void keepsSafeInlineStyleAndDropsEveryRemoteCssUrl() {
 		String clean = SafeHtml.sanitizePageHtml(
-			"<div style=\"color:#123456;background:url(https://exemplo.com/bg.png);border-image:url(http://rastreador.test/pixel)\">conteudo</div>");
+			"<div style=\"color:#123456;background:url(https://exemplo.com/bg.png);"
+				+ "border-image:url(http://rastreador.test/pixel);cursor:url(data:image/png;base64,AAA)\">conteudo</div>");
 
+		// A cor fica (nao faz requisicao nenhuma); qualquer url() remota sai — inclusive https, que
+		// era o rastro invisivel: nao aparece na tela e ainda avisa o dono do endereco que a pagina
+		// foi aberta. Imagem remota continua valendo por `<img>`, que aparece no markup.
 		assertThat(clean).contains("color").contains("#123456");
-		assertThat(clean).contains("https://exemplo.com/bg.png");
-		assertThat(clean).doesNotContain("rastreador.test");
+		assertThat(clean).contains("data:image/png;base64,AAA");
+		assertThat(clean).doesNotContain("exemplo.com/bg.png").doesNotContain("rastreador.test");
 	}
 
 	@Test

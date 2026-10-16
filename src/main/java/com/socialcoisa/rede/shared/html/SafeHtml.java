@@ -51,8 +51,12 @@ public final class SafeHtml {
 	private static final int MAX_RAW_INPUT = 400_000;
 
 	private static final Pattern STYLE_IMPORT = Pattern.compile("(?is)@import\\b[^;]*;?");
-	private static final Pattern STYLE_DANGEROUS = Pattern
-		.compile("(?is)(expression\\s*\\(|javascript\\s*:|vbscript\\s*:|-moz-binding\\s*:|behavior\\s*:[^;]*;?)");
+	/**
+	 * Declaracao de CSS perigosa inteira (nao so a palavra): tirar apenas o `expression(` deixava o
+	 * resto do texto do ataque guardado como lixo na folha de estilo.
+	 */
+	private static final Pattern STYLE_DANGEROUS = Pattern.compile(
+		"(?is)[^;{}]*\\b(?:expression\\s*\\(|javascript\\s*:\\s*|vbscript\\s*:|-moz-binding\\s*:|behavior\\s*:)[^;}]*;?");
 	private static final Pattern STYLE_URL = Pattern.compile("(?is)url\\s*\\(\\s*(['\"]?)([^'\")]*)\\1\\s*\\)");
 	private static final Pattern STYLE_ATTRIBUTE = Pattern.compile("(?is)\\sstyle\\s*=\\s*(\"([^\"]*)\"|'([^']*)')");
 	private static final Pattern STYLE_ELEMENT = Pattern.compile("(?is)<style\\b[^>]*>(.*?)</style>");
@@ -77,6 +81,9 @@ public final class SafeHtml {
 	 * markup. Serve de segunda barreira, alem do escape.
 	 */
 	private static final Pattern ENTITY_LIKE = Pattern.compile("&(?:#[0-9]+|[a-zA-Z][a-zA-Z0-9]{1,30});");
+
+	/** Tag de link aberta, para reescrever alvo e `rel`. */
+	private static final Pattern LINK_TAG = Pattern.compile("(?is)<a\\b[^>]*>");
 
 	/** Atributo que marca "aqui vai um player"; o front casa esse marcador com o player do app. */
 	private static final String EMBED_MARKER_ATTRIBUTE = "data-enois-embed";
@@ -143,7 +150,7 @@ public final class SafeHtml {
 		Document clean = new Cleaner(PAGE_ALLOWLIST).clean(Jsoup.parse(withMarkers));
 		clean.outputSettings().prettyPrint(false);
 
-		String markup = clean.body().html().trim();
+		String markup = hardenLinks(clean.body().html().trim());
 		String result = (css.isEmpty() ? "" : "<style>" + css + "</style>") + sanitizeStyleAttributes(markup);
 		if (result.length() > maxLength) {
 			throw new ApiException(400, tooLongCode,
@@ -180,6 +187,20 @@ public final class SafeHtml {
 			.replace(">", "&gt;");
 	}
 
+	/**
+	 * Links da pagina: alvo e `rel` sao definidos por NOS, nao pelo autor.
+	 *
+	 * Sem isso, o autor escolhe `target` — e `_top` existe. O sandbox ja bloqueia navegacao da aba
+	 * de cima, mas nao depender de uma unica barreira e o ponto: aqui o valor nem chega a existir.
+	 * `noopener`/`noreferrer` tambem cortam a aba aberta de mexer na origem de quem clicou.
+	 */
+	private static String hardenLinks(String markup) {
+		return LINK_TAG.matcher(markup).replaceAll(match -> {
+			String tag = match.group(0).replaceAll("(?i)\\s(?:target|rel)\\s*=\\s*(\"[^\"]*\"|'[^']*'|[^\\s>]+)", "");
+			return tag.replaceFirst("(?i)<a\\b", "<a target=\"_blank\" rel=\"noopener noreferrer\"");
+		});
+	}
+
 	/** Junta o CSS de todos os blocos {@code <style>} do documento colado (head e body). */
 	private static String collectCss(String raw) {
 		StringBuilder css = new StringBuilder();
@@ -200,8 +221,11 @@ public final class SafeHtml {
 		out = STYLE_DANGEROUS.matcher(out).replaceAll("");
 		out = STYLE_URL.matcher(out).replaceAll(match -> {
 			String target = match.group(2).trim().toLowerCase(Locale.ROOT);
-			// Imagem em https e data: sao o que a pagina legitimamente carrega; o resto e rastro.
-			return target.startsWith("https:") || target.startsWith("data:") ? match.group(0) : "";
+			// CSS so carrega `data:`: um `url(https://...)` e requisicao invisivel — o leitor nao ve
+			// nada na tela e o dono do endereco descobre que a pagina foi aberta (e de onde). Imagem
+			// remota continua permitida por `<img>`, que aparece no markup e pode ser inspecionada.
+			// O custo e nao dar para usar imagem remota de fundo por CSS.
+			return target.startsWith("data:") ? match.group(0) : "";
 		});
 		return out.trim();
 	}
@@ -233,7 +257,7 @@ public final class SafeHtml {
 				"tr", "track", "u", "ul", "video", "wbr");
 			addAttributes(":all", "class", "style", "title", "dir", "lang", "align", "width", "height",
 				EMBED_MARKER_ATTRIBUTE);
-			addAttributes("a", "href", "target", "rel");
+			addAttributes("a", "href");
 			addAttributes("img", "src", "alt", "loading");
 			addAttributes("video", "src", "poster", "controls", "preload", "loop", "muted", "playsinline");
 			addAttributes("audio", "src", "controls", "preload", "loop", "muted");
