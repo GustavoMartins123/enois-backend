@@ -113,9 +113,18 @@ class EventSanitizationTests {
 			.andExpect(status().isOk());
 		assertThat(TestDatabase.countEventAttendees(eventId)).isEqualTo(1);
 
-		// ...que terminou hoje de madrugada: ja saiu da vitrine, mas as 24h de folga ainda protegem
-		// os dados. (A varredura cuida de varios eventos no mesmo banco, entao a asserta e sobre ESTE.)
-		TestDatabase.setEventDate(eventId, LocalDate.now().toString(), "00:01");
+		// ...que terminou ha uma hora: ja saiu da vitrine, mas as 24h de folga ainda protegem os
+		// dados. (A varredura cuida de varios eventos no mesmo banco, entao a asserta e sobre ESTE.)
+		//
+		// O instante vem do relogio UTC AGORA, e nao de um horario fixo. Com "hoje 00:01" o teste
+		// dependia da hora do dia: a data era a local (UTC-3) mas o parse do Event usa UTC, entao
+		// depois das 21h locais o UTC ja virara o dia e a folga de 24h tinha vencido — o evento era
+		// sanitizado e a asserta falhava. Verde de manha, vermelho de noite, sem nenhuma mudanca de
+		// codigo: era isso que deixava o CI vermelho.
+		java.time.ZonedDateTime oneHourAgo = java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC)
+			.minusHours(1);
+		TestDatabase.setEventDate(eventId, oneHourAgo.toLocalDate().toString(),
+			String.format("%02d:%02d", oneHourAgo.getHour(), oneHourAgo.getMinute()));
 		eventService.sanitizeExpired();
 		assertThat(TestDatabase.countEventAttendees(eventId)).isEqualTo(1);
 
