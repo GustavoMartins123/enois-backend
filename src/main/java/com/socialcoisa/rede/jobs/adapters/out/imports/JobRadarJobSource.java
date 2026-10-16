@@ -114,26 +114,53 @@ public class JobRadarJobSource implements JobImportSource {
 	private static final java.util.Set<String> LOWERCASE = java.util.Set.of(
 		"de", "da", "do", "das", "dos", "e", "em", "para", "com", "a", "o", "na", "no");
 
+	/** Ruido do slug que nao agrega ao titulo. */
+	private static final java.util.Set<String> NOISE = java.util.Set.of("edtech", "vaga", "vagas");
+
 	/**
-	 * "dev-java-senior-remoto" -> "Dev Java Senior Remoto". So o TITULO vem do slug; empresa, local e
-	 * salario nao sao confiaveis no slug (ficam nulos) — nada e inventado.
+	 * Limpa o titulo a partir do slug. O slug nao tem separador confiavel entre titulo e empresa, e
+	 * empresa/local nao sao recuperaveis com seguranca — por isso NAO inventamos esses campos (ficam
+	 * nulos). O que fazemos e deixar o TITULO apresentavel:
+	 *  - "-a-"/"-o-" (inclusivo) vira "(a)"/"(o)" colado na palavra anterior;
+	 *  - remove ruido (edtech/vaga) e palavras adjacentes duplicadas ("vitru vitru" -> "vitru");
+	 *  - capitaliza mantendo conectivos minusculos.
 	 */
 	static String humanize(String slug) {
-		String[] words = slug.replace('-', ' ').trim().replaceAll("\\s+", " ").split(" ");
-		StringBuilder out = new StringBuilder();
-		for (int i = 0; i < words.length; i++) {
-			String word = words[i];
-			if (word.isEmpty()) {
+		java.util.List<String> out = new java.util.ArrayList<>();
+		for (String raw : slug.split("-")) {
+			String word = raw.trim();
+			if (word.isEmpty() || NOISE.contains(word.toLowerCase(java.util.Locale.ROOT))) {
 				continue;
 			}
-			if (i == 0 || !LOWERCASE.contains(word)) {
+			// "(a)"/"(o)" inclusivo: nao vira palavra propria, gruda na anterior.
+			String previous = out.isEmpty() ? null : out.get(out.size() - 1);
+			if (previous != null && !previous.endsWith(")")
+					&& (word.equalsIgnoreCase("a") || word.equalsIgnoreCase("o"))) {
+				out.set(out.size() - 1, previous + " (" + word.toLowerCase(java.util.Locale.ROOT) + ")");
+				continue;
+			}
+			// Palavra igual a anterior (a base, sem o "(a)"): descarta a repeticao.
+			if (previous != null && previous.split(" ")[0].equalsIgnoreCase(word)) {
+				continue;
+			}
+			out.add(word);
+		}
+		if (out.isEmpty()) {
+			return slug;
+		}
+		StringBuilder sb = new StringBuilder();
+		for (int i = 0; i < out.size(); i++) {
+			String word = out.get(i);
+			boolean first = i == 0;
+			String lower = word.toLowerCase(java.util.Locale.ROOT);
+			if (first || !LOWERCASE.contains(lower)) {
 				word = Character.toUpperCase(word.charAt(0)) + word.substring(1);
 			}
-			if (out.length() > 0) {
-				out.append(' ');
+			if (sb.length() > 0) {
+				sb.append(' ');
 			}
-			out.append(word);
+			sb.append(word);
 		}
-		return out.length() == 0 ? slug : out.toString();
+		return sb.toString();
 	}
 }

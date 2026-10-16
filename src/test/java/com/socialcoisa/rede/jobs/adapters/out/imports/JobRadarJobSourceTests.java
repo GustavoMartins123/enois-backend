@@ -41,6 +41,16 @@ class JobRadarJobSourceTests {
 	}
 
 	@Test
+	void cleansRealSlugs() {
+		// Exemplos reais do sitemap do JobRadar (2026-10-16).
+		assertThat(JobRadarJobSource.humanize(
+			"professor-a-autor-a-curadoria-e-validacao-de-conteudo-sommelieria-vinhos-do-mundo-e-terroir-edtech-vitru-vitru-educacao"))
+			.isEqualTo("Professor (a) Autor (a) Curadoria e Validacao de Conteudo Sommelieria Vinhos do Mundo e Terroir Vitru Educacao");
+		assertThat(JobRadarJobSource.humanize("estagiario-a-de-educacao-fisica-campo-grande-silva-gym"))
+			.isEqualTo("Estagiario (a) de Educacao Fisica Campo Grande Silva Gym");
+	}
+
+	@Test
 	void respectsTheLimit() {
 		String xml = """
 				<urlset>
