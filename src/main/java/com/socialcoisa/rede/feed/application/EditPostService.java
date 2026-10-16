@@ -12,12 +12,15 @@ import com.socialcoisa.rede.feed.application.port.out.AuditLogRepository;
 import com.socialcoisa.rede.feed.application.port.out.FeedCacheRepository;
 import com.socialcoisa.rede.feed.application.port.out.PostRepository;
 import com.socialcoisa.rede.feed.domain.Post;
+import com.socialcoisa.rede.feed.domain.PostType;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
+import com.socialcoisa.rede.shared.html.SafeHtml;
 import com.socialcoisa.rede.shared.web.ApiException;
 
 /**
  * Edicao de publicacao propria. So o autor edita (validado no backend, nao no cliente) e o conteudo
- * segue as mesmas regras do post novo. Tipo, midias e comunidade ficam como estao.
+ * segue as mesmas regras do post novo. Tipo, midias e comunidade ficam como estao; a pagina (posts
+ * do tipo PAGE) e re-sanitizada a cada edicao, porque o HTML vem de fora de novo.
  */
 @Service
 public class EditPostService implements EditPostUseCase {
@@ -54,7 +57,7 @@ public class EditPostService implements EditPostUseCase {
 		String content = validateContent(command.content());
 		List<String> tags = normalizeTags(command.tags());
 
-		Post edited = post.edited(content, tags, clock.instant());
+		Post edited = post.edited(content, pageHtml(post, command), tags, clock.instant());
 		Post saved = postRepository.save(edited);
 		feedCacheRepository.removeEverywhere(saved.id());
 		auditLogRepository.record(command.userId(), "POST_EDITED", saved.id().value(), null);
@@ -63,6 +66,17 @@ public class EditPostService implements EditPostUseCase {
 		return author != null
 			? PostView.from(saved, author.username(), author.name(), author.avatar())
 			: PostView.from(saved);
+	}
+
+	/**
+	 * A pagina acompanha o tipo do post (nao o que o cliente manda): num PAGE ela e obrigatoria,
+	 * nos outros o HTML recebido e descartado.
+	 */
+	private String pageHtml(Post post, EditPostCommand command) {
+		if (post.type() != PostType.PAGE) {
+			return null;
+		}
+		return SafeHtml.requirePageHtml(command.pageHtml());
 	}
 
 	private String validateContent(String content) {

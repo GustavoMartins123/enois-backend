@@ -5,5 +5,7 @@ public enum PostType {
 	ARTICLE,
 	QUESTION,
 	PROJECT,
-	OPPORTUNITY
+	OPPORTUNITY,
+	/** Post com uma mini pagina em HTML (colada pelo autor e sanitizada no backend). */
+	PAGE
 }

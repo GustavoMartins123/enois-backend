@@ -9,6 +9,8 @@ public class Post {
 	private final UserId authorId;
 	private final PostType type;
 	private final String content;
+	/** Mini pagina (apenas em posts do tipo PAGE); HTML ja sanitizado, nulo nos demais tipos. */
+	private final String pageHtml;
 	private final List<String> tags;
 	private final List<String> mediaIds;
 	private final String communityId;
@@ -19,13 +21,14 @@ public class Post {
 	private Instant deletedAt;
 	private Instant editedAt;
 
-	private Post(PostId id, UserId authorId, PostType type, String content, List<String> tags, List<String> mediaIds,
-			String communityId, Instant createdAt, Visibility visibility, Counters counters, PostStatus status,
-			Instant deletedAt, Instant editedAt) {
+	private Post(PostId id, UserId authorId, PostType type, String content, String pageHtml, List<String> tags,
+			List<String> mediaIds, String communityId, Instant createdAt, Visibility visibility, Counters counters,
+			PostStatus status, Instant deletedAt, Instant editedAt) {
 		this.id = id;
 		this.authorId = authorId;
 		this.type = type;
 		this.content = content;
+		this.pageHtml = pageHtml;
 		this.tags = List.copyOf(tags);
 		this.mediaIds = List.copyOf(mediaIds);
 		this.communityId = communityId;
@@ -37,26 +40,26 @@ public class Post {
 		this.editedAt = editedAt;
 	}
 
-	public static Post publish(PostId id, UserId authorId, PostType type, String content, List<String> tags,
-			List<String> mediaIds, String communityId, Instant createdAt) {
-		return new Post(id, authorId, type, content, tags, mediaIds, communityId, createdAt, Visibility.PUBLIC,
-			Counters.zero(), PostStatus.ACTIVE, null, null);
+	public static Post publish(PostId id, UserId authorId, PostType type, String content, String pageHtml,
+			List<String> tags, List<String> mediaIds, String communityId, Instant createdAt) {
+		return new Post(id, authorId, type, content, pageHtml, tags, mediaIds, communityId, createdAt,
+			Visibility.PUBLIC, Counters.zero(), PostStatus.ACTIVE, null, null);
 	}
 
-	public static Post restore(PostId id, UserId authorId, PostType type, String content, List<String> tags,
-			List<String> mediaIds, String communityId, Instant createdAt, Visibility visibility, Counters counters,
-			PostStatus status, Instant deletedAt, Instant editedAt) {
-		return new Post(id, authorId, type, content, tags, mediaIds, communityId, createdAt, visibility, counters,
-			status, deletedAt, editedAt);
+	public static Post restore(PostId id, UserId authorId, PostType type, String content, String pageHtml,
+			List<String> tags, List<String> mediaIds, String communityId, Instant createdAt, Visibility visibility,
+			Counters counters, PostStatus status, Instant deletedAt, Instant editedAt) {
+		return new Post(id, authorId, type, content, pageHtml, tags, mediaIds, communityId, createdAt, visibility,
+			counters, status, deletedAt, editedAt);
 	}
 
 	/**
-	 * Edicao do proprio post: troca conteudo e tags e marca a data. Devolve uma nova instancia porque
-	 * o conteudo e imutavel; id, autor e contadores sao preservados (editar nao zera nada).
+	 * Edicao do proprio post: troca conteudo, pagina e tags e marca a data. Devolve uma nova instancia
+	 * porque o conteudo e imutavel; id, autor e contadores sao preservados (editar nao zera nada).
 	 */
-	public Post edited(String newContent, List<String> newTags, Instant editedAt) {
-		return new Post(id, authorId, type, newContent, newTags, mediaIds, communityId, createdAt, visibility,
-			counters, status, deletedAt, editedAt);
+	public Post edited(String newContent, String newPageHtml, List<String> newTags, Instant editedAt) {
+		return new Post(id, authorId, type, newContent, newPageHtml, newTags, mediaIds, communityId, createdAt,
+			visibility, counters, status, deletedAt, editedAt);
 	}
 
 	public boolean isActive() {
@@ -127,6 +130,10 @@ public class Post {
 
 	public String content() {
 		return content;
+	}
+
+	public String pageHtml() {
+		return pageHtml;
 	}
 
 	public List<String> tags() {

@@ -44,6 +44,10 @@ class PostJpaEntity {
 	@Column(nullable = false, length = 1200)
 	private String content;
 
+	/** So preenchido em posts do tipo PAGE (largura = SafeHtml.MAX_PAGE_HTML). */
+	@Column(name = "page_html", length = 12000)
+	private String pageHtml;
+
 	@ElementCollection(fetch = FetchType.EAGER)
 	@CollectionTable(name = "post_tags", joinColumns = @JoinColumn(name = "post_id"),
 			indexes = @Index(name = "idx_post_tags_tag", columnList = "tag"))
@@ -96,6 +100,7 @@ class PostJpaEntity {
 		entity.authorId = post.authorId().value();
 		entity.type = post.type();
 		entity.content = post.content();
+		entity.pageHtml = post.pageHtml();
 		entity.tags = new ArrayList<>(post.tags());
 		entity.mediaIds = new ArrayList<>(post.mediaIds());
 		entity.communityId = post.communityId();
@@ -112,7 +117,7 @@ class PostJpaEntity {
 	}
 
 	Post toDomain() {
-		return Post.restore(new PostId(id), new UserId(authorId), type, content, tags, mediaIds, communityId, createdAt,
-			visibility, new Counters(reactions, comments, saves, shares), status, deletedAt, editedAt);
+		return Post.restore(new PostId(id), new UserId(authorId), type, content, pageHtml, tags, mediaIds, communityId,
+			createdAt, visibility, new Counters(reactions, comments, saves, shares), status, deletedAt, editedAt);
 	}
 }

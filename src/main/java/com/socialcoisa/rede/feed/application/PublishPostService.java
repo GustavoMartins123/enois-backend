@@ -12,9 +12,11 @@ import com.socialcoisa.rede.feed.application.port.out.IdGenerator;
 import com.socialcoisa.rede.feed.application.port.out.OutboxEventRepository;
 import com.socialcoisa.rede.feed.application.port.out.PostRepository;
 import com.socialcoisa.rede.feed.domain.Post;
+import com.socialcoisa.rede.feed.domain.PostType;
 import com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseCase;
 import com.socialcoisa.rede.notifications.application.NotificationService;
 import com.socialcoisa.rede.profile.domain.UserProfile;
+import com.socialcoisa.rede.shared.html.SafeHtml;
 import com.socialcoisa.rede.shared.web.ApiException;
 
 @Service
@@ -61,7 +63,7 @@ public class PublishPostService implements PublishPostUseCase {
 		validateMediaOwnershipUseCase.validateOwnedBy(command.authorId(), mediaIds);
 		String communityId = StringUtils.hasText(command.communityId()) ? command.communityId().trim() : null;
 		Post post = Post.publish(idGenerator.newPostId(), command.authorId(), command.type(), command.content().trim(),
-			tags, mediaIds, communityId, clock.instant());
+			pageHtml(command), tags, mediaIds, communityId, clock.instant());
 		Post saved = postRepository.save(post);
 		feedDistributionService.distribute(saved);
 		outboxEventRepository.append("PostPublished", saved.id().value(), "{\"postId\":\"" + saved.id().value() + "\"}");
@@ -84,6 +86,17 @@ public class PublishPostService implements PublishPostUseCase {
 				"Você foi mencionado em um " + ("post".equals(kind) ? "publicação" : "comentário") + ".",
 				href, "Ver");
 		}
+	}
+
+	/**
+	 * Pagina so existe em posts do tipo PAGE; nos outros o HTML e ignorado (nao vira lixo guardado).
+	 * Em PAGE o texto obrigatorio continua sendo o titulo/legenda que aparece no card.
+	 */
+	private String pageHtml(PublishPostCommand command) {
+		if (command.type() != PostType.PAGE) {
+			return null;
+		}
+		return SafeHtml.requirePageHtml(command.pageHtml());
 	}
 
 	private void validate(PublishPostCommand command) {

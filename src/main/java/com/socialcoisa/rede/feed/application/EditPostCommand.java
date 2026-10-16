@@ -5,5 +5,5 @@ import java.util.List;
 import com.socialcoisa.rede.feed.domain.PostId;
 import com.socialcoisa.rede.feed.domain.UserId;
 
-public record EditPostCommand(UserId userId, PostId postId, String content, List<String> tags) {
+public record EditPostCommand(UserId userId, PostId postId, String content, String pageHtml, List<String> tags) {
 }
