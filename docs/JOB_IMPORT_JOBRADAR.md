@@ -37,3 +37,35 @@ a fonte publicar os dados de forma legível/autorizada (hoje não publica).
 
 > Não declaro a integração com o JobRadar funcional: a fonte não permite extração legítima e
 > confiável hoje. Este documento registra a limitação, como o brief exige.
+
+## Achado decisivo: existe API oficial, mas exige chave (verificado em 2026-10-16)
+O bundle da SPA referencia `https://api.jobradar.com.br`. Teste direto:
+
+| endpoint | resposta |
+|---|---|
+| `GET https://api.jobradar.com.br/v1/jobs` | **401** `{"error":"API key required"}` |
+| `GET https://api.jobradar.com.br/v1/jobs?limit=2` | **401** `API key required` |
+| `GET https://api.jobradar.com.br/api/jobs` | **403** `{"error":"Missing request token"}` |
+| `GET https://api.jobradar.com.br/api/sources` | **403** `Missing request token` |
+| `GET https://api.jobradar.com.br/api/stats` | **403** `Missing request token` |
+| `GET https://api.jobradar.com.br/v1` | 404 |
+
+**Leitura:**
+- **Existe uma API oficial versionada** (`/v1/jobs`) — ela responde JSON e **diz explicitamente "API key
+  required"**. É o caminho **"via API"** correto: **precisa de uma chave que o JobRadar concede**.
+- **`/api/*` (o backend interno da SPA) exige "request token"** — é a API privada do app deles.
+  **Não** vamos usar: acessá-la exigiria o token deles, o que seria **contornar autorização** — o
+  brief proíbe.
+- **Não sei o formato do header de autenticação** do `/v1` (nome do header/esquema não é público).
+  **Não vou inventar** ("Authorization: Bearer xyz") — contrato inventado é exatamente o que o brief
+  proíbe. Precisamos da **documentação/credencial** do JobRadar (ou do exemplo de chamada deles).
+
+## O que fazer para destravar o "via API"
+1. **Pedir ao JobRadar** a chave de API (e a doc: base, header de auth, formato de paginação, limites).
+2. Implementar `JobRadarJobSource` (porta `JobImportSource`) chamando `GET {base}/v1/jobs` com a
+   credencial em variável de ambiente (`JOBRADAR_API_KEY`), **desligado** enquanto não houver chave
+   (fail-safe), com dedupe por `sourceExternalId`/URL canônica e selo "Vaga externa · JobRadar".
+3. Sem a chave, a importação fica **indisponível** — sem scraping da SPA e sem usar o `/api/*` interno.
+
+> Atualização: a conclusão anterior ("só CSV/manual") fica **superada** por este achado — há API
+> oficial; o bloqueio agora é **credencial + doc de autenticação**, não a ausência de API.
