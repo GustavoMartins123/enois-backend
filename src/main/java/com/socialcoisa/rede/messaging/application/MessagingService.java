@@ -103,6 +103,10 @@ public class MessagingService {
 		return repository.findConversationsByUserId(userId, before, limit);
 	}
 
+	public int hideConversations(String userId, java.util.List<String> ids) {
+		return repository.hideConversations(userId, ids, clock.instant());
+	}
+
 	public boolean isParticipant(String conversationId, String userId) {
 		return repository.isParticipant(conversationId, userId);
 	}

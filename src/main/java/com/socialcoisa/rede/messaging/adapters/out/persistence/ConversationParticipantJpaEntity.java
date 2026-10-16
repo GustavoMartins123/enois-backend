@@ -38,6 +38,9 @@ class ConversationParticipantJpaEntity {
 	@Column(name = "joined_at", nullable = false)
 	private Instant joinedAt;
 
+	@Column(name = "hidden_at")
+	private Instant hiddenAt;
+
 	protected ConversationParticipantJpaEntity() {
 	}
 

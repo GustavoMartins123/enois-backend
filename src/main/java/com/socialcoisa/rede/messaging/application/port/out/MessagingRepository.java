@@ -1,6 +1,7 @@
 package com.socialcoisa.rede.messaging.application.port.out;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -26,6 +27,9 @@ public interface MessagingRepository {
 	Optional<ConversationParticipant> findParticipant(String conversationId, String userId);
 
 	boolean isParticipant(String conversationId, String userId);
+
+	/** Esconde conversas para um usuario ("apagar para mim"); nao afeta os outros participantes. */
+	int hideConversations(String userId, Collection<String> conversationIds, java.time.Instant now);
 
 	void markRead(String conversationId, String userId, java.time.Instant now);
 

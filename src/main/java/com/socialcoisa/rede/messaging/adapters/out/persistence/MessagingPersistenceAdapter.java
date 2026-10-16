@@ -80,6 +80,14 @@ class MessagingPersistenceAdapter implements MessagingRepository {
 	}
 
 	@Override
+	public int hideConversations(String userId, java.util.Collection<String> conversationIds, java.time.Instant now) {
+		if (conversationIds == null || conversationIds.isEmpty()) {
+			return 0;
+		}
+		return participantRepo.hideConversations(userId, conversationIds, now);
+	}
+
+	@Override
 	public boolean isParticipant(String conversationId, String userId) {
 		return participantRepo.existsByConversationIdAndUserId(conversationId, userId);
 	}
