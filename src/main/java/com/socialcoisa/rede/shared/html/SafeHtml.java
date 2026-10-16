@@ -32,9 +32,10 @@ public final class SafeHtml {
 	 * Teto de HTML renderizado por pagina, em caracteres, para TODO MUNDO: nao ha excecao por
 	 * reputacao, tipo de conta ou idade da conta, e o mesmo numero vale na publicacao e na edicao.
 	 * O front usa o mesmo valor no campo de escrita (`PAGE_HTML_MAX_LENGTH`), para ninguem digitar
-	 * algo que o servidor vai recusar depois.
+	 * algo que o servidor vai recusar depois. O numero e o MESMO da bio do perfil, de proposito:
+	 * um teto unico para "HTML colado" e mais facil de explicar do que um por superficie.
 	 */
-	public static final int MAX_PAGE_HTML = 100_000;
+	public static final int MAX_PAGE_HTML = 20_000;
 
 	/**
 	 * Teto do HTML da bio do perfil. E o mesmo para todo mundo, como o da pagina; e menor porque o
