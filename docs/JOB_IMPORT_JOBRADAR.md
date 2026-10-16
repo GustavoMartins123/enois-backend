@@ -69,3 +69,19 @@ O bundle da SPA referencia `https://api.jobradar.com.br`. Teste direto:
 
 > Atualização: a conclusão anterior ("só CSV/manual") fica **superada** por este achado — há API
 > oficial; o bloqueio agora é **credencial + doc de autenticação**, não a ausência de API.
+
+## Decisão: LISTAR + REDIRECIONAR (sem credencial, sem scraping de JS)
+O objetivo é **listar as vagas do JobRadar no énóis e mandar a pessoa para o site deles** — não
+republicar conteúdo. Isso é viável **sem** a API key e **sem** renderizar JS, usando o que o próprio
+JobRadar publica para indexadores:
+- **`/sitemap-vagas.xml`** (7.978 URLs de vaga), permitido no `robots.txt` (que só bloqueia `?`).
+- De cada URL derivamos o **título** (do slug) + a **URL original** + o **id externo**. **Empresa,
+  local e salário NÃO estão no sitemap** → ficam nulos (não inventamos).
+- A vaga aparece como **"Vaga externa · JobRadar"** com o botão **"Candidatar-se no JobRadar"**,
+  abrindo a URL original. **Sem reproduzir descrição/atributos** → sem problema de direitos.
+
+Isso atende "listar + redirecionar" respeitando os limites da fonte. **Não** usamos `/v1` (exige
+chave) nem `/api/*` (token da SPA). Limites: teto por chamada, User-Agent identificado, sem `?`.
+
+Implementado: `jobs/adapters/out/imports/JobRadarJobSource` (porta `JobImportSource`),
+`parse`/`humanize` cobertos por teste.

@@ -1,37 +1,53 @@
 package com.socialcoisa.rede.jobs.adapters.out.imports;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import org.junit.jupiter.api.Test;
 
-import com.socialcoisa.rede.shared.web.ApiException;
-import tools.jackson.databind.ObjectMapper;
 
 /** Sem a API key do JobRadar, a fonte fica indisponivel e nao busca por caminhos nao autorizados. */
 class JobRadarJobSourceTests {
 
-	private final ObjectMapper mapper = new ObjectMapper();
+	private final JobRadarJobSource source = new JobRadarJobSource(
+		"https://jobradar.com.br/sitemap-vagas.xml", "EnóisBot/1.0");
 
 	@Test
-	void withoutApiKeyTheSourceIsUnavailable() {
-		JobRadarJobSource source = new JobRadarJobSource("https://api.jobradar.com.br", "", "Authorization",
-			"Bearer", mapper);
-
+	void theSitemapSourceIsPublicAndAvailable() {
 		assertThat(source.name()).isEqualTo("JobRadar");
-		assertThat(source.available()).isFalse();
-		assertThatThrownBy(() -> source.discover(10))
-			.isInstanceOf(ApiException.class)
-			.satisfies(e -> {
-				assertThat(((ApiException) e).code()).isEqualTo("IMPORT_SOURCE_UNAVAILABLE");
-				assertThat(((ApiException) e).status()).isEqualTo(503);
-			});
+		assertThat(source.available()).isTrue();
 	}
 
 	@Test
-	void withApiKeyTheSourceIsAvailable() {
-		JobRadarJobSource source = new JobRadarJobSource("https://api.jobradar.com.br", "chave-teste",
-			"Authorization", "Bearer", mapper);
-		assertThat(source.available()).isTrue();
+	void parsesJobsFromSitemapDerivingTitleFromSlug() {
+		String xml = """
+				<?xml version="1.0" encoding="UTF-8"?>
+				<urlset>
+				  <url><loc>https://jobradar.com.br/vaga/dev-java-senior-remoto-123456</loc></url>
+				  <url><loc>https://jobradar.com.br/vaga/designer-de-produto-987654</loc></url>
+				  <url><loc>https://jobradar.com.br/pagina-institucional</loc></url>
+				</urlset>""";
+
+		var jobs = source.parse(xml, 10);
+
+		// A pagina institucional (sem /vaga/) e ignorada; nada de dado inventado.
+		assertThat(jobs).hasSize(2);
+		assertThat(jobs.get(0).title()).isEqualTo("Dev Java Senior Remoto");
+		assertThat(jobs.get(0).externalId()).isEqualTo("123456");
+		assertThat(jobs.get(0).url()).isEqualTo("https://jobradar.com.br/vaga/dev-java-senior-remoto-123456");
+		assertThat(jobs.get(0).platform()).isEqualTo("JobRadar");
+		// Empresa/descricao nao estao no sitemap: ficam nulos (a candidatura ocorre no JobRadar).
+		assertThat(jobs.get(0).company()).isNull();
+		assertThat(jobs.get(0).description()).isNull();
+	}
+
+	@Test
+	void respectsTheLimit() {
+		String xml = """
+				<urlset>
+				  <url><loc>https://jobradar.com.br/vaga/a-1</loc></url>
+				  <url><loc>https://jobradar.com.br/vaga/b-2</loc></url>
+				  <url><loc>https://jobradar.com.br/vaga/c-3</loc></url>
+				</urlset>""";
+		assertThat(source.parse(xml, 2)).hasSize(2);
 	}
 }

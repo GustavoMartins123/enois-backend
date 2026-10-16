@@ -7,6 +7,8 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -15,42 +17,33 @@ import org.springframework.util.StringUtils;
 import com.socialcoisa.rede.shared.web.ApiException;
 import com.socialcoisa.rede.jobs.application.port.out.JobImportSource;
 
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
-
 /**
- * Fonte JobRadar, pela API OFICIAL `https://api.jobradar.com.br/v1/jobs`.
+ * JobRadar como fonte de LISTAGEM + REDIRECIONAMENTO (sem credencial, sem scraping de JS).
  *
- * A API existe e responde JSON, mas exige uma **API key** (401 "API key required") — que so o
- * JobRadar concede. Sem `JOBRADAR_API_KEY`, a fonte fica INDISPONIVEL (fail-safe): nao buscamos por
- * scraping da SPA nem pela API privada (`/api/*`, que exige request token e seria contornar
- * autorizacao).
+ * Usa o **sitemap publico** que o proprio JobRadar publica para indexadores
+ * (`/sitemap-vagas.xml`, permitido no robots.txt — que so bloqueia URLs com `?`). Cada item vira uma
+ * vaga externa com **titulo derivado do slug**, a **URL original** e o selo "Vaga externa". Nao
+ * reproduzimos descricao/empresa/salario (ficam nulos) — a pessoa confere e se candidata no JobRadar.
  *
- * O nome/esquema do header de autenticacao **nao e publico** — por isso sao configuracao
- * (`JOBRADAR_AUTH_HEADER`/`JOBRADAR_AUTH_SCHEME`), a confirmar com a documentacao deles. Nao
- * inventamos contrato.
+ * Nao usamos a API privada da SPA (`/api/*`, exige request token) nem a API key do `/v1`: isso seria
+ * contornar controle de acesso. Se o JobRadar conceder acesso oficial, um adaptador por API entra
+ * depois usando a mesma porta.
  */
 @Component
 public class JobRadarJobSource implements JobImportSource {
 
-	private final String baseUrl;
-	private final String apiKey;
-	private final String authHeader;
-	private final String authScheme;
-	private final ObjectMapper objectMapper;
+	private static final Pattern LOC = Pattern.compile("<loc>\\s*([^<\\s]+)\\s*</loc>");
+	private static final Pattern SLUG = Pattern.compile("/vaga/(.+?)-(\\d+)$");
+
+	private final String sitemapUrl;
+	private final String userAgent;
 	private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
 	public JobRadarJobSource(
-			@Value("${rede.jobs.import.jobradar.base-url:https://api.jobradar.com.br}") String baseUrl,
-			@Value("${rede.jobs.import.jobradar.api-key:}") String apiKey,
-			@Value("${rede.jobs.import.jobradar.auth-header:Authorization}") String authHeader,
-			@Value("${rede.jobs.import.jobradar.auth-scheme:Bearer}") String authScheme,
-			ObjectMapper objectMapper) {
-		this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
-		this.apiKey = apiKey;
-		this.authHeader = authHeader;
-		this.authScheme = authScheme;
-		this.objectMapper = objectMapper;
+			@Value("${rede.jobs.import.jobradar.sitemap-url:https://jobradar.com.br/sitemap-vagas.xml}") String sitemapUrl,
+			@Value("${rede.jobs.import.jobradar.user-agent:EnóisBot/1.0 (+https://enois.ia.br/developers)}") String userAgent) {
+		this.sitemapUrl = sitemapUrl;
+		this.userAgent = userAgent;
 	}
 
 	@Override
@@ -58,71 +51,86 @@ public class JobRadarJobSource implements JobImportSource {
 		return "JobRadar";
 	}
 
+	/** O sitemap e publico (feito para indexadores), entao a fonte esta sempre disponivel. */
 	@Override
 	public boolean available() {
-		return StringUtils.hasText(apiKey);
+		return true;
 	}
 
 	@Override
 	public List<ExternalJob> discover(int limit) {
-		if (!available()) {
-			throw new ApiException(503, "IMPORT_SOURCE_UNAVAILABLE",
-				"A importacao do JobRadar ainda nao esta disponivel (falta a chave de API).");
-		}
-		int capped = Math.max(1, Math.min(limit, 100));
+		int capped = Math.max(1, Math.min(limit, 500));
+		String body;
 		try {
-			HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/v1/jobs?limit=" + capped))
+			HttpRequest request = HttpRequest.newBuilder(URI.create(sitemapUrl))
 				.timeout(Duration.ofSeconds(20))
-				.header(authHeader, (StringUtils.hasText(authScheme) ? authScheme + " " : "") + apiKey)
-				.header("Accept", "application/json")
+				.header("User-Agent", userAgent)
+				.header("Accept", "application/xml")
 				.GET()
 				.build();
 			HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
 			if (response.statusCode() / 100 != 2) {
-				// Falha tecnica nao vira importacao: erro claro, sem inventar dados.
-				throw new ApiException(502, "IMPORT_SOURCE_ERROR",
-					"Nao foi possivel consultar a fonte externa agora.");
+				throw new ApiException(502, "IMPORT_SOURCE_ERROR", "Nao foi possivel ler o sitemap do JobRadar.");
 			}
-			return map(objectMapper.readTree(response.body()));
+			body = response.body();
 		}
 		catch (InterruptedException interrupted) {
 			Thread.currentThread().interrupt();
-			throw new ApiException(502, "IMPORT_SOURCE_ERROR", "Consulta a fonte externa interrompida.");
+			throw new ApiException(502, "IMPORT_SOURCE_ERROR", "Consulta ao JobRadar interrompida.");
 		}
 		catch (ApiException apiException) {
 			throw apiException;
 		}
 		catch (Exception failure) {
-			throw new ApiException(502, "IMPORT_SOURCE_ERROR", "Falha ao consultar a fonte externa.");
+			throw new ApiException(502, "IMPORT_SOURCE_ERROR", "Falha ao consultar o JobRadar.");
 		}
+		return parse(body, capped);
 	}
 
-	/** Mapeia o JSON da fonte para o modelo interno. Campo ausente fica nulo — nada e inventado. */
-	private List<ExternalJob> map(JsonNode body) {
-		JsonNode items = body.isArray() ? body : body.path("data");
+	/** Extrai as vagas do XML do sitemap: so titulo (do slug), URL e id. Nada e inventado. */
+	List<ExternalJob> parse(String sitemapXml, int limit) {
 		List<ExternalJob> jobs = new ArrayList<>();
-		if (!items.isArray()) {
+		if (!StringUtils.hasText(sitemapXml)) {
 			return jobs;
 		}
-		for (JsonNode node : items) {
-			jobs.add(new ExternalJob(
-				text(node, "id"),
-				text(node, "title"),
-				text(node, "company"),
-				text(node, "location"),
-				text(node, "description"),
-				text(node, "salary"),
-				text(node, "employment_type"),
-				text(node, "url"),
-				text(node, "apply_url"),
-				name(),
-				null));
+		Matcher matcher = LOC.matcher(sitemapXml);
+		while (matcher.find() && jobs.size() < limit) {
+			String url = matcher.group(1);
+			Matcher slug = SLUG.matcher(url);
+			if (!slug.find()) {
+				continue;
+			}
+			String title = humanize(slug.group(1));
+			String externalId = slug.group(2);
+			jobs.add(new ExternalJob(externalId, title, null, null, null, null, null, url, url, name(), null));
 		}
 		return jobs;
 	}
 
-	private static String text(JsonNode node, String field) {
-		JsonNode value = node.path(field);
-		return value.isMissingNode() || value.isNull() ? null : value.asString();
+	/** Conectivos que ficam minusculos no meio do titulo. */
+	private static final java.util.Set<String> LOWERCASE = java.util.Set.of(
+		"de", "da", "do", "das", "dos", "e", "em", "para", "com", "a", "o", "na", "no");
+
+	/**
+	 * "dev-java-senior-remoto" -> "Dev Java Senior Remoto". So o TITULO vem do slug; empresa, local e
+	 * salario nao sao confiaveis no slug (ficam nulos) — nada e inventado.
+	 */
+	static String humanize(String slug) {
+		String[] words = slug.replace('-', ' ').trim().replaceAll("\\s+", " ").split(" ");
+		StringBuilder out = new StringBuilder();
+		for (int i = 0; i < words.length; i++) {
+			String word = words[i];
+			if (word.isEmpty()) {
+				continue;
+			}
+			if (i == 0 || !LOWERCASE.contains(word)) {
+				word = Character.toUpperCase(word.charAt(0)) + word.substring(1);
+			}
+			if (out.length() > 0) {
+				out.append(' ');
+			}
+			out.append(word);
+		}
+		return out.length() == 0 ? slug : out.toString();
 	}
 }
