@@ -77,6 +77,19 @@ public final class TestDatabase {
 		}
 	}
 
+	/** Define o dono de uma vaga inserida direto no banco. */
+	public static void setJobPostedBy(String jobId, String userId) {
+		require().update("update jobs set posted_by = ? where id = ?", userId, jobId);
+	}
+
+	/** Insere uma candidatura direto no banco (para reproduzir uma candidatura orfa do dono). */
+	public static void insertJobApplication(String jobId, String userId) {
+		require().update("delete from job_applications where job_id = ? and user_id = ?", jobId, userId);
+		require().update("""
+				insert into job_applications (job_id, user_id, status, applied_at)
+				values (?, ?, 'APPLIED', ?)""", jobId, userId, java.time.Instant.now());
+	}
+
 	/** Forca a expiracao da sessao de um access token (para exercitar refresh sem esperar o tempo). */
 	public static void expireAccessToken(String accessToken, Instant expiresAt) {
 		require().update("update auth_sessions set expires_at = ? where token = ?", expiresAt, accessToken);

@@ -130,7 +130,10 @@ class JobContractController {
 		String viewer = viewerId(userId, sessionToken);
 		Job job = jobService.getById(jobId);
 		boolean owner = viewer != null && viewer.equals(job.postedBy());
-		boolean applied = viewer != null && jobService.appliedJobIds(viewer, List.of(job.id())).contains(job.id());
+		// O dono NUNCA e candidato na propria vaga (o apply bloqueia isso). Se houver uma
+		// candidatura orfa (criada antes da regra), ela nao pode marcar o dono como "Inscrito".
+		boolean applied = !owner && viewer != null
+			&& jobService.appliedJobIds(viewer, List.of(job.id())).contains(job.id());
 		boolean saved = viewer != null && jobService.savedJobIds(viewer, List.of(job.id())).contains(job.id());
 		return toView(job, viewer, applied, saved, owner ? jobService.applicationsCount(job.id()) : 0);
 	}
@@ -271,7 +274,7 @@ class JobContractController {
 				return new JobView(job.id(), job.title(), job.company(), job.logo(), job.location(), job.type(),
 					job.level(), job.salary(), job.currency(), job.skills(),
 					job.postedAt() != null ? job.postedAt().toString() : null, 0,
-					appliedIds.contains(job.id()), savedIds.contains(job.id()), owner,
+					!owner && appliedIds.contains(job.id()), savedIds.contains(job.id()), owner,
 					owner ? counts.getOrDefault(job.id(), 0) : 0, authorOf(job), fieldViews(job),
 					job.status().name(), job.closedAt() != null ? job.closedAt().toString() : null);
 			})
