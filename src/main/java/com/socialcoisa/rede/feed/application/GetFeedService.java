@@ -22,6 +22,7 @@ import com.socialcoisa.rede.feed.application.port.out.CommentRepository;
 import com.socialcoisa.rede.feed.application.port.out.ConnectionGraphRepository;
 import com.socialcoisa.rede.feed.application.port.out.FeedCacheRepository;
 import com.socialcoisa.rede.feed.application.port.out.PostInteractionRepository;
+import com.socialcoisa.rede.feed.application.port.out.ArticleRepository;
 import com.socialcoisa.rede.feed.application.port.out.PostRepository;
 import com.socialcoisa.rede.feed.domain.FeedItem;
 import com.socialcoisa.rede.feed.domain.FeedTab;
@@ -41,6 +42,7 @@ import com.socialcoisa.rede.shared.web.CursorCodec;
 public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, GetPostUseCase {
 
 	private final PostRepository postRepository;
+	private final ArticleRepository articleRepository;
 	private final FeedCacheRepository feedCacheRepository;
 	private final ConnectionGraphRepository connectionGraphRepository;
 	private final UserProfileRepository userProfileRepository;
@@ -51,11 +53,13 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 	private final PostCommunityReader postCommunityReader;
 	private static final Instant DEFAULT_BEFORE = Instant.parse("9999-12-31T23:59:59Z");
 
-	public GetFeedService(PostRepository postRepository, FeedCacheRepository feedCacheRepository,
+	public GetFeedService(PostRepository postRepository, ArticleRepository articleRepository,
+			FeedCacheRepository feedCacheRepository,
 			ConnectionGraphRepository connectionGraphRepository, UserProfileRepository userProfileRepository,
 			PostInteractionRepository postInteractionRepository, CommentRepository commentRepository,
 			CursorCodec cursorCodec, BlockedUsersReader blockedUsersReader, PostCommunityReader postCommunityReader) {
 		this.postRepository = postRepository;
+		this.articleRepository = articleRepository;
 		this.feedCacheRepository = feedCacheRepository;
 		this.connectionGraphRepository = connectionGraphRepository;
 		this.userProfileRepository = userProfileRepository;
@@ -117,8 +121,11 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 			throw new ApiException(404, "POST_NOT_FOUND", "Post nao encontrado.");
 		}
 		List<PostView> enriched = enrich(List.of(post), viewerId);
-		// Unico lugar que devolve o corpo da pagina (ver PostView.from): e a leitura de um post so.
-		return (enriched.isEmpty() ? PostView.from(post) : enriched.get(0)).withPageHtml(post.pageHtml());
+		// Unico lugar que devolve o corpo da pagina e o texto do artigo (ver PostView.from): e a
+		// leitura de um post so — a listagem nao carrega nem um nem outro.
+		return (enriched.isEmpty() ? PostView.from(post) : enriched.get(0))
+			.withPageHtml(post.pageHtml())
+			.withArticleBody(articleRepository.findBody(post.id()).orElse(null));
 	}
 
 	@Transactional(readOnly = true)

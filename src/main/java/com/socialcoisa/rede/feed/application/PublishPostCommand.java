@@ -5,6 +5,7 @@ import java.util.List;
 import com.socialcoisa.rede.feed.domain.PostType;
 import com.socialcoisa.rede.feed.domain.UserId;
 
-public record PublishPostCommand(UserId authorId, PostType type, String content, String pageHtml, List<String> tags,
+public record PublishPostCommand(UserId authorId, PostType type, String content, String pageHtml, String articleBody,
+		List<String> tags,
 		List<String> mediaIds, String communityId, List<String> mentionedUserIds) {
 }

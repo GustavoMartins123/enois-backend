@@ -128,7 +128,7 @@ class FeedController {
 		String hash = idempotency.hash(request);
 		return idempotency.execute(user.id(), "POST", "/api/feed/posts", idempotencyKey, hash, () -> new CommandResponse(201,
 			publishPostUseCase.publish(new PublishPostCommand(user.id(), request.type(), request.content(),
-				request.pageHtml(), request.tags(), request.mediaIds(), request.communityId(),
+				request.pageHtml(), request.articleBody(), request.tags(), request.mediaIds(), request.communityId(),
 				request.mentionedUserIds()))));
 	}
 
@@ -203,11 +203,12 @@ class FeedController {
 		// Sem a pagina no hash, duas edicoes diferentes do mesmo post (com a mesma chave de
 		// idempotencia) seriam tratadas como a mesma chamada e a segunda nao chegaria a gravar.
 		payload.put("pageHtml", request.pageHtml() == null ? "" : request.pageHtml());
+		payload.put("articleBody", request.articleBody() == null ? "" : request.articleBody());
 		payload.put("tags", request.tags() == null ? List.of() : request.tags());
 		String hash = idempotency.hash(payload);
 		return idempotency.execute(user.id(), "PATCH", "/api/feed/posts/{postId}", idempotencyKey, hash,
 			() -> new CommandResponse(200, editPostUseCase.edit(new EditPostCommand(user.id(), new PostId(postId),
-				request.content(), request.pageHtml(), request.tags()))));
+				request.content(), request.pageHtml(), request.articleBody(), request.tags()))));
 	}
 
 	/** Desfaz a exclusao do proprio post (o "desfazer" do aviso de exclusao). */

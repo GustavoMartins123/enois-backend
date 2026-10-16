@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import com.socialcoisa.rede.feed.application.port.in.EditPostUseCase;
+import com.socialcoisa.rede.feed.application.port.out.ArticleRepository;
 import com.socialcoisa.rede.feed.application.port.out.AuditLogRepository;
 import com.socialcoisa.rede.feed.application.port.out.FeedCacheRepository;
 import com.socialcoisa.rede.feed.application.port.out.PostRepository;
@@ -29,14 +30,17 @@ public class EditPostService implements EditPostUseCase {
 	private static final int MAX_TAGS = 5;
 
 	private final PostRepository postRepository;
+	private final ArticleRepository articleRepository;
 	private final FeedCacheRepository feedCacheRepository;
 	private final AuditLogRepository auditLogRepository;
 	private final UserProfileRepository userProfileRepository;
 	private final Clock clock;
 
-	public EditPostService(PostRepository postRepository, FeedCacheRepository feedCacheRepository,
+	public EditPostService(PostRepository postRepository, ArticleRepository articleRepository,
+			FeedCacheRepository feedCacheRepository,
 			AuditLogRepository auditLogRepository, UserProfileRepository userProfileRepository, Clock clock) {
 		this.postRepository = postRepository;
+		this.articleRepository = articleRepository;
 		this.feedCacheRepository = feedCacheRepository;
 		this.auditLogRepository = auditLogRepository;
 		this.userProfileRepository = userProfileRepository;
@@ -59,6 +63,11 @@ public class EditPostService implements EditPostUseCase {
 
 		Post edited = post.edited(content, pageHtml(post, command), tags, clock.instant());
 		Post saved = postRepository.save(edited);
+		String articleBody = articleBody(post, command);
+		if (articleBody != null) {
+			// Editar artigo sem mandar o texto apagaria o corpo: a regra e a mesma da pagina.
+			articleRepository.updateBody(saved.id(), articleBody, clock.instant());
+		}
 		feedCacheRepository.removeEverywhere(saved.id());
 		auditLogRepository.record(command.userId(), "POST_EDITED", saved.id().value(), null);
 
@@ -83,6 +92,14 @@ public class EditPostService implements EditPostUseCase {
 	 * Texto do post editado. Num post de pagina ele pode ficar vazio (pagina e uma coisa OU outra:
 	 * o HTML e o conteudo), mas em qualquer outro tipo continua obrigatorio.
 	 */
+	/** Corpo do artigo acompanha o tipo do post (nao o que o cliente manda), como a pagina. */
+	private String articleBody(Post post, EditPostCommand command) {
+		if (post.type() != PostType.ARTICLE) {
+			return null;
+		}
+		return PublishPostService.validateArticleBody(command.articleBody());
+	}
+
 	private String validateContent(String content, PostType type) {
 		if (!StringUtils.hasText(content)) {
 			if (type == PostType.PAGE) {

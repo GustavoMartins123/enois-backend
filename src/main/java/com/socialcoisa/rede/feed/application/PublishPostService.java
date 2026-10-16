@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import com.socialcoisa.rede.feed.application.port.in.PublishPostUseCase;
+import com.socialcoisa.rede.feed.application.port.out.ArticleRepository;
 import com.socialcoisa.rede.feed.application.port.out.IdGenerator;
 import com.socialcoisa.rede.feed.application.port.out.OutboxEventRepository;
 import com.socialcoisa.rede.feed.application.port.out.PostRepository;
@@ -22,7 +23,11 @@ import com.socialcoisa.rede.shared.web.ApiException;
 @Service
 public class PublishPostService implements PublishPostUseCase {
 
+	/** Teto do texto do artigo — maior que o do post (1.200) porque artigo e outro formato. */
+	static final int MAX_ARTICLE_BODY = 4_000;
+
 	private final PostRepository postRepository;
+	private final ArticleRepository articleRepository;
 	private final IdGenerator idGenerator;
 	private final Clock clock;
 	private final FeedDistributionService feedDistributionService;
@@ -31,12 +36,14 @@ public class PublishPostService implements PublishPostUseCase {
 	private final NotificationService notificationService;
 	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository;
 
-	public PublishPostService(PostRepository postRepository, IdGenerator idGenerator, Clock clock,
+	public PublishPostService(PostRepository postRepository, ArticleRepository articleRepository,
+			IdGenerator idGenerator, Clock clock,
 			FeedDistributionService feedDistributionService, OutboxEventRepository outboxEventRepository,
 			ValidateMediaOwnershipUseCase validateMediaOwnershipUseCase,
 			NotificationService notificationService,
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository) {
 		this.postRepository = postRepository;
+		this.articleRepository = articleRepository;
 		this.idGenerator = idGenerator;
 		this.clock = clock;
 		this.feedDistributionService = feedDistributionService;
@@ -65,6 +72,12 @@ public class PublishPostService implements PublishPostUseCase {
 		Post post = Post.publish(idGenerator.newPostId(), command.authorId(), command.type(), textOf(command),
 			pageHtml(command), tags, mediaIds, communityId, clock.instant());
 		Post saved = postRepository.save(post);
+		String articleBody = articleBody(command);
+		if (articleBody != null) {
+			// Corpo do artigo em tabela propria: nao pesa na linha que o feed le e nao viaja na
+			// listagem (ver PostView.from). Mesma transacao do post: ou nasce inteiro, ou nao nasce.
+			articleRepository.save(saved.id(), articleBody, clock.instant());
+		}
 		feedDistributionService.distribute(saved);
 		outboxEventRepository.append("PostPublished", saved.id().value(), "{\"postId\":\"" + saved.id().value() + "\"}");
 		notifyMentions(command.mentionedUserIds(), command.authorId().value(), saved.id().value(), "post");
@@ -98,6 +111,31 @@ public class PublishPostService implements PublishPostUseCase {
 			return StringUtils.hasText(command.content()) ? command.content().trim() : "";
 		}
 		return command.content().trim();
+	}
+
+	/**
+	 * Corpo do artigo: so existe em ARTICLE (nos outros tipos o campo e ignorado, para nao virar
+	 * lixo guardado), e o limite e maior que o do post justamente porque artigo e outra coisa.
+	 * `posts.content` continua sendo o titulo/resumo que aparece no card.
+	 */
+	private String articleBody(PublishPostCommand command) {
+		if (command.type() != PostType.ARTICLE) {
+			return null;
+		}
+		return validateArticleBody(command.articleBody());
+	}
+
+	/** Regra do texto do artigo, compartilhada com a edicao (mesmo limite, mesma mensagem). */
+	static String validateArticleBody(String raw) {
+		if (!StringUtils.hasText(raw)) {
+			throw new ApiException(400, "INVALID_ARTICLE_BODY", "Artigo precisa do texto do artigo.");
+		}
+		String body = raw.trim();
+		if (body.length() > MAX_ARTICLE_BODY) {
+			throw new ApiException(400, "ARTICLE_BODY_TOO_LONG",
+				"Texto do artigo deve ter no maximo " + MAX_ARTICLE_BODY + " caracteres.");
+		}
+		return body;
 	}
 
 	/**
