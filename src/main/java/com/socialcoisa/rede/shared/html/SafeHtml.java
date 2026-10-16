@@ -56,6 +56,30 @@ public final class SafeHtml {
 	private static final Pattern STYLE_ATTRIBUTE = Pattern.compile("(?is)\\sstyle\\s*=\\s*(\"([^\"]*)\"|'([^']*)')");
 	private static final Pattern STYLE_ELEMENT = Pattern.compile("(?is)<style\\b[^>]*>(.*?)</style>");
 
+	/** Tag de embed de terceiro (quadro/objeto) com o endereco numa das duas formas usadas. */
+	private static final Pattern EMBED_TAG = Pattern
+		.compile("(?is)<(?:iframe|embed|object)\\b[^>]*?(?:src|data)\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)')[^>]*>");
+
+	/**
+	 * Endereco de embed aceito: https, provedor conhecido, sem aspas/espacos/angulos. A checagem e
+	 * por host inteiro (com `\.`) e o resto do caminho nao pode conter caractere que quebraria o
+	 * atributo — assim o valor pode ser reescrito dentro do HTML sem risco de injecao.
+	 */
+	private static final Pattern PROVIDER_EMBED_URL = Pattern.compile(
+		"(?i)^https://(?:www\\.)?(?:youtube\\.com|youtube-nocookie\\.com|youtu\\.be|player\\.vimeo\\.com|vimeo\\.com"
+			+ "|dailymotion\\.com|dai\\.ly|player\\.twitch\\.tv|twitch\\.tv|open\\.spotify\\.com"
+			+ "|w\\.soundcloud\\.com|soundcloud\\.com)/[^\\s\"'<>]*$");
+
+	/**
+	 * Sequencia com cara de entidade HTML (`&quot;`, `&#39;`, `&amp;`) no endereco. Endereco de
+	 * embed de verdade nao carrega isso — quem carrega esta tentando fechar o atributo e escrever
+	 * markup. Serve de segunda barreira, alem do escape.
+	 */
+	private static final Pattern ENTITY_LIKE = Pattern.compile("&(?:#[0-9]+|[a-zA-Z][a-zA-Z0-9]{1,30});");
+
+	/** Atributo que marca "aqui vai um player"; o front casa esse marcador com o player do app. */
+	private static final String EMBED_MARKER_ATTRIBUTE = "data-enois-embed";
+
 	private static final Safelist PAGE_ALLOWLIST = buildAllowlist();
 
 	private SafeHtml() {
@@ -111,7 +135,11 @@ public final class SafeHtml {
 		String css = sanitizeCss(collectCss(raw));
 		// O <style> sai do markup antes da limpeza e volta sanitizado, no formato que o front espera.
 		String withoutStyles = STYLE_ELEMENT.matcher(raw).replaceAll("");
-		Document clean = new Cleaner(PAGE_ALLOWLIST).clean(Jsoup.parse(withoutStyles));
+		// Embed de provedor conhecido vira marcador (ver keepProviderEmbedAsMarker): o quadro do post
+		// nao roda script, entao o player de terceiros e montado pelo propio app, fora do isolamento.
+		String withMarkers = EMBED_TAG.matcher(withoutStyles)
+			.replaceAll(match -> keepProviderEmbedAsMarker(match.group(1) != null ? match.group(1) : match.group(2)));
+		Document clean = new Cleaner(PAGE_ALLOWLIST).clean(Jsoup.parse(withMarkers));
 		clean.outputSettings().prettyPrint(false);
 
 		String markup = clean.body().html().trim();
@@ -121,6 +149,34 @@ public final class SafeHtml {
 				label + " deve ter no maximo " + maxLength + " caracteres.");
 		}
 		return result.isEmpty() ? null : result;
+	}
+
+	/**
+	 * Troca um embed de provedor conhecido por um marcador vazio com o endereco no atributo.
+	 *
+	 * Por que assim: o quadro da pagina roda sem script, e player de terceiros exige script — entao
+	 * ele nao pode morar dentro do quadro sem abrir mao da garantia que sustenta a seguranca. O que
+	 * a pagina guarda e so a INTENCAO ("aqui vai um video do YouTube"); quem monta o player e o
+	 * front, com o mesmo componente que ja usa nos posts, a partir do id extraido da URL — nunca de
+	 * um endereco cru. Embed de host desconhecido nao vira marcador nem nada: sai fora.
+	 */
+	private static String keepProviderEmbedAsMarker(String url) {
+		if (url == null || !PROVIDER_EMBED_URL.matcher(url).matches() || ENTITY_LIKE.matcher(url).find()) {
+			return "";
+		}
+		// O valor vem de texto colado e ainda vai ser lido como HTML: sem escapar, um `&quot;` no
+		// lugar de aspas fecharia o atributo e o resto viraria tag de verdade (`<script>` incluido).
+		// Escapar aqui e o que separa "marcador" de "porta de entrada".
+		return "<div " + EMBED_MARKER_ATTRIBUTE + "=\"" + escapeAttribute(url) + "\"></div>";
+	}
+
+	/** Escape minimo de valor de atributo: `&` primeiro, senao os outros escapes sao re-escapes. */
+	private static String escapeAttribute(String value) {
+		return value.replace("&", "&amp;")
+			.replace("\"", "&quot;")
+			.replace("'", "&#39;")
+			.replace("<", "&lt;")
+			.replace(">", "&gt;");
 	}
 
 	/** Junta o CSS de todos os blocos {@code <style>} do documento colado (head e body). */
@@ -174,7 +230,8 @@ public final class SafeHtml {
 				"main", "mark", "ol", "p", "picture", "pre", "q", "s", "samp", "section", "small", "source",
 				"span", "strong", "sub", "summary", "sup", "table", "tbody", "td", "tfoot", "th", "thead", "time",
 				"tr", "track", "u", "ul", "video", "wbr");
-			addAttributes(":all", "class", "style", "title", "dir", "lang", "align", "width", "height");
+			addAttributes(":all", "class", "style", "title", "dir", "lang", "align", "width", "height",
+				EMBED_MARKER_ATTRIBUTE);
 			addAttributes("a", "href", "target", "rel");
 			addAttributes("img", "src", "alt", "loading");
 			addAttributes("video", "src", "poster", "controls", "preload", "loop", "muted", "playsinline");

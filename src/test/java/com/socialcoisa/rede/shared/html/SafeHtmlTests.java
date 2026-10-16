@@ -156,4 +156,48 @@ class SafeHtmlTests {
 			.isInstanceOf(ApiException.class)
 			.hasMessageContaining(String.valueOf(SafeHtml.MAX_PAGE_HTML));
 	}
+
+	/**
+	 * Embed de provedor conhecido: o quadro nao roda script, entao o player nao pode morar la dentro
+	 * — mas a INTENCAO ("aqui vai um video") fica guardada num marcador, e quem monta o player e o
+	 * app. Host que nao e provedor conhecido nao vira marcador: sai fora.
+	 */
+	@Test
+	void keepsProviderEmbedAsMarkerAndDropsUnknownOnes() {
+		String clean = SafeHtml.sanitizePageHtml("""
+			<iframe width="560" height="315" src="https://www.youtube.com/embed/aqz-KE-bpKQ" frameborder="0"></iframe>
+			<iframe src="https://player.vimeo.com/video/76979871"></iframe>
+			<iframe src="https://open.spotify.com/embed/track/4cOdK2wGLETKBW3PvgPWqT"></iframe>
+			<iframe src="https://malicioso.test/embed/x"></iframe>
+			<embed src="http://www.youtube.com/embed/aqz-KE-bpKQ">
+			<iframe src="https://evil.test/y"></iframe>
+			""");
+
+		assertThat(clean).doesNotContain("<iframe").doesNotContain("<embed").doesNotContain("malicioso.test")
+			.doesNotContain("evil.test");
+		// Provedores conhecidos viram marcador com a URL; http e host desconhecido nao viram nada.
+		assertThat(clean).contains("data-enois-embed=\"https://www.youtube.com/embed/aqz-KE-bpKQ\"");
+		assertThat(clean).contains("data-enois-embed=\"https://player.vimeo.com/video/76979871\"");
+		assertThat(clean).contains("data-enois-embed=\"https://open.spotify.com/embed/track/4cOdK2wGLETKBW3PvgPWqT\"");
+		assertThat(clean.split("data-enois-embed", -1).length - 1).isEqualTo(3);
+	}
+
+	@Test
+	void providerEmbedCannotSmuggleMarkupOrScript() {
+		String clean = SafeHtml.sanitizePageHtml("""
+			<iframe src="https://www.youtube.com/embed/aqz-KE-bpKQ" onload="alert(1)"><script>alert(2)</script></iframe>
+			<iframe src="https://www.youtube.com/embed/x&quot;&gt;&lt;script&gt;alert(3)&lt;/script&gt;"></iframe>
+			""");
+
+		assertThat(clean).doesNotContain("<script").doesNotContain("alert").doesNotContain("onload");
+		assertThat(clean).contains("data-enois-embed=\"https://www.youtube.com/embed/aqz-KE-bpKQ\"");
+	}
+
+	@Test
+	void linkToVideoStaysALinkForTheAppToTurnIntoAPlayer() {
+		String clean = SafeHtml.sanitizePageHtml("<p>Veja <a href=\"https://youtu.be/aqz-KE-bpKQ\">o video</a></p>");
+
+		assertThat(clean).contains("href=\"https://youtu.be/aqz-KE-bpKQ\"");
+		assertThat(clean).contains("o video");
+	}
 }
