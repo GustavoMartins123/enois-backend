@@ -54,11 +54,16 @@ class MediaContractController {
 				request.fileName(), request.mimeType(), request.size(), request.purpose()))));
 	}
 
+	/**
+	 * Leitura do asset por id. Publica de proposito: o id so aparece em post/perfil que qualquer
+	 * pessoa ja pode ler, e a resposta e o mesmo dado que a publicacao expoe (nome, tipo, tamanho e
+	 * a URL do CDN, que e aberta). Exigir sessao aqui deixava sem imagem o post visto por quem nao
+	 * entrou — e tambem o proprio autor, quando a sessao dele estava sendo renovada.
+	 *
+	 * Upload e exclusao continuam exigindo sessao (o dono), logo abaixo.
+	 */
 	@GetMapping("/{mediaId}")
-	Object media(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
-			@PathVariable String mediaId) {
-		currentUserResolver.resolve(userId, sessionToken);
+	Object media(@PathVariable String mediaId) {
 		return getMediaAssetUseCase.getMedia(mediaId);
 	}
 
