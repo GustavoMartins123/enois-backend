@@ -2,6 +2,7 @@ package com.socialcoisa.rede.media.adapters.out.storage;
 
 import java.util.Base64;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -11,8 +12,10 @@ import org.springframework.web.client.RestClient;
 import com.socialcoisa.rede.media.application.port.out.MediaStorageGateway;
 import com.socialcoisa.rede.media.application.port.out.StorageUrlFactory;
 
-@Configuration
+@Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(ImageKitConfig.ImageKitProperties.class)
+// Continua incondicional enquanto o upload pelo S3 nao existir: o gateway daqui e quem assina e
+// recebe o arquivo hoje. Ligar o S3 so troca o endereco dos objetos novos (ver S3StorageConfig).
 class ImageKitConfig {
 
 	@Bean
