@@ -21,6 +21,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.socialcoisa.rede.idempotency.application.CommandResponse;
 import com.socialcoisa.rede.idempotency.application.IdempotencyApplicationService;
+import com.socialcoisa.rede.jobs.application.port.out.ExternalJobRepository;
+import com.socialcoisa.rede.jobs.domain.ExternalJob;
 import com.socialcoisa.rede.jobs.application.JobService;
 import com.socialcoisa.rede.jobs.domain.Job;
 import com.socialcoisa.rede.jobs.domain.JobApplicationStatus;
@@ -43,6 +45,7 @@ class JobContractController {
 	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository;
 	private final com.socialcoisa.rede.profile.application.ReputationService reputationService;
 	private final List<com.socialcoisa.rede.jobs.application.port.out.JobImportSource> jobImportSources;
+	private final ExternalJobRepository externalJobRepository;
 	private final boolean externalListingEnabled;
 	private final int externalListingLimit;
 	private final tools.jackson.databind.ObjectMapper objectMapper;
@@ -53,6 +56,7 @@ class JobContractController {
 			com.socialcoisa.rede.profile.application.ReputationService reputationService,
 			tools.jackson.databind.ObjectMapper objectMapper,
 			List<com.socialcoisa.rede.jobs.application.port.out.JobImportSource> jobImportSources,
+			ExternalJobRepository externalJobRepository,
 			@org.springframework.beans.factory.annotation.Value("${rede.jobs.import.external-listing-enabled:false}") boolean externalListingEnabled,
 			@org.springframework.beans.factory.annotation.Value("${rede.jobs.import.external-listing-limit:20}") int externalListingLimit) {
 		this.idempotency = idempotency;
@@ -63,6 +67,7 @@ class JobContractController {
 		this.reputationService = reputationService;
 		this.objectMapper = objectMapper;
 		this.jobImportSources = jobImportSources;
+		this.externalJobRepository = externalJobRepository;
 		this.externalListingEnabled = externalListingEnabled;
 		this.externalListingLimit = externalListingLimit;
 	}
@@ -300,24 +305,17 @@ class JobContractController {
 		return new PageResponse<>(merged, nextCursor);
 	}
 
-	/** Monta as vagas externas (listagem + redirecionamento). Falha na fonte NAO derruba as internas. */
+	/**
+	 * Vagas externas JA SALVAS no banco (tabela propria, atualizadas pelo worker da meia-noite) —
+	 * nao buscamos a fonte a cada requisicao. Entram DEPOIS das internas.
+	 */
 	private List<JobView> externalJobViews() {
 		List<JobView> external = new java.util.ArrayList<>();
-		for (com.socialcoisa.rede.jobs.application.port.out.JobImportSource source : jobImportSources) {
-			if (!source.available()) {
-				continue;
-			}
-			try {
-				for (var job : source.discover(externalListingLimit)) {
-					external.add(new JobView("ext_" + source.name() + "_" + job.externalId(), job.title(),
-						job.company(), null, job.location(), null, null, job.salary(), null, List.of(), null, 0,
-						false, false, false, 0, null, List.of(), "OPEN", null, "EXTERNAL", job.url(),
-						source.name()));
-				}
-			}
-			catch (RuntimeException failure) {
-				// Fonte indisponivel: seguimos com as vagas internas (nao inventa, nao quebra).
-			}
+		for (ExternalJob job : externalJobRepository.findRecent(externalListingLimit)) {
+			external.add(new JobView(job.id(), job.title(), job.company(), null, job.location(), null, null,
+				job.salary(), job.currency(), List.of(),
+				job.importedAt() != null ? job.importedAt().toString() : null, 0, false, false, false, 0, null,
+				List.of(), "OPEN", null, "EXTERNAL", job.url(), job.platform()));
 		}
 		return external;
 	}
