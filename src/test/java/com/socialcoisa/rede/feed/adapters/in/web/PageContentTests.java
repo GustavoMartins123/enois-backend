@@ -105,4 +105,41 @@ class PageContentTests {
 			.andReturn();
 		return objectMapper.readTree(created.getResponse().getContentAsString()).get("id").asText();
 	}
+
+	/**
+	 * Cartao da miniatura: para uma PAGINA, o que aparece e o TEXTO dela — nao a imagem de marca.
+	 * O teste confere o tipo/assinatura do PNG e que ele nao sai vazio; com
+	 * `-DpageCard.dump=true` ele grava o arquivo, que foi como eu olhei o resultado.
+	 */
+	@Test
+	void previewCardShowsThePageText() throws Exception {
+		var author = auth.authenticate("user_page_card");
+		String postId = publish(author.token(), "page-card-1", "PAGE",
+			"<style>.ruido{color:red}</style><h1>Meu portfolio de dados</h1>"
+				+ "<p>Sou analista, trabalho com pipelines de dados e escrevo sobre isso.</p>");
+
+		MvcResult result = mockMvc.perform(get("/pages/" + postId + "/og.png"))
+			.andExpect(status().isOk())
+			.andExpect(header().string("Content-Type", "image/png"))
+			.andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("max-age")))
+			.andReturn();
+
+		byte[] png = result.getResponse().getContentAsByteArray();
+		assertThat(png.length).isGreaterThan(5_000);
+		assertThat(png[0]).isEqualTo((byte) 0x89);
+		assertThat(new String(png, 1, 3, java.nio.charset.StandardCharsets.US_ASCII)).isEqualTo("PNG");
+
+		if (Boolean.getBoolean("pageCard.dump")) {
+			java.nio.file.Files.write(java.nio.file.Path.of("/tmp/page-card.png"), png);
+		}
+	}
+
+	@Test
+	void previewCardForSomethingThatIsNotAPageIsNotFound() throws Exception {
+		var author = auth.authenticate("user_page_card2");
+		String insight = publish(author.token(), "page-card-2", "INSIGHT", "Post comum.");
+
+		mockMvc.perform(get("/pages/" + insight + "/og.png")).andExpect(status().isNotFound());
+		mockMvc.perform(get("/pages/post_inexistente_999/og.png")).andExpect(status().isNotFound());
+	}
 }

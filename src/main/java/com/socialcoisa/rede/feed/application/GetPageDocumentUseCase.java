@@ -14,6 +14,7 @@ public interface GetPageDocumentUseCase {
 	/** HTML ja sanitizado da pagina. Lanca 404 se nao for uma pagina publicada. */
 	PageDocument getPageDocument(PostId postId);
 
-	record PageDocument(String postId, String html) {
+	/** `authorId` vai junto porque o cartao de compartilhamento assina o nome de quem publicou. */
+	record PageDocument(String postId, String authorId, String html) {
 	}
 }

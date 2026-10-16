@@ -11,7 +11,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.socialcoisa.rede.feed.application.GetPageDocumentUseCase;
+import com.socialcoisa.rede.feed.application.PagePreviewCardService;
 import com.socialcoisa.rede.feed.domain.PostId;
+import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 
 /**
  * Documento HTML de uma pagina publicada — a origem de conteudo.
@@ -36,11 +38,17 @@ import com.socialcoisa.rede.feed.domain.PostId;
 class PageContentController {
 
 	private final GetPageDocumentUseCase getPageDocumentUseCase;
+	private final PagePreviewCardService pagePreviewCardService;
+	private final UserProfileRepository userProfileRepository;
 	private final String contentSecurityPolicy;
 
 	PageContentController(GetPageDocumentUseCase getPageDocumentUseCase,
+			PagePreviewCardService pagePreviewCardService,
+			UserProfileRepository userProfileRepository,
 			@Value("${rede.pages.content-security-policy:" + DEFAULT_CSP + "}") String contentSecurityPolicy) {
 		this.getPageDocumentUseCase = getPageDocumentUseCase;
+		this.pagePreviewCardService = pagePreviewCardService;
+		this.userProfileRepository = userProfileRepository;
 		this.contentSecurityPolicy = contentSecurityPolicy;
 	}
 
@@ -57,6 +65,25 @@ class PageContentController {
 			.header("Referrer-Policy", "no-referrer")
 			.cacheControl(CacheControl.noCache())
 			.body(html.getBytes(StandardCharsets.UTF_8));
+	}
+
+	/**
+	 * Cartao que aparece na miniatura do link de uma pagina: as primeiras linhas do que a pessoa
+	 * escreveu, desenhadas a partir do texto da pagina. Imagem de marca nao serve — quem publica uma
+	 * pagina quer ver o que escreveu.
+	 */
+	@GetMapping(value = "/pages/{postId}/og.png", produces = MediaType.IMAGE_PNG_VALUE)
+	ResponseEntity<byte[]> previewCard(@PathVariable String postId) {
+		var document = getPageDocumentUseCase.getPageDocument(new PostId(postId));
+		String author = userProfileRepository.findById(document.authorId())
+			.map(profile -> profile.name())
+			.orElse(null);
+
+		return ResponseEntity.ok()
+			.contentType(MediaType.IMAGE_PNG)
+			// Um dia no navegador/plataforma; o servidor guarda em cache proprio.
+			.header("Cache-Control", "public, max-age=86400")
+			.body(pagePreviewCardService.render(document.postId(), document.html(), author));
 	}
 
 	/**

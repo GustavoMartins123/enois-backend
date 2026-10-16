@@ -29,6 +29,6 @@ public class GetPageDocumentService implements GetPageDocumentUseCase {
 			.filter(candidate -> candidate.type() == PostType.PAGE)
 			.filter(candidate -> StringUtils.hasText(candidate.pageHtml()))
 			.orElseThrow(() -> new ApiException(404, "PAGE_NOT_FOUND", "Pagina nao encontrada."));
-		return new PageDocument(post.id().value(), post.pageHtml());
+		return new PageDocument(post.id().value(), post.authorId().value(), post.pageHtml());
 	}
 }

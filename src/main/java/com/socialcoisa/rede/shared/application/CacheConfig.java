@@ -30,6 +30,12 @@ public class CacheConfig {
 	/** Frescor do contador da comunidade: o numero pode ficar ate 10 min atras do banco. */
 	private static final Duration COMMUNITY_STATS_TTL = Duration.ofMinutes(10);
 
+	/**
+	 * Cartao de compartilhamento das paginas (PNG desenhado no servidor). Uma hora: o cartao so muda
+	 * quando a pagina e editada, e o cabecalho HTTP ja pede um dia de cache para as plataformas.
+	 */
+	private static final Duration PAGE_PREVIEW_CARD_TTL = Duration.ofHours(1);
+
 	/** Vagas externas so mudam na importacao (boot/meia-noite): 5 min de cache evitam bater no banco. */
 	private static final Duration EXTERNAL_JOBS_TTL = Duration.ofMinutes(5);
 
@@ -37,7 +43,8 @@ public class CacheConfig {
 	CacheManager cacheManager() {
 		SimpleCacheManager manager = new SimpleCacheManager();
 		manager.setCaches(List.of(cache("communityStats", COMMUNITY_STATS_TTL),
-			cache("externalJobs", EXTERNAL_JOBS_TTL)));
+			cache("externalJobs", EXTERNAL_JOBS_TTL),
+			cache("pagePreviewCards", PAGE_PREVIEW_CARD_TTL)));
 		return manager;
 	}
 
