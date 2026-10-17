@@ -148,4 +148,25 @@ class IdentityDisplayTests {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.badges.length()").value(0));
 	}
+
+	@Test
+	void theOldSingleBadgeFollowsTheList() throws Exception {
+		var session = auth.authenticate("user_badge_c");
+
+		// A coluna unica (o emblema antigo) espelha o primeiro da lista: e nela que as leituras de
+		// autor caem quando a lista esta vazia.
+		mockMvc.perform(withSession(put("/me/badges"), session).contentType(MediaType.APPLICATION_JSON)
+			.content("{\"badges\":[\"https://cdn.enois.ia.br/b1.png\",\"https://cdn.enois.ia.br/b2.png\"]}"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.badges.length()").value(2))
+			.andExpect(jsonPath("$.badge").value("https://cdn.enois.ia.br/b1.png"));
+
+		// Remover todos tem que remover de verdade: sem limpar a coluna antiga o emblema voltaria
+		// a acompanhar o nome em todo o app depois de a pessoa tirar ele do perfil.
+		mockMvc.perform(withSession(put("/me/badges"), session).contentType(MediaType.APPLICATION_JSON)
+			.content("{\"badges\":[]}"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.badges.length()").value(0))
+			.andExpect(jsonPath("$.badge").doesNotExist());
+	}
 }

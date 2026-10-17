@@ -302,6 +302,9 @@ public class UserProfile {
 	public void updateBadges(List<String> badges, Instant now) {
 		if (badges == null || badges.isEmpty()) {
 			this.badges = List.of();
+			// O campo antigo sai junto: com a lista vazia o primaryBadge cai nele, e o emblema que
+			// a pessoa acabou de remover voltaria a acompanhar o nome por todo o app.
+			this.badge = null;
 			this.updatedAt = now;
 			return;
 		}
@@ -309,6 +312,9 @@ public class UserProfile {
 			throw new IllegalStateException("MAX_BADGES");
 		}
 		this.badges = List.copyOf(badges);
+		// A coluna unica segue a lista (o primeiro emblema): e o valor que as leituras de autor
+		// (feed, comentarios, blog) usam quando procuram "o emblema" da pessoa.
+		this.badge = this.badges.get(0);
 		this.updatedAt = now;
 	}
 
