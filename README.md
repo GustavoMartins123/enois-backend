@@ -200,33 +200,60 @@ configure `REDE_GIFS_TENOR_KEY` e o provedor passa a responder primeiro.
 A cota é do provedor, então o backend guarda o resultado por 10 minutos por termo (cache `gifSearch`)
 e o endpoint exige sessão — anônimo não gasta a cota.
 
-## Pending infrastructure tasks
+## Pendências de infraestrutura — o que precisa de quem opera
 
-Three items are waiting on infrastructure:
+**A lista inteira, em ordem de urgência. Nada aqui é código: tudo já está no `main` esperando.**
 
-### 0. URGENTE — o CI parou de deployar: a role OIDC rejeita o GitHub (desde ~16:55 de 17/10)
+| # | O que | Onde | Bloqueia |
+|---|-------|------|----------|
+| **0** | **Religar o GitHub Actions nos dois repositórios** | `gh api -X PUT repos/Rede-ENois/enois-frontend/actions/permissions -F enabled=true` (idem `enois-backend`) ou Settings → Actions → General | **todo deploy, nos dois repos** |
+| **0b** | **Trust policy do papel OIDC com os nomes novos dos repos** | IAM `arn:aws:iam::818928662779:role/forest-dev-github` | **todo deploy** |
+| 1 | Certificado (ACM) + DNS de `paginas.enois.ia.br` | ACM us-east-1 + DNS do `ia.br` | player dentro das páginas publicadas |
+| 2 | Rotacionar a senha do banco (a antiga está no histórico do Git) | MariaDB + `git filter-repo` | segurança |
+| 3 | `REDE_GIFS_TENOR_KEY` e `REDE_GIFS_GIPHY_KEY` | secrets do Deployment | busca externa de GIF (sem elas, só os GIFs da comunidade) |
+| 4 | `REDE_SECURITY_ENCRYPTION_KEY` (base64 de 32 bytes) | secrets do Deployment | 2FA (a seção fica escondida sem ela) |
+| 5 | `dump_rede.sql` no histórico do Git (dados pessoais reais) | `git filter-repo` + trocar as senhas dos afetados | LGPD |
+| 6 | Sanitizar usuários e posts de teste em produção | precisa de acesso ao banco ou de um endpoint admin | — |
 
-**Sintoma:** todo workflow (front e backend) falha no passo
-`⚙️ Configurar Credenciais AWS via OIDC` com
-`Not authorized to perform sts:AssumeRoleWithWebIdentity` (12 retries, sempre igual) — e os runs
-seguintes ficam em "queued" para sempre. **Nada deploya desde o run das 16:51** (imagem
-`b199118`): os commits na main (correção dos controles de tema, cards de projeto, e-mail da
-denúncia, GIFs da comunidade, blogs) estão prontos e esperando.
+### 0. URGENTE — o CI parou de deployar (desde ~16:55 de 17/10)
 
-**A role:** `arn:aws:iam::818928662779:role/forest-dev-github` (usada pelos DOIS repositórios,
-`enois-backend` e `enois-frontend`, via `aws-actions/configure-aws-credentials@v6` com OIDC de
-`token.actions.githubusercontent.com`).
+**São dois bloqueios independentes, e o primeiro explica o sintoma mais estranho.**
+
+**a) O GitHub Actions está DESABILITADO nos dois repositórios.** É o estado que o GitHub deixa
+depois de um repositório ser transferido de dono, e explica os três sintomas de uma vez: push novo
+**não cria run nenhum**, os runs antigos ficam `queued` para sempre e a esteira parece "travada".
+Uma chamada confirma:
+
+```
+gh api repos/Rede-ENois/enois-frontend/actions/permissions   → {"enabled":false,...}
+gh api repos/Rede-ENois/enois-backend/actions/permissions    → {"enabled":false,...}
+```
+
+Para religar (ou Settings → Actions → General → permitir as ações):
+
+```
+gh api -X PUT repos/Rede-ENois/enois-frontend/actions/permissions -F enabled=true
+gh api -X PUT repos/Rede-ENois/enois-backend/actions/permissions -F enabled=true
+```
+
+**b) A role OIDC ainda espera o nome ANTIGO do repositório.** Com o Actions religado, o primeiro run
+morre no passo `⚙️ Configurar Credenciais AWS via OIDC` com
+`Not authorized to perform sts:AssumeRoleWithWebIdentity` (12 retries, sempre igual): a claim `sub`
+do OIDC passou a ser `repo:Rede-ENois/enois-frontend:...` e a trust policy de
+`arn:aws:iam::818928662779:role/forest-dev-github` não bate mais. É a mesma role nos dois workflows.
 
 **O que conferir no IAM, nesta ordem:**
 1. A role `forest-dev-github` ainda existe e não foi renomeada;
-2. A trust policy dela ainda confia em `token.actions.githubusercontent.com` com
-   `sts:AssumeRoleWithWebIdentity` e a condition `aud = sts.amazonaws.com` (e nenhuma condição de
-   `sub` que tenha sido apertada em 17/10);
+2. A trust policy confia em `token.actions.githubusercontent.com` com `sts:AssumeRoleWithWebIdentity`,
+   condition `aud = sts.amazonaws.com` **e um `sub` que aceite `repo:Rede-ENois/enois-frontend:*` e
+   `repo:Rede-ENois/enois-backend:*`** (hoje ela aponta para o nome antigo);
 3. O Identity provider OIDC `token.actions.githubusercontent.com` ainda existe na conta.
 
-**Depois de restaurar:** reexecutar o workflow nos dois repos
-(`gh workflow run build-and-push.yml -R florestaencantada/enois-backend` e `-R florestaencantada/enois-frontend`)
-— a main dos dois já tem tudo pronto. Não precisa de commit novo.
+**Depois de religar:** não precisa de commit novo — a `main` dos dois repos já tem tudo pronto.
+Dispare o workflow (`gh workflow run "Build, Push and GitOps Deploy" --ref main -R
+Rede-ENois/enois-backend`, idem front) ou espere o próximo push. **O primeiro deploy que passar leva
+junto, de uma vez:** a V57 (o 409 ao publicar página grande), V58 (blogs), V60 (selos), V61
+(projetos), V62 (capa de comunidade) e V63 (vulgo) — todas aplicam sozinhas no boot, pelo Flyway.
 
 Two items are also waiting on infrastructure (both are one-time, no code change needed afterwards):
 
