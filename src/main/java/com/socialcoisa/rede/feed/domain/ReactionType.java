@@ -8,5 +8,9 @@ public enum ReactionType {
 	SAD,
 	CELEBRATE,
 	SUPPORT,
-	INSIGHTFUL
+	INSIGHTFUL,
+	ROFL,
+	ANGRY,
+	DISGUST,
+	SKEPTICAL
 }
