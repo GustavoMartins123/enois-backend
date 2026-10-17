@@ -56,8 +56,9 @@ class IdentityDisplayTests {
 			.andExpect(jsonPath("$.pronouns").value("ela/dela"));
 
 		// Consulta publica: o nome de cadastro nao aparece para terceiros.
-		var me = objectMapper.readTree(mockMvc.perform(withSession(get("/me"), session).andReturn().getResponse()
-			.getContentAsString()));
+		var me = objectMapper
+			.readTree(mockMvc.perform(withSession(get("/me"), session)).andReturn().getResponse()
+				.getContentAsString());
 		mockMvc.perform(get("/users/" + me.get("username").asText()))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.name").value("Beatriz Sol (Bia)"))
