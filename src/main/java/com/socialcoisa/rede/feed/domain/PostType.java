@@ -18,5 +18,10 @@ public enum PostType {
 	NEWS,
 	TUTORIAL,
 	REVIEW,
-	MOMENT
+	MOMENT,
+	/**
+	 * Ponteiro de um post de blog: o conteudo mora no blog do autor, nao no feed. Entra so no "Para
+	 * voce" de quem se inscreveu no blog (nunca no "Tudo") e leva a tag "blog".
+	 */
+	BLOG
 }

@@ -58,16 +58,19 @@ class PostPersistenceAdapter implements PostRepository {
 
 	@Override
 	public List<Post> findActiveByAuthor(UserId authorId, Instant before, int limit) {
-		return repository.findByAuthorIdAndStatusAndCreatedAtBeforeOrderByCreatedAtDesc(authorId.value(),
-			PostStatus.ACTIVE, before, PageRequest.of(0, limit)).stream()
+		// Ponteiro de blog fica fora do perfil: o conteudo dele mora no blog, nao na lista de posts.
+		return repository.findByAuthorIdAndStatusAndTypeNotAndCreatedAtBeforeOrderByCreatedAtDesc(authorId.value(),
+			PostStatus.ACTIVE, PostType.BLOG, before, PageRequest.of(0, limit)).stream()
 			.map(PostJpaEntity::toDomain)
 			.toList();
 	}
 
 	@Override
 	public List<Post> findActiveAll(Instant before, int limit) {
-		return repository.findByStatusAndCreatedAtBeforeOrderByCreatedAtDesc(PostStatus.ACTIVE, before,
-			PageRequest.of(0, limit)).stream()
+		// "Tudo" nunca mostra post de blog: quem quer acompanhar se inscreve no blog, e a novidade
+		// aparece no "Para voce" de quem segue.
+		return repository.findByStatusAndTypeNotAndCreatedAtBeforeOrderByCreatedAtDesc(PostStatus.ACTIVE,
+			PostType.BLOG, before, PageRequest.of(0, limit)).stream()
 			.map(PostJpaEntity::toDomain)
 			.toList();
 	}

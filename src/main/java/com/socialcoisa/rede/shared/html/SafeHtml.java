@@ -45,6 +45,9 @@ public final class SafeHtml {
 	 */
 	public static final int MAX_PROFILE_HTML = 20_000;
 
+	/** Teto do HTML de blog (tema do cantinho ou post em HTML): o mesmo do resto, sem excecao. */
+	public static final int MAX_BLOG_HTML = 20_000;
+
 	/**
 	 * Corte do texto cru antes de parsear: evita gastar CPU com um paste gigante. Fica acima do
 	 * teto porque a limpeza costuma encolher o markup (scripts fora, tags nao permitidas fora).
@@ -131,6 +134,23 @@ public final class SafeHtml {
 		String sanitized = sanitizeProfileHtml(raw);
 		if (sanitized == null) {
 			throw new ApiException(400, "INVALID_PROFILE_HTML", "Bio em HTML precisa de conteudo valido.");
+		}
+		return sanitized;
+	}
+
+	/**
+	 * HTML do blog: o tema do cantinho e o corpo de um post escrito em HTML. Mesma limpeza e mesmo
+	 * teto do resto (um limite so, para todo mundo) — o que muda e so a mensagem de erro, que fala
+	 * de blog em vez de pagina/perfil.
+	 */
+	public static String sanitizeBlogHtml(String raw) {
+		return sanitize(raw, MAX_BLOG_HTML, "BLOG_HTML_TOO_LONG", "HTML do blog");
+	}
+
+	public static String requireBlogHtml(String raw) {
+		String sanitized = sanitizeBlogHtml(raw);
+		if (sanitized == null) {
+			throw new ApiException(400, "INVALID_BLOG_HTML", "Post do blog precisa de HTML valido.");
 		}
 		return sanitized;
 	}

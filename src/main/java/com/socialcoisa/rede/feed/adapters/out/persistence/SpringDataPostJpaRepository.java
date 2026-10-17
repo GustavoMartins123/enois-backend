@@ -17,14 +17,14 @@ interface SpringDataPostJpaRepository extends JpaRepository<PostJpaEntity, Strin
 	List<PostJpaEntity> findByAuthorIdInAndStatusAndCreatedAtBeforeOrderByCreatedAtDesc(Collection<String> authorIds,
 			PostStatus status, Instant before, Pageable pageable);
 
-	List<PostJpaEntity> findByAuthorIdAndStatusAndCreatedAtBeforeOrderByCreatedAtDesc(String authorId, PostStatus status,
-			Instant before, Pageable pageable);
+	List<PostJpaEntity> findByAuthorIdAndStatusAndTypeNotAndCreatedAtBeforeOrderByCreatedAtDesc(String authorId,
+			PostStatus status, PostType excludedType, Instant before, Pageable pageable);
 
 	List<PostJpaEntity> findByCommunityIdAndStatusAndCreatedAtBeforeOrderByCreatedAtDesc(String communityId,
 			PostStatus status, Instant before, Pageable pageable);
 
-	List<PostJpaEntity> findByStatusAndCreatedAtBeforeOrderByCreatedAtDesc(PostStatus status, Instant before,
-			Pageable pageable);
+	List<PostJpaEntity> findByStatusAndTypeNotAndCreatedAtBeforeOrderByCreatedAtDesc(PostStatus status,
+			PostType excludedType, Instant before, Pageable pageable);
 
 	List<PostJpaEntity> findByTypeAndStatusAndCreatedAtBeforeOrderByCreatedAtDesc(PostType type, PostStatus status,
 			Instant before, Pageable pageable);

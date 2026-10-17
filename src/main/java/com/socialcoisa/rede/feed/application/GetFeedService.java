@@ -24,6 +24,7 @@ import com.socialcoisa.rede.feed.application.port.out.FeedCacheRepository;
 import com.socialcoisa.rede.feed.application.port.out.PostInteractionRepository;
 import com.socialcoisa.rede.feed.application.port.out.ArticleRepository;
 import com.socialcoisa.rede.feed.application.port.out.PostRepository;
+import com.socialcoisa.rede.feed.application.port.out.SubscribedBlogAuthorsReader;
 import com.socialcoisa.rede.feed.domain.FeedItem;
 import com.socialcoisa.rede.feed.domain.FeedTab;
 import com.socialcoisa.rede.feed.domain.Post;
@@ -51,13 +52,15 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 	private final CursorCodec cursorCodec;
 	private final BlockedUsersReader blockedUsersReader;
 	private final PostCommunityReader postCommunityReader;
+	private final SubscribedBlogAuthorsReader subscribedBlogAuthors;
 	private static final Instant DEFAULT_BEFORE = Instant.parse("9999-12-31T23:59:59Z");
 
 	public GetFeedService(PostRepository postRepository, ArticleRepository articleRepository,
 			FeedCacheRepository feedCacheRepository,
 			ConnectionGraphRepository connectionGraphRepository, UserProfileRepository userProfileRepository,
 			PostInteractionRepository postInteractionRepository, CommentRepository commentRepository,
-			CursorCodec cursorCodec, BlockedUsersReader blockedUsersReader, PostCommunityReader postCommunityReader) {
+			CursorCodec cursorCodec, BlockedUsersReader blockedUsersReader, PostCommunityReader postCommunityReader,
+			SubscribedBlogAuthorsReader subscribedBlogAuthors) {
 		this.postRepository = postRepository;
 		this.articleRepository = articleRepository;
 		this.feedCacheRepository = feedCacheRepository;
@@ -68,6 +71,7 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 		this.cursorCodec = cursorCodec;
 		this.blockedUsersReader = blockedUsersReader;
 		this.postCommunityReader = postCommunityReader;
+		this.subscribedBlogAuthors = subscribedBlogAuthors;
 	}
 
 	@Override
@@ -258,6 +262,11 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 		Set<UserId> authors = new LinkedHashSet<>();
 		authors.add(query.userId());
 		authors.addAll(connectionGraphRepository.findFriends(query.userId()));
+		// Blogs que a pessoa segue: a novidade deles aparece AQUI. E o unico caminho para um post de
+		// blog no feed — a listagem global ("Tudo") exclui o tipo BLOG, entao ele nunca cai la.
+		subscribedBlogAuthors.authorsFollowedBy(query.userId().value()).stream()
+			.map(UserId::new)
+			.forEach(authors::add);
 		// Busca mais que o limite porque a filtragem por comunidade pode encolher a pagina.
 		List<Post> fetched = postRepository.findActiveByAuthors(authors, before, limit * 3);
 		Set<String> hiddenCommunities = communityIdsWithoutMembership(fetched, query.userId());
