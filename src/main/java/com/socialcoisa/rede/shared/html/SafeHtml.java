@@ -45,6 +45,12 @@ public final class SafeHtml {
 	 */
 	public static final int MAX_PROFILE_HTML = 20_000;
 
+	/**
+	 * Teto do HTML de um card de projeto. O mesmo número da bio e da página: um teto
+	 * único para "HTML colado" continua sendo o mais fácil de explicar e de conferir.
+	 */
+	public static final int MAX_PROJECT_HTML = 20_000;
+
 	/** Teto do HTML de blog (tema do cantinho ou post em HTML): o mesmo do resto, sem excecao. */
 	public static final int MAX_BLOG_HTML = 20_000;
 
@@ -128,6 +134,11 @@ public final class SafeHtml {
 	 */
 	public static String sanitizeProfileHtml(String raw) {
 		return sanitize(raw, MAX_PROFILE_HTML, "PROFILE_HTML_TOO_LONG", "HTML do perfil");
+	}
+
+	/** HTML obrigatório do card de projeto: mesma limpeza da família, teto próprio. */
+	public static String sanitizeProjectHtml(String raw) {
+		return sanitize(raw, MAX_PROJECT_HTML, "PROJECT_HTML_TOO_LONG", "HTML do projeto");
 	}
 
 	public static String requireProfileHtml(String raw) {
