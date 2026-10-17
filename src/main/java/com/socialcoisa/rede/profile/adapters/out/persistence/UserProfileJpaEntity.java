@@ -113,6 +113,10 @@ class UserProfileJpaEntity {
 	@Column(name = "nickname", length = 60)
 	private String nickname;
 
+	/** Ate 5 URLs de emblema, uma por linha (URL nao tem quebra de linha). */
+	@Column(name = "badges", columnDefinition = "text")
+	private String badges;
+
 	@Column(name = "social_name", length = 160)
 	private String socialName;
 
@@ -158,6 +162,7 @@ class UserProfileJpaEntity {
 		entity.nickname = profile.nickname();
 		entity.socialName = profile.socialName();
 		entity.pronouns = profile.pronouns();
+		entity.badges = String.join("\n", profile.badges());
 		return entity;
 	}
 
@@ -181,6 +186,7 @@ class UserProfileJpaEntity {
 			profile.enableFederatedSecondFactor(federatedSecondFactorAt);
 		}
 		profile.hydrateIdentityDisplay(nickname, socialName, pronouns);
+		profile.hydrateBadges(badges == null || badges.isBlank() ? List.of() : List.of(badges.split("\n")));
 		return profile;
 	}
 }

@@ -116,4 +116,36 @@ class IdentityDisplayTests {
 		mockMvc.perform(put("/me/identity").contentType(MediaType.APPLICATION_JSON).content("{}"))
 			.andExpect(status().isUnauthorized());
 	}
+
+	@Test
+	void acceptsUpToFiveBadgesAndRefusesSix() throws Exception {
+		var session = auth.authenticate("user_badge_a");
+
+		String five = "{\"badges\":[\"https://cdn.enois.ia.br/b1.png\",\"https://cdn.enois.ia.br/b2.png\",\"https://cdn.enois.ia.br/b3.png\",\"https://cdn.enois.ia.br/b4.png\",\"https://cdn.enois.ia.br/b5.png\"]}";
+		mockMvc.perform(withSession(put("/me/badges"), session).contentType(MediaType.APPLICATION_JSON)
+			.content(five))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.badges.length()").value(5));
+
+		String six = "{\"badges\":[\"https://cdn.enois.ia.br/b1.png\",\"https://cdn.enois.ia.br/b2.png\",\"https://cdn.enois.ia.br/b3.png\",\"https://cdn.enois.ia.br/b4.png\",\"https://cdn.enois.ia.br/b5.png\",\"https://cdn.enois.ia.br/b6.png\"]}";
+		mockMvc.perform(withSession(put("/me/badges"), session).contentType(MediaType.APPLICATION_JSON)
+			.content(six))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("MAX_BADGES"));
+	}
+
+	@Test
+	void clearingBadgesIsEmptyList() throws Exception {
+		var session = auth.authenticate("user_badge_b");
+
+		mockMvc.perform(withSession(put("/me/badges"), session).contentType(MediaType.APPLICATION_JSON)
+			.content("{\"badges\":[\"https://cdn.enois.ia.br/b1.png\"]}"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.badges.length()").value(1));
+
+		mockMvc.perform(withSession(put("/me/badges"), session).contentType(MediaType.APPLICATION_JSON)
+			.content("{\"badges\":null}"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.badges.length()").value(0));
+	}
 }

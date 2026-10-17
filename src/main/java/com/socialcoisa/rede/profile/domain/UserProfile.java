@@ -27,6 +27,8 @@ public class UserProfile {
 	private String socialName;
 	/** Pronomes: aparecem so no perfil, como lembrete de como tratar a pessoa. */
 	private String pronouns;
+	/** Ate 5 emblemas; o primeiro e o que acompanha o nome por todo o app. */
+	private List<String> badges = List.of();
 	private List<String> skills;
 	private List<String> goals;
 	private String availability;
@@ -243,6 +245,7 @@ public class UserProfile {
 		this.externalLinks = List.of();
 		this.openToWork = false;
 		this.mentor = false;
+		this.badges = List.of();
 		this.nickname = null;
 		this.socialName = null;
 		this.pronouns = null;
@@ -288,6 +291,30 @@ public class UserProfile {
 		this.nickname = blankToNull(nickname);
 		this.socialName = blankToNull(socialName);
 		this.pronouns = blankToNull(pronouns);
+	}
+
+	/** Hidrata a lista de emblemas (URLs separadas por linha no banco). */
+	public void hydrateBadges(List<String> badges) {
+		this.badges = badges == null ? List.of() : List.copyOf(badges);
+	}
+
+	/** Ate 5 emblemas; valor nulo/vazio limpa a lista. Recusa acima de 5. */
+	public void updateBadges(List<String> badges, Instant now) {
+		if (badges == null || badges.isEmpty()) {
+			this.badges = List.of();
+			this.updatedAt = now;
+			return;
+		}
+		if (badges.size() > 5) {
+			throw new IllegalStateException("MAX_BADGES");
+		}
+		this.badges = List.copyOf(badges);
+		this.updatedAt = now;
+	}
+
+	/** O emblema que acompanha o nome por todo o app: o primeiro da lista. */
+	public String primaryBadge() {
+		return badges.isEmpty() ? badge : badges.get(0);
 	}
 
 	public String id() {
@@ -340,6 +367,10 @@ public class UserProfile {
 
 	public String badge() {
 		return badge;
+	}
+
+	public List<String> badges() {
+		return badges;
 	}
 
 	public String bio() {

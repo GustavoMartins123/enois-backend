@@ -15,7 +15,7 @@ public record OwnProfileView(String id, String username, String name, String hea
 		List<String> goals,
 		String availability, String portfolio, List<String> externalLinks, boolean openToWork, boolean isMentor,
 		int connectionsCount, int followersCount, int reputation, String nickname, String socialName,
-		String pronouns) {
+		String pronouns, List<String> badges) {
 
 	public static OwnProfileView from(UserProfile profile) {
 		return new OwnProfileView(profile.id(), profile.username(), profile.name(), profile.headline(), profile.email(),
@@ -24,7 +24,7 @@ public record OwnProfileView(String id, String username, String name, String hea
 			profile.skills(),
 			profile.goals(), profile.availability(), profile.portfolio(), profile.externalLinks(), profile.openToWork(),
 			profile.mentor(), profile.connectionsCount(), profile.followersCount(), profile.reputation(),
-			profile.nickname(), profile.socialName(), profile.pronouns());
+			profile.nickname(), profile.socialName(), profile.pronouns(), profile.badges());
 
 	}
 
@@ -37,13 +37,13 @@ public record OwnProfileView(String id, String username, String name, String hea
 	public OwnProfileView withBioHtml(String bioHtml) {
 		return new OwnProfileView(id, username, name, headline, email, company, location, avatar, banner, badge, bio,
 			bioHtml, bannerHtml, skills, goals, availability, portfolio, externalLinks, openToWork, isMentor,
-			connectionsCount, followersCount, reputation, nickname, socialName, pronouns);
+			connectionsCount, followersCount, reputation, nickname, socialName, pronouns, badges);
 	}
 
 	/** Capa em HTML/CSS; so a leitura do perfil anexa (mesmo motivo da bio). */
 	public OwnProfileView withBannerHtml(String bannerHtml) {
 		return new OwnProfileView(id, username, name, headline, email, company, location, avatar, banner, badge, bio,
 			bioHtml, bannerHtml, skills, goals, availability, portfolio, externalLinks, openToWork, isMentor,
-			connectionsCount, followersCount, reputation, nickname, socialName, pronouns);
+			connectionsCount, followersCount, reputation, nickname, socialName, pronouns, badges);
 	}
 }

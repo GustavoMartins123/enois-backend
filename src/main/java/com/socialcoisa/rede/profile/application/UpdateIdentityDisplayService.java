@@ -1,6 +1,7 @@
 package com.socialcoisa.rede.profile.application;
 
 import java.time.Clock;
+import java.util.List;
 
 import org.springframework.stereotype.Service;
 
@@ -36,6 +37,27 @@ public class UpdateIdentityDisplayService {
 		check("pronomes", pronouns, 60);
 		profile.updateIdentityDisplay(PlainText.defuse(nickname), PlainText.defuse(socialName),
 			PlainText.defuse(pronouns), clock.instant());
+		return repository.save(profile);
+	}
+
+	/**
+	 * Ate 5 emblemas por perfil. Cada um e uma URL do nosso CDN (upload pela media);
+	 * o primeiro acompanha o nome por todo o app, todos aparecem no perfil. Uma lista
+	 * nula ou vazia limpa.
+	 */
+	public UserProfile updateBadges(String userId, List<String> badges) {
+		UserProfile profile = repository.findById(userId)
+			.orElseThrow(() -> new ApiException(404, "PROFILE_NOT_FOUND", "Perfil nao encontrado."));
+		if (badges != null && badges.size() > 5) {
+			throw new ApiException(400, "MAX_BADGES", "Sao no maximo 5 emblemas.");
+		}
+		List<String> clean = badges == null ? List.of()
+			: badges.stream()
+				.map(String::trim)
+				.filter(value -> !value.isEmpty())
+				.peek(value -> check("emblema", value, 500))
+				.toList();
+		profile.updateBadges(clean, clock.instant());
 		return repository.save(profile);
 	}
 
