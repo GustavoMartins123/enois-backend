@@ -39,17 +39,29 @@ public class CacheConfig {
 	/** Vagas externas so mudam na importacao (boot/meia-noite): 5 min de cache evitam bater no banco. */
 	private static final Duration EXTERNAL_JOBS_TTL = Duration.ofMinutes(5);
 
+	/**
+	 * Busca de GIF do seletor. Dez minutos: o termo repetido nao gasta a cota do provedor de novo, e
+	 * a chave inclui o termo — por isso o teto de entradas e maior que o dos outros caches.
+	 */
+	private static final Duration GIF_SEARCH_TTL = Duration.ofMinutes(10);
+	private static final int GIF_SEARCH_MAX_ENTRIES = 200;
+
 	@Bean
 	CacheManager cacheManager() {
 		SimpleCacheManager manager = new SimpleCacheManager();
 		manager.setCaches(List.of(cache("communityStats", COMMUNITY_STATS_TTL),
 			cache("externalJobs", EXTERNAL_JOBS_TTL),
-			cache("pagePreviewCards", PAGE_PREVIEW_CARD_TTL)));
+			cache("pagePreviewCards", PAGE_PREVIEW_CARD_TTL),
+			cache("gifSearch", GIF_SEARCH_TTL, GIF_SEARCH_MAX_ENTRIES)));
 		return manager;
 	}
 
 	private CaffeineCache cache(String name, Duration ttl) {
+		return cache(name, ttl, 16);
+	}
+
+	private CaffeineCache cache(String name, Duration ttl, int maxEntries) {
 		return new CaffeineCache(name,
-			Caffeine.newBuilder().expireAfterWrite(ttl).maximumSize(16).build());
+			Caffeine.newBuilder().expireAfterWrite(ttl).maximumSize(maxEntries).build());
 	}
 }

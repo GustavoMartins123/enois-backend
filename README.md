@@ -178,6 +178,22 @@ back** is setting `REDE_MEDIA_STORAGE=imagekit` and restarting: objects already 
 served through their stored address. A `403` on upload is almost always bucket CORS or a
 `Content-Type` different from the signed one.
 
+## Busca de GIF (seletor de comentário)
+
+O seletor de GIF do comentário busca num provedor externo e devolve a URL da mídia — a mesma que o
+comentário já aceita por link. **Renderizar GIF não precisa de chave** (é um `<img>` numa URL do
+Giphy/Tenor, e isso continua valendo); o que precisa de chave é a **busca**.
+
+| Variável | Observação |
+|---|---|
+| `REDE_GIFS_TENOR_KEY` | chave da **Tenor API v2**: Google Cloud → ativar a "Tenor API" → criar uma chave de API. É o provedor preferido. |
+| `REDE_GIFS_GIPHY_KEY` | chave da **GIPHY API**: developers.giphy.com → *Create an App*. Entra quando só ele está configurado. |
+
+Uma chave basta — com as duas, o Tenor responde primeiro. **Sem chave nenhuma nada quebra**: o
+seletor abre e avisa que a busca está indisponível, com o caminho de colar link funcionando ao lado.
+A cota é do provedor, então o backend guarda o resultado por 10 minutos por termo (cache `gifSearch`)
+e o endpoint exige sessão — anônimo não gasta a cota.
+
 ## Pending infrastructure tasks
 
 Two items are waiting on infrastructure (both are one-time, no code change needed afterwards):
@@ -268,6 +284,7 @@ backend expõe fica público em `https://enois.ia.br/api/...` — inclusive `/ap
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | p/ login Google | |
 | `APPLE_CLIENT_ID` / `APPLE_TEAM_ID` / `APPLE_KEY_ID` / `APPLE_PRIVATE_KEY` | p/ login Apple | `APPLE_PRIVATE_KEY` é o **conteúdo** da chave `.p8` (PEM PKCS#8), com `\n` ou quebras reais. Ela é usada para montar o `client_secret` (JWT ES256) exigido na troca do `code`. |
 | `IMAGEKIT_URL_ENDPOINT` / `IMAGEKIT_PUBLIC_KEY` / `IMAGEKIT_PRIVATE_KEY` | p/ mídia | |
+| `REDE_GIFS_TENOR_KEY` / `REDE_GIFS_GIPHY_KEY` | p/ busca de GIF | chave de um dos provedores (Tenor ou GIPHY). Sem nenhuma, o seletor de GIF do comentário avisa que a busca está indisponível — colar link continua funcionando. Como obter: seção "Busca de GIF" |
 | `CORS_ALLOWED_ORIGINS` | não | padrão `*` |
 | `SPRINGDOC_ENABLED` | não | padrão `false`. `true` liga `/api/openapi.json` + Swagger UI (use só em dev/VPN) |
 | `MANAGEMENT_ENDPOINTS` | não | padrão `health`. Para métricas use `health,prometheus` **e bloqueie `/api/actuator/*` no gateway** |
