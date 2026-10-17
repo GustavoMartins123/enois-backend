@@ -45,13 +45,15 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 	private final NotificationService notificationService;
 	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository;
 	private final BlockedUsersReader blockedUsersReader;
+	private final com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseCase validateMediaOwnership;
 
 	public PostInteractionService(PostRepository postRepository, CommentRepository commentRepository,
 			PostInteractionRepository postInteractionRepository, OutboxEventRepository outboxEventRepository,
 			CursorCodec cursorCodec, Clock clock,
 			NotificationService notificationService,
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository,
-			BlockedUsersReader blockedUsersReader) {
+			BlockedUsersReader blockedUsersReader,
+			com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseCase validateMediaOwnership) {
 		this.postRepository = postRepository;
 		this.commentRepository = commentRepository;
 		this.postInteractionRepository = postInteractionRepository;
@@ -61,16 +63,18 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 		this.notificationService = notificationService;
 		this.userProfileRepository = userProfileRepository;
 		this.blockedUsersReader = blockedUsersReader;
+		this.validateMediaOwnership = validateMediaOwnership;
 	}
 
 	@Override
 	@Transactional
 	public CommentView comment(CommentOnPostCommand command) {
 		Post post = activePost(command.postId());
-		String content = normalizeContent(command.content());
+		List<String> mediaIds = normalizeCommentMedia(command.mediaIds(), command.authorId());
+		String content = normalizeContent(command.content(), !mediaIds.isEmpty());
 		String parentCommentId = normalizeParentComment(command.parentCommentId(), post.id());
 		Comment comment = Comment.create(newId("comment"), post.id(), command.authorId(), parentCommentId, content,
-			clock.instant());
+			mediaIds, clock.instant());
 		Comment saved = commentRepository.save(comment);
 		post.addComment();
 		postRepository.save(post);
@@ -253,8 +257,12 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 		return post;
 	}
 
-	private String normalizeContent(String content) {
+	private String normalizeContent(String content, boolean hasMedia) {
 		if (!StringUtils.hasText(content)) {
+			// Comentario so de midia (imagem/GIF) e valido; texto vazio sem midia nao.
+			if (hasMedia) {
+				return "";
+			}
 			throw new ApiException(400, "INVALID_COMMENT_CONTENT", "Conteudo obrigatorio.");
 		}
 		// Mesma defesa do post (ver PlainText): comentario tambem e porta de entrada de texto.
@@ -262,6 +270,27 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 		if (normalized.length() > 800) {
 			throw new ApiException(400, "COMMENT_TOO_LONG", "Comentario deve ter no maximo 800 caracteres.");
 		}
+		return normalized;
+	}
+
+	/** Ate 4 midias, do proprio autor — a mesma regra de posse da publicacao de posts. */
+	private List<String> normalizeCommentMedia(List<String> mediaIds,
+			com.socialcoisa.rede.feed.domain.UserId authorId) {
+		if (mediaIds == null) {
+			return List.of();
+		}
+		List<String> normalized = mediaIds.stream()
+			.filter(StringUtils::hasText)
+			.map(String::trim)
+			.distinct()
+			.toList();
+		if (normalized.isEmpty()) {
+			return List.of();
+		}
+		if (normalized.size() > 4) {
+			throw new ApiException(400, "COMMENT_TOO_MANY_MEDIA", "Comentario aceita no maximo 4 midias.");
+		}
+		validateMediaOwnership.validateOwnedBy(authorId, normalized);
 		return normalized;
 	}
 

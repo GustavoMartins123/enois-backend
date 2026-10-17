@@ -7,12 +7,19 @@ import com.socialcoisa.rede.feed.domain.CommentStatus;
 import com.socialcoisa.rede.feed.domain.PostId;
 import com.socialcoisa.rede.feed.domain.UserId;
 
+import java.util.ArrayList;
+import java.util.List;
+
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
 
 @Entity
@@ -46,6 +53,11 @@ class CommentJpaEntity {
 	@Column(name = "edited_at")
 	private Instant editedAt;
 
+	@ElementCollection(fetch = FetchType.EAGER)
+	@CollectionTable(name = "comment_media", joinColumns = @JoinColumn(name = "comment_id"))
+	@Column(name = "media_id", nullable = false)
+	private List<String> mediaIds = new ArrayList<>();
+
 	protected CommentJpaEntity() {
 	}
 
@@ -59,12 +71,13 @@ class CommentJpaEntity {
 		entity.createdAt = comment.createdAt();
 		entity.status = comment.status();
 		entity.editedAt = comment.editedAt();
+		entity.mediaIds = new ArrayList<>(comment.mediaIds());
 		return entity;
 	}
 
 	Comment toDomain() {
-		return new Comment(id, new PostId(postId), new UserId(authorId), parentCommentId, content, createdAt, status,
-			editedAt);
+		return new Comment(id, new PostId(postId), new UserId(authorId), parentCommentId, content,
+			mediaIds == null ? List.of() : mediaIds, createdAt, status, editedAt);
 	}
 
 	String getPostId() { return postId; }

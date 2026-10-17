@@ -87,6 +87,7 @@ class FeedController {
 	private final CursorCodec cursorCodec;
 	private final BlockedUsersReader blockedUsersReader;
 	private final Clock clock;
+	private final com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseCase mediaOwnershipValidator;
 
 	FeedController(PublishPostUseCase publishPostUseCase, GetFeedUseCase getFeedUseCase, GetPostUseCase getPostUseCase,
 			GetProfilePostsUseCase getProfilePostsUseCase, DeletePostUseCase deletePostUseCase,
@@ -96,7 +97,8 @@ class FeedController {
 			SavePostUseCase savePostUseCase, SharePostUseCase sharePostUseCase,
 			IdempotencyApplicationService idempotency, CurrentUserResolver currentUserResolver,
 			PostInteractionRepository postInteractionRepository, CommentRepository commentRepository,
-			CursorCodec cursorCodec, BlockedUsersReader blockedUsersReader, Clock clock) {
+			CursorCodec cursorCodec, BlockedUsersReader blockedUsersReader, Clock clock,
+			com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseCase mediaOwnershipValidator) {
 		this.publishPostUseCase = publishPostUseCase;
 		this.getFeedUseCase = getFeedUseCase;
 		this.getPostUseCase = getPostUseCase;
@@ -117,6 +119,7 @@ class FeedController {
 		this.cursorCodec = cursorCodec;
 		this.blockedUsersReader = blockedUsersReader;
 		this.clock = clock;
+		this.mediaOwnershipValidator = mediaOwnershipValidator;
 	}
 
 	@PostMapping("/feed/posts")
@@ -252,10 +255,12 @@ class FeedController {
 		payload.put("postId", postId);
 		payload.put("parentCommentId", request.parentCommentId() == null ? "" : request.parentCommentId());
 		payload.put("content", request.content() == null ? "" : request.content());
+		payload.put("mediaIds", request.mediaIds() == null ? List.of() : request.mediaIds());
 		String hash = idempotency.hash(payload);
 		return idempotency.execute(user.id(), "POST", "/api/feed/posts/{postId}/comments", idempotencyKey, hash,
 			() -> new CommandResponse(201, commentOnPostUseCase.comment(new CommentOnPostCommand(user.id(),
-				new PostId(postId), request.parentCommentId(), request.content(), request.mentionedUserIds()))));
+				new PostId(postId), request.parentCommentId(), request.content(), request.mediaIds(),
+				request.mentionedUserIds()))));
 	}
 
 	@GetMapping("/feed/posts/{postId}/comments")
@@ -375,6 +380,7 @@ class FeedController {
 		Map<String, Object> payload = new LinkedHashMap<>();
 		payload.put("commentId", commentId);
 		payload.put("content", request.content() == null ? "" : request.content());
+		payload.put("mediaIds", request.mediaIds() == null ? List.of() : request.mediaIds());
 		String hash = idempotency.hash(payload);
 		return idempotency.execute(user.id(), "PATCH", "/api/feed/posts/{postId}/comments/{commentId}",
 			idempotencyKey, hash,
@@ -384,14 +390,17 @@ class FeedController {
 				if (!comment.authorId().equals(user.id())) {
 					throw new ApiException(403, "NOT_AUTHORIZED", "Voce nao pode editar este comentario.");
 				}
+				// mediaIds null = "nao mexi na midia"; lista (mesmo vazia) = substitui.
+				List<String> mediaIds = request.mediaIds() == null ? comment.mediaIds()
+					: normalizeEditMedia(request.mediaIds(), user.id());
 				String content = request.content() == null ? "" : request.content().trim();
-				if (content.isEmpty() || content.length() > MAX_COMMENT_LENGTH) {
+				if ((content.isEmpty() && mediaIds.isEmpty()) || content.length() > MAX_COMMENT_LENGTH) {
 					throw new ApiException(422, "INVALID_COMMENT",
 						"O comentario precisa ter de 1 a " + MAX_COMMENT_LENGTH + " caracteres.");
 				}
-				var saved = commentRepository.save(comment.edited(content, clock.instant()));
+				var saved = commentRepository.save(comment.edited(content, mediaIds, clock.instant()));
 				return new CommandResponse(200, Map.of("status", "COMMENT_EDITED", "content", saved.content(),
-					"editedAt", saved.editedAt().toString()));
+					"mediaIds", saved.mediaIds(), "editedAt", saved.editedAt().toString()));
 			});
 	}
 
@@ -442,5 +451,20 @@ class FeedController {
 		String hash = idempotency.hash(payload);
 		return idempotency.execute(user.id(), "POST", "/api/feed/posts/{postId}/shares", idempotencyKey, hash,
 			() -> new CommandResponse(200, sharePostUseCase.share(new PostActionCommand(user.id(), new PostId(postId)))));
+	}
+
+	/** Ate 4 midias na edicao, do proprio autor (mesma regra do comentario novo). */
+	private List<String> normalizeEditMedia(List<String> mediaIds,
+			com.socialcoisa.rede.feed.domain.UserId ownerId) {
+		List<String> normalized = mediaIds.stream()
+			.filter(org.springframework.util.StringUtils::hasText)
+			.map(String::trim)
+			.distinct()
+			.toList();
+		if (normalized.size() > 4) {
+			throw new ApiException(400, "COMMENT_TOO_MANY_MEDIA", "Comentario aceita no maximo 4 midias.");
+		}
+		mediaOwnershipValidator.validateOwnedBy(ownerId, normalized);
+		return normalized;
 	}
 }
