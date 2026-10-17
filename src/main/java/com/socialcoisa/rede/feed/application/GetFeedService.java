@@ -76,6 +76,9 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 		int limit = normalizeLimit(query.limit());
 		Instant before = query.before().orElse(DEFAULT_BEFORE);
 		FeedTab tab = query.tab() != null ? query.tab() : FeedTab.FOR_YOU;
+		if (tab == FeedTab.FOR_YOU) {
+			return forYou(query, before, limit);
+		}
 		List<Post> posts = switch (tab) {
 			case FOR_YOU, FOLLOWING -> {
 				Set<UserId> authors = new LinkedHashSet<>();
@@ -244,6 +247,45 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 	 * O cursor sai da pagina que veio do banco, nao da lista exibida: quando um post e escondido por
 	 * bloqueio a pagina fica menor, e sem isso o scroll infinito acharia que chegou ao fim.
 	 */
+	/**
+	 * "Para voce": posts de quem a pessoa segue e os proprios, mas SO dentro das comunidades de que
+	 * ela participa (ou fora de comunidade). Post de conexao numa comunidade estranha nao entra —
+	 * feedback direto da comunidade: o feed virou vitrine de comunidade alheia. FOLLOWING continua
+	 * mostrando tudo de quem a pessoa segue; a diferenca entre as abas e exatamente essa.
+	 */
+	private FeedPage forYou(GetFeedQuery query, Instant before, int limit) {
+		Set<UserId> authors = new LinkedHashSet<>();
+		authors.add(query.userId());
+		authors.addAll(connectionGraphRepository.findFriends(query.userId()));
+		// Busca mais que o limite porque a filtragem por comunidade pode encolher a pagina.
+		List<Post> fetched = postRepository.findActiveByAuthors(authors, before, limit * 3);
+		Set<String> hiddenCommunities = communityIdsWithoutMembership(fetched, query.userId());
+		List<Post> visible = fetched.stream()
+			.filter(post -> post.communityId() == null || !hiddenCommunities.contains(post.communityId()))
+			.limit(limit)
+			.toList();
+		// Cursor pela pagina EXIBIDA (nao pela bruta): repetir post ou pular pedaco seria pior do que
+		// uma pagina mais curta. So ha "proxima pagina" quando a busca bruta veio saturada.
+		String nextCursor = fetched.size() == limit * 3 && !visible.isEmpty()
+			? cursorCodec.encode(visible.get(visible.size() - 1).createdAt()) : null;
+		return new FeedPage(enrich(visible, query.userId()), nextCursor);
+	}
+
+	/** Comunidades da pagina em que o leitor NAO participa (uma consulta em lote, nao uma por post). */
+	private Set<String> communityIdsWithoutMembership(List<Post> posts, UserId viewer) {
+		Set<String> communityIds = posts.stream()
+			.map(Post::communityId)
+			.filter(java.util.Objects::nonNull)
+			.collect(Collectors.toSet());
+		if (communityIds.isEmpty()) {
+			return Set.of();
+		}
+		return postCommunityReader.byIds(communityIds, viewer.value()).entrySet().stream()
+			.filter(entry -> !entry.getValue().joined())
+			.map(Map.Entry::getKey)
+			.collect(Collectors.toSet());
+	}
+
 	private FeedPage page(List<PostView> views, List<Post> fetched, int limit) {
 		String nextCursor = fetched.size() == limit
 			? cursorCodec.encode(fetched.get(fetched.size() - 1).createdAt()) : null;

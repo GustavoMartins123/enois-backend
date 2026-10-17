@@ -55,8 +55,11 @@ public final class SafeHtml {
 	 * Declaracao de CSS perigosa inteira (nao so a palavra): tirar apenas o `expression(` deixava o
 	 * resto do texto do ataque guardado como lixo na folha de estilo.
 	 */
+	// `behavior:` com lookbehind: sem ele, `scroll-behavior: smooth` (CSS legitimo e comum em
+	// paginas animadas) casava no "behavior:" e a declaracao inteira era descartada.
 	private static final Pattern STYLE_DANGEROUS = Pattern.compile(
-		"(?is)[^;{}]*\\b(?:expression\\s*\\(|javascript\\s*:\\s*|vbscript\\s*:|-moz-binding\\s*:|behavior\\s*:)[^;}]*;?");
+		"(?is)[^;{}]*(?:expression\\s*\\(|javascript\\s*:\\s*|vbscript\\s*:|-moz-binding\\s*:"
+			+ "|(?<![a-zA-Z-])behavior\\s*:)[^;}]*;?");
 	private static final Pattern STYLE_URL = Pattern.compile("(?is)url\\s*\\(\\s*(['\"]?)([^'\")]*)\\1\\s*\\)");
 	private static final Pattern STYLE_ATTRIBUTE = Pattern.compile("(?is)\\sstyle\\s*=\\s*(\"([^\"]*)\"|'([^']*)')");
 	private static final Pattern STYLE_ELEMENT = Pattern.compile("(?is)<style\\b[^>]*>(.*?)</style>");

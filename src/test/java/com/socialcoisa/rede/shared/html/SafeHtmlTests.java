@@ -15,6 +15,52 @@ import com.socialcoisa.rede.shared.web.ApiException;
 class SafeHtmlTests {
 
 	@Test
+	void cssAnimationsSurviveTheSanitizer() {
+		// O recurso "sobre/pagina com HTML+CSS" perde o sentido sem animacao: keyframes, animation,
+		// transition e pseudo-elementos sao o que as pessoas colam (ex.: a.singlediv.com). Nada disso
+		// e perigoso no sandbox (sem script), entao a garantia fica travada aqui.
+		String clean = SafeHtml.sanitizeProfileHtml("""
+			<style>
+			  @keyframes pulse {
+			    0% { transform: scale(1); opacity: 1; }
+			    100% { transform: scale(1.08); opacity: .85; }
+			  }
+			  .card {
+			    background: linear-gradient(45deg, #7c38ee, #ff0080);
+			    animation: pulse 2s infinite alternate;
+			    transition: transform .3s ease;
+			    scroll-behavior: smooth;
+			  }
+			  .card:hover { transform: rotate(2deg); }
+			  .card::after { content: "*"; }
+			</style>
+			<div class="card" style="animation: pulse 3s infinite;">Ola</div>
+			""");
+
+		assertThat(clean).contains("@keyframes pulse");
+		assertThat(clean).contains("animation: pulse 2s infinite alternate");
+		assertThat(clean).contains("transition: transform .3s ease");
+		assertThat(clean).contains("scroll-behavior: smooth");
+		assertThat(clean).contains(".card:hover");
+		assertThat(clean).contains(".card::after");
+		assertThat(clean).contains("style=\"animation: pulse 3s infinite;\"");
+	}
+
+	@Test
+	void dangerousCssStillDies() {
+		String clean = SafeHtml.sanitizeProfileHtml("""
+			<style>
+			  .a { behavior: url(script.htc); width: expression(alert(1)); background: url(javascript:alert(2)); }
+			  @import url("https://evil.test/track.css");
+			</style>
+			<div class="a">x</div>
+			""");
+
+		assertThat(clean).doesNotContain("behavior").doesNotContain("expression").doesNotContain("javascript");
+		assertThat(clean).doesNotContain("@import").doesNotContain("evil.test");
+	}
+
+	@Test
 	void removesScriptTagAndItsContent() {
 		String clean = SafeHtml.sanitizePageHtml("<p>antes</p><script>alert('xss')</script><p>depois</p>");
 
