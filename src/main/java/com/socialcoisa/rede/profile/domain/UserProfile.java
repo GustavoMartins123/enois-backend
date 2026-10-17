@@ -21,6 +21,12 @@ public class UserProfile {
 	private String bioHtml;
 	/** Capa em HTML/CSS (ja sanitizada); quando presente, o perfil mostra ela no lugar da imagem. */
 	private String bannerHtml;
+	/** Apelido: entra entre parenteses depois do nome, em tudo que exibe nome. */
+	private String nickname;
+	/** Nome social: substitui o nome de cadastro para todo mundo, quando existe. */
+	private String socialName;
+	/** Pronomes: aparecem so no perfil, como lembrete de como tratar a pessoa. */
+	private String pronouns;
 	private List<String> skills;
 	private List<String> goals;
 	private String availability;
@@ -237,11 +243,51 @@ public class UserProfile {
 		this.externalLinks = List.of();
 		this.openToWork = false;
 		this.mentor = false;
+		this.nickname = null;
+		this.socialName = null;
+		this.pronouns = null;
 		this.updatedAt = now;
 	}
 
 	private String keep(String value, String current) {
 		return value == null ? current : value.trim();
+	}
+
+	private static String blankToNull(String value) {
+		if (value == null) {
+			return null;
+		}
+		String trimmed = value.trim();
+		return trimmed.isEmpty() ? null : trimmed;
+	}
+
+	/** Nome que aparece para todo mundo: o social, quando existe; senao o de cadastro. */
+	public String displayName() {
+		return socialName != null && !socialName.isBlank() ? socialName : name;
+	}
+
+	/** Nome de exibicao com o apelido entre parenteses, quando existe. */
+	public String displayWithNickname() {
+		String base = displayName();
+		return nickname == null || nickname.isBlank() ? base : base + " (" + nickname + ")";
+	}
+
+	/**
+	 * Atualiza apelido, nome social e pronomes. Valor nulo ou vazio LIMPA o campo (e uma
+	 * intencao: "nao quero mais apelido"), ao contrario do `keep` do perfil.
+	 */
+	public void updateIdentityDisplay(String nickname, String socialName, String pronouns, Instant now) {
+		this.nickname = blankToNull(nickname);
+		this.socialName = blankToNull(socialName);
+		this.pronouns = blankToNull(pronouns);
+		this.updatedAt = now;
+	}
+
+	/** Hidrata os campos de identidade exibida carregados do banco (padrao do updateBioHtml). */
+	public void hydrateIdentityDisplay(String nickname, String socialName, String pronouns) {
+		this.nickname = blankToNull(nickname);
+		this.socialName = blankToNull(socialName);
+		this.pronouns = blankToNull(pronouns);
 	}
 
 	public String id() {
@@ -258,6 +304,18 @@ public class UserProfile {
 
 	public String name() {
 		return name;
+	}
+
+	public String nickname() {
+		return nickname;
+	}
+
+	public String socialName() {
+		return socialName;
+	}
+
+	public String pronouns() {
+		return pronouns;
 	}
 
 	public String headline() {
