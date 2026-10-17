@@ -42,8 +42,21 @@ public class GlobalExceptionHandler {
 
 	@ExceptionHandler(DataIntegrityViolationException.class)
 	ResponseEntity<ErrorResponse> handleConflict(DataIntegrityViolationException exception) {
+		// A resposta e generica de proposito (nao vaza detalhe de banco para quem chamou), mas o log
+		// guarda a causa raiz. Foi um "Data too long for column 'page_html'" invisivel que virou
+		// horas de investigacao: o 409 sozinho nao diz se foi coluna pequena, chave duplicada ou FK.
+		LOGGER.warn("data_integrity_violation: {}", rootMessage(exception));
 		return ResponseEntity.status(409)
 			.body(new ErrorResponse("CONFLICT", "Operacao conflita com o estado atual dos dados.", Instant.now()));
+	}
+
+	/** A mensagem mais especifica da cadeia: o "Data too long for column ..." mora no fim dela. */
+	private String rootMessage(Throwable exception) {
+		Throwable cause = exception;
+		while (cause.getCause() != null) {
+			cause = cause.getCause();
+		}
+		return cause.getMessage();
 	}
 
 	@ExceptionHandler(RequestNotPermitted.class)

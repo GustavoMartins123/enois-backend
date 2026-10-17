@@ -1,0 +1,12 @@
+-- A capa de comunidade vira LONGTEXT, como todas as outras colunas que guardam HTML.
+--
+-- `communities.banner_html` nasceu `text` no V50: sao 64 KB de BYTES, nao de caracteres. Uma capa
+-- de 20 mil caracteres (o teto que a tela promete) com emoji ou acentos passa de 65.535 bytes e
+-- morre com "Data too long for column 'banner_html'" — que a API devolve como o 409 generico
+-- "operacao conflita com o estado atual dos dados", o mesmo sintoma que o V57 consertou em
+-- `posts.page_html`. Aqui nao ha divergencia de producao a corrigir: e o tipo errado desde o
+-- comeco, e o teto da tela tem que caber no banco.
+--
+-- Em banco novo e no-op? Nao: o V50 cria a coluna como `text` em qualquer banco, entao este ALTER
+-- e o que deixa o tipo certo em todos eles.
+alter table communities modify column banner_html longtext;
