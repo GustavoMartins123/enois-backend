@@ -12,5 +12,9 @@ public enum ReactionType {
 	ROFL,
 	ANGRY,
 	DISGUST,
-	SKEPTICAL
+	SKEPTICAL,
+	EYES,
+	NOTE,
+	FIRE,
+	CLAP
 }

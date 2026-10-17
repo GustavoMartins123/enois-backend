@@ -423,6 +423,18 @@ class FeedController {
 			});
 	}
 
+	@DeleteMapping("/feed/posts/{postId}/comments/{commentId}/reactions")
+	ResponseEntity<String> removeCommentReaction(@RequestHeader(value = USER_HEADER, required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@PathVariable String postId, @PathVariable String commentId) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		String hash = idempotency.hash(Map.of("commentId", commentId));
+		return idempotency.execute(user.id(), "DELETE", "/api/feed/posts/{postId}/comments/{commentId}/reactions",
+			idempotencyKey, hash, () -> new CommandResponse(200, Map.of(
+				"status", postInteractionRepository.removeCommentReaction(commentId, user.id()) ? "REMOVED" : "NO_REACTION")));
+	}
+
 	@GetMapping("/feed/posts/{postId}/comments/{commentId}/reactions")
 	Object listCommentReactions(@RequestHeader(value = USER_HEADER, required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,

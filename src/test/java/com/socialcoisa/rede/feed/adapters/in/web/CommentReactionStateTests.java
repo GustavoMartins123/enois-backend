@@ -1,5 +1,6 @@
 package com.socialcoisa.rede.feed.adapters.in.web;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -61,6 +62,45 @@ class CommentReactionStateTests {
 		mockMvc.perform(get("/feed/posts/" + postId + "/comments").header("X-Session-Token", author.token()))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.items[0].currentUserReaction").doesNotExist());
+	}
+
+	@Test
+	void newCommentReactionTypesWork() throws Exception {
+		// O set de reacoes de comentario cresceu (olhos, anotacao, fogo, palmas) — o backend
+		// aceita todos, e a reacao volta no reload como as antigas.
+		var author = auth.authenticate("creact_author2");
+		var reactor = auth.authenticate("creact_reactor2");
+		String postId = publish(author);
+		String commentId = comment(reactor, postId);
+
+		for (String type : List.of("EYES", "NOTE", "FIRE", "CLAP")) {
+			String idem = "creact2-" + type;
+			mockMvc.perform(post("/feed/posts/" + postId + "/comments/" + commentId + "/reactions")
+					.header("X-Session-Token", reactor.token())
+					.header("Idempotency-Key", idem)
+					.contentType(MediaType.APPLICATION_JSON)
+					.content(objectMapper.writeValueAsString(Map.of("type", type))))
+				.andExpect(status().isOk());
+
+			mockMvc.perform(get("/feed/posts/" + postId + "/comments").header("X-Session-Token", reactor.token()))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.items[?(@.id == '" + commentId + "')].currentUserReaction").value(type));
+
+			// Troca (o proximo tipo substitui) e o ciclo recomeca.
+		}
+
+		// Remove: volta ao estado sem reacao.
+		mockMvc.perform(post("/feed/posts/" + postId + "/comments/" + commentId + "/reactions")
+				.header("X-Session-Token", reactor.token())
+				.header("Idempotency-Key", "creact2-remove")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("type", "EYES"))))
+			.andDo(r -> { /* troca para EYES (mesma da ultima), so para garantir estado */ });
+
+		mockMvc.perform(delete("/feed/posts/" + postId + "/comments/" + commentId + "/reactions")
+				.header("X-Session-Token", reactor.token())
+				.header("Idempotency-Key", "creact2-del"))
+			.andExpect(status().isOk());
 	}
 
 	private String publish(TestAuthHelper.AuthSession session) throws Exception {
