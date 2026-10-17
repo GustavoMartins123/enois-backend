@@ -124,6 +124,31 @@ class SafeHtmlTests {
 		assertThat(clean).doesNotContain("autoplay");
 	}
 
+	/**
+	 * Autoplay: o atributo sobrevive, e o que o navegador exige para ele acontecer de verdade vem
+	 * junto — video com som nunca toca sozinho (politica de autoplay dos navegadores), entao ganha
+	 * muted + playsinline; audio sem controles seria invisivel caso o autoplay fosse recusado.
+	 * Autoplay nao pedido nao e inventado (o teste de midia nativa acima continua provando isso).
+	 */
+	@Test
+	void autoplaySurvivesAndGetsWhatBrowsersRequireToActuallyPlay() {
+		String clean = SafeHtml.sanitizePageHtml("""
+			<video autoplay src="https://exemplo.com/clipe.mp4"></video>
+			<video autoplay muted playsinline loop src="https://exemplo.com/fundo.mp4"></video>
+			<audio autoplay src="https://exemplo.com/musica.mp3"></audio>
+			""");
+
+		assertThat(clean).contains("autoplay");
+		// Video sem muted sai completo (politica de autoplay exige muted + playsinline para tocar);
+		// quem ja escreveu o par nao e reescrito. jsoup serializa atributos vazios como `attr=""`
+		// e booleanos conhecidos sem valor — para o navegador as duas formas valem "presente".
+		assertThat(clean).contains(
+			"<video autoplay=\"\" src=\"https://exemplo.com/clipe.mp4\" muted playsinline=\"playsinline\"></video>");
+		assertThat(clean).contains("loop=\"\"");
+		// Audio: controles entram como caminho de fallback caso o navegador recuse o autoplay.
+		assertThat(clean).contains("<audio autoplay=\"\" src=\"https://exemplo.com/musica.mp3\" controls=\"controls\"></audio>");
+	}
+
 	@Test
 	void mediaOnlyByHttpsAndDocumentsStayAsLinks() {
 		// http nao carregaria numa pagina https (conteudo misto): o atributo sai.
@@ -229,6 +254,9 @@ class SafeHtmlTests {
 		assertThat(clean).contains("src=\"https://www.youtube.com/embed/aqz-KE-bpKQ\"");
 		assertThat(clean).contains("src=\"https://player.vimeo.com/video/76979871\"");
 		assertThat(clean).contains("src=\"https://open.spotify.com/embed/track/4cOdK2wGLETKBW3PvgPWqT\"");
+		// O quadro reescrito delega autoplay/tela cheia ao player (o autoplay=1 da URL so toca com
+		// essa delegacao); o navegador continua dono da decisao final.
+		assertThat(clean).contains("allow=\"autoplay; fullscreen; encrypted-media\"");
 		assertThat(clean.split("<iframe", -1).length - 1).isEqualTo(3);
 	}
 

@@ -6,6 +6,7 @@ import java.util.regex.Pattern;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
 import org.jsoup.safety.Cleaner;
 import org.jsoup.safety.Safelist;
 import org.springframework.util.StringUtils;
@@ -157,6 +158,7 @@ public final class SafeHtml {
 			.replaceAll(match -> keepProviderEmbed(match.group(1) != null ? match.group(1) : match.group(2)));
 		Document clean = new Cleaner(PAGE_ALLOWLIST).clean(Jsoup.parse(withMarkers));
 		clean.outputSettings().prettyPrint(false);
+		normalizeAutoplay(clean);
 
 		String markup = hardenLinks(dropUnknownIframes(clean.body().html().trim()));
 		String result = (css.isEmpty() ? "" : "<style>" + css + "</style>") + sanitizeStyleAttributes(markup);
@@ -180,8 +182,11 @@ public final class SafeHtml {
 		if (url == null || !PROVIDER_EMBED_URL.matcher(url).matches() || ENTITY_LIKE.matcher(url).find()) {
 			return "";
 		}
-		return "<iframe src=\"" + escapeAttribute(url) + "\" allowfullscreen loading=\"lazy\" "
-			+ "referrerpolicy=\"no-referrer\"></iframe>";
+		// `allow` delega ao player do provedor o autoplay que o autor pediu na URL (ex.: o
+		// autoplay=1 do YouTube) e a tela cheia; o navegador decide se honra (com som, so toca
+		// depois de um gesto do usuario na pagina).
+		return "<iframe src=\"" + escapeAttribute(url) + "\" allow=\"autoplay; fullscreen; encrypted-media\" "
+			+ "allowfullscreen loading=\"lazy\" referrerpolicy=\"no-referrer\"></iframe>";
 	}
 
 	/** Escape minimo de valor de atributo: `&` primeiro, senao os outros escapes sao re-escapes. */
@@ -211,6 +216,30 @@ public final class SafeHtml {
 				? match.group(0)
 				: "";
 		});
+	}
+
+	/**
+	 * Autoplay pedido pelo autor precisa de ajuda para acontecer de verdade: com som, os navegadores
+	 * bloqueiam (so tocam depois de um gesto do usuario), entao video com `autoplay` e sem `muted`
+	 * nunca tocaria — recebe `muted` + `playsinline`, o padrao de "tocar sozinho", que vale ate
+	 * dentro do quadro sandboxed. Audio silenciado nao faz sentido (muted e nao tocar); se o
+	 * navegador recusar o autoplay, `controls` garante que o som nao fique preso atras de um player
+	 * invisivel. Quem ja escreveu o par completo nao e reescrito.
+	 */
+	private static void normalizeAutoplay(Document clean) {
+		for (Element video : clean.select("video[autoplay]")) {
+			if (!video.hasAttr("muted")) {
+				video.attr("muted", "muted");
+			}
+			if (!video.hasAttr("playsinline")) {
+				video.attr("playsinline", "playsinline");
+			}
+		}
+		for (Element audio : clean.select("audio[autoplay]")) {
+			if (!audio.hasAttr("controls")) {
+				audio.attr("controls", "controls");
+			}
+		}
 	}
 
 	/**
@@ -286,9 +315,10 @@ public final class SafeHtml {
 				EMBED_MARKER_ATTRIBUTE);
 			addAttributes("a", "href");
 			addAttributes("img", "src", "alt", "loading");
-			addAttributes("iframe", "src", "allowfullscreen", "loading", "referrerpolicy");
-			addAttributes("video", "src", "poster", "controls", "preload", "loop", "muted", "playsinline");
-			addAttributes("audio", "src", "controls", "preload", "loop", "muted");
+			addAttributes("iframe", "src", "allow", "allowfullscreen", "loading", "referrerpolicy");
+			addAttributes("video", "src", "poster", "controls", "autoplay", "preload", "loop", "muted",
+				"playsinline");
+			addAttributes("audio", "src", "controls", "autoplay", "preload", "loop", "muted");
 			addAttributes("source", "src", "type", "media");
 			addAttributes("track", "src", "kind", "srclang", "label", "default");
 			addAttributes("ol", "start", "type", "reversed");
