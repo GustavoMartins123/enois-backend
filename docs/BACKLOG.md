@@ -35,6 +35,16 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
 8. **Currículo em PDF** — campo no perfil (upload PDF validado por tipo/tamanho) + anexar/atualizar na
    candidatura; link no snapshot que o empregador recebe. *Aceite:* PDF válido anexa; inválido recusa.
 
+## Médio-grande (pedido 2026-10-17, Game Dev community)
+9. **Imagem no meio do texto** — post/comentário com imagem INSERIDA no ponto exato da
+   explicação (ex.: ideia de jogo + screenshot no parágrafo correspondente), não só anexada
+   no fim. *Design sugerido:* conteúdo passa a aceitar marcadores `{{media:<id>}}` inline no
+   texto (PlainText/defuse preservando o marcador); upload via Mídia (3 passos já existentes);
+   o botão de inserir copia o marcador na posição do cursor; o render (RichText) troca o
+   marcador por `<figure><img></figure>` com a grade já existente; contador continua no teto
+   de 4 mídias; comentário e post usam o mesmo caminho. *Aceite:* imagem aparece exatamente
+   entre os parágrafos onde o autor colocou; sem marcador = anexo no fim (comportamento atual).
+
 ## Grande
 9. **Importador de vagas plugável** — porta `JobImportSource` + `imported_jobs` (unique `(source,
    external_id)`) + dedupe/normalização + revisão antes de publicar (respeita identidade + ≥150).
