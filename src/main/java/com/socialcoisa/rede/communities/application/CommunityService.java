@@ -35,7 +35,7 @@ public class CommunityService {
 
 	@Transactional
 	public Community update(String communityId, String name, String description, String topic, String cover,
-			String avatar, String userId) {
+			String avatar, String bannerHtml, String userId) {
 		Community community = repository.findById(communityId)
 			.orElseThrow(() -> new ApiException(404, "COMMUNITY_NOT_FOUND", "Comunidade nao encontrada."));
 		if (!community.createdBy().equals(userId)) {
@@ -46,7 +46,14 @@ public class CommunityService {
 		String finalTopic = topic != null ? topic : community.topic();
 		String finalCover = cover != null ? cover : community.cover();
 		String finalAvatar = avatar != null ? avatar : community.avatar();
-		Community updated = community.update(finalName, finalDesc, finalTopic, finalCover, finalAvatar, clock.instant());
+		// Capa em HTML: mesmo sanitizador da capa do perfil. Nulo = campo ausente (mantem); vazio =
+		// limpa (volta para a foto); com texto = sanitiza e substitui.
+		String finalBannerHtml = bannerHtml == null ? null
+			: (org.springframework.util.StringUtils.hasText(bannerHtml)
+				? com.socialcoisa.rede.shared.html.SafeHtml.requireProfileHtml(bannerHtml)
+				: "");
+		Community updated = community.update(finalName, finalDesc, finalTopic, finalCover, finalAvatar,
+			finalBannerHtml, clock.instant());
 		repository.save(updated);
 		return updated;
 	}

@@ -66,7 +66,7 @@ class CommunityContractController {
 		List<Community> communities = communityService.list(topic, before, limit);
 		var items = communities.stream()
 			.map(c -> new CommunityView(c.id(), c.name(), c.description(),
-				communityService.countMembers(c.id()), c.topic(), c.cover(), c.avatar(),
+				communityService.countMembers(c.id()), c.topic(), c.cover(), c.avatar(), c.bannerHtml(),
 				user != null && communityService.isMember(c.id(), user.id().value())))
 			.toList();
 		String nextCursor = communities.size() == limit
@@ -81,7 +81,7 @@ class CommunityContractController {
 		CurrentUser user = resolveSafely(userId, sessionToken);
 		Community c = communityService.getById(communityId);
 		return new CommunityView(c.id(), c.name(), c.description(),
-			communityService.countMembers(c.id()), c.topic(), c.cover(), c.avatar(),
+			communityService.countMembers(c.id()), c.topic(), c.cover(), c.avatar(), c.bannerHtml(),
 			user != null && communityService.isMember(c.id(), user.id().value()));
 	}
 
@@ -105,7 +105,7 @@ class CommunityContractController {
 				Community c = communityService.create(request.name(), request.description(), request.topic(),
 					request.cover(), request.avatar(), user.id().value());
 				return new CommandResponse(201, new CommunityView(c.id(), c.name(), c.description(),
-					1, c.topic(), c.cover(), c.avatar(), true));
+					1, c.topic(), c.cover(), c.avatar(), c.bannerHtml(), true));
 			});
 	}
 
@@ -119,9 +119,10 @@ class CommunityContractController {
 		return idempotency.execute(user.id(), "PATCH", "/api/communities/{communityId}", idempotencyKey, hash,
 			() -> {
 				Community c = communityService.update(communityId, request.name(), request.description(),
-					request.topic(), request.cover(), request.avatar(), user.id().value());
+					request.topic(), request.cover(), request.avatar(), request.bannerHtml(),
+					user.id().value());
 				return new CommandResponse(200, new CommunityView(c.id(), c.name(), c.description(),
-					communityService.countMembers(c.id()), c.topic(), c.cover(), c.avatar(),
+					communityService.countMembers(c.id()), c.topic(), c.cover(), c.avatar(), c.bannerHtml(),
 					communityService.isMember(c.id(), user.id().value())));
 			});
 	}
@@ -162,7 +163,7 @@ class CommunityContractController {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		var items = communityService.listFavorites(user.id().value(), limit).stream()
 			.map(c -> new CommunityView(c.id(), c.name(), c.description(), communityService.countMembers(c.id()),
-				c.topic(), c.cover(), c.avatar(), communityService.isMember(c.id(), user.id().value())))
+				c.topic(), c.cover(), c.avatar(), c.bannerHtml(), communityService.isMember(c.id(), user.id().value())))
 			.toList();
 		return new PageResponse<>(items, null);
 	}
@@ -203,7 +204,7 @@ class CommunityContractController {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		var items = communityService.listMine(user.id().value(), limit).stream()
 			.map(c -> new CommunityView(c.id(), c.name(), c.description(), communityService.countMembers(c.id()),
-				c.topic(), c.cover(), c.avatar(), true))
+				c.topic(), c.cover(), c.avatar(), c.bannerHtml(), true))
 			.toList();
 		return new PageResponse<>(items, null);
 	}
@@ -221,7 +222,7 @@ class CommunityContractController {
 			() -> {
 				Community c = communityService.transferOwnership(communityId, user.id().value(), request.newOwnerId());
 				return new CommandResponse(200, new CommunityView(c.id(), c.name(), c.description(),
-					communityService.countMembers(c.id()), c.topic(), c.cover(), c.avatar(),
+					communityService.countMembers(c.id()), c.topic(), c.cover(), c.avatar(), c.bannerHtml(),
 					communityService.isMember(c.id(), user.id().value())));
 			});
 	}
@@ -276,10 +277,11 @@ class CommunityContractController {
 	}
 
 	record CommunityView(String id, String name, String description, int members, String topic, String cover,
-			String avatar, boolean joined) {
+			String avatar, String bannerHtml, boolean joined) {
 	}
 
-	record CommunityRequest(String name, String description, String topic, String cover, String avatar) {
+	record CommunityRequest(String name, String description, String topic, String cover, String avatar,
+			String bannerHtml) {
 	}
 
 	record TransferOwnershipRequest(String newOwnerId) {
