@@ -14,6 +14,8 @@ public class UserProfile {
 	private String location;
 	private String avatar;
 	private String banner;
+	/** Emblema (PNG pequeno) que aparece ao lado do nome; URL da midia, como avatar e banner. */
+	private String badge;
 	private String bio;
 	/** Bio em HTML/CSS (ja sanitizada no servidor); quando presente, o perfil mostra ela no lugar do texto. */
 	private String bioHtml;
@@ -36,8 +38,8 @@ public class UserProfile {
 	private Instant federatedSecondFactorAt;
 
 	private UserProfile(String id, String username, String email, String name, String headline, String company,
-			String location, String avatar, String banner, String bio, String bioHtml, List<String> skills,
-			List<String> goals,
+			String location, String avatar, String banner, String badge, String bio, String bioHtml,
+			List<String> skills, List<String> goals,
 			String availability, String portfolio, List<String> externalLinks, boolean openToWork, boolean mentor,
 			Instant createdAt, Instant updatedAt) {
 		this.id = id;
@@ -49,6 +51,7 @@ public class UserProfile {
 		this.location = location;
 		this.avatar = avatar;
 		this.banner = banner;
+		this.badge = badge;
 		this.bio = bio;
 		this.bioHtml = bioHtml;
 		this.skills = List.copyOf(skills);
@@ -64,20 +67,21 @@ public class UserProfile {
 
 	public static UserProfile create(String id, String username, String email, String name, String headline,
 			Instant now) {
-		return new UserProfile(id, username, email, name, headline, null, null, null, null, null, null, List.of(),
-			List.of(), null, null, List.of(), false, false, now, now);
+		return new UserProfile(id, username, email, name, headline, null, null, null, null, null, null, null,
+			List.of(), List.of(), null, null, List.of(), false, false, now, now);
 	}
 
 	public static UserProfile restore(String id, String username, String email, String name, String headline,
-			String company, String location, String avatar, String banner, String bio, String bioHtml,
+			String company, String location, String avatar, String banner, String badge, String bio, String bioHtml,
 			List<String> skills, List<String> goals, String availability, String portfolio, List<String> externalLinks,
 			boolean openToWork, boolean mentor, Instant createdAt, Instant updatedAt) {
-		return new UserProfile(id, username, email, name, headline, company, location, avatar, banner, bio, bioHtml,
-			skills, goals, availability, portfolio, externalLinks, openToWork, mentor, createdAt, updatedAt);
+		return new UserProfile(id, username, email, name, headline, company, location, avatar, banner, badge, bio,
+			bioHtml, skills, goals, availability, portfolio, externalLinks, openToWork, mentor, createdAt,
+			updatedAt);
 	}
 
 	public void update(String name, String headline, String company, String location, String avatar, String banner,
-			String bio, List<String> skills, List<String> goals, String availability, String portfolio,
+			String badge, String bio, List<String> skills, List<String> goals, String availability, String portfolio,
 			List<String> externalLinks, Boolean openToWork, Boolean mentor, String username, Instant now) {
 		this.name = keep(name, this.name);
 		this.headline = keep(headline, this.headline);
@@ -85,6 +89,7 @@ public class UserProfile {
 		this.location = keep(location, this.location);
 		this.avatar = keep(avatar, this.avatar);
 		this.banner = keep(banner, this.banner);
+		this.badge = keep(badge, this.badge);
 		this.bio = keep(bio, this.bio);
 		this.skills = skills == null ? this.skills : List.copyOf(skills);
 		this.goals = goals == null ? this.goals : List.copyOf(goals);
@@ -269,6 +274,10 @@ public class UserProfile {
 
 	public String banner() {
 		return banner;
+	}
+
+	public String badge() {
+		return badge;
 	}
 
 	public String bio() {

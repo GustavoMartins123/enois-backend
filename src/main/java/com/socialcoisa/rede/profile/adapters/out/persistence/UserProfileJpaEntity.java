@@ -47,6 +47,10 @@ class UserProfileJpaEntity {
 	@Column(length = 500)
 	private String banner;
 
+	/** Emblema ao lado do nome (URL da midia, igual avatar e banner). */
+	@Column(length = 500)
+	private String badge;
+
 	@Column(length = 1024)
 	private String bio;
 
@@ -119,6 +123,7 @@ class UserProfileJpaEntity {
 		entity.location = profile.location();
 		entity.avatar = profile.avatar();
 		entity.banner = profile.banner();
+		entity.badge = profile.badge();
 		entity.bio = profile.bio();
 		entity.bioHtml = profile.bioHtml();
 		entity.skills = new ArrayList<>(profile.skills());
@@ -141,6 +146,7 @@ class UserProfileJpaEntity {
 
 	UserProfile toDomain() {
 		UserProfile profile = UserProfile.restore(id, username, email, name, headline, company, location, avatar, banner,
+			badge,
 			bio, bioHtml, skills, goals, availability, portfolio, externalLinks, openToWork, mentor, createdAt,
 			updatedAt);
 		profile.setCounts(profile.connectionsCount(), profile.followersCount(), reputation);

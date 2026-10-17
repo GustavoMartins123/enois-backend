@@ -127,7 +127,8 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 		}
 		validateLengths(command);
 		profile.update(trim(command.name()), trim(command.headline()), trim(command.company()), trim(command.location()),
-			trim(command.avatar()), trim(command.banner()), trim(command.bio()), clean(command.skills()),
+			trim(command.avatar()), trim(command.banner()), trim(command.badge()), trim(command.bio()),
+			clean(command.skills()),
 			clean(command.goals()), trim(command.availability()), trim(command.portfolio()), clean(command.externalLinks()),
 			command.openToWork(), command.isMentor(), username, clock.instant());
 		// A bio em HTML e sanitizada aqui, como o HTML do post de pagina: allowlist de tags e CSS.
