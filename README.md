@@ -105,6 +105,46 @@ src/main/java/com/socialcoisa/rede/
 
 Modules: `identity`, `feed`, `media`, `network`, `profile`, `messaging`, `notifications`, `search`, `community`, `admin`.
 
+## Two-factor with an authenticator app (TOTP)
+
+Google Authenticator / Authy / 1Password support is **already implemented** in code — nothing to
+write. What is missing is one environment variable, and without it the app correctly reports TOTP as
+unavailable (the security screen hides the section instead of offering something that cannot work).
+
+| What | Where |
+|---|---|
+| The only required setting | `REDE_SECURITY_ENCRYPTION_KEY` — base64 of 32 random bytes (AES-256-GCM) |
+| How the app reads it | `SecretCipher` (used **only** by `TwoFactorService` today) |
+| Status endpoint | `GET /auth/2fa/status` → `totpAvailable` |
+| Setup / enable / disable | `POST /auth/2fa/totp/setup`, `POST /auth/2fa/totp/enable`, `POST /auth/2fa/totp/disable` (disable asks for the account password) |
+
+**Generating the key:**
+
+```bash
+openssl rand -base64 32
+```
+
+Put the result in the backend's secret (same place as the other secrets in the cluster) as an
+environment variable for the **pod** — the app resolves it as `REDE_SECURITY_ENCRYPTION_KEY`. There is
+no database object and no migration to run.
+
+**Keep this key stable.** It is the AES key that encrypts each user's TOTP secret: if it changes (or
+is removed) after people have enabled the authenticator, their secrets become unreadable and they will
+have to set the authenticator up again. Nothing else in the app uses this key today, so a rotation
+affects only those users.
+
+**Verifying it worked** (after the rollout):
+
+1. `GET /api/auth/2fa/status` with a real session answers `"totpAvailable": true`.
+2. On `/seguranca` the "authenticator app" section leaves the unavailable state and offers to
+   configure it — it shows the QR/secret and one-time backup codes.
+3. Enabling one, the next login stops at the 6-digit step (`POST /auth/2fa/verify`) before releasing
+   the session. The code lives 30 seconds, the usual.
+
+**Note:** do not confuse this with `VITE_IDENTITY_ENABLED` (front). That flag is about *civil identity*
+verification (gov.br), a different feature; TOTP has no front flag at all — the screen reads the
+status from the API and shows or hides itself.
+
 ## Media storage (ImageKit → S3)
 
 Media has two storage providers and the choice is an **environment variable**, no code change:
