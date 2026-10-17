@@ -9,7 +9,8 @@ import com.socialcoisa.rede.profile.domain.UserProfile;
  * {@code /me}; nunca deve ser exposto em consultas a terceiros.
  */
 public record OwnProfileView(String id, String username, String name, String headline, String email, String company,
-		String location, String avatar, String banner, String bio, String bioHtml, String bannerHtml,
+		String location, String avatar, String banner, String badge, String bio, String bioHtml,
+		String bannerHtml,
 		List<String> skills,
 		List<String> goals,
 		String availability, String portfolio, List<String> externalLinks, boolean openToWork, boolean isMentor,
@@ -17,7 +18,8 @@ public record OwnProfileView(String id, String username, String name, String hea
 
 	public static OwnProfileView from(UserProfile profile) {
 		return new OwnProfileView(profile.id(), profile.username(), profile.name(), profile.headline(), profile.email(),
-			profile.company(), profile.location(), profile.avatar(), profile.banner(), profile.bio(), null, null,
+			profile.company(), profile.location(), profile.avatar(), profile.banner(), profile.badge(),
+			profile.bio(), null, null,
 			profile.skills(),
 			profile.goals(), profile.availability(), profile.portfolio(), profile.externalLinks(), profile.openToWork(),
 			profile.mentor(), profile.connectionsCount(), profile.followersCount(), profile.reputation());
@@ -31,14 +33,14 @@ public record OwnProfileView(String id, String username, String name, String hea
 	 * e a leitura do proprio perfil.
 	 */
 	public OwnProfileView withBioHtml(String bioHtml) {
-		return new OwnProfileView(id, username, name, headline, email, company, location, avatar, banner, bio,
+		return new OwnProfileView(id, username, name, headline, email, company, location, avatar, banner, badge, bio,
 			bioHtml, bannerHtml, skills, goals, availability, portfolio, externalLinks, openToWork, isMentor,
 			connectionsCount, followersCount, reputation);
 	}
 
 	/** Capa em HTML/CSS; so a leitura do perfil anexa (mesmo motivo da bio). */
 	public OwnProfileView withBannerHtml(String bannerHtml) {
-		return new OwnProfileView(id, username, name, headline, email, company, location, avatar, banner, bio,
+		return new OwnProfileView(id, username, name, headline, email, company, location, avatar, banner, badge, bio,
 			bioHtml, bannerHtml, skills, goals, availability, portfolio, externalLinks, openToWork, isMentor,
 			connectionsCount, followersCount, reputation);
 	}
