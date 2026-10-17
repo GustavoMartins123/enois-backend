@@ -46,7 +46,7 @@ class JobApplicationDeliveryAdapter implements JobApplicationDelivery {
 			return;
 		}
 		var candidate = userProfileRepository.findById(application.userId()).orElse(null);
-		String summary = summaryText(job, application, candidate == null ? application.userId() : candidate.name());
+		String summary = summaryText(job, application, candidate == null ? application.userId() : candidate.displayWithNickname());
 
 		try {
 			String conversationId = messagingService.directConversationBetween(application.userId(), job.postedBy(), "JOB");

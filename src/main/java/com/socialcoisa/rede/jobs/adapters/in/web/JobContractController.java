@@ -417,7 +417,7 @@ class JobContractController {
 		}
 	}
 
-	record CandidateView(String userId, String name, String username, String headline, String location, String avatar,
+	record CandidateView(String userId, String name, String socialName, String username, String headline, String location, String avatar,
 			List<String> skills, int experienceYears, int experiencesCount, int reputation, boolean identityVerified) {
 	}
 
@@ -449,6 +449,7 @@ class JobContractController {
 			return new CandidateView(
 				application.userId(),
 				snapshot.path("name").asText(""),
+				snapshot.path("socialName").asText(""),
 				snapshot.path("username").asText(""),
 				snapshot.path("headline").asText(""),
 				snapshot.path("location").asText(""),
@@ -461,7 +462,7 @@ class JobContractController {
 				snapshot.path("identityVerified").asBoolean(false));
 		}
 		catch (Exception exception) {
-			return new CandidateView(application.userId(), "", "", "", "", "", List.of(), 0, 0, 0, false);
+			return new CandidateView(application.userId(), "", "", "", "", "", "", List.of(), 0, 0, 0, false);
 		}
 	}
 

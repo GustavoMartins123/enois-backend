@@ -256,7 +256,7 @@ class CommunityContractController {
 				UserProfile p = profiles.get(m.userId());
 				return new MemberView(m.userId(),
 					p != null ? p.username() : null,
-					p != null ? p.name() : null,
+					p != null ? p.displayWithNickname() : null,
 					p != null ? p.avatar() : null,
 					m.role().name());
 			})

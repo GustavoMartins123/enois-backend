@@ -110,6 +110,15 @@ class UserProfileJpaEntity {
 	@Column(name = "email_otp_enabled_at")
 	private Instant emailOtpEnabledAt;
 
+	@Column(name = "nickname", length = 60)
+	private String nickname;
+
+	@Column(name = "social_name", length = 160)
+	private String socialName;
+
+	@Column(name = "pronouns", length = 60)
+	private String pronouns;
+
 	@Column(name = "federated_second_factor_at")
 	private Instant federatedSecondFactorAt;
 
@@ -146,6 +155,9 @@ class UserProfileJpaEntity {
 		entity.totpEnabledAt = profile.totpEnabledAt();
 		entity.emailOtpEnabledAt = profile.emailOtpEnabledAt();
 		entity.federatedSecondFactorAt = profile.federatedSecondFactorAt();
+		entity.nickname = profile.nickname();
+		entity.socialName = profile.socialName();
+		entity.pronouns = profile.pronouns();
 		return entity;
 	}
 
@@ -168,6 +180,7 @@ class UserProfileJpaEntity {
 		if (federatedSecondFactorAt != null) {
 			profile.enableFederatedSecondFactor(federatedSecondFactorAt);
 		}
+		profile.hydrateIdentityDisplay(nickname, socialName, pronouns);
 		return profile;
 	}
 }

@@ -261,6 +261,7 @@ public class JobService {
 		int years = yearsOfExperience(userId);
 		Map<String, Object> snapshot = new java.util.LinkedHashMap<>();
 		snapshot.put("name", profile == null ? "" : profile.name());
+		snapshot.put("socialName", profile == null || profile.socialName() == null ? "" : profile.socialName());
 		snapshot.put("username", profile == null ? "" : profile.username());
 		snapshot.put("headline", profile == null ? "" : StringUtils.hasText(profile.headline()) ? profile.headline() : "");
 		snapshot.put("location", profile == null ? "" : StringUtils.hasText(profile.location()) ? profile.location() : "");
