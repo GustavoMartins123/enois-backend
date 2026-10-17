@@ -16,6 +16,7 @@ import com.socialcoisa.rede.feed.domain.Post;
 import com.socialcoisa.rede.feed.domain.PostType;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.shared.html.SafeHtml;
+import com.socialcoisa.rede.shared.text.PlainText;
 import com.socialcoisa.rede.shared.web.ApiException;
 
 /**
@@ -107,7 +108,7 @@ public class EditPostService implements EditPostUseCase {
 			}
 			throw new ApiException(400, "INVALID_CONTENT", "Conteudo obrigatorio.");
 		}
-		String normalized = content.trim();
+		String normalized = PlainText.defuse(content.trim());
 		if (normalized.length() > MAX_CONTENT) {
 			throw new ApiException(400, "CONTENT_TOO_LONG", "Conteudo deve ter no maximo 1200 caracteres.");
 		}

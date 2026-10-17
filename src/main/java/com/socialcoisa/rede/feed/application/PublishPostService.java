@@ -18,6 +18,7 @@ import com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseC
 import com.socialcoisa.rede.notifications.application.NotificationService;
 import com.socialcoisa.rede.profile.domain.UserProfile;
 import com.socialcoisa.rede.shared.html.SafeHtml;
+import com.socialcoisa.rede.shared.text.PlainText;
 import com.socialcoisa.rede.shared.web.ApiException;
 
 @Service
@@ -110,7 +111,9 @@ public class PublishPostService implements PublishPostUseCase {
 		if (command.type() == PostType.PAGE) {
 			return StringUtils.hasText(command.content()) ? command.content().trim() : "";
 		}
-		return command.content().trim();
+		// Texto do post passa pela defesa contra texto patologico (ver PlainText): limite de tamanho
+		// nao impede bidi/zero-width/repeticoes gigantes dentro do limite.
+		return PlainText.defuse(command.content().trim());
 	}
 
 	/**

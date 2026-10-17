@@ -26,6 +26,7 @@ import com.socialcoisa.rede.feed.domain.Post;
 import com.socialcoisa.rede.feed.domain.PostId;
 import com.socialcoisa.rede.notifications.application.NotificationService;
 import com.socialcoisa.rede.shared.blocks.BlockedUsersReader;
+import com.socialcoisa.rede.shared.text.PlainText;
 import com.socialcoisa.rede.shared.web.ApiException;
 import com.socialcoisa.rede.shared.web.CursorCodec;
 
@@ -256,7 +257,8 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 		if (!StringUtils.hasText(content)) {
 			throw new ApiException(400, "INVALID_COMMENT_CONTENT", "Conteudo obrigatorio.");
 		}
-		String normalized = content.trim();
+		// Mesma defesa do post (ver PlainText): comentario tambem e porta de entrada de texto.
+		String normalized = PlainText.defuse(content.trim());
 		if (normalized.length() > 800) {
 			throw new ApiException(400, "COMMENT_TOO_LONG", "Comentario deve ter no maximo 800 caracteres.");
 		}
