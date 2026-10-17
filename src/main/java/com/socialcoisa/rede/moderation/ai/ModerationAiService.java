@@ -25,8 +25,9 @@ import tools.jackson.databind.ObjectMapper;
  *
  * Regras de seguranca: o CONTEUDO DENUNCIADO e dado NAO CONFIÁVEL (vai no corpo da mensagem delimitado,
  * nunca nas instrucoes de sistema); a saida do modelo e apenas um PALPITE ESTRUTURADO validado aqui —
- * nada do modelo executa acao; sem chave configurada, o servico fica INDISPONIVEL e a denuncia segue
- * para revisao humana.
+ * nada do modelo executa acao. Quando o palpite e PENALIZAR e passa no gate, e o BACKEND que aplica a
+ * restricao (AiVerdictApplicationService), com direito a recurso revisado por uma pessoa. Sem chave
+ * configurada, o servico fica INDISPONIVEL e a denuncia segue para revisao humana.
  */
 @Service
 public class ModerationAiService {
@@ -77,15 +78,21 @@ public class ModerationAiService {
 
 			Regras obrigatorias de saida:
 			- "acao" pode ser "PENALIZAR", "HUMAN_REVIEW" ou "NENHUMA".
-			- "PENALIZAR" e para TOLERANCIA ZERO, e somente quando TUDO isto vale ao mesmo tempo:
-			  (a) racismo, homofobia, transfobia, intolerancia religiosa, xenofobia, ameaca,
-			  incitacao a violencia ou assedio dirigido a pessoa/grupo; (b) nao ha DUVIDA nem
-			  ambiguidade ("ambiguo": false); (c) "gravidade": "HIGH" ou "CRITICAL";
-			  (d) "confianca": >= 0.9. Qualquer condicao faltando, use "HUMAN_REVIEW".
+			- "PENALIZAR" e para violacao CONFIRMADA das diretrizes: racismo, homofobia, transfobia,
+			  intolerancia religiosa, xenofobia, discriminacao ou preconceito DIRECIONADOS a pessoa
+			  ou grupo; ameaca, intimidacao ou incitacao a violencia; assedio ou humilhacao
+			  DIRECIONADA; golpe, fraude, phishing ou link malicioso; spam ou manipulacao.
+			  UMA denuncia comprovada ja basta — nao exija varias denuncias nem gravidade alta.
+			- Use "PENALIZAR" quando o proprio CONTEUDO comprova a violacao e nao ha duvida:
+			  "ambiguo": false e "confianca" >= 0.7. "gravidade" (LOW..CRITICAL) classifica o caso,
+			  mas NAO impede a penalidade.
+			- A penalidade do sistema e uma RESTRICAO da conta, com recurso revisado por uma pessoa;
+			  o modelo nunca bane nem executa nada.
 			- Palavrao como giria NAO e infracao ("porra, tu e foda" entre amigos e elogio) — so
 			  insulto DIRECIONADO para humilhar/discriminar e violacao.
 			- Se houver duvida, ambiguidade, contexto insuficiente ou humor consensual, use
 			  "ambiguo": true e "acao": "HUMAN_REVIEW".
+			- Se o conteudo NAO viola as diretrizes (denuncia sem fundamento), use "acao": "NENHUMA".
 			- Nao classifique somente por palavras-chave: considere alvo, contexto e intencao.
 			- Nao trate citacao de conteudo ofensivo como ataque.
 			- Nao invente dados: use apenas o que esta na DENUNCIA e no CONTEUDO fornecidos.
@@ -145,13 +152,18 @@ public class ModerationAiService {
 		}
 	}
 
-	/** Confianca minima para o veredito PENALIZAR valer; abaixo disso cai para revisao humana. */
-	public static final double AUTO_PENALTY_MIN_CONFIDENCE = 0.9;
+	/**
+	 * Confianca minima para o veredito PENALIZAR valer sozinho. O piso e de "confirmado, sem
+	 * duvida" — nao de certeza absoluta: uma denuncia comprovada ja basta para penalizar, e o que
+	 * ficar abaixo daqui (ou ambiguo) vai para revisao humana. O autor sempre pode recorrer, e o
+	 * recurso e revisado por uma pessoa.
+	 */
+	public static final double AUTO_PENALTY_MIN_CONFIDENCE = 0.7;
 
 	/**
-	 * Extrai e valida o JSON do palpite. PENALIZAR so passa com gravidade HIGH/CRITICAL, confianca
-	 * >= 0.9 e sem ambiguidade — qualquer coisa faltando, o veredito inteiro e invalido e a
-	 * denuncia segue para revisao humana (fail-safe).
+	 * Extrai e valida o JSON do palpite. PENALIZAR so passa com confianca de sobra e sem
+	 * ambiguidade — qualquer coisa faltando, o veredito inteiro e invalido e a denuncia segue para
+	 * revisao humana (fail-safe).
 	 */
 	public Optional<JsonNode> parseVerdict(String modelOutput) {
 		if (!StringUtils.hasText(modelOutput)) {
@@ -176,20 +188,21 @@ public class ModerationAiService {
 		}
 	}
 
-	/** O gate da penalidade automatica: tolerancia zero, grave, inequivoca e de alta confianca. */
+	/**
+	 * O gate da penalidade automatica: violacao confirmada (sem ambiguidade) e confianca acima do
+	 * piso. Gravidade nao entra aqui de proposito — ela classifica o caso, nao decide se ele e
+	 * penalizavel.
+	 */
 	public static boolean canAutoPenalize(JsonNode verdict) {
-		String gravidade = verdict.path("gravidade").asString();
-		boolean grave = "HIGH".equals(gravidade) || "CRITICAL".equals(gravidade);
-		return grave
-			&& verdict.path("confianca").asDouble(0) >= AUTO_PENALTY_MIN_CONFIDENCE
-			&& !verdict.path("ambiguo").asBoolean(true);
+		return !verdict.path("ambiguo").asBoolean(true)
+			&& verdict.path("confianca").asDouble(0) >= AUTO_PENALTY_MIN_CONFIDENCE;
 	}
 
-	/** O modelo nao pode nem recomendar acao automatica: isto e do back e fica com o humano. */
 	/**
 	 * Triagem das denuncias PENDING sem palpite: chama o LLM para cada uma e anexa o JSON validado.
-	 * A IA NAO aplica punicao: o resultado e so orientacao para a revisao humana no painel admin.
-	 * Retorna quantas denuncias foram triadas.
+	 * O palpite e so orientacao GRAVADA na denuncia — quem aplica a penalidade e o backend
+	 * (AiVerdictApplicationService), e so quando a acao e PENALIZAR e passa no gate. O modelo nunca
+	 * executa nada. Retorna quantas denuncias foram triadas.
 	 */
 	@org.springframework.transaction.annotation.Transactional
 	public int triagePendingReports(int limit) {

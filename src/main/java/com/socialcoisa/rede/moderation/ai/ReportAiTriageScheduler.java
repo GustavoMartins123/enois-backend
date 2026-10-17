@@ -10,10 +10,10 @@ import org.springframework.stereotype.Component;
  * Triagem de denuncias por IA, a cada 60s (denuncias PENDING sem palpite).
  *
  * Duas fases, com flags independentes: (1) triar — grava o palpite estruturado; (2) aplicar a
- * penalidade quando o veredito PENALIZAR passa no gate (tolerancia zero, grave, inequivoco,
- * confianca >= 0.9). O gate do veredito fica no parse (fail-safe: qualquer duvida vai para
- * revisao humana) e o banimento NUNCA e automatico — ele so acontece quando um humano NEGA o
- * recurso (SanctionService.denyAppeal).
+ * penalidade quando o veredito PENALIZAR passa no gate (violacao confirmada, sem ambiguidade,
+ * confianca >= 0.7). UMA denuncia comprovada ja basta para penalizar; o duvidoso vai para revisao
+ * humana. O gate fica no parse (fail-safe) e o banimento NUNCA e automatico — ele so acontece
+ * quando um humano NEGA o recurso (SanctionService.denyAppeal).
  */
 @Component
 public class ReportAiTriageScheduler {

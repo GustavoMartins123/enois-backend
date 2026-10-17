@@ -192,6 +192,26 @@ class SanctionFlowTests {
 			.andExpect(status().isCreated());
 	}
 
+	@Test
+	void confirmedVerdictPenalizesWithoutHighSeverity() throws Exception {
+		var author = new TestAuthHelper(mockMvc, objectMapper).authenticate("sflow_author4");
+		var viewer = new TestAuthHelper(mockMvc, objectMapper).authenticate("sflow_viewer4");
+
+		String postId = publish(author, "Post do fluxo de veredito confirmado.", "sflow-conf-pub");
+		String reportId = report(viewer, postId);
+
+		// UMA denuncia comprovada, sem gravidade alta e sem tolerancia zero: penaliza assim mesmo.
+		attachVerdict(reportId, """
+			{"categoria":"spam","gravidade":"MEDIUM","confianca":0.8,"ambiguo":false,
+			 "acao":"PENALIZAR","justificativa":"Spam confirmado no conteudo"}
+			""");
+		assertThatApplied(verdictApplication.applyPendingVerdicts(10));
+
+		mockMvc.perform(get("/reports/mine").header("X-Session-Token", viewer.token()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$[?(@.id == '" + reportId + "')].status").value("AUTO_PENALIZED"));
+	}
+
 	// --- helpers ---
 
 	private void assertThatApplied(int applied) {

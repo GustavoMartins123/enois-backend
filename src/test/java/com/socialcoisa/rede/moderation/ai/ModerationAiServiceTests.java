@@ -73,6 +73,30 @@ class ModerationAiServiceTests {
 		assertThat(service.triagePendingReports(10)).isZero();
 	}
 
+	@Test
+	void confirmedViolationPenalizesWithoutHighSeverity() {
+		ModerationAiService service = serviceWithOutKey();
+		// Violacao confirmada e sem duvida, mas gravidade MEDIUM: passa no gate. Uma denuncia
+		// comprovada basta; a gravidade classifica o caso, nao decide se ele e penalizavel.
+		Optional<JsonNode> verdict = service.parseVerdict("""
+			{"categoria":"spam","regra":"Proibido spam","gravidade":"MEDIUM","confianca":0.8,
+			 "evidencias":["mesmo link repetido em varios posts"],"contexto":"divulgacao em massa",
+			 "ambiguo":false,"acao":"PENALIZAR","justificativa":"Spam confirmado no conteudo"}""");
+		assertThat(verdict).isPresent();
+		assertThat(ModerationAiService.canAutoPenalize(verdict.get())).isTrue();
+	}
+
+	@Test
+	void doubtOrLowConfidenceGoesToHumanReview() {
+		ModerationAiService service = serviceWithOutKey();
+		// Ambiguidade declarada: revisao humana, mesmo com confianca alta.
+		assertThat(service.parseVerdict("""
+			{"acao":"PENALIZAR","gravidade":"HIGH","confianca":0.95,"ambiguo":true}""")).isEmpty();
+		// Confianca abaixo do piso: revisao humana.
+		assertThat(service.parseVerdict("""
+			{"acao":"PENALIZAR","gravidade":"HIGH","confianca":0.6,"ambiguo":false}""")).isEmpty();
+	}
+
 	/** Repositorio em memoria do que o servico precisa (sem banco). */
 	static class ReportRepositoryStub implements ReportRepository {
 		@Override public Report save(Report report) { return report; }

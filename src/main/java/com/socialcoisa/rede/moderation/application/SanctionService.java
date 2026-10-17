@@ -24,7 +24,7 @@ import com.socialcoisa.rede.notifications.application.NotificationService;
 import com.socialcoisa.rede.shared.web.ApiException;
 
 /**
- * Sancoes de moderacao: a IA (quando o veredito passa no gate de gravidade/confianca) aplica
+ * Sancoes de moderacao: a IA (quando o veredito passa no gate de confianca/sem ambiguidade) aplica
  * RESTRICAO e o autor pode recorrer; humano aprova (libera) ou nega (ban, com sessoes revogadas).
  * A IA NUNCA bana — ban so por recurso negado, decisao humana.
  */
