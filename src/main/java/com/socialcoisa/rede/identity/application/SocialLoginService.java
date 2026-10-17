@@ -138,6 +138,19 @@ public class SocialLoginService implements OAuthUseCase {
 					+ "&response_type=code&scope=name+email&response_mode=form_post"
 					+ "&state=" + urlEncode(state) + "&nonce=" + urlEncode(nonce);
 			}
+			case LINKEDIN -> {
+				var config = oAuthProperties.getLinkedin();
+				if (!StringUtils.hasText(config.getClientId())) {
+					throw new ApiException(501, "OAUTH_NOT_CONFIGURED",
+						"Login com LinkedIn nao configurado. Configure LINKEDIN_CLIENT_ID.");
+				}
+				// OIDC do LinkedIn ("Sign In with LinkedIn using OpenID Connect"): os escopos
+				// openid/profile/email sao de aprovacao automatica — importam nome, foto e e-mail.
+				yield "https://www.linkedin.com/oauth/v2/authorization?client_id=" + urlEncode(config.getClientId())
+					+ "&redirect_uri=" + urlEncode(config.getRedirectUri())
+					+ "&response_type=code&scope=openid+profile+email"
+					+ "&state=" + urlEncode(state) + "&nonce=" + urlEncode(nonce);
+			}
 		};
 	}
 

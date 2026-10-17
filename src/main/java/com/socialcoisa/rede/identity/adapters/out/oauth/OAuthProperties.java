@@ -8,6 +8,7 @@ public class OAuthProperties {
 
 	private GoogleConfig google = new GoogleConfig();
 	private AppleConfig apple = new AppleConfig();
+	private LinkedInConfig linkedin = new LinkedInConfig();
 	private String frontendRedirectUrl = "";
 
 	public GoogleConfig getGoogle() { return google; }
@@ -15,6 +16,13 @@ public class OAuthProperties {
 
 	public AppleConfig getApple() { return apple; }
 	public void setApple(AppleConfig apple) { this.apple = apple; }
+
+	public LinkedInConfig getLinkedin() { return linkedin; }
+	public void setLinkedin(LinkedInConfig linkedin) { this.linkedin = linkedin; }
+
+	public boolean isLinkedinConfigured() {
+		return StringUtils.hasText(linkedin.clientId);
+	}
 
 	public String getFrontendRedirectUrl() { return frontendRedirectUrl; }
 	public void setFrontendRedirectUrl(String frontendRedirectUrl) { this.frontendRedirectUrl = frontendRedirectUrl; }
@@ -28,6 +36,21 @@ public class OAuthProperties {
 	}
 
 	public static class GoogleConfig {
+		private String clientId = "";
+		private String clientSecret = "";
+		private String redirectUri = "";
+
+		public String getClientId() { return clientId; }
+		public void setClientId(String clientId) { this.clientId = clientId; }
+
+		public String getClientSecret() { return clientSecret; }
+		public void setClientSecret(String clientSecret) { this.clientSecret = clientSecret; }
+
+		public String getRedirectUri() { return redirectUri; }
+		public void setRedirectUri(String redirectUri) { this.redirectUri = redirectUri; }
+	}
+
+	public static class LinkedInConfig {
 		private String clientId = "";
 		private String clientSecret = "";
 		private String redirectUri = "";
