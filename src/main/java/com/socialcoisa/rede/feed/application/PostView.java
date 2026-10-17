@@ -9,6 +9,7 @@ import com.socialcoisa.rede.feed.domain.PostType;
 import com.socialcoisa.rede.feed.domain.ReactionType;
 
 public record PostView(String id, String authorId, String authorUsername, String authorName, String authorAvatar,
+		String authorBadge,
 		PostType type, String content, String pageHtml, String articleBody, List<String> tags, List<String> mediaIds,
 		Instant createdAt,
 		Counters counters, ReactionType currentUserReaction, String communityId, CommunityView community,
@@ -29,39 +30,45 @@ public record PostView(String id, String authorId, String authorUsername, String
 	 * post ja ter sido gravado). Devolver so o essencial mantem essas respostas pequenas.
 	 */
 	public static PostView from(Post post) {
-		return new PostView(post.id().value(), post.authorId().value(), null, null, null, post.type(), post.content(),
-			null, null, post.tags(), post.mediaIds(), post.createdAt(), post.counters(), null, post.communityId(),
-			null, post.editedAt());
+		return new PostView(post.id().value(), post.authorId().value(), null, null, null, null, post.type(),
+			post.content(), null, null, post.tags(), post.mediaIds(), post.createdAt(), post.counters(), null,
+			post.communityId(), null, post.editedAt());
 	}
 
 	public static PostView from(Post post, String authorUsername, String authorName, String authorAvatar) {
+		return from(post, authorUsername, authorName, authorAvatar, null);
+	}
+
+	/** Com o emblema do autor (PNG junto ao nome, onde ele aparecer). */
+	public static PostView from(Post post, String authorUsername, String authorName, String authorAvatar,
+			String authorBadge) {
 		return new PostView(post.id().value(), post.authorId().value(), authorUsername, authorName, authorAvatar,
-			post.type(), post.content(), null, null, post.tags(), post.mediaIds(), post.createdAt(), post.counters(),
-			null, post.communityId(), null, post.editedAt());
+			authorBadge, post.type(), post.content(), null, null, post.tags(), post.mediaIds(), post.createdAt(),
+			post.counters(), null, post.communityId(), null, post.editedAt());
 	}
 
 	public PostView withCurrentUserReaction(ReactionType reaction) {
-		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, type, content, pageHtml,
+		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, type, content, pageHtml,
 			articleBody, tags, mediaIds, createdAt, counters, reaction, communityId, community, editedAt);
 	}
 
 	/** Anexa o HTML da pagina; so o post unico faz isso (ver {@link #from(Post)}). */
 	public PostView withPageHtml(String pageHtml) {
-		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, type, content, pageHtml,
+		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, type, content, pageHtml,
 			articleBody, tags, mediaIds, createdAt, counters, currentUserReaction, communityId, community,
 			editedAt);
 	}
 
 	/** Anexa a comunidade (nome + participacao do leitor) depois do enriquecimento. */
 	public PostView withCommunity(String communityId, CommunityView community) {
-		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, type, content, pageHtml,
+		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, type, content, pageHtml,
 			articleBody, tags, mediaIds, createdAt, counters, currentUserReaction, communityId, community,
 			editedAt);
 	}
 
 	/** Anexa o corpo do artigo; so a leitura do post unico faz isso (mesma regra da pagina). */
 	public PostView withArticleBody(String body) {
-		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, type, content, pageHtml, body,
+		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, type, content, pageHtml, body,
 			tags, mediaIds, createdAt, counters, currentUserReaction, communityId, community, editedAt);
 	}
 }

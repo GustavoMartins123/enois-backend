@@ -91,9 +91,10 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 		notifyMentions(command.mentionedUserIds(), command.authorId().value(), post.id().value());
 		var profile = userProfileRepository.findById(command.authorId().value()).orElse(null);
 		return CommentView.from(saved,
-			profile != null ? profile.name() : null,
+			profile != null ? profile.displayWithNickname() : null,
 			profile != null ? profile.username() : null,
-			profile != null ? profile.avatar() : null);
+			profile != null ? profile.avatar() : null,
+			profile != null ? profile.badge() : null);
 	}
 
 	/**
@@ -110,7 +111,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 		if (parentAuthorId.equals(actorId)) return;
 		if (parentAuthorId.equals(post.authorId().value())) return;
 		var actor = userProfileRepository.findById(actorId).orElse(null);
-		String actorName = actor != null && actor.name() != null ? actor.name() : "Alguem";
+		String actorName = actor != null && actor.displayWithNickname() != null ? actor.displayWithNickname() : "Alguem";
 		notificationService.create(parentAuthorId, "NEW_REPLY", actorId, "Nova resposta",
 			actorName + " respondeu ao seu comentario.", "/api/feed/posts/" + post.id().value(), "Ver");
 	}
@@ -142,9 +143,10 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 			.map(c -> {
 				var p = userProfileRepository.findById(c.authorId().value()).orElse(null);
 				return CommentView.from(c,
-					p != null ? p.name() : null,
+					p != null ? p.displayWithNickname() : null,
 					p != null ? p.username() : null,
-					p != null ? p.avatar() : null);
+					p != null ? p.avatar() : null,
+					p != null ? p.badge() : null);
 			})
 			.toList();
 		// Reacao do proprio leitor: sem isso o front nao sabe que ele ja reagiu e a reacao
