@@ -65,6 +65,8 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 	private final PasswordHasher passwordHasher;
 	private final EmailService emailService;
 	private final Clock clock;
+
+	private final com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate;
 	private final SecureRandom secureRandom = new SecureRandom();
 
 	public AuthService(@Value("${rede.auth.access-token-ttl-minutes:60}") int accessTokenTtlMinutes,
@@ -74,7 +76,8 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
                        EmailVerificationTokenRepository emailVerificationTokenRepository,
                        TwoFactorService twoFactorService,
                        UserExternalIdentityRepository externalIdentityRepository,
-                       PasswordHasher passwordHasher, EmailService emailService, Clock clock) {
+                       PasswordHasher passwordHasher, EmailService emailService, Clock clock,
+                       com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate) {
 		this.accessTokenTtl = Duration.ofMinutes(accessTokenTtlMinutes);
 		this.refreshTokenTtl = Duration.ofDays(refreshTokenTtlDays);
 		this.userProfileRepository = userProfileRepository;
@@ -87,6 +90,7 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		this.passwordHasher = passwordHasher;
         this.emailService = emailService;
         this.clock = clock;
+		this.sanctionGate = sanctionGate;
 	}
 
 	@Override
@@ -123,6 +127,11 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		UserProfile profile = userProfileRepository.findById(credential.userId())
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
 		requireVerifiedIdentity(profile);
+		// Ban (recurso negado) trava ate o login: a conta nao emite sessao nova.
+		if (sanctionGate.banned(profile.id())) {
+			throw new ApiException(403, "ACCOUNT_BANNED",
+				"Esta conta foi banida apos revisao do recurso. Fale com o suporte se precisar.");
+		}
 
 		// Senha correta e o primeiro passo: com segundo fator ativo, aqui sai um desafio, nao sessao.
 		var requiredMethod = twoFactorService.requiredMethod(profile.id());
@@ -143,6 +152,10 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		String userId = twoFactorService.verifyChallenge(challengeId.trim(), code);
 		UserProfile profile = userProfileRepository.findById(userId)
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
+		if (sanctionGate.banned(profile.id())) {
+			throw new ApiException(403, "ACCOUNT_BANNED",
+				"Esta conta foi banida apos revisao do recurso. Fale com o suporte se precisar.");
+		}
 		return createResponse(profile);
 	}
 

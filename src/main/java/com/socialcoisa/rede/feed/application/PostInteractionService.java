@@ -46,6 +46,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository;
 	private final BlockedUsersReader blockedUsersReader;
 	private final com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseCase validateMediaOwnership;
+	private final com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate;
 
 	public PostInteractionService(PostRepository postRepository, CommentRepository commentRepository,
 			PostInteractionRepository postInteractionRepository, OutboxEventRepository outboxEventRepository,
@@ -53,7 +54,8 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 			NotificationService notificationService,
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository,
 			BlockedUsersReader blockedUsersReader,
-			com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseCase validateMediaOwnership) {
+			com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseCase validateMediaOwnership,
+			com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate) {
 		this.postRepository = postRepository;
 		this.commentRepository = commentRepository;
 		this.postInteractionRepository = postInteractionRepository;
@@ -64,11 +66,16 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 		this.userProfileRepository = userProfileRepository;
 		this.blockedUsersReader = blockedUsersReader;
 		this.validateMediaOwnership = validateMediaOwnership;
+		this.sanctionGate = sanctionGate;
 	}
 
 	@Override
 	@Transactional
 	public CommentView comment(CommentOnPostCommand command) {
+		if (sanctionGate.restricted(command.authorId().value())) {
+			throw new ApiException(403, "ACCOUNT_RESTRICTED",
+				"Sua conta esta restrita por moderacao. Voce pode recorrer na pagina Penalidades.");
+		}
 		Post post = activePost(command.postId());
 		List<String> mediaIds = normalizeCommentMedia(command.mediaIds(), command.authorId());
 		String content = normalizeContent(command.content(), !mediaIds.isEmpty());

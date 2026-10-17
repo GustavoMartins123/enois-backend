@@ -70,6 +70,12 @@ public class Report {
 		this.resolutionNote = note;
 	}
 
+	/** Pre-triagem da IA definiu penalidade: status proprio; o humano entra pelo recurso. */
+	public void autoPenalize(String motive) {
+		this.status = ReportStatus.AUTO_PENALIZED;
+		this.resolutionNote = motive;
+	}
+
 	public String id() { return id; }
 	public String reporterId() { return reporterId; }
 	public TargetType targetType() { return targetType; }

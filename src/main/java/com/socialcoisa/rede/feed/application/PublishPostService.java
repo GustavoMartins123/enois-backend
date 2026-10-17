@@ -36,13 +36,15 @@ public class PublishPostService implements PublishPostUseCase {
 	private final ValidateMediaOwnershipUseCase validateMediaOwnershipUseCase;
 	private final NotificationService notificationService;
 	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository;
+	private final com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate;
 
 	public PublishPostService(PostRepository postRepository, ArticleRepository articleRepository,
 			IdGenerator idGenerator, Clock clock,
 			FeedDistributionService feedDistributionService, OutboxEventRepository outboxEventRepository,
 			ValidateMediaOwnershipUseCase validateMediaOwnershipUseCase,
 			NotificationService notificationService,
-			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository) {
+			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository,
+			com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate) {
 		this.postRepository = postRepository;
 		this.articleRepository = articleRepository;
 		this.idGenerator = idGenerator;
@@ -52,11 +54,16 @@ public class PublishPostService implements PublishPostUseCase {
 		this.validateMediaOwnershipUseCase = validateMediaOwnershipUseCase;
 		this.notificationService = notificationService;
 		this.userProfileRepository = userProfileRepository;
+		this.sanctionGate = sanctionGate;
 	}
 
 	@Override
 	@Transactional
 	public PostView publish(PublishPostCommand command) {
+		if (sanctionGate.restricted(command.authorId().value())) {
+			throw new ApiException(403, "ACCOUNT_RESTRICTED",
+				"Sua conta esta restrita por moderacao. Voce pode recorrer na pagina Penalidades.");
+		}
 		validate(command);
 		List<String> tags = command.tags() == null ? List.of() : command.tags().stream()
 			.filter(StringUtils::hasText)

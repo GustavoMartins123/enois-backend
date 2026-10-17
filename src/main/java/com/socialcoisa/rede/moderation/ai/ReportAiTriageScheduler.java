@@ -7,8 +7,13 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * Triagem de denuncias por IA, a cada 60s (denuncias PENDING sem palpite). O palpite e SO
- * orientacao para o painel admin — a penalidade continua sendo decidida por revisao humana.
+ * Triagem de denuncias por IA, a cada 60s (denuncias PENDING sem palpite).
+ *
+ * Duas fases, com flags independentes: (1) triar — grava o palpite estruturado; (2) aplicar a
+ * penalidade quando o veredito PENALIZAR passa no gate (tolerancia zero, grave, inequivoco,
+ * confianca >= 0.9). O gate do veredito fica no parse (fail-safe: qualquer duvida vai para
+ * revisao humana) e o banimento NUNCA e automatico — ele so acontece quando um humano NEGA o
+ * recurso (SanctionService.denyAppeal).
  */
 @Component
 public class ReportAiTriageScheduler {
@@ -16,12 +21,18 @@ public class ReportAiTriageScheduler {
 	private static final Logger LOG = LoggerFactory.getLogger(ReportAiTriageScheduler.class);
 
 	private final ModerationAiService moderationAiService;
+	private final com.socialcoisa.rede.moderation.application.AiVerdictApplicationService verdictApplication;
 	private final boolean enabled;
+	private final boolean autoPenaltyEnabled;
 
 	public ReportAiTriageScheduler(ModerationAiService moderationAiService,
-			@Value("${rede.moderation.ai.triage-enabled:true}") boolean enabled) {
+			com.socialcoisa.rede.moderation.application.AiVerdictApplicationService verdictApplication,
+			@Value("${rede.moderation.ai.triage-enabled:true}") boolean enabled,
+			@Value("${rede.moderation.ai.auto-penalty-enabled:true}") boolean autoPenaltyEnabled) {
 		this.moderationAiService = moderationAiService;
+		this.verdictApplication = verdictApplication;
 		this.enabled = enabled;
+		this.autoPenaltyEnabled = autoPenaltyEnabled;
 	}
 
 	@Scheduled(fixedDelay = 60_000, initialDelay = 30_000)
@@ -33,6 +44,12 @@ public class ReportAiTriageScheduler {
 			int triaged = moderationAiService.triagePendingReports(10);
 			if (triaged > 0) {
 				LOG.info("Denuncias triadas por IA: {}", triaged);
+			}
+			if (autoPenaltyEnabled && triaged >= 0) {
+				int penalized = verdictApplication.applyPendingVerdicts(10);
+				if (penalized > 0) {
+					LOG.info("Denuncias com penalidade automatica aplicada: {}", penalized);
+				}
 			}
 		}
 		catch (RuntimeException failure) {

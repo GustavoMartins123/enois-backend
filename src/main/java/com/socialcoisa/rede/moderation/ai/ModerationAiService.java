@@ -60,8 +60,8 @@ public class ModerationAiService {
 			Voce e um assistente de TRIAGEM de denuncias da rede social enois. Analise a DENUNCIA e o
 			CONTEUDO denunciado e devolva SOMENTE um objeto JSON valido, sem texto fora dele, com o formato:
 			{"categoria":"...","regra":"...","gravidade":"LOW|MEDIUM|HIGH|CRITICAL","confianca":0.0-1.0,
-			"evidencias":["..."],"contexto":"...","ambiguo":true|false,"acao":"HUMAN_REVIEW|NENHUMA",
-			"justificativa":"..."}
+			"evidencias":["..."],"contexto":"...","ambiguo":true|false,
+			"acao":"PENALIZAR|HUMAN_REVIEW|NENHUMA","justificativa":"..."}
 
 			Diretrizes do enois (resumo):
 			1. Proibido discurso de odio, racismo, homofobia, transfobia, intolerancia religiosa,
@@ -76,7 +76,14 @@ public class ModerationAiService {
 			8. Conteudo repetitivo ou gerado por IA nao e infracao por si so.
 
 			Regras obrigatorias de saida:
-			- "acao" so pode ser "HUMAN_REVIEW" ou "NENHUMA" (a IA NAO aplica punicao).
+			- "acao" pode ser "PENALIZAR", "HUMAN_REVIEW" ou "NENHUMA".
+			- "PENALIZAR" e para TOLERANCIA ZERO, e somente quando TUDO isto vale ao mesmo tempo:
+			  (a) racismo, homofobia, transfobia, intolerancia religiosa, xenofobia, ameaca,
+			  incitacao a violencia ou assedio dirigido a pessoa/grupo; (b) nao ha DUVIDA nem
+			  ambiguidade ("ambiguo": false); (c) "gravidade": "HIGH" ou "CRITICAL";
+			  (d) "confianca": >= 0.9. Qualquer condicao faltando, use "HUMAN_REVIEW".
+			- Palavrao como giria NAO e infracao ("porra, tu e foda" entre amigos e elogio) — so
+			  insulto DIRECIONADO para humilhar/discriminar e violacao.
 			- Se houver duvida, ambiguidade, contexto insuficiente ou humor consensual, use
 			  "ambiguo": true e "acao": "HUMAN_REVIEW".
 			- Nao classifique somente por palavras-chave: considere alvo, contexto e intencao.
@@ -138,7 +145,14 @@ public class ModerationAiService {
 		}
 	}
 
-	/** Extrai e valida o JSON do palpite: so aceita campos/valores dentro da politica. */
+	/** Confianca minima para o veredito PENALIZAR valer; abaixo disso cai para revisao humana. */
+	public static final double AUTO_PENALTY_MIN_CONFIDENCE = 0.9;
+
+	/**
+	 * Extrai e valida o JSON do palpite. PENALIZAR so passa com gravidade HIGH/CRITICAL, confianca
+	 * >= 0.9 e sem ambiguidade — qualquer coisa faltando, o veredito inteiro e invalido e a
+	 * denuncia segue para revisao humana (fail-safe).
+	 */
 	public Optional<JsonNode> parseVerdict(String modelOutput) {
 		if (!StringUtils.hasText(modelOutput)) {
 			return Optional.empty();
@@ -146,18 +160,29 @@ public class ModerationAiService {
 		try {
 			JsonNode verdict = objectMapper.readTree(modelOutput);
 			String action = verdict.path("acao").asString();
-			if (!"HUMAN_REVIEW".equals(action) && !"NENHUMA".equals(action)) {
-				return Optional.empty(); // acao fora da politica: palpite invalido
-			}
 			double confidence = verdict.path("confianca").asDouble(-1);
 			if (confidence < 0 || confidence > 1) {
 				return Optional.empty();
 			}
-			return Optional.of(verdict);
+			boolean valid = switch (action) {
+				case "NENHUMA", "HUMAN_REVIEW" -> true;
+				case "PENALIZAR" -> canAutoPenalize(verdict);
+				default -> false; // acao fora da politica: palpite invalido
+			};
+			return valid ? Optional.of(verdict) : Optional.empty();
 		}
 		catch (Exception invalid) {
 			return Optional.empty();
 		}
+	}
+
+	/** O gate da penalidade automatica: tolerancia zero, grave, inequivoca e de alta confianca. */
+	public static boolean canAutoPenalize(JsonNode verdict) {
+		String gravidade = verdict.path("gravidade").asString();
+		boolean grave = "HIGH".equals(gravidade) || "CRITICAL".equals(gravidade);
+		return grave
+			&& verdict.path("confianca").asDouble(0) >= AUTO_PENALTY_MIN_CONFIDENCE
+			&& !verdict.path("ambiguo").asBoolean(true);
 	}
 
 	/** O modelo nao pode nem recomendar acao automatica: isto e do back e fica com o humano. */
@@ -185,6 +210,7 @@ public class ModerationAiService {
 
 	public static boolean isActionAllowed(JsonNode verdict) {
 		String action = verdict.path("acao").asString();
-		return "HUMAN_REVIEW".equals(action) || "NENHUMA".equals(action);
+		return "HUMAN_REVIEW".equals(action) || "NENHUMA".equals(action)
+			|| ("PENALIZAR".equals(action) && canAutoPenalize(verdict));
 	}
 }
