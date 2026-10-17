@@ -190,7 +190,10 @@ Giphy/Tenor, e isso continua valendo); o que precisa de chave é a **busca**.
 | `REDE_GIFS_GIPHY_KEY` | chave da **GIPHY API**: developers.giphy.com → *Create an App*. Entra quando só ele está configurado. |
 
 Uma chave basta — com as duas, o Tenor responde primeiro. **Sem chave nenhuma nada quebra**: o
-seletor abre e avisa que a busca está indisponível, com o caminho de colar link funcionando ao lado.
+provedor da Comunidade responde — busca nos GIFs que a própria rede já compartilhou nos comentários
+(mais recentes primeiro, dedupe por URL) — e o caminho de colar link segue funcionando ao lado.
+Para a busca externa (Tenor v2 é grátis no Google Cloud → ativar a "Tenor API" → criar chave),
+configure `REDE_GIFS_TENOR_KEY` e o provedor passa a responder primeiro.
 A cota é do provedor, então o backend guarda o resultado por 10 minutos por termo (cache `gifSearch`)
 e o endpoint exige sessão — anônimo não gasta a cota.
 

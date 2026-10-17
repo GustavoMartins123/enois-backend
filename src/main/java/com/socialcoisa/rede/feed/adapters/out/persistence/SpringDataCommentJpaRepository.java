@@ -14,4 +14,20 @@ interface SpringDataCommentJpaRepository extends JpaRepository<CommentJpaEntity,
 			CommentStatus status, Instant before, Pageable pageable);
 
 	List<CommentJpaEntity> findByAuthorId(String authorId);
+
+	/**
+	 * Comentários que citam o termo E trazem URL de GIF — a busca de GIF da comunidade
+	 * (sem provedor externo, usa o que a rede mesma já compartilhou).
+	 */
+	@org.springframework.data.jpa.repository.Query("""
+		select c.content from CommentJpaEntity c
+		where lower(c.content) like lower(concat('%', :term, '%'))
+		  and (lower(c.content) like '%.gif%'
+		       or lower(c.content) like '%media.giphy.com%'
+		       or lower(c.content) like '%c.tenor.com%'
+		       or lower(c.content) like '%media.tenor.com%')
+		order by c.createdAt desc
+		""")
+	List<String> searchGifContents(@org.springframework.data.repository.query.Param("term") String term,
+			Pageable pageable);
 }

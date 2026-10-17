@@ -17,7 +17,8 @@ import tools.jackson.databind.ObjectMapper;
  * storage: condicional demais quebrou o pod uma vez). A ordem importa: com as duas chaves, o Tenor
  * responde primeiro.
  *
- * Chaves e como conseguir: README, secao "Busca de GIF".
+ * Chaves e como conseguir: README, secao "Busca de GIF". Sem chave nenhuma, o
+ * provedor da Comunidade responde (GIFs que a propria rede ja compartilhou).
  */
 @Configuration(proxyBeanMethods = false)
 class GifProvidersConfig {
