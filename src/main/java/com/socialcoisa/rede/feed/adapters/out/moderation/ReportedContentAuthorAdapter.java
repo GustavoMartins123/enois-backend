@@ -26,6 +26,9 @@ class ReportedContentAuthorAdapter implements ReportedContentAuthorReader {
 		return switch (targetType) {
 			case "POST" -> posts.findById(new PostId(targetId)).map(p -> p.authorId().value());
 			case "COMMENT" -> comments.findById(targetId).map(c -> c.authorId().value());
+			// Denuncia de perfil: o alvo E a pessoa. Sem isto, penalizar/banir um perfil denunciado
+			// (spam, por exemplo) batia em "alvo sem autor" e nada acontecia.
+			case "USER" -> Optional.of(targetId);
 			default -> Optional.empty();
 		};
 	}

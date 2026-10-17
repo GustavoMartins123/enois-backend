@@ -27,8 +27,40 @@ class ModerationAiServiceTests {
 
 	private ReportRepositoryStub repo = new ReportRepositoryStub();
 
+	/** Sem leitor de conteudo: a triagem assume "(conteudo indisponivel)". */
+	private static final com.socialcoisa.rede.moderation.application.port.out.ReportedContentReader NO_CONTENT =
+		(targetType, targetId) -> Optional.empty();
+
 	private ModerationAiService serviceWithOutKey() {
-		return new ModerationAiService(repo, "https://infer.test/v1", "", "beta-llm/qwen3.8-27b", new tools.jackson.databind.ObjectMapper());
+		return new ModerationAiService(repo, NO_CONTENT, "https://infer.test/v1", "", "beta-llm/qwen3.8-27b", new tools.jackson.databind.ObjectMapper());
+	}
+
+	@Test
+	void reportPromptCarriesTheTargetContentInsteadOfTheId() {
+		// O prompt que vai ao modelo precisa levar o CONTEUDO do alvo — antes ia o id, e o modelo
+		// nao tinha como julgar contexto nenhum.
+		var report = Report.create("rep_1", "user_reporter", TargetType.POST, "post_abc",
+			com.socialcoisa.rede.moderation.domain.ReportReason.SPAM, "vende seguidores", Instant.now());
+		com.socialcoisa.rede.moderation.application.port.out.ReportedContentReader reader =
+			(targetType, targetId) -> Optional.of("Compre seguidores barato no meu site");
+		ModerationAiService service = new ModerationAiService(repo, reader, "https://infer.test/v1", "",
+			"beta-llm/qwen3.8-27b", new tools.jackson.databind.ObjectMapper());
+
+		String prompt = service.reportUserPrompt(report);
+
+		assertThat(prompt).contains("Compre seguidores barato no meu site").contains("SPAM");
+		assertThat(prompt).doesNotContain("post_abc");
+	}
+
+	@Test
+	void reportPromptSaysWhenThereIsNoContentToJudge() {
+		var report = Report.create("rep_2", "user_reporter", TargetType.JOB, "job_abc",
+			com.socialcoisa.rede.moderation.domain.ReportReason.SCAM, "golpe", Instant.now());
+
+		String prompt = serviceWithOutKey().reportUserPrompt(report);
+
+		assertThat(prompt).contains("(conteudo indisponivel)");
+		assertThat(prompt).doesNotContain("job_abc");
 	}
 
 	@Test
