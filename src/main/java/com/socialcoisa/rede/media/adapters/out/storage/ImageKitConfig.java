@@ -14,11 +14,14 @@ import com.socialcoisa.rede.media.application.port.out.StorageUrlFactory;
 
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(ImageKitConfig.ImageKitProperties.class)
-// Continua incondicional enquanto o upload pelo S3 nao existir: o gateway daqui e quem assina e
-// recebe o arquivo hoje. Ligar o S3 so troca o endereco dos objetos novos (ver S3StorageConfig).
+// O gateway do ImageKit segue incondicional: e ele que recebe e apaga arquivo hoje, e o S3 ainda
+// nao cobre esse caminho. Ja a FABRICA DE URL e alternativa ao S3 — as duas juntas colidiam no
+// mesmo nome de bean (`storageUrlFactory`) e o boot morria com "bean already defined" quando
+// `REDE_MEDIA_STORAGE=s3`. Agora cada uma so existe no seu modo; sem a variavel, o padrao e ImageKit.
 class ImageKitConfig {
 
 	@Bean
+	@ConditionalOnProperty(name = "rede.media.storage", havingValue = "imagekit", matchIfMissing = true)
 	StorageUrlFactory storageUrlFactory(ImageKitProperties props) {
 		return new ImageKitStorageUrlFactory(props.getUrlEndpoint());
 	}

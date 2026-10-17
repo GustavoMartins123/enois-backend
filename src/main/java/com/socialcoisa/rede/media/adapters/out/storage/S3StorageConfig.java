@@ -27,7 +27,7 @@ import com.socialcoisa.rede.media.application.port.out.StorageUrlFactory;
 class S3StorageConfig {
 
 	@Bean
-	StorageUrlFactory storageUrlFactory(S3Properties props) {
+	StorageUrlFactory s3StorageUrlFactory(S3Properties props) {
 		return new S3StorageUrlFactory(props.getBucket(), props.getRegion(), props.getPrefix(),
 			props.getPublicBaseUrl());
 	}
