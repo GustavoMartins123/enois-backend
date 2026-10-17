@@ -41,7 +41,7 @@ public class ModerationAiService {
 	public ModerationAiService(ReportRepository reportRepository,
 			@Value("${rede.moderation.llm.base-url:https://infer.flatt.com.br/v1}") String baseUrl,
 			@Value("${rede.moderation.llm.api-key:}") String apiKey,
-			@Value("${rede.moderation.llm.model:beta-llm/qwen3.8-27b}") String model,
+			@Value("${rede.moderation.llm.model:qwen3.8-27b}") String model,
 			ObjectMapper objectMapper) {
 		this.reportRepository = reportRepository;
 		this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
@@ -115,6 +115,9 @@ public class ModerationAiService {
 			HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/chat/completions"))
 				.timeout(Duration.ofSeconds(30))
 				.header("Content-Type", "application/json")
+				// O endpoint fica atras de Cloudflare: UA de biblioteca (java-http-client) pode
+				// apanhar o bloqueio de assinatura (error 1010) — UA proprio evita.
+				.header("User-Agent", "enois-moderacao/1.0")
 				.header("Authorization", "Bearer " + apiKey)
 				.POST(HttpRequest.BodyPublishers.ofString(body))
 				.build();
