@@ -178,6 +178,57 @@ back** is setting `REDE_MEDIA_STORAGE=imagekit` and restarting: objects already 
 served through their stored address. A `403` on upload is almost always bucket CORS or a
 `Content-Type` different from the signed one.
 
+## Pending infrastructure tasks
+
+Two items are waiting on infrastructure (both are one-time, no code change needed afterwards):
+
+### 1. Content origin for post pages — `paginas.enois.ia.br`
+
+**Why:** a post can be a "page" (HTML/CSS authored by the user, rendered in a phone-sized frame). The
+frame needs `allow-scripts` so third-party players (YouTube and friends) can mount — and that is only
+safe if the page document comes from an **origin separate from the app**, so user HTML can never reach
+a reader's session. Until this host exists the front falls back to the embedded mode, which runs no
+script at all (safe, but without inline players).
+
+**Already done in the repo (nothing for you to do):** the backend serves the document at
+`GET /api/pages/{postId}` with the policy in the **response headers** (`script-src 'none'` for the
+page itself, `frame-src` limited to the known providers, `frame-ancestors` limited to the app,
+plus `nosniff`/`no-referrer`). The gateway route for the new host is prepared in the GitOps repo
+(`enois-content-httproute.yaml`, routing everything to the backend).
+
+**What you need to do:**
+
+1. **ACM (us-east-1)** — open the certificate `arn:aws:acm:us-east-1:818928662779:certificate/80055fdf-3de2-40a8-b23c-048d3f244f3c`
+   and add the name **`paginas.enois.ia.br`**. ACM answers with a **DNS validation record**
+   (`_<token>.paginas.enois.ia.br` → `_<token>.acm-validations.aws.`). Create exactly that record at
+   the `ia.br` DNS provider, TTL 300, and wait for the certificate to be issued.
+2. **DNS** — create **`paginas.enois.ia.br` as a CNAME to `enois.ia.br`**, TTL 300 (it then resolves to
+   the same ALB; today `enois.ia.br` answers on 44.208.152.234 and 184.192.246.24). An A record with
+   both IPs also works, but the CNAME follows changes.
+3. **Then tell the dev session to flip the front:** set `VITE_CONTENT_ORIGIN=https://paginas.enois.ia.br`
+   in the front deployment. That is the switch — with it the frame loads the served document (and
+   players work); without it, the embedded mode stays.
+
+**Verifying:** `curl -sI https://paginas.enois.ia.br/pages/<postId>` should answer `200` with
+`content-type: text/html` and the `content-security-policy` header; and a YouTube link inside a
+published page should play inside the frame.
+
+### 2. Front deploy key (informational, already applied)
+
+The front's workflow updates the GitOps manifest through a **deploy key** (`enois-frontend-gitops
+(workflow do front)`) with write access **only** to `florestaencantada/integration_gitops`; the private
+half lives in the front repository's `GITOPS_SSH_KEY` secret and nowhere else. Deployment keys had to
+be enabled at the organisation level for this (`gh api -X PATCH orgs/florestaencantada -f
+deploy_keys_enabled_for_repositories=true`). **To rotate:** delete that key in the GitOps repository,
+generate another pair, add the public half as a deploy key (write) and update the `GITOPS_SSH_KEY`
+secret in the front repo. Nothing else depends on it.
+
+### Still to build (product work, not infrastructure)
+
+The **content integrity system** (copy/spam detection, credibility ledger, appeals) is designed and
+audited but not implemented; the migration draft for it needs a fresh version number, since migrations
+have already reached V51.
+
 ## Deploy (EKS via GitOps)
 
 O deploy **não** se faz por `fly deploy`. O fluxo é:
