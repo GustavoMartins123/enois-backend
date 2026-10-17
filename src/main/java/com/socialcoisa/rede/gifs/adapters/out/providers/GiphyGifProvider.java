@@ -53,6 +53,8 @@ public class GiphyGifProvider implements GifProvider {
 		url.append("?api_key=").append(URLEncoder.encode(apiKey, StandardCharsets.UTF_8));
 		url.append("&limit=").append(limit);
 		url.append("&rating=pg-13");
+		// Doc do GIPHY: bundle de messaging tira stickers/clips da grade — só GIFs de chat.
+		url.append("&bundle=messaging_non_clips");
 		if (hasQuery) {
 			url.append("&q=").append(URLEncoder.encode(query, StandardCharsets.UTF_8));
 		}

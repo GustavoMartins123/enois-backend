@@ -189,7 +189,10 @@ Giphy/Tenor, e isso continua valendo); o que precisa de chave é a **busca**.
 | `REDE_GIFS_TENOR_KEY` | chave da **Tenor API v2**: Google Cloud → ativar a "Tenor API" → criar uma chave de API. É o provedor preferido. |
 | `REDE_GIFS_GIPHY_KEY` | chave da **GIPHY API**: developers.giphy.com → *Create an App*. Entra quando só ele está configurado. |
 
-Uma chave basta — com as duas, o Tenor responde primeiro. **Sem chave nenhuma nada quebra**: o
+Uma chave basta — com as duas, o Tenor responde primeiro. **A chave do GIPHY já está no default
+do `application.properties`** (e no Secret `REDE_GIFS_GIPHY_KEY` do GitHub) — para ROTAR sem
+redeploy, aplique o Secret `enois-gifs` no cluster com a chave nova (o manifesto já referencia
+com `optional: true`). **Sem chave nenhuma nada quebra**: o
 provedor da Comunidade responde — busca nos GIFs que a própria rede já compartilhou nos comentários
 (mais recentes primeiro, dedupe por URL) — e o caminho de colar link segue funcionando ao lado.
 Para a busca externa (Tenor v2 é grátis no Google Cloud → ativar a "Tenor API" → criar chave),
