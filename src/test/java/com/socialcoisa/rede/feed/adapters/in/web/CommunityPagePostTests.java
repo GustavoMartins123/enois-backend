@@ -86,16 +86,16 @@ class CommunityPagePostTests {
 	}
 
 	@Test
-	void publishesPageAtTheSizeLimit() throws Exception {
+	void rejectsPageAboveTheLimitWithAClearMessage() throws Exception {
 		var author = auth.authenticate("user_com_page3");
 		String communityId = createCommunity(author, "Comunidade da pagina no limite");
 
-		// Perto do teto de 20 mil caracteres do campo.
+		// Acima do teto de 20 mil caracteres do campo: 400 com codigo proprio, nunca um 409 generico.
 		String html = "<div>" + "<p>paragrafo de teste com tamanho realista</p>".repeat(460) + "</div>";
 
 		publishPage(author, communityId, html, "com-page-limit")
-			.andExpect(status().isCreated())
-			.andExpect(jsonPath("$.type").value("PAGE"));
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("PAGE_HTML_TOO_LONG"));
 	}
 
 	@Test
@@ -109,6 +109,17 @@ class CommunityPagePostTests {
 			.andExpect(status().isCreated())
 			.andExpect(jsonPath("$.type").value("PAGE"));
 	}
+
+
+	@Test
+	void publishesPageWithNulByteOnly() throws Exception {
+		var author = auth.authenticate("user_com_page5");
+		String communityId = createCommunity(author, "Comunidade da pagina com nul");
+
+		publishPage(author, communityId, "<p>antes\u0000depois</p>", "com-page-nul")
+			.andExpect(status().isCreated());
+	}
+
 
 	private org.springframework.test.web.servlet.ResultActions publishPage(
 			TestAuthHelper.AuthSession author, String communityId, String pageHtml, String idem) throws Exception {
