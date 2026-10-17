@@ -35,7 +35,7 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 			.map(this::populateCounts)
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
 		// A bio em HTML so vai na leitura (ver OwnProfileView.withBioHtml).
-		return OwnProfileView.from(profile).withBioHtml(profile.bioHtml());
+		return OwnProfileView.from(profile).withBioHtml(profile.bioHtml()).withBannerHtml(profile.bannerHtml());
 	}
 
 	@Override
@@ -44,7 +44,7 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 		UserProfile profile = repository.findByUsername(username)
 			.map(this::populateCounts)
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
-		return UserProfileView.from(profile).withBioHtml(profile.bioHtml());
+		return UserProfileView.from(profile).withBioHtml(profile.bioHtml()).withBannerHtml(profile.bannerHtml());
 	}
 
 	@Override
@@ -53,7 +53,7 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 		UserProfile profile = repository.findById(userId)
 			.map(this::populateCounts)
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
-		return UserProfileView.from(profile).withBioHtml(profile.bioHtml());
+		return UserProfileView.from(profile).withBioHtml(profile.bioHtml()).withBannerHtml(profile.bannerHtml());
 	}
 
 	/**
@@ -136,6 +136,13 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 		if (command.bioHtml() != null) {
 			profile.updateBioHtml(StringUtils.hasText(command.bioHtml())
 				? SafeHtml.requireProfileHtml(command.bioHtml())
+				: null, clock.instant());
+		}
+		// A capa em HTML/CSS segue a mesma regra: sanitizada aqui, vazia limpa (volta para a foto),
+		// ausente no corpo da requisicao mantem.
+		if (command.bannerHtml() != null) {
+			profile.updateBannerHtml(StringUtils.hasText(command.bannerHtml())
+				? SafeHtml.requireProfileHtml(command.bannerHtml())
 				: null, clock.instant());
 		}
 		return OwnProfileView.from(repository.save(profile));

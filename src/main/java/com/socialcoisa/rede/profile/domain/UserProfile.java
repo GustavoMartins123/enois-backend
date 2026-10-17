@@ -19,6 +19,8 @@ public class UserProfile {
 	private String bio;
 	/** Bio em HTML/CSS (ja sanitizada no servidor); quando presente, o perfil mostra ela no lugar do texto. */
 	private String bioHtml;
+	/** Capa em HTML/CSS (ja sanitizada); quando presente, o perfil mostra ela no lugar da imagem. */
+	private String bannerHtml;
 	private List<String> skills;
 	private List<String> goals;
 	private String availability;
@@ -38,7 +40,7 @@ public class UserProfile {
 	private Instant federatedSecondFactorAt;
 
 	private UserProfile(String id, String username, String email, String name, String headline, String company,
-			String location, String avatar, String banner, String badge, String bio, String bioHtml,
+			String location, String avatar, String banner, String badge, String bio, String bioHtml, String bannerHtml,
 			List<String> skills, List<String> goals,
 			String availability, String portfolio, List<String> externalLinks, boolean openToWork, boolean mentor,
 			Instant createdAt, Instant updatedAt) {
@@ -54,6 +56,7 @@ public class UserProfile {
 		this.badge = badge;
 		this.bio = bio;
 		this.bioHtml = bioHtml;
+		this.bannerHtml = bannerHtml;
 		this.skills = List.copyOf(skills);
 		this.goals = List.copyOf(goals);
 		this.availability = availability;
@@ -67,16 +70,16 @@ public class UserProfile {
 
 	public static UserProfile create(String id, String username, String email, String name, String headline,
 			Instant now) {
-		return new UserProfile(id, username, email, name, headline, null, null, null, null, null, null, null,
+		return new UserProfile(id, username, email, name, headline, null, null, null, null, null, null, null, null,
 			List.of(), List.of(), null, null, List.of(), false, false, now, now);
 	}
 
 	public static UserProfile restore(String id, String username, String email, String name, String headline,
-			String company, String location, String avatar, String banner, String badge, String bio, String bioHtml,
+			String company, String location, String avatar, String banner, String badge, String bio, String bioHtml, String bannerHtml,
 			List<String> skills, List<String> goals, String availability, String portfolio, List<String> externalLinks,
 			boolean openToWork, boolean mentor, Instant createdAt, Instant updatedAt) {
 		return new UserProfile(id, username, email, name, headline, company, location, avatar, banner, badge, bio,
-			bioHtml, skills, goals, availability, portfolio, externalLinks, openToWork, mentor, createdAt,
+			bioHtml, bannerHtml, skills, goals, availability, portfolio, externalLinks, openToWork, mentor, createdAt,
 			updatedAt);
 	}
 
@@ -110,6 +113,7 @@ public class UserProfile {
 		this.bioHtml = sanitizedHtml;
 		this.updatedAt = now;
 	}
+
 
 	/** Instante em que o usuario aceitou os termos no cadastro (null para contas antigas). */
 	public void acceptTerms(Instant at) {
@@ -284,9 +288,19 @@ public class UserProfile {
 		return bio;
 	}
 
+	public void updateBannerHtml(String sanitizedHtml, Instant now) {
+		this.bannerHtml = sanitizedHtml;
+		this.updatedAt = now;
+	}
+
 	public String bioHtml() {
 		return bioHtml;
 	}
+
+	public String bannerHtml() {
+		return bannerHtml;
+	}
+
 
 	public List<String> skills() {
 		return skills;

@@ -58,6 +58,10 @@ class UserProfileJpaEntity {
 	@Column(name = "bio_html", columnDefinition = "longtext")
 	private String bioHtml;
 
+	/** Capa em HTML/CSS, ja sanitizada: ocupa o lugar da imagem da capa quando existe. */
+	@Column(name = "banner_html", columnDefinition = "longtext")
+	private String bannerHtml;
+
 	@ElementCollection(fetch = FetchType.EAGER)
 	@CollectionTable(name = "user_skills", joinColumns = @JoinColumn(name = "user_id"))
 	@Column(name = "skill", nullable = false, length = 1600)
@@ -126,6 +130,7 @@ class UserProfileJpaEntity {
 		entity.badge = profile.badge();
 		entity.bio = profile.bio();
 		entity.bioHtml = profile.bioHtml();
+		entity.bannerHtml = profile.bannerHtml();
 		entity.skills = new ArrayList<>(profile.skills());
 		entity.goals = new ArrayList<>(profile.goals());
 		entity.availability = profile.availability();
@@ -147,8 +152,8 @@ class UserProfileJpaEntity {
 	UserProfile toDomain() {
 		UserProfile profile = UserProfile.restore(id, username, email, name, headline, company, location, avatar, banner,
 			badge,
-			bio, bioHtml, skills, goals, availability, portfolio, externalLinks, openToWork, mentor, createdAt,
-			updatedAt);
+			bio, bioHtml, bannerHtml, skills, goals, availability, portfolio, externalLinks, openToWork, mentor,
+			createdAt, updatedAt);
 		profile.setCounts(profile.connectionsCount(), profile.followersCount(), reputation);
 		profile.acceptTerms(termsAcceptedAt);
 		if (emailVerifiedAt != null) {
