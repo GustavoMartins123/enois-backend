@@ -215,6 +215,23 @@ e o endpoint exige sessão — anônimo não gasta a cota.
 | 5 | `dump_rede.sql` no histórico do Git (dados pessoais reais) | `git filter-repo` + trocar as senhas dos afetados | LGPD |
 | 6 | Sanitizar usuários e posts de teste em produção | precisa de acesso ao banco ou de um endpoint admin | — |
 
+> **Pronto na main, esperando só os itens 0 e 0b (19 commits):** projetos no perfil (stack, repo,
+> status, diário ou HTML), vulgo (aka), aplicações para empresas com marketplace, blogs, selos de
+> post, reações novas (EYES/NOTE/FIRE/CLAP + remoção), o e-mail da denúncia com ações rápidas, a
+> busca de GIF (chave do GIPHY embutida + fallback da comunidade), os controles de tema do front
+> (a store faltara num commit), transparências, fixes de segurança e o 409 de páginas. No FRONT:
+> a mesma lista + responsividade. Reexecutar os dois workflows depois de 0/0b — sem commit novo.
+
+### 0.1 — GIFs: aplicar o Secret `enois-gifs` no cluster (opcional, rotação sem redeploy)
+
+O manifesto já referencia (`optional: true`; sem ele, a busca funciona do mesmo jeito — a chave
+do GIPHY está no default do `application.properties`):
+
+```bash
+kubectl -n <namespace> create secret generic enois-gifs \
+  --from-literal=giphy-key='<chave nova do GIPHY>'
+```
+
 ### 0. URGENTE — o CI parou de deployar (desde ~16:55 de 17/10)
 
 **São dois bloqueios independentes, e o primeiro explica o sintoma mais estranho.**
