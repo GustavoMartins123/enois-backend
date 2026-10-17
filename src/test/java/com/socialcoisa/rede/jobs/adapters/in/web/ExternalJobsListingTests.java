@@ -45,6 +45,28 @@ class ExternalJobsListingTests {
 	private ExternalJobRepository externalJobs;
 
 	@Test
+	void externalJobHasPublicDetailWithItsOriginalUrl() throws Exception {
+		String id = "ext_detail_" + System.nanoTime();
+		externalJobs.save(new ExternalJob(id, "Teste", id, "Vaga compartilhada",
+			null, null, null, null, "https://exemplo.test/vaga/detalhe", Instant.now(), Instant.now(),
+			ExternalJob.FOUND, null));
+
+		MvcResult result = mockMvc.perform(get("/jobs/{id}", id))
+			.andExpect(status().isOk()).andReturn();
+		JsonNode job = objectMapper.readTree(result.getResponse().getContentAsString());
+		assertThat(job.path("id").asString()).isEqualTo(id);
+		assertThat(job.path("title").asString()).isEqualTo("Vaga compartilhada");
+		assertThat(job.path("sourceType").asString()).isEqualTo("EXTERNAL");
+		assertThat(job.path("sourceUrl").asString()).isEqualTo("https://exemplo.test/vaga/detalhe");
+	}
+
+	@Test
+	void unknownExternalJobStillReturnsNotFound() throws Exception {
+		mockMvc.perform(get("/jobs/ext_missing_" + System.nanoTime()))
+			.andExpect(status().isNotFound());
+	}
+
+	@Test
 	void searchFiltersExternalJobsByTitle() throws Exception {
 		externalJobs.save(new ExternalJob("ext_search_java", "BuscaExterna", "java-1", "Desenvolvedor Java Senior",
 			null, null, null, null, "https://exemplo.test/vaga/java", Instant.now(), Instant.now(),
