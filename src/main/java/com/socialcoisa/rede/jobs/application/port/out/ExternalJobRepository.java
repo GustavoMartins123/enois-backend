@@ -8,6 +8,8 @@ import com.socialcoisa.rede.jobs.domain.ExternalJob;
 /** Persistencia das vagas externas (tabela propria, separada das vagas da plataforma). */
 public interface ExternalJobRepository {
 
+	Optional<ExternalJob> findById(String id);
+
 	Optional<ExternalJob> findBySource(String platform, String externalId);
 
 	/** Deduplicacao GLOBAL: mesma vaga (mesma URL canonica) achada por outra fonte. */

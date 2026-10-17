@@ -19,6 +19,11 @@ class ExternalJobPersistenceAdapter implements ExternalJobRepository {
 	}
 
 	@Override
+	public Optional<ExternalJob> findById(String id) {
+		return repository.findById(id).map(ExternalJobJpaEntity::toDomain);
+	}
+
+	@Override
 	public Optional<ExternalJob> findBySource(String platform, String externalId) {
 		return repository.findByPlatformAndExternalId(platform, externalId).map(ExternalJobJpaEntity::toDomain);
 	}

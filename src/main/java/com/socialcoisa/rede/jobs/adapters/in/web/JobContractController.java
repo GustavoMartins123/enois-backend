@@ -148,6 +148,12 @@ class JobContractController {
 	JobView job(@PathVariable String jobId,
 			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		// A listagem publica inclui vagas externas persistidas em tabela separada.
+		// Seus identificadores pertencem ao namespace ext_; elas nao aceitam candidatura interna.
+		if (externalListingEnabled && jobId.startsWith("ext_")) {
+			var external = externalJobRepository.findById(jobId);
+			if (external.isPresent()) return toExternalView(external.get());
+		}
 		String viewer = viewerId(userId, sessionToken);
 		Job job = jobService.getById(jobId);
 		boolean owner = viewer != null && viewer.equals(job.postedBy());
@@ -324,12 +330,16 @@ class JobContractController {
 			? externalJobRepository.search(query.trim(), externalListingLimit)
 			: externalJobRepository.findRecent(externalListingLimit);
 		for (ExternalJob job : found) {
-			external.add(new JobView(job.id(), job.title(), job.company(), null, job.location(), null, null,
-				job.salary(), job.currency(), List.of(),
-				job.importedAt() != null ? job.importedAt().toString() : null, 0, false, false, false, 0, null,
-				List.of(), "OPEN", null, "EXTERNAL", job.url(), job.platform()));
+			external.add(toExternalView(job));
 		}
 		return external;
+	}
+
+	private JobView toExternalView(ExternalJob job) {
+		return new JobView(job.id(), job.title(), job.company(), null, job.location(), null, null,
+			job.salary(), job.currency(), List.of(),
+			job.importedAt() != null ? job.importedAt().toString() : null, 0, false, false, false, 0, null,
+			List.of(), "OPEN", null, "EXTERNAL", job.url(), job.platform());
 	}
 
 	private JobView toView(Job job, String viewer, boolean applied, boolean saved, int applicationsCount) {
