@@ -69,6 +69,45 @@ class ReportController {
 			.toList();
 	}
 
+	/** Retrato completo de uma denuncia para o painel de revisão aberto pelo e-mail. */
+	@GetMapping("/admin/reports/{reportId}")
+	Map<String, Object> review(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String reportId) {
+		adminGuard.requireAdmin(currentUserResolver.resolve(userId, sessionToken));
+		var review = moderationService.review(reportId);
+		return Map.of(
+			"report", ReportView.from(review.report()),
+			"reporter", review.reporter(),
+			"authorId", review.authorId() == null ? "" : review.authorId(),
+			"author", review.author() == null ? "" : review.author(),
+			"content", review.content() == null ? "" : review.content());
+	}
+
+	@PostMapping("/admin/reports/{reportId}/penalize")
+	ResponseEntity<String> penalize(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String reportId) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		adminGuard.requireAdmin(user);
+		return ResponseEntity.ok(ReportView.from(moderationService.penalize(reportId, user.id().value())).toString());
+	}
+
+	@PostMapping("/admin/reports/{reportId}/warn")
+	ResponseEntity<String> warn(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String reportId) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		adminGuard.requireAdmin(user);
+		return ResponseEntity.ok(ReportView.from(moderationService.warn(reportId, user.id().value())).toString());
+	}
+
+	@PostMapping("/admin/reports/{reportId}/ban")
+	ResponseEntity<String> ban(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String reportId,
+			com.socialcoisa.rede.identity.application.port.out.AuthSessionRepository sessions) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		adminGuard.requireAdmin(user);
+		return ResponseEntity.ok(ReportView.from(moderationService.ban(reportId, user.id().value(), sessions)).toString());
+	}
+
 	@PostMapping("/admin/reports/{reportId}/approve")
 	ResponseEntity<String> approve(@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken,

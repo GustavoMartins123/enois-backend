@@ -82,6 +82,19 @@ public class SanctionService {
 		return true;
 	}
 
+	/**
+	 * Banimento direto por decisao humana: salva a sancao e escala para BAN, revogando
+	 * todas as sessoes (o padrao do recurso negado, sem passar pelo recurso).
+	 */
+	@Transactional
+	public UserSanction banAuthor(UserSanction sanction, String authorId, String reviewerId,
+			com.socialcoisa.rede.identity.application.port.out.AuthSessionRepository sessions) {
+		UserSanction saved = sanctions.save(sanction);
+		UserSanction banned = sanctions.save(saved.escalateToBan());
+		sessions.revokeAllByUser(authorId, Instant.now(clock));
+		return banned;
+	}
+
 	/** Recurso do proprio usuario: so com restricao ativa e sem recurso pendente. */
 	@Transactional
 	public Appeal appeal(String userId, String message) {

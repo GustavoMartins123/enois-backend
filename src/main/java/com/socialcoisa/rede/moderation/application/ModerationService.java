@@ -9,7 +9,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.socialcoisa.rede.feed.application.port.in.ModerationRemovePostUseCase;
+import com.socialcoisa.rede.notifications.application.NotificationService;
 import com.socialcoisa.rede.moderation.application.port.out.ReportRepository;
+import com.socialcoisa.rede.moderation.application.port.out.ReportedContentAuthorReader;
+import com.socialcoisa.rede.moderation.application.port.out.ReportedContentReader;
 import com.socialcoisa.rede.moderation.domain.Report;
 import com.socialcoisa.rede.moderation.domain.ReportReason;
 import com.socialcoisa.rede.moderation.domain.ReportStatus;
@@ -24,17 +27,34 @@ public class ModerationService {
 	private final ModerationRemovePostUseCase moderationRemovePostUseCase;
 	private final EmailService emailService;
 	private final String supportEmail;
+	private final String frontendUrl;
 	private final Clock clock;
+	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles;
+	private final ReportedContentAuthorReader contentAuthors;
+	private final ReportedContentReader contentReader;
+	private final SanctionService sanctionService;
+	private final NotificationService notifications;
 
 	public ModerationService(ReportRepository reportRepository,
 			ModerationRemovePostUseCase moderationRemovePostUseCase, EmailService emailService,
 			@org.springframework.beans.factory.annotation.Value("${rede.support.email:}") String supportEmail,
+			@org.springframework.beans.factory.annotation.Value("${rede.frontend.url:https://enois.ia.br}") String frontendUrl,
+			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles,
+			ReportedContentAuthorReader contentAuthors, ReportedContentReader contentReader,
+			SanctionService sanctionService,
+			NotificationService notifications,
 			Clock clock) {
 		this.reportRepository = reportRepository;
 		this.moderationRemovePostUseCase = moderationRemovePostUseCase;
 		this.emailService = emailService;
 		this.supportEmail = supportEmail;
+		this.frontendUrl = frontendUrl.endsWith("/") ? frontendUrl.substring(0, frontendUrl.length() - 1) : frontendUrl;
 		this.clock = clock;
+		this.profiles = profiles;
+		this.contentAuthors = contentAuthors;
+		this.contentReader = contentReader;
+		this.sanctionService = sanctionService;
+		this.notifications = notifications;
 	}
 
 	/** Aviso ao suporte: best-effort. A denuncia JA ESTA salva; falha de e-mail nao perde nada. */
@@ -43,12 +63,40 @@ public class ModerationService {
 			return;
 		}
 		try {
-			emailService.sendSupportRequestEmail(supportEmail,
+			String reporter = describeUser(report.reporterId());
+			String authorId = contentAuthors.authorOf(report.targetType().name(), report.targetId()).orElse(null);
+			String reported = authorId == null ? "(autor nao identificado para este alvo)" : describeUser(authorId);
+			String content = contentReader.contentOf(report.targetType().name(), report.targetId()).orElse(null);
+
+			StringBuilder body = new StringBuilder();
+			body.append("<h2 style=\"margin:0 0 12px\">Denúncia recebida</h2>");
+			body.append("<ul>")
+				.append("<li><b>Denunciante:</b> ").append(reporter).append("</li>")
+				.append("<li><b>Denunciado:</b> ").append(reported).append("</li>")
+				.append("<li><b>Tipo da denúncia:</b> ").append(report.reason().name())
+				.append(" (alvo: ").append(report.targetType().name()).append(")</li>")
+				.append("<li><b>ID da denúncia:</b> ").append(report.id()).append("</li>")
+				.append("</ul>");
+			if (content != null) {
+				body.append("<p><b>Conteúdo do post denunciado:</b></p>")
+					.append("<blockquote style=\"margin:8px 0;padding:8px 12px;border-left:3px solid #ccc;")
+					.append("white-space:pre-wrap\">").append(escape(truncate(content, 2000))).append("</blockquote>");
+			}
+			if (report.description() != null && !report.description().isBlank()) {
+				body.append("<p><b>Relato de quem denunciou:</b> ").append(escape(report.description())).append("</p>");
+			}
+			String base = frontendUrl + "/moderacao/" + report.id();
+			body.append("<p style=\"margin-top:16px\"><b>Ações rápidas</b> (abrem o painel; a ação é "
+				+ "confirmada lá, com a sua sessão de admin):</p><ul>")
+				.append("<li><a href=\"").append(base).append("?acao=penalizar\">Penalizar o autor</a></li>")
+				.append("<li><a href=\"").append(base).append("?acao=avisar\">Avisar o autor</a></li>")
+				.append("<li><a href=\"").append(base).append("?acao=excluir\">Excluir o post</a></li>")
+				.append("<li><a href=\"").append(base).append("?acao=banir\">Banir o autor</a></li>")
+				.append("</ul>");
+
+			emailService.sendHtmlEmail(supportEmail,
 				"[Denúncia " + report.id() + "] " + report.reason().name() + " em " + report.targetType().name(),
-				"Denúncia: " + report.id() + "\nRegistrada em: " + report.createdAt() + "\nAlvo: "
-					+ report.targetType().name() + "/" + report.targetId() + "\nCategoria: "
-					+ report.reason().name() + "\nStatus: " + report.status().name() + "\nResumo: "
-					+ report.description(), null);
+				body.toString());
 		}
 		catch (RuntimeException failure) {
 			org.slf4j.LoggerFactory.getLogger(ModerationService.class)
@@ -83,6 +131,102 @@ public class ModerationService {
 	@Transactional(readOnly = true)
 	public List<Report> reportsOf(String reporterId, int limit) {
 		return reportRepository.findByReporter(reporterId, limit);
+	}
+
+	private String describeUser(String userId) {
+		return profiles.findById(userId)
+			.map(profile -> profile.displayWithNickname() + " (@" + profile.username() + ", id " + userId + ")")
+			.orElse(userId);
+	}
+
+	private String escape(String value) {
+		if (value == null) {
+			return "";
+		}
+		return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+			.replace("\"", "&quot;");
+	}
+
+	private String truncate(String value, int max) {
+		return value.length() <= max ? value : value.substring(0, max) + "… [cortado]";
+	}
+
+	/** Penalizar o autor da denuncia (pessoa revisora): remove post e restringe a conta. */
+	/** Retrato completo da denuncia para o painel de revisão (quem, quem, o quê). */
+	@Transactional(readOnly = true)
+	public ReportReview review(String reportId) {
+		Report report = reportRepository.findById(reportId)
+			.orElseThrow(() -> new ApiException(404, "REPORT_NOT_FOUND", "Denuncia nao encontrada."));
+		String authorId = contentAuthors.authorOf(report.targetType().name(), report.targetId()).orElse(null);
+		String content = contentReader.contentOf(report.targetType().name(), report.targetId()).orElse(null);
+		return new ReportReview(report, describeUser(report.reporterId()), authorId,
+			authorId == null ? null : describeUser(authorId), content);
+	}
+
+	public record ReportReview(Report report, String reporter, String authorId, String author, String content) {
+	}
+
+	@Transactional
+	public Report penalize(String reportId, String reviewerId) {
+		Report report = pendingReport(reportId);
+		boolean applied = sanctionService.applyForReport(report,
+			"Penalização manual por uma pessoa do time (motivo da denúncia: " + report.reason().name() + ")");
+		if (!applied) {
+			throw new ApiException(409, "CANNOT_PENALIZE", "Esta denúncia não pode mais ser penalizada.");
+		}
+		return reportRepository.findById(reportId).orElse(report);
+	}
+
+	/** Avisar o autor: a denuncia vira revisada e o autor recebe um aviso; o conteudo FICA. */
+	@Transactional
+	public Report warn(String reportId, String reviewerId) {
+		Report report = pendingReport(reportId);
+		report.approve(reviewerId, "AVISO da moderação (conteúdo mantido)");
+		Report saved = reportRepository.save(report);
+		contentAuthors.authorOf(report.targetType().name(), report.targetId()).ifPresent(authorId ->
+			notifications.create(authorId, "MODERACAO", reviewerId, "Aviso da moderação",
+				"Uma denúncia sobre seu conteúdo foi revisada e o time decidiu avisar você: "
+					+ "revise as diretrizes da rede para não perder o acesso. O conteúdo foi mantido.",
+				"/api/diretrizes", "Ver diretrizes"));
+		return saved;
+	}
+
+	/** Banir o autor: remove o post (quando for post), bane a conta e revoga as sessões. */
+	@Transactional
+	public Report ban(String reportId, String reviewerId,
+			com.socialcoisa.rede.identity.application.port.out.AuthSessionRepository sessions) {
+		Report report = pendingReport(reportId);
+		String authorId = contentAuthors.authorOf(report.targetType().name(), report.targetId())
+			.orElseThrow(() -> new ApiException(409, "NO_AUTHOR", "Este alvo não tem autor identificável."));
+		if ("POST".equals(report.targetType().name())) {
+			moderationRemovePostUseCase.removeAsModerator(reviewerId, report.targetId(), "BAN:" + report.reason().name());
+		}
+		report.approve(reviewerId, "BANIMENTO da conta");
+		Report saved = reportRepository.save(report);
+		String id = "sanc_" + java.util.UUID.randomUUID().toString().replace("-", "");
+		var sanction = com.socialcoisa.rede.moderation.domain.UserSanction
+			.create(id, authorId, report.id(), "Banimento por decisão humana (denúncia " + report.id() + ")",
+				Instant.now(clock));
+		sanctions_save_banned(sanction, authorId, reviewerId, sessions);
+		return saved;
+	}
+
+	private void sanctions_save_banned(com.socialcoisa.rede.moderation.domain.UserSanction sanction,
+			String authorId, String reviewerId,
+			com.socialcoisa.rede.identity.application.port.out.AuthSessionRepository sessions) {
+		var banned = sanctionService.banAuthor(sanction, authorId, reviewerId, sessions);
+		notifications.create(authorId, "MODERACAO", reviewerId, "Conta banida",
+			"Uma denúncia sobre seu conteúdo foi revisada por uma pessoa do time e a conta foi banida.",
+			"/api/penalidades", "Ver");
+	}
+
+	private Report pendingReport(String reportId) {
+		Report report = reportRepository.findById(reportId)
+			.orElseThrow(() -> new ApiException(404, "REPORT_NOT_FOUND", "Denuncia nao encontrada."));
+		if (report.status() != ReportStatus.PENDING) {
+			throw new ApiException(409, "ALREADY_REVIEWED", "Denuncia ja foi revisada.");
+		}
+		return report;
 	}
 
 	@Transactional

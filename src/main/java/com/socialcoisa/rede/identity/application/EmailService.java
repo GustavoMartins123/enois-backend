@@ -175,6 +175,21 @@ public class EmailService {
 		}
 	}
 
+	/** E-mail HTML pronto (o chamador escapa o conteudo do usuario). Best-effort: nunca lanca. */
+	public void sendHtmlEmail(String toEmail, String subject, String htmlBody) {
+		try {
+			MimeMessage message = mailSender.createMimeMessage();
+			MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+			helper.setFrom(fromEmail);
+			helper.setTo(toEmail);
+			helper.setSubject(subject);
+			helper.setText(htmlBody, true);
+			mailSender.send(message);
+		} catch (Exception e) {
+			LOG.error("Falha ao enviar e-mail para {}: {}", toEmail, e.getMessage(), e);
+		}
+	}
+
 	private String escape(String value) {
 		if (value == null) {
 			return "";
