@@ -199,7 +199,33 @@ e o endpoint exige sessão — anônimo não gasta a cota.
 
 ## Pending infrastructure tasks
 
-Two items are waiting on infrastructure (both are one-time, no code change needed afterwards):
+Three items are waiting on infrastructure:
+
+### 0. URGENTE — o CI parou de deployar: a role OIDC rejeita o GitHub (desde ~16:55 de 17/10)
+
+**Sintoma:** todo workflow (front e backend) falha no passo
+`⚙️ Configurar Credenciais AWS via OIDC` com
+`Not authorized to perform sts:AssumeRoleWithWebIdentity` (12 retries, sempre igual) — e os runs
+seguintes ficam em "queued" para sempre. **Nada deploya desde o run das 16:51** (imagem
+`b199118`): os commits na main (correção dos controles de tema, cards de projeto, e-mail da
+denúncia, GIFs da comunidade, blogs) estão prontos e esperando.
+
+**A role:** `arn:aws:iam::818928662779:role/forest-dev-github` (usada pelos DOIS repositórios,
+`enois-backend` e `enois-frontend`, via `aws-actions/configure-aws-credentials@v6` com OIDC de
+`token.actions.githubusercontent.com`).
+
+**O que conferir no IAM, nesta ordem:**
+1. A role `forest-dev-github` ainda existe e não foi renomeada;
+2. A trust policy dela ainda confia em `token.actions.githubusercontent.com` com
+   `sts:AssumeRoleWithWebIdentity` e a condition `aud = sts.amazonaws.com` (e nenhuma condição de
+   `sub` que tenha sido apertada em 17/10);
+3. O Identity provider OIDC `token.actions.githubusercontent.com` ainda existe na conta.
+
+**Depois de restaurar:** reexecutar o workflow nos dois repos
+(`gh workflow run build-and-push.yml -R florestaencantada/enois-backend` e `-R florestaencantada/enois-frontend`)
+— a main dos dois já tem tudo pronto. Não precisa de commit novo.
+
+Two items are also waiting on infrastructure (both are one-time, no code change needed afterwards):
 
 ### 1. Content origin for post pages — `paginas.enois.ia.br`
 
