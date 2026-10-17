@@ -72,6 +72,7 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 		check("bio", command.bio(), 1024);
 		check("avatar", command.avatar(), 500);
 		check("banner", command.banner(), 500);
+		check("emblema", command.badge(), 500);
 		if (command.externalLinks() != null) {
 			command.externalLinks().forEach(link -> check("link", link, 500));
 		}
