@@ -41,6 +41,9 @@ public interface MessagingRepository {
 
 	Optional<Message> findLastMessage(String conversationId);
 
+	/** A mensagem por id (para conferir de qual conversa ela e antes de mexer nela). */
+	Optional<Message> findMessageById(String messageId);
+
 	boolean addMessageReaction(String id, String messageId, String userId, com.socialcoisa.rede.feed.domain.ReactionType type, java.time.Instant createdAt);
 	boolean removeMessageReaction(String messageId, String userId);
 	List<ReactionSummary> findReactionsByMessageId(String messageId);

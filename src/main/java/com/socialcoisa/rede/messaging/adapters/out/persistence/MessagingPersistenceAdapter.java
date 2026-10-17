@@ -130,6 +130,11 @@ class MessagingPersistenceAdapter implements MessagingRepository {
 	}
 
 	@Override
+	public Optional<Message> findMessageById(String messageId) {
+		return messageRepo.findById(messageId).map(MessageJpaEntity::toDomain);
+	}
+
+	@Override
 	public boolean addMessageReaction(String id, String messageId, String userId, ReactionType type, Instant createdAt) {
 		var existing = messageReactionRepo.findByMessageIdAndUserId(messageId, userId);
 		if (existing.isPresent()) {

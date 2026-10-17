@@ -32,6 +32,9 @@ import com.socialcoisa.rede.shared.web.CurrentUserResolver;
 @RequestMapping("/feed/posts")
 class PostSealContractController {
 
+	/** Teto de ids por consulta: a tela pede uma pagina; acima disso e abuso, nao uso. */
+	private static final int MAX_IDS = 100;
+
 	private final SealService sealService;
 	private final CurrentUserResolver currentUserResolver;
 
@@ -47,7 +50,8 @@ class PostSealContractController {
 			@RequestParam(value = "ids", required = false) String ids) {
 		CurrentUser user = resolveSafely(userId, sessionToken);
 		List<String> postIds = ids == null ? List.of()
-			: Arrays.stream(ids.split(",")).map(String::trim).filter(value -> !value.isEmpty()).toList();
+			: Arrays.stream(ids.split(",")).map(String::trim).filter(value -> !value.isEmpty()).distinct()
+				.limit(MAX_IDS).toList();
 		Map<String, SealsView> found = sealService.sealsFor(postIds, user == null ? null : user.id().value());
 		// Garante a chave de todo id pedido (o front nao precisa tratar ausencia).
 		Map<String, SealsView> complete = new LinkedHashMap<>();

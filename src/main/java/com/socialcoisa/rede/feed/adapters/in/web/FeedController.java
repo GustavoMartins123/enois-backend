@@ -172,10 +172,10 @@ class FeedController {
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken, @PathVariable String username,
 			@RequestParam(required = false) String cursor,
 			@RequestParam(defaultValue = "20") int limit) {
-		CurrentUser user = StringUtils.hasText(userId) || StringUtils.hasText(sessionToken)
-			? currentUserResolver.resolve(userId, sessionToken) : currentUserResolver.resolveById(username);
-		return getProfilePostsUseCase.getProfilePosts(new GetProfilePostsQuery(user.id(), username,
-			cursorCodec.decode(cursor), limit));
+		// Leitura publica: sem sessao valida o visitante e NINGUEM (nunca o username do perfil, que
+		// virava um "leitor" inventado e desligava o filtro de bloqueio).
+		return getProfilePostsUseCase.getProfilePosts(new GetProfilePostsQuery(
+			viewerIdOrNull(userId, sessionToken), username, cursorCodec.decode(cursor), limit));
 	}
 
 	@DeleteMapping("/feed/posts/{postId}")

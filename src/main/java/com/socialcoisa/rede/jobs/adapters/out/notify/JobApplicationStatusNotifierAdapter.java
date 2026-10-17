@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.web.util.HtmlUtils;
 
 import com.socialcoisa.rede.identity.application.EmailService;
 import com.socialcoisa.rede.jobs.application.port.out.JobApplicationStatusNotifier;
@@ -70,19 +71,27 @@ class JobApplicationStatusNotifierAdapter implements JobApplicationStatusNotifie
 	}
 
 	private String subjectFor(Job job, JobApplicationStatus status) {
+		String title = subjectText(job.title());
 		return switch (status) {
-			case IN_REVIEW -> "Sua candidatura está em análise: " + job.title();
-			case ADVANCED -> "Você avançou no processo: " + job.title();
-			case NOT_SELECTED -> "Sobre a sua candidatura: " + job.title();
-			case APPLIED -> "Candidatura recebida: " + job.title();
+			case IN_REVIEW -> "Sua candidatura está em análise: " + title;
+			case ADVANCED -> "Você avançou no processo: " + title;
+			case NOT_SELECTED -> "Sobre a sua candidatura: " + title;
+			case APPLIED -> "Candidatura recebida: " + title;
 		};
+	}
+
+	/** Assunto de e-mail nao aceita quebra de linha (viraria cabecalho) nem marcação. */
+	private String subjectText(String value) {
+		return value == null ? "" : value.replaceAll("[\\r\\n]+", " ").trim();
 	}
 
 	private String emailBody(Job job, JobApplicationStatus status, String text) {
 		StringBuilder body = new StringBuilder();
-		body.append("<p><strong>").append(job.title()).append("</strong> — ").append(job.company())
-			.append("</p>");
-		body.append("<p>").append(text.replace("\n", "<br/>")).append("</p>");
+		// Titulo e empresa vem do anuncio do empregador: entram escapados, senao um titulo com
+		// <a href> vira link de phishing dentro do e-mail que chega ao candidato.
+		body.append("<p><strong>").append(HtmlUtils.htmlEscape(job.title())).append("</strong> — ")
+			.append(HtmlUtils.htmlEscape(job.company())).append("</p>");
+		body.append("<p>").append(HtmlUtils.htmlEscape(text).replace("\n", "<br/>")).append("</p>");
 		body.append("<p style=\"color:#6b7280;font-size:12px\">").append("Voce recebeu este aviso porque se ")
 			.append("candidatou a esta vaga no Enois.</p>");
 		return body.toString();

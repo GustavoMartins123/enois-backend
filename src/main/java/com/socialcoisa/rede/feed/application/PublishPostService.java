@@ -10,6 +10,7 @@ import org.springframework.util.StringUtils;
 import com.socialcoisa.rede.feed.application.port.in.PublishPostUseCase;
 import com.socialcoisa.rede.feed.application.port.out.ArticleRepository;
 import com.socialcoisa.rede.feed.application.port.out.IdGenerator;
+import com.socialcoisa.rede.feed.application.port.out.PostCommunityReader;
 import com.socialcoisa.rede.feed.application.port.out.OutboxEventRepository;
 import com.socialcoisa.rede.feed.application.port.out.PostRepository;
 import com.socialcoisa.rede.feed.domain.Post;
@@ -37,6 +38,7 @@ public class PublishPostService implements PublishPostUseCase {
 	private final NotificationService notificationService;
 	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository;
 	private final com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate;
+	private final PostCommunityReader postCommunityReader;
 
 	public PublishPostService(PostRepository postRepository, ArticleRepository articleRepository,
 			IdGenerator idGenerator, Clock clock,
@@ -44,7 +46,8 @@ public class PublishPostService implements PublishPostUseCase {
 			ValidateMediaOwnershipUseCase validateMediaOwnershipUseCase,
 			NotificationService notificationService,
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository,
-			com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate) {
+			com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate,
+			PostCommunityReader postCommunityReader) {
 		this.postRepository = postRepository;
 		this.articleRepository = articleRepository;
 		this.idGenerator = idGenerator;
@@ -55,6 +58,7 @@ public class PublishPostService implements PublishPostUseCase {
 		this.notificationService = notificationService;
 		this.userProfileRepository = userProfileRepository;
 		this.sanctionGate = sanctionGate;
+		this.postCommunityReader = postCommunityReader;
 	}
 
 	@Override
@@ -77,6 +81,18 @@ public class PublishPostService implements PublishPostUseCase {
 			.toList();
 		validateMediaOwnershipUseCase.validateOwnedBy(command.authorId(), mediaIds);
 		String communityId = StringUtils.hasText(command.communityId()) ? command.communityId().trim() : null;
+		if (communityId != null) {
+			// Publicar numa comunidade e escrever no feed dela: sem ser membro, qualquer pessoa
+			// logada colocaria post na vitrine dos outros (e o post nao aparece para quem participa).
+			PostCommunityReader.CommunityRef community = postCommunityReader
+				.byIds(List.of(communityId), command.authorId().value()).get(communityId);
+			if (community == null) {
+				throw new ApiException(404, "COMMUNITY_NOT_FOUND", "Comunidade nao encontrada.");
+			}
+			if (!community.joined()) {
+				throw new ApiException(403, "NOT_A_MEMBER", "Entre na comunidade para publicar nela.");
+			}
+		}
 		Post post = Post.publish(idGenerator.newPostId(), command.authorId(), command.type(), textOf(command),
 			pageHtml(command), tags, mediaIds, communityId, clock.instant());
 		Post saved = postRepository.save(post);

@@ -111,6 +111,18 @@ public class MessagingService {
 		return repository.isParticipant(conversationId, userId);
 	}
 
+	/**
+	 * A mensagem existe e e mesmo desta conversa.
+	 *
+	 * O caminho da reacao recebe o id da conversa e o id da mensagem separados: sem esta conferencia,
+	 * o id da conversa era decorativo e dava para reagir (e ler reacoes) em mensagem de conversa alheia.
+	 */
+	public boolean messageBelongsTo(String messageId, String conversationId) {
+		return repository.findMessageById(messageId)
+			.map(message -> message.conversationId().equals(conversationId))
+			.orElse(false);
+	}
+
 	public Conversation getConversation(String id) {
 		return repository.findConversationById(id)
 			.orElseThrow(() -> new ApiException(404, "CONVERSATION_NOT_FOUND", "Conversa nao encontrada."));

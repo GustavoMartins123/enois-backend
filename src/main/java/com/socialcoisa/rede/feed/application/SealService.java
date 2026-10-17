@@ -9,6 +9,7 @@ import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.socialcoisa.rede.feed.application.port.out.PostRepository;
 import com.socialcoisa.rede.feed.application.port.out.PostSealRepository;
 import com.socialcoisa.rede.feed.domain.PostSeal;
 import com.socialcoisa.rede.feed.domain.PostSealType;
@@ -25,9 +26,20 @@ import com.socialcoisa.rede.shared.web.ApiException;
 public class SealService {
 
 	private final PostSealRepository seals;
+	private final PostRepository posts;
 
-	public SealService(PostSealRepository seals) {
+	public SealService(PostSealRepository seals, PostRepository posts) {
 		this.seals = seals;
+		this.posts = posts;
+	}
+
+	/** O post precisa existir: sem isto qualquer id inventado vira linha de selo no banco. */
+	private void requirePost(String postId) {
+		if (!org.springframework.util.StringUtils.hasText(postId)) {
+			throw new ApiException(404, "POST_NOT_FOUND", "Post nao encontrado.");
+		}
+		posts.findById(new com.socialcoisa.rede.feed.domain.PostId(postId))
+			.orElseThrow(() -> new ApiException(404, "POST_NOT_FOUND", "Post nao encontrado."));
 	}
 
 	/** Alterna o selo do usuario no post e devolve o estado atual (contagens + o meu). */
@@ -36,6 +48,7 @@ public class SealService {
 		if (seal == null) {
 			throw new ApiException(400, "INVALID_SEAL", "Selo invalido.");
 		}
+		requirePost(postId);
 		PostSeal existing = seals.findByPostAndUser(postId, userId).orElse(null);
 		if (existing != null && existing.seal() == seal) {
 			seals.delete(postId, userId);
@@ -53,6 +66,7 @@ public class SealService {
 	/** Tira o selo do usuario no post (nao importa qual era) e devolve o estado atual. */
 	@Transactional
 	public SealsView remove(String userId, String postId) {
+		requirePost(postId);
 		seals.delete(postId, userId);
 		return sealsFor(List.of(postId), userId).get(postId);
 	}

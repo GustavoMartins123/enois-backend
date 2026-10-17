@@ -2,10 +2,12 @@ package com.socialcoisa.rede.events.application;
 
 import java.time.Clock;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import com.socialcoisa.rede.events.application.port.out.EventRepository;
 import com.socialcoisa.rede.events.domain.Event;
@@ -33,10 +35,27 @@ public class EventService {
 	public Event create(String title, String date, String time, String format, String host, String cover,
 			String streamUrl, String location, String userId) {
 		String id = "event_" + UUID.randomUUID().toString().replace("-", "");
-		Event event = Event.create(id, title, date, time, format, host, cover, streamUrl, location, userId,
-			clock.instant());
+		Event event = Event.create(id, title, date, time, format, host, cover, httpsOrNull(streamUrl), location,
+			userId, clock.instant());
 		repository.save(event);
 		return event;
+	}
+
+	/**
+	 * Link de transmissao so entra por https.
+	 *
+	 * O campo e texto livre e volta no evento como link: sem esta checagem, um `javascript:` gravado
+	 * aqui sairia como link clicavel para quem abre a lista.
+	 */
+	private String httpsOrNull(String url) {
+		if (!StringUtils.hasText(url)) {
+			return null;
+		}
+		String trimmed = url.trim();
+		if (!trimmed.toLowerCase(Locale.ROOT).startsWith("https://")) {
+			throw new ApiException(400, "INVALID_STREAM_URL", "O link da transmissao precisa comecar com https://.");
+		}
+		return trimmed;
 	}
 
 	@Transactional

@@ -170,7 +170,9 @@ class AuthController {
 	@PostMapping("/logout")
 	ResponseEntity<String> logout(@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@RequestHeader(value = "X-Session-Token", required = false) String token) {
-		String scope = "session:" + (token == null ? "anonymous" : token.trim());
+		// O escopo da idempotencia e chave de tabela: vai como HASH do token, nunca o token vivo
+		// em texto puro (quem le a tabela — backup, DBA — nao ganha uma sessao com isso).
+		String scope = "session:" + (token == null ? "anonymous" : idempotency.hash(token.trim()));
 		String hash = idempotency.hash(Map.of("token", scope));
 		return idempotency.execute(scope, "POST", "/api/auth/logout", idempotencyKey, hash, () -> {
 			logoutUseCase.logout(token);
@@ -397,7 +399,8 @@ class AuthController {
 	@RateLimiter(name = "email-sending")
 	ResponseEntity<String> resetPassword(@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@RequestBody ResetPasswordRequest request) {
-		String scope = "reset:" + (StringUtils.hasText(request.token()) ? request.token().trim() : "anonymous");
+		String scope = "reset:" + (StringUtils.hasText(request.token()) ? idempotency.hash(request.token().trim())
+			: "anonymous");
 		String hash = idempotency.hash(request);
 		return idempotency.execute(scope, "POST", "/api/auth/password/reset", idempotencyKey, hash,
 			() -> {

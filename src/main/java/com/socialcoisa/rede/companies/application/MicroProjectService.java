@@ -41,6 +41,11 @@ public class MicroProjectService {
 	public MicroProject publish(String companyId, String userId, String title, String problem, String scope,
 			String deliverables, String acceptanceCriteria, String budget, LocalDate deadline) {
 		CompanyAccess access = companyWithRole(companyId, userId);
+		// Publicar e escrita na vitrine da empresa: sem papel nenhum, qualquer pessoa logada
+		// publicaria um projeto publico na pagina dos outros.
+		if (!access.hasRole()) {
+			throw new ApiException(403, "NOT_COMPANY_MEMBER", "Voce nao faz parte desta pagina empresarial.");
+		}
 		if (!StringUtils.hasText(title) || title.trim().length() < 8) {
 			throw new ApiException(400, "INVALID_TITLE", "Titulo do microprojeto precisa de pelo menos 8 caracteres.");
 		}

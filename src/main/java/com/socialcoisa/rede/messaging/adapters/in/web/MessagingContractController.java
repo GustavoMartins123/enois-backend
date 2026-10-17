@@ -250,6 +250,7 @@ class MessagingContractController {
 			@PathVariable String conversationId, @PathVariable String messageId,
 			@RequestBody ReactToMessageRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		requireMessageInConversation(conversationId, messageId, user.id().value());
 		Map<String, Object> payload = new LinkedHashMap<>();
 		payload.put("messageId", messageId);
 		payload.put("type", request.type() == null ? "" : request.type());
@@ -266,13 +267,21 @@ class MessagingContractController {
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String conversationId, @PathVariable String messageId) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		if (!messagingService.isParticipant(conversationId, user.id().value())) {
-			throw new ApiException(403, "NOT_PARTICIPANT", "Voce nao participa desta conversa.");
-		}
+		requireMessageInConversation(conversationId, messageId, user.id().value());
 		var reactions = messagingService.getReactions(messageId);
 		var summary = reactions.stream()
 			.collect(Collectors.groupingBy(MessagingRepository.ReactionSummary::type, Collectors.counting()));
 		return Map.of("messageId", messageId, "summary", summary, "reactions", reactions);
+	}
+
+	/** Participa da conversa E a mensagem e dela: e o que o id da conversa no caminho promete. */
+	private void requireMessageInConversation(String conversationId, String messageId, String userId) {
+		if (!messagingService.isParticipant(conversationId, userId)) {
+			throw new ApiException(403, "NOT_PARTICIPANT", "Voce nao participa desta conversa.");
+		}
+		if (!messagingService.messageBelongsTo(messageId, conversationId)) {
+			throw new ApiException(404, "MESSAGE_NOT_FOUND", "Mensagem nao encontrada nesta conversa.");
+		}
 	}
 
 	record ReactToMessageRequest(ReactionType type) {
