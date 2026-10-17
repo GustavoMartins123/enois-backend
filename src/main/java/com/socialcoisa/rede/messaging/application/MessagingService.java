@@ -107,6 +107,16 @@ public class MessagingService {
 		return repository.hideConversations(userId, ids, clock.instant());
 	}
 
+	/** As conversas arquivadas (apagadas so para quem chama). */
+	public List<Conversation> listArchivedConversations(String userId, java.time.Instant before, int limit) {
+		return repository.findArchivedConversationsByUserId(userId, before, limit);
+	}
+
+	/** Restaurar: a conversa volta para a caixa de entrada de quem chamou. */
+	public int unhideConversations(String userId, java.util.List<String> ids) {
+		return repository.unhideConversations(userId, ids);
+	}
+
 	public boolean isParticipant(String conversationId, String userId) {
 		return repository.isParticipant(conversationId, userId);
 	}

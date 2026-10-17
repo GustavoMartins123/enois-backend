@@ -36,4 +36,14 @@ interface SpringDataConversationJpaRepository extends JpaRepository<Conversation
 	List<ConversationJpaEntity> findByParticipantUserId(@Param("userId") String userId, @Param("before") Instant before,
 			Pageable pageable);
 
+	/** As que a pessoa apagou para si ("arquivadas"): a caixa de entrada esconde, esta lista mostra. */
+	@Query("""
+			SELECT c FROM ConversationJpaEntity c
+			WHERE c.id IN (SELECT cp.conversationId FROM ConversationParticipantJpaEntity cp
+				WHERE cp.userId = :userId AND cp.hiddenAt IS NOT NULL)
+			AND (:before IS NULL OR c.updatedAt < :before)
+			ORDER BY c.updatedAt DESC""")
+	List<ConversationJpaEntity> findArchivedByParticipantUserId(@Param("userId") String userId,
+			@Param("before") Instant before, Pageable pageable);
+
 }

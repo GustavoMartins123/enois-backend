@@ -19,6 +19,9 @@ public interface MessagingRepository {
 
 	List<Conversation> findConversationsByUserId(String userId, java.time.Instant before, int limit);
 
+	/** As conversas que a pessoa arquivou (apagadas so para ela). */
+	List<Conversation> findArchivedConversationsByUserId(String userId, java.time.Instant before, int limit);
+
 	List<ConversationParticipant> findParticipantsByConversation(String conversationId);
 
 	/** Conversa DIRETA (1:1) entre dois usuarios, se existir. */
@@ -30,6 +33,9 @@ public interface MessagingRepository {
 
 	/** Esconde conversas para um usuario ("apagar para mim"); nao afeta os outros participantes. */
 	int hideConversations(String userId, Collection<String> conversationIds, java.time.Instant now);
+
+	/** Desfaz o "apagar para mim" (a conversa volta para a caixa de entrada). */
+	int unhideConversations(String userId, Collection<String> conversationIds);
 
 	void markRead(String conversationId, String userId, java.time.Instant now);
 

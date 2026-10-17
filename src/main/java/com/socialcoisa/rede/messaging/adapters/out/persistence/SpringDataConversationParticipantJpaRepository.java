@@ -15,6 +15,14 @@ interface SpringDataConversationParticipantJpaRepository extends JpaRepository<C
 			@org.springframework.data.repository.query.Param("ids") java.util.Collection<String> ids,
 			@org.springframework.data.repository.query.Param("now") java.time.Instant now);
 
+	/** Tira o "apagado para mim" das conversas escolhidas (volta para a caixa de entrada). */
+	@org.springframework.data.jpa.repository.Modifying
+	@org.springframework.data.jpa.repository.Query("""
+			UPDATE ConversationParticipantJpaEntity cp SET cp.hiddenAt = null
+			WHERE cp.userId = :userId AND cp.conversationId IN :ids""")
+	int unhideConversations(@org.springframework.data.repository.query.Param("userId") String userId,
+			@org.springframework.data.repository.query.Param("ids") java.util.Collection<String> ids);
+
 	List<ConversationParticipantJpaEntity> findByConversationId(String conversationId);
 
 	Optional<ConversationParticipantJpaEntity> findByConversationIdAndUserId(String conversationId, String userId);

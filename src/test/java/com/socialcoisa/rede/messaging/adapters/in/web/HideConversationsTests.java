@@ -61,6 +61,36 @@ class HideConversationsTests {
 	}
 
 	@Test
+	void archivedListShowsItAndUnhideBringsItBack() throws Exception {
+		var a = auth.authenticate("hide_user_d");
+		var b = auth.authenticate("hide_user_e");
+		String conversationId = createConversation(a, b.userId());
+
+		mockMvc.perform(post("/conversations/hide")
+				.header("X-Session-Token", a.token())
+				.header("Idempotency-Key", "hide-archive-1")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("ids", List.of(conversationId)))))
+			.andExpect(status().isOk());
+
+		// Arquivada: sai da caixa de entrada e entra na lista de arquivadas.
+		org.assertj.core.api.Assertions.assertThat(ids(a)).doesNotContain(conversationId);
+		org.assertj.core.api.Assertions.assertThat(archivedIds(a)).contains(conversationId);
+
+		// Restaurar: volta para a caixa de entrada e sai das arquivadas.
+		mockMvc.perform(post("/conversations/unhide")
+				.header("X-Session-Token", a.token())
+				.header("Idempotency-Key", "unhide-1")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("ids", List.of(conversationId)))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.restored").value(1));
+
+		org.assertj.core.api.Assertions.assertThat(ids(a)).contains(conversationId);
+		org.assertj.core.api.Assertions.assertThat(archivedIds(a)).doesNotContain(conversationId);
+	}
+
+	@Test
 	void emptySelectionIsRejected() throws Exception {
 		var a = auth.authenticate("hide_user_c");
 		mockMvc.perform(post("/conversations/hide")
@@ -70,6 +100,15 @@ class HideConversationsTests {
 				.content(objectMapper.writeValueAsString(Map.of("ids", List.of()))))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("EMPTY_CONVERSATION_LIST"));
+	}
+
+	private List<String> archivedIds(TestAuthHelper.AuthSession session) throws Exception {
+		MvcResult result = mockMvc.perform(get("/conversations/archived").header("X-Session-Token", session.token()))
+			.andExpect(status().isOk()).andReturn();
+		JsonNode items = objectMapper.readTree(result.getResponse().getContentAsString()).get("items");
+		List<String> out = new ArrayList<>();
+		for (int i = 0; i < items.size(); i++) out.add(items.get(i).get("id").asText());
+		return out;
 	}
 
 	private List<String> ids(TestAuthHelper.AuthSession session) throws Exception {

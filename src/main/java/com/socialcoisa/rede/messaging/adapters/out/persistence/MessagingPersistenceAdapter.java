@@ -67,6 +67,13 @@ class MessagingPersistenceAdapter implements MessagingRepository {
 	}
 
 	@Override
+	public List<Conversation> findArchivedConversationsByUserId(String userId, java.time.Instant before, int limit) {
+		return conversationRepo.findArchivedByParticipantUserId(userId, before, PageRequest.of(0, limit)).stream()
+			.map(ConversationJpaEntity::toDomain)
+			.toList();
+	}
+
+	@Override
 	public List<ConversationParticipant> findParticipantsByConversation(String conversationId) {
 		return participantRepo.findByConversationId(conversationId).stream()
 			.map(ConversationParticipantJpaEntity::toDomain)
@@ -85,6 +92,14 @@ class MessagingPersistenceAdapter implements MessagingRepository {
 			return 0;
 		}
 		return participantRepo.hideConversations(userId, conversationIds, now);
+	}
+
+	@Override
+	public int unhideConversations(String userId, java.util.Collection<String> conversationIds) {
+		if (conversationIds == null || conversationIds.isEmpty()) {
+			return 0;
+		}
+		return participantRepo.unhideConversations(userId, conversationIds);
 	}
 
 	@Override

@@ -223,6 +223,51 @@ class MessagingContractController {
 		});
 	}
 
+	/** As conversas que a pessoa apagou para si — a tela de arquivadas. */
+	@GetMapping("/archived")
+	PageResponse<ConversationView> archived(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestParam(required = false) String cursor, @RequestParam(defaultValue = "20") int limit) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		Instant before = cursorCodec.decode(cursor).orElse(null);
+		List<Conversation> conversations = messagingService.listArchivedConversations(user.id().value(), before,
+			Math.min(limit, 50));
+		var items = conversations.stream()
+			.map(c -> {
+				List<String> pIds = messagingService.getParticipants(c.id()).stream()
+					.map(ConversationParticipant::userId)
+					.toList();
+				return new ConversationView(c.id(), user.id().value(), c.kind(), c.title(), pIds,
+					messagingService.getLastMessageText(c.id()),
+					messagingService.getLastMessageTime(c.id()) != null
+						? messagingService.getLastMessageTime(c.id()).toString() : null,
+					messagingService.countUnread(c.id(), user.id().value()));
+			})
+			.toList();
+		String nextCursor = conversations.size() == limit
+			? cursorCodec.encode(conversations.get(conversations.size() - 1).updatedAt()) : null;
+		return new PageResponse<>(items, nextCursor);
+	}
+
+	/** Restaurar: desfaz o "apagar para mim" das conversas escolhidas. */
+	@PostMapping("/unhide")
+	ResponseEntity<String> unhide(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@RequestBody HideConversationsRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		List<String> ids = request.ids() == null ? List.of()
+			: request.ids().stream().filter(id -> id != null && !id.isBlank()).map(String::trim).distinct().toList();
+		if (ids.isEmpty()) {
+			throw new ApiException(400, "EMPTY_CONVERSATION_LIST", "Selecione ao menos uma conversa.");
+		}
+		String hash = idempotency.hash(Map.of("ids", ids));
+		return idempotency.execute(user.id(), "POST", "/api/conversations/unhide", idempotencyKey, hash, () -> {
+			int restored = messagingService.unhideConversations(user.id().value(), ids);
+			return new CommandResponse(200, Map.of("restored", restored));
+		});
+	}
+
 	@PostMapping
 	ResponseEntity<String> create(@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
