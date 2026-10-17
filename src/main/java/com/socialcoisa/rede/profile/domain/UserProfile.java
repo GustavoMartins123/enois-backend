@@ -27,6 +27,8 @@ public class UserProfile {
 	private String socialName;
 	/** Pronomes: aparecem so no perfil, como lembrete de como tratar a pessoa. */
 	private String pronouns;
+	/** Vulgo: como a pessoa e conhecida (etiqueta ao lado do nome, so no perfil). */
+	private String aka;
 	/** Ate 5 emblemas; o primeiro e o que acompanha o nome por todo o app. */
 	private List<String> badges = List.of();
 	private List<String> skills;
@@ -93,7 +95,7 @@ public class UserProfile {
 
 	public void update(String name, String headline, String company, String location, String avatar, String banner,
 			String badge, String bio, List<String> skills, List<String> goals, String availability, String portfolio,
-			List<String> externalLinks, Boolean openToWork, Boolean mentor, String username, Instant now) {
+			List<String> externalLinks, Boolean openToWork, Boolean mentor, String username, String aka, Instant now) {
 		this.name = keep(name, this.name);
 		this.headline = keep(headline, this.headline);
 		this.company = keep(company, this.company);
@@ -102,6 +104,7 @@ public class UserProfile {
 		this.banner = keep(banner, this.banner);
 		this.badge = keep(badge, this.badge);
 		this.bio = keep(bio, this.bio);
+		this.aka = keep(aka, this.aka);
 		this.skills = skills == null ? this.skills : List.copyOf(skills);
 		this.goals = goals == null ? this.goals : List.copyOf(goals);
 		this.availability = keep(availability, this.availability);
@@ -293,6 +296,11 @@ public class UserProfile {
 		this.pronouns = blankToNull(pronouns);
 	}
 
+	/** Hidrata o vulgo (o campo vem da coluna, nao do fluxo de edicao). */
+	public void hydrateAka(String aka) {
+		this.aka = aka;
+	}
+
 	/** Hidrata a lista de emblemas (URLs separadas por linha no banco). */
 	public void hydrateBadges(List<String> badges) {
 		this.badges = badges == null ? List.of() : List.copyOf(badges);
@@ -349,6 +357,10 @@ public class UserProfile {
 
 	public String pronouns() {
 		return pronouns;
+	}
+
+	public String aka() {
+		return aka;
 	}
 
 	public String headline() {

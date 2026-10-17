@@ -73,6 +73,7 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 		check("avatar", command.avatar(), 500);
 		check("banner", command.banner(), 500);
 		check("emblema", command.badge(), 500);
+		check("vulgo", command.aka(), 60);
 		if (command.externalLinks() != null) {
 			command.externalLinks().forEach(link -> check("link", link, 500));
 		}
@@ -131,7 +132,7 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 			trim(command.avatar()), trim(command.banner()), trim(command.badge()), trim(command.bio()),
 			clean(command.skills()),
 			clean(command.goals()), trim(command.availability()), trim(command.portfolio()), clean(command.externalLinks()),
-			command.openToWork(), command.isMentor(), username, clock.instant());
+			command.openToWork(), command.isMentor(), username, trim(command.aka()), clock.instant());
 		// A bio em HTML e sanitizada aqui, como o HTML do post de pagina: allowlist de tags e CSS.
 		// Vazio limpa (o perfil volta para a bio de texto); ausente no corpo da requisicao mantem.
 		if (command.bioHtml() != null) {

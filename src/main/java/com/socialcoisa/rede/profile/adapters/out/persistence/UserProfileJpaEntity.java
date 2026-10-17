@@ -123,6 +123,9 @@ class UserProfileJpaEntity {
 	@Column(name = "pronouns", length = 60)
 	private String pronouns;
 
+	@Column(name = "aka", length = 60)
+	private String aka;
+
 	@Column(name = "federated_second_factor_at")
 	private Instant federatedSecondFactorAt;
 
@@ -162,6 +165,7 @@ class UserProfileJpaEntity {
 		entity.nickname = profile.nickname();
 		entity.socialName = profile.socialName();
 		entity.pronouns = profile.pronouns();
+		entity.aka = profile.aka();
 		entity.badges = String.join("\n", profile.badges());
 		return entity;
 	}
@@ -186,6 +190,7 @@ class UserProfileJpaEntity {
 			profile.enableFederatedSecondFactor(federatedSecondFactorAt);
 		}
 		profile.hydrateIdentityDisplay(nickname, socialName, pronouns);
+		profile.hydrateAka(aka);
 		profile.hydrateBadges(badges == null || badges.isBlank() ? List.of() : List.of(badges.split("\n")));
 		return profile;
 	}

@@ -107,7 +107,7 @@ class ProfileController {
 				request.banner(), request.badge(), request.bio(), request.bioHtml(), request.bannerHtml(), request.skills(), request.goals(),
 				request.availability(),
 				request.portfolio(), request.externalLinks(), request.openToWork(), request.isMentor(),
-				request.username()))));
+				request.username(), request.aka()))));
 	}
 
 	private CurrentUser resolve(String userId, String sessionToken) {
