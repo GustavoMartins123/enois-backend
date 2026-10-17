@@ -46,6 +46,7 @@ class JobContractController {
 	private final com.socialcoisa.rede.profile.application.ReputationService reputationService;
 	private final List<com.socialcoisa.rede.jobs.application.port.out.JobImportSource> jobImportSources;
 	private final ExternalJobRepository externalJobRepository;
+	private final com.socialcoisa.rede.jobs.application.port.out.CompanyDirectoryReader companyDirectory;
 	private final boolean externalListingEnabled;
 	private final int externalListingLimit;
 	private final tools.jackson.databind.ObjectMapper objectMapper;
@@ -58,7 +59,8 @@ class JobContractController {
 			List<com.socialcoisa.rede.jobs.application.port.out.JobImportSource> jobImportSources,
 			ExternalJobRepository externalJobRepository,
 			@org.springframework.beans.factory.annotation.Value("${rede.jobs.import.external-listing-enabled:false}") boolean externalListingEnabled,
-			@org.springframework.beans.factory.annotation.Value("${rede.jobs.import.external-listing-limit:20}") int externalListingLimit) {
+			@org.springframework.beans.factory.annotation.Value("${rede.jobs.import.external-listing-limit:20}") int externalListingLimit,
+			com.socialcoisa.rede.jobs.application.port.out.CompanyDirectoryReader companyDirectory) {
 		this.idempotency = idempotency;
 		this.currentUserResolver = currentUserResolver;
 		this.jobService = jobService;
@@ -66,6 +68,7 @@ class JobContractController {
 		this.userProfileRepository = userProfileRepository;
 		this.reputationService = reputationService;
 		this.objectMapper = objectMapper;
+		this.companyDirectory = companyDirectory;
 		this.jobImportSources = jobImportSources;
 		this.externalJobRepository = externalJobRepository;
 		this.externalListingEnabled = externalListingEnabled;
@@ -142,6 +145,17 @@ class JobContractController {
 		Instant before = cursorCodec.decode(cursor).orElse(null);
 		List<Job> jobs = jobService.listApplications(user.id().value(), before, limit);
 		return page(jobs, limit, user.id().value(), PageKind.APPLICATIONS, false, null);
+	}
+
+	@GetMapping("/companies")
+	List<Map<String, Object>> companies(@RequestParam(required = false) String query,
+			@RequestParam(defaultValue = "60") int limit) {
+		return companyDirectory.directory(query, Math.min(Math.max(limit, 1), 200)).stream()
+			.map(c -> Map.<String, Object>of(
+				"name", c.name(),
+				"logo", c.logo() == null ? "" : c.logo(),
+				"openJobs", c.openJobs()))
+			.toList();
 	}
 
 	@GetMapping("/{jobId}")

@@ -26,6 +26,14 @@ interface SpringDataJobJpaRepository extends JpaRepository<JobJpaEntity, String>
 	@Query("SELECT j FROM JobJpaEntity j WHERE j.id IN :ids")
 	List<JobJpaEntity> findByIdIn(@Param("ids") java.util.Collection<String> ids);
 
+	// Diretorio de empresas: vagas abertas agrupadas por empresa (sem Case para agrupar
+	// maiusculas/minusculas juntas — a variante mais frequente define o nome exibido, resolvido
+	// no adapter). MAX(logo) pega um logo qualquer nao nulo do grupo.
+	@Query("SELECT j.company, COUNT(j) AS total, MAX(j.logo) FROM JobJpaEntity j " +
+		"WHERE j.status = com.socialcoisa.rede.jobs.domain.JobStatus.OPEN AND j.company IS NOT NULL " +
+		"GROUP BY j.company ORDER BY COUNT(j) DESC")
+	List<Object[]> countOpenJobsByCompany();
+
 	/**
 	 * Le a vaga travando a linha ate o fim da transacao. E o ponto de serializacao entre
 	 * candidatar-se e encerrar: quem pega o lock primeiro decide, e o outro le o estado ja mudado —
