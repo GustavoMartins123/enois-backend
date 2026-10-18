@@ -32,6 +32,7 @@ public class GameService {
 	private final Clock clock;
 	private final com.socialcoisa.rede.coin.application.CoinService coins;
 	private final com.socialcoisa.rede.coin.application.port.out.CoinLedgerRepository ledger;
+	private final com.socialcoisa.rede.games.application.port.out.GameCollectionRepository colecoes;
 
 	public GameService(GameRepository games,
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles, GameUrlGuard urlGuard,
@@ -39,7 +40,8 @@ public class GameService {
 			com.socialcoisa.rede.games.application.port.out.DeveloperFollowRepository follows,
 			com.socialcoisa.rede.notifications.application.NotificationService notifications, Clock clock,
 			com.socialcoisa.rede.coin.application.CoinService coins,
-			com.socialcoisa.rede.coin.application.port.out.CoinLedgerRepository ledger) {
+			com.socialcoisa.rede.coin.application.port.out.CoinLedgerRepository ledger,
+			com.socialcoisa.rede.games.application.port.out.GameCollectionRepository colecoes) {
 		this.games = games;
 		this.profiles = profiles;
 		this.urlGuard = urlGuard;
@@ -49,6 +51,7 @@ public class GameService {
 		this.clock = clock;
 		this.coins = coins;
 		this.ledger = ledger;
+		this.colecoes = colecoes;
 	}
 
 	@Transactional
@@ -288,4 +291,40 @@ public class GameService {
 	}
 
 	public static final long BOOST_PRICE_MF = 5_000L;
+
+
+	// --- G3: coleções temáticas curadas (v1: administração) ---
+
+	@Transactional
+	public com.socialcoisa.rede.games.domain.GameCollection createCollection(String curatorId, String title,
+			String description, List<String> gameIds) {
+		return colecoes.save(
+			com.socialcoisa.rede.games.domain.GameCollection.create(curatorId, title, description, gameIds,
+				java.time.Instant.now(clock)));
+	}
+
+	@Transactional
+	public com.socialcoisa.rede.games.domain.GameCollection hideCollection(String collectionId, String curatorId) {
+		com.socialcoisa.rede.games.domain.GameCollection collection = colecoes.findById(collectionId)
+			.orElseThrow(() -> new ApiException(404, "COLLECTION_NOT_FOUND", "Coleção não encontrada."));
+		if (!collection.ownedBy(curatorId)) {
+			throw new ApiException(403, "NOT_THE_CURATOR", "Só quem curou esconde a coleção.");
+		}
+		return colecoes.save(collection.hide(java.time.Instant.now(clock)));
+	}
+
+	/** As coleções publicadas com os jogos RESOLVIDOS (escondidos/suspensos saem da lista). */
+	@Transactional(readOnly = true)
+	public List<ColecaoView> collections(int limit) {
+		return colecoes.findPublished(limit).stream().map(c -> new ColecaoView(c.id(), c.title(), c.description(),
+			c.gameIds().stream()
+				.map(id -> games.findById(id).orElse(null))
+				.filter(g -> g != null && g.status() == GameStatus.PUBLISHED)
+				.map(g -> GameView.of(g, null))
+				.toList(),
+			c.createdAt().toString())).toList();
+	}
+
+	public record ColecaoView(String id, String title, String description, List<GameView> jogos, String createdAt) {
+	}
 }

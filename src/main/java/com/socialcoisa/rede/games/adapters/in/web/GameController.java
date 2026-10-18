@@ -118,6 +118,38 @@ class GameController {
 		return Map.of("id", created.id(), "slug", created.slug(), "status", created.status().name());
 	}
 
+	/** As coleções curadas (G3) com os jogos resolvidos. */
+	@GetMapping("/games/colecoes")
+	List<com.socialcoisa.rede.games.application.GameService.ColecaoView> colecoes(
+			@RequestParam(defaultValue = "20") int limit) {
+		return games.collections(limit);
+	}
+
+	/** Cria uma coleção curada (v1: administração). */
+	@PostMapping("/games/colecoes")
+	Map<String, Object> createCollection(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestBody CreateCollectionRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		adminGuard.requireAdmin(user);
+		var created = games.createCollection(user.id().value(), request.title(), request.description(),
+			request.gameIds());
+		return Map.of("id", created.id(), "status", created.status().name());
+	}
+
+	@PostMapping("/games/colecoes/{collectionId}/esconder")
+	Map<String, Object> hideCollection(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@PathVariable String collectionId) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		adminGuard.requireAdmin(user);
+		var hidden = games.hideCollection(collectionId, user.id().value());
+		return Map.of("id", hidden.id(), "status", hidden.status().name());
+	}
+
+	record CreateCollectionRequest(String title, String description, List<String> gameIds) {
+	}
+
 	/** Destaque pago (G2): o criador impulsiona o próprio jogo por 7 dias (5 faíscas). */
 	@PostMapping("/games/{gameId}/boost")
 	Map<String, Object> boost(@RequestHeader(value = "X-User-Id", required = false) String userId,
