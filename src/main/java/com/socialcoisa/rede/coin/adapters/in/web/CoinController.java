@@ -6,6 +6,7 @@ import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -25,16 +26,51 @@ import com.socialcoisa.rede.idempotency.application.IdempotencyApplicationServic
 class CoinController {
 
 	private final CoinService coins;
+	private final com.socialcoisa.rede.coin.application.CoinRateService rates;
 	private final CurrentUserResolver currentUserResolver;
 	private final IdempotencyApplicationService idempotency;
 	private final UserProfileRepository profiles;
+	private final com.socialcoisa.rede.shared.web.AdminGuard adminGuard;
 
-	CoinController(CoinService coins, CurrentUserResolver currentUserResolver,
-			IdempotencyApplicationService idempotency, UserProfileRepository profiles) {
+	CoinController(CoinService coins, com.socialcoisa.rede.coin.application.CoinRateService rates,
+			CurrentUserResolver currentUserResolver, IdempotencyApplicationService idempotency,
+			UserProfileRepository profiles, com.socialcoisa.rede.shared.web.AdminGuard adminGuard) {
 		this.coins = coins;
+		this.rates = rates;
 		this.currentUserResolver = currentUserResolver;
 		this.idempotency = idempotency;
 		this.profiles = profiles;
+		this.adminGuard = adminGuard;
+	}
+
+	/**
+	 * A MINI BOLSA (monitor público): a cotação de referência da faísca em BRL e o
+	 * histórico que alimenta o gráfico. NÃO é câmbio — não compra faísca com dinheiro.
+	 */
+	@GetMapping("/coin/cotacao")
+	Map<String, Object> quote(@RequestParam(defaultValue = "90") int history) {
+		var current = rates.latest();
+		return Map.of(
+			"brlCents", current.brlCents(),
+			"escala", com.socialcoisa.rede.coin.application.CoinService.SCALE,
+			"atualizadaEm", current.effectiveAt().toString(),
+			"historico", rates.history(history).stream().map(r -> Map.of(
+				"brlCents", r.brlCents(),
+				"em", r.effectiveAt().toString())).toList());
+	}
+
+	/** Publica uma nova cotação de referência (só administração). */
+	@PostMapping("/coin/cotacao")
+	Map<String, Object> setQuote(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestBody SetQuoteRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		adminGuard.requireAdmin(user);
+		var published = rates.publish(request.brlCents(), request.note());
+		return Map.of("brlCents", published.brlCents(), "em", published.effectiveAt().toString());
+	}
+
+	record SetQuoteRequest(long brlCents, String note) {
 	}
 
 	@GetMapping("/carteira")
@@ -50,6 +86,8 @@ class CoinController {
 		}
 		return Map.of(
 			"balance", wallet.balance(),
+			"escala", wallet.escala(),
+			"cotacaoBrlCents", wallet.cotacaoBrlCents(),
 			"chave", wallet.chave(),
 			"entries", wallet.entries().stream().map(EntryView::from).toList());
 	}

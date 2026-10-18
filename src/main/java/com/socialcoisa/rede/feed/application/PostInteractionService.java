@@ -224,7 +224,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 			}
 			String ref = "reacoes:" + authorId + ":" + received / 10;
 			if (!coins.hasReward(ref)) {
-				coins.reward(authorId, 1, ref, "Reações recebidas (" + received + " no total)");
+				coins.reward(authorId, com.socialcoisa.rede.coin.application.CoinService.FAIS(1), ref, "Reações recebidas (" + received + " no total)");
 			}
 		} catch (RuntimeException ignored) {
 			// a reação já está gravada; a faísca não pode ser motivo de erro para o usuário

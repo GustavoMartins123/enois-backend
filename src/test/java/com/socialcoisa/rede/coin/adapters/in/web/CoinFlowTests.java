@@ -56,7 +56,7 @@ class CoinFlowTests {
 			.as("carteira2: " + wallet2.getResponse().getContentAsString()).isEqualTo(200);
 		org.assertj.core.api.Assertions.assertThat(
 			objectMapper.readTree(wallet2.getResponse().getContentAsString()).get("balance").asLong())
-			.isEqualTo(105); // 100 do airdrop + 5 da presença do dia
+			.isEqualTo(105_000); // 100 faíscas do airdrop + 5 da presença do dia, em milésimos
 
 		// Transferência P2P por username (estilo Pix).
 		mockMvc.perform(post("/carteira/transferencias")
@@ -64,17 +64,17 @@ class CoinFlowTests {
 				.header("Idempotency-Key", "coin-p2p-1")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(objectMapper.writeValueAsString(Map.of(
-					"toUsername", "coin-receiver", "amount", 30, "message", "pelo mockup lindo"))))
+					"toUsername", "coin-receiver", "amount", 30_000, "message", "pelo mockup lindo"))))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.status").value("SENT"));
 
 		// Saldo nos dois lados: 70 e 130.
 		mockMvc.perform(get("/carteira").header("X-Session-Token", sender.token()))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.balance").value(75));
+			.andExpect(jsonPath("$.balance").value(75_000));
 		mockMvc.perform(get("/carteira").header("X-Session-Token", receiver.token()))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.balance").value(135));
+			.andExpect(jsonPath("$.balance").value(135_000));
 
 		// O extrato de cada um registra a MESMA transferência (a ordem dentro do mesmo
 		// segundo não é determinística — filtra por tipo).
@@ -91,17 +91,17 @@ class CoinFlowTests {
 				.header("Idempotency-Key", "coin-p2p-2")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(objectMapper.writeValueAsString(Map.of(
-					"toUsername", "coin-receiver", "amount", 400))))
+					"toUsername", "coin-receiver", "amount", 400_000))))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("INSUFFICIENT_SPARKS"));
 
-		// Conta nova tem teto de envio diário: 99999 estoura os 500/dia.
+		// Conta nova tem teto de envio diário: 999_999 mf (999,999 faíscas) estoura os 500/dia.
 		mockMvc.perform(post("/carteira/transferencias")
 				.header("X-Session-Token", sender.token())
 				.header("Idempotency-Key", "coin-p2p-3")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(objectMapper.writeValueAsString(Map.of(
-					"toUsername", "coin-receiver", "amount", 99999))))
+					"toUsername", "coin-receiver", "amount", 999_999))))
 			.andExpect(status().isForbidden())
 			.andExpect(jsonPath("$.code").value("NEW_ACCOUNT_LIMIT"));
 
@@ -111,12 +111,12 @@ class CoinFlowTests {
 				.header("Idempotency-Key", "coin-p2p-1")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(objectMapper.writeValueAsString(Map.of(
-					"toUsername", "coin-receiver", "amount", 30, "message", "pelo mockup lindo"))))
+					"toUsername", "coin-receiver", "amount", 30_000, "message", "pelo mockup lindo"))))
 			.andExpect(status().isOk());
 
 		mockMvc.perform(get("/carteira").header("X-Session-Token", sender.token()))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.balance").value(75));
+			.andExpect(jsonPath("$.balance").value(75_000));
 
 		// Não transfere para si mesmo.
 		mockMvc.perform(post("/carteira/transferencias")

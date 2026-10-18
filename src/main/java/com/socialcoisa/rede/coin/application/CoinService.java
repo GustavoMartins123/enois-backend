@@ -39,28 +39,41 @@ public class CoinService {
 	public static final String ESCROW_ACCOUNT = "coin_escrow";
 	/** Taxa da plataforma sobre vendas (Fase 4/D1): 10% do preço, ida para a tesouraria. */
 	public static final long MARKETPLACE_FEE_PERCENT = 10L;
+	/**
+	 * A faísca é FRACIONADA: o ledger inteiro conta MILÉSIMOS (1 faísca = 1.000 mf),
+	 * como os centavos do real — inteiro no banco (sem float), decimal na tela. O
+	 * fracionamento existe porque a cotação de referência pode dar centavos por faísca.
+	 */
+	public static final long SCALE = 1_000L;
+
+	public static long FAIS(long f) {
+		return f * SCALE;
+	}
+
 	/** Volume interno fixo do genesis. Não é público; nunca muda. */
-	private static final long TREASURY_GENESIS = 2_000_000L;
-	public static final long AIRDROP_PER_USER = 100L;
-	public static final long AIRDROP_OWNER = 150_000L;
+	private static final long TREASURY_GENESIS = FAIS(2_000_000L);
+	public static final long AIRDROP_PER_USER = FAIS(100L);
+	public static final long AIRDROP_OWNER = FAIS(150_000L);
 	/** Presença diária (plano C2): 5/dia, bônus de 25 a cada 7 dias seguidos. */
-	public static final long DAILY_PRESENCE = 5L;
-	public static final long STREAK_BONUS = 25L;
+	public static final long DAILY_PRESENCE = FAIS(5L);
+	public static final long STREAK_BONUS = FAIS(25L);
 	/** Teto de envio para contas com menos de 7 dias. */
-	private static final long NEW_ACCOUNT_DAILY_CAP = 500L;
+	private static final long NEW_ACCOUNT_DAILY_CAP = FAIS(500L);
 	private static final Duration NEW_ACCOUNT_WINDOW = Duration.ofDays(7);
 
 	private static final String OWNER_USERNAME = "aminadojava";
 
 	private final CoinLedgerRepository ledger;
+	private final CoinRateService rateService;
 	private final Clock clock;
 
-	public CoinService(CoinLedgerRepository ledger, Clock clock) {
+	public CoinService(CoinLedgerRepository ledger, CoinRateService rateService, Clock clock) {
 		this.ledger = ledger;
+		this.rateService = rateService;
 		this.clock = clock;
 	}
 
-	public record Wallet(long balance, String chave, List<CoinEntry> entries) {
+	public record Wallet(long balance, String chave, long escala, long cotacaoBrlCents, List<CoinEntry> entries) {
 	}
 
 	/** Conta da moeda: cria a conta, executa o airdrop do genesis e marca a presença do dia. */
@@ -69,8 +82,8 @@ public class CoinService {
 		CoinAccount account = ensureAccount(accountId);
 		ensureGenesis(accountId, username);
 		ensureDailyPresence(accountId);
-		return new Wallet(ensureAccount(accountId).balance(), username,
-			ledger.recentEntries(accountId, 50));
+		return new Wallet(ensureAccount(accountId).balance(), username, SCALE,
+			rateService.currentBrlCents(), ledger.recentEntries(accountId, 50));
 	}
 
 	/**

@@ -49,7 +49,7 @@ class ServicesFlowTests {
 				.content(objectMapper.writeValueAsString(Map.of(
 					"category", "design", "title", "Logo simples para o seu time",
 					"description", "Faço um logo limpo com duas rodadas de ajuste, formato pronto para uso.",
-					"deliverables", "SVG + PNG em três tamanhos", "price", 30, "deliveryDays", 5))))
+					"deliverables", "SVG + PNG em três tamanhos", "price", 30_000, "deliveryDays", 5))))
 			.andExpect(status().isOk())
 			.andReturn();
 		String listingId = objectMapper.readTree(created.getResponse().getContentAsString()).get("id").asText();
@@ -59,14 +59,14 @@ class ServicesFlowTests {
 				.header("X-Session-Token", seller.token()))
 			.andExpect(status().isBadRequest());
 
-		// O comprador contrata: escrow retém (105 -> 75).
+		// O comprador contrata: escrow retém (105.000 -> 75.000, mf).
 		MvcResult contract = mockMvc.perform(post("/servicos/ofertas/" + listingId + "/contratar")
 				.header("X-Session-Token", buyer.token()))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.state").value("HELD"))
 			.andReturn();
 		String contractId = objectMapper.readTree(contract.getResponse().getContentAsString()).get("contractId").asText();
-		balance(buyer.token(), 75);
+		balance(buyer.token(), 75_000);
 
 		// O vendedor entrega e o comprador aceita: 90% (27) para o vendedor.
 		mockMvc.perform(post("/servicos/contratos/" + contractId + "/entregar")
@@ -78,7 +78,7 @@ class ServicesFlowTests {
 				.header("X-Session-Token", buyer.token()))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.state").value("RELEASED"));
-		balance(seller.token(), 132);
+		balance(seller.token(), 132_000);
 	}
 
 	@Test
@@ -107,7 +107,7 @@ class ServicesFlowTests {
 				.content(objectMapper.writeValueAsString(Map.of(
 					"category", "código", "title", "Página para a minha comunidade",
 					"description", "Uma página institucional simples com formulário de contato funcional.",
-					"deliverables", "HTML + CSS publicados", "budgetMin", 40, "budgetMax", 80))))
+					"deliverables", "HTML + CSS publicados", "budgetMin", 40_000, "budgetMax", 80_000))))
 			.andExpect(status().isOk())
 			.andReturn();
 		String requestId = objectMapper.readTree(created.getResponse().getContentAsString()).get("id").asText();
@@ -117,25 +117,25 @@ class ServicesFlowTests {
 				.header("X-Session-Token", pro.token())
 				.header("Idempotency-Key", "svc-prop-bad")
 				.contentType(MediaType.APPLICATION_JSON)
-				.content(objectMapper.writeValueAsString(Map.of("message", "Faço isso rapidinho para você.", "price", 200))))
+				.content(objectMapper.writeValueAsString(Map.of("message", "Faço isso rapidinho para você.", "price", 200_000))))
 			.andExpect(status().isBadRequest());
 		MvcResult proposal = mockMvc.perform(post("/servicos/pedidos/" + requestId + "/propostas")
 				.header("X-Session-Token", pro.token())
 				.header("Idempotency-Key", "svc-prop-1")
 				.contentType(MediaType.APPLICATION_JSON)
-				.content(objectMapper.writeValueAsString(Map.of("message", "Entrego em uma semana, com revisão.", "price", 50))))
+				.content(objectMapper.writeValueAsString(Map.of("message", "Entrego em uma semana, com revisão.", "price", 50_000))))
 			.andExpect(status().isOk())
 			.andReturn();
 		String proposalId = objectMapper.readTree(proposal.getResponse().getContentAsString()).get("id").asText();
 
-		// Escolher a proposta: escrow retém (105 -> 55) e o pedido fecha.
+		// Escolher a proposta: escrow retém (105.000 -> 55.000, mf) e o pedido fecha.
 		mockMvc.perform(post("/servicos/pedidos/" + requestId + "/escolher")
 				.header("X-Session-Token", requester.token())
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(objectMapper.writeValueAsString(Map.of("proposalId", proposalId))))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.state").value("HELD"));
-		balance(requester.token(), 55);
+		balance(requester.token(), 55_000);
 
 		// Reembolso: devolve 100%.
 		MvcResult mine = mockMvc.perform(get("/servicos/minhas").header("X-Session-Token", requester.token()))
@@ -148,7 +148,7 @@ class ServicesFlowTests {
 				.header("X-Session-Token", requester.token()))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.state").value("REFUNDED"));
-		balance(requester.token(), 105);
+		balance(requester.token(), 105_000);
 	}
 
 	private void wallet(String token) throws Exception {
