@@ -154,7 +154,12 @@ Enquanto houver pendência real, a automação fica viva.
 - [ ] Bateria de testes de segurança da seção 18 (pendente).
 
 ### Etapa 7 — Comunidades
-- [ ] Descrição opcional nas Comunidades (edição e apresentação), sem afetar registros antigos.
+- [x] Descrição opcional nas Comunidades (edição e apresentação), sem afetar registros antigos —
+      o campo já existia; o que faltava era poder ficar vazio. A **V84** afrouxa a coluna para
+      NULL (idempotente, nenhum registro é tocado), a criação grava NULL quando vem em branco, a
+      edição adiciona/troca e a string vazia limpa. O card e a página simplesmente não renderizam
+      quando não há (nada de texto inventado). `CommunityDescriptionTests`: nascer sem, ganhar
+      depois e limpar de novo (2026-10-18).
 
 ### Etapa 8 — Validação final
 - [ ] Suíte de testes executada; regressões corrigidas; migrations validadas; entrega documentada.

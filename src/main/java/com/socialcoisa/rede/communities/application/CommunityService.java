@@ -27,7 +27,11 @@ public class CommunityService {
 	@Transactional
 	public Community create(String name, String description, String topic, String cover, String avatar, String userId) {
 		String id = "community_" + UUID.randomUUID().toString().replace("-", "");
-		Community community = Community.create(id, name, description, topic, cover, avatar, userId, clock.instant());
+		// Descrição é opcional: em branco vira NULL (o banco guarda "sem descrição", não texto vazio).
+		String finalDescription = org.springframework.util.StringUtils.hasText(description) ? description.trim()
+			: null;
+		Community community = Community.create(id, name, finalDescription, topic, cover, avatar, userId,
+			clock.instant());
 		repository.save(community);
 		repository.saveMember(CommunityMember.join(id, userId, MemberRole.ADMIN, clock.instant()));
 		return community;
