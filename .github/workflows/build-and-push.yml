@@ -42,20 +42,20 @@ jobs:
           SHA_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
           echo "sha_short=${SHA_SHORT}" >> $GITHUB_OUTPUT
           echo "image_ref=${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${SHA_SHORT}" >> $GITHUB_OUTPUT
-
-      - name: ⚙️ Configurar Credenciais AWS via OIDC
-        uses: aws-actions/configure-aws-credentials@v6.2.4
-        with:
-          role-to-assume: arn:aws:iam::818928662779:role/forest-dev-enois-ecr
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Show OIDC claims (right before assume)
+          
+            - name: Show OIDC claims (right before assume)
         env:
           AUDIENCE: "sts.amazonaws.com"
         run: |
           TOKEN_JSON=$(curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$AUDIENCE")
           ID_TOKEN=$(echo "$TOKEN_JSON" | jq -r .value)
           echo "$ID_TOKEN" | awk -F. '{print $2}' | base64 -d 2>/dev/null | jq -r
+
+      - name: ⚙️ Configurar Credenciais AWS via OIDC
+        uses: aws-actions/configure-aws-credentials@v6.2.4
+        with:
+          role-to-assume: arn:aws:iam::818928662779:role/forest-dev-enois-ecr
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: 🔑 Login no Amazon ECR
         id: login-ecr
