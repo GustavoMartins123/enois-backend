@@ -151,7 +151,7 @@ jobs:
       - name: ⚙️ Credenciais AWS via OIDC
         uses: aws-actions/configure-aws-credentials@v6.2.4
         with:
-          role-to-assume: arn:aws:iam::818928662779:role/forest-dev-github
+          role-to-assume: arn:aws:iam::818928662779:role/forest-dev-enois-ecr
           aws-region: ${{ env.AWS_REGION }}
 
       - name: 🔑 Login no Amazon ECR
