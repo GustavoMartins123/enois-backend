@@ -6,10 +6,10 @@
 -- conteúdo de grupo nem por engano de consulta, porque ele mora em outra tabela. A reutilização
 -- acontece nos serviços transversais (mídia, notificações, denúncias, AutoMod, auditoria).
 --
--- Integridade no banco onde ela é barata e definitiva: chave estrangeira para o grupo, o autor e
--- o usuário; unicidade de (grupo, usuário) no membro; uma solicitação pendente por pessoa; e a
--- FK COMPOSTA (tópico, grupo) em group_posts, que impede estruturalmente publicar num tópico de
--- outro grupo — não é só uma checagem na aplicação.
+-- SEM chave estrangeira DE PROPÓSITO (a armadilha de collation do MariaDB, errno 150, derrubava o
+-- boot: o users de produção tem collation diferente das tabelas novas). Integridade na aplicação,
+-- como no resto do banco; os índices ficam para as junções. Unicidade de (grupo, usuário) no
+-- membro e uma solicitação pendente por pessoa continuam garantidas pelos índices únicos.
 --
 -- Idempotente: `if not exists` em tudo, porque uma migração que recria objeto existente derruba o
 -- boot e trava o rollout em silêncio.
@@ -36,8 +36,7 @@ create table if not exists groups (
   primary key (id),
   unique key uk_groups_slug (slug),
   key idx_groups_status_created (status, created_at),
-  key idx_groups_owner (owner_id),
-  constraint fk_groups_owner foreign key (owner_id) references users (id)
+  key idx_groups_owner (owner_id)
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_uca1400_ai_ci;
 
 create table if not exists group_members (
@@ -50,8 +49,7 @@ create table if not exists group_members (
   primary key (id),
   unique key uk_group_members_group_user (group_id, user_id),
   key idx_group_members_user (user_id, joined_at),
-  constraint fk_group_members_group foreign key (group_id) references groups (id) on delete cascade,
-  constraint fk_group_members_user foreign key (user_id) references users (id)
+  key idx_group_members_group (group_id, role)
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_uca1400_ai_ci;
 
 -- Pedido de ingresso. `pending_slot` vale o user_id enquanto PENDING e vira NULL quando o pedido
@@ -73,13 +71,10 @@ create table if not exists group_join_requests (
   primary key (id),
   unique key uk_group_join_pending (group_id, pending_slot),
   key idx_group_join_group_status (group_id, status, created_at),
-  key idx_group_join_user (user_id, created_at),
-  constraint fk_group_join_group foreign key (group_id) references groups (id) on delete cascade,
-  constraint fk_group_join_user foreign key (user_id) references users (id)
+  key idx_group_join_user (user_id, created_at)
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_uca1400_ai_ci;
 
--- Tópicos internos. A chave única (id, group_id) parece redundante (id já é chave) e não é: é ela
--- que permite a FK composta em group_posts, que amarra a publicação a um tópico DO MESMO grupo.
+-- Tópicos internos do grupo.
 create table if not exists group_topics (
   id varchar(255) not null,
   group_id varchar(255) not null,
@@ -91,10 +86,8 @@ create table if not exists group_topics (
   created_at timestamp not null,
   updated_at timestamp not null,
   primary key (id),
-  unique key uk_group_topics_id_group (id, group_id),
   unique key uk_group_topics_group_name (group_id, name),
-  key idx_group_topics_group_position (group_id, position),
-  constraint fk_group_topics_group foreign key (group_id) references groups (id) on delete cascade
+  key idx_group_topics_group_position (group_id, position)
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_uca1400_ai_ci;
 
 create table if not exists group_posts (
@@ -113,13 +106,10 @@ create table if not exists group_posts (
   created_at timestamp not null,
   updated_at timestamp not null,
   primary key (id),
+  unique key uk_group_posts_id_topic (id, topic_id),
   key idx_group_posts_feed (group_id, status, created_at),
   key idx_group_posts_topic (topic_id, status, created_at),
-  key idx_group_posts_author (author_id, created_at),
-  constraint fk_group_posts_group foreign key (group_id) references groups (id) on delete cascade,
-  constraint fk_group_posts_topic foreign key (topic_id, group_id)
-    references group_topics (id, group_id),
-  constraint fk_group_posts_author foreign key (author_id) references users (id)
+  key idx_group_posts_author (author_id, created_at)
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_uca1400_ai_ci;
 
 create table if not exists group_post_comments (
@@ -135,9 +125,7 @@ create table if not exists group_post_comments (
   updated_at timestamp not null,
   primary key (id),
   key idx_group_comments_post (post_id, status, created_at),
-  key idx_group_comments_author (author_id, created_at),
-  constraint fk_group_comments_post foreign key (post_id) references group_posts (id) on delete cascade,
-  constraint fk_group_comments_author foreign key (author_id) references users (id)
+  key idx_group_comments_author (author_id, created_at)
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_uca1400_ai_ci;
 
 -- Uma reação por pessoa por publicação (o feed principal é assim; o grupo segue a mesma régua).
@@ -149,7 +137,5 @@ create table if not exists group_post_reactions (
   created_at timestamp not null,
   primary key (id),
   unique key uk_group_reactions_post_user (post_id, user_id),
-  key idx_group_reactions_user (user_id, created_at),
-  constraint fk_group_reactions_post foreign key (post_id) references group_posts (id) on delete cascade,
-  constraint fk_group_reactions_user foreign key (user_id) references users (id)
+  key idx_group_reactions_user (user_id, created_at)
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_uca1400_ai_ci;
