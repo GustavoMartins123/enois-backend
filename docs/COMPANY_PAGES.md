@@ -47,6 +47,34 @@ Frontend:
 - Painel `/empresa/{slug}/admin` com as seções (visão geral, página, publicações, vagas, equipe,
   mensagens, métricas, configurações) — **não mostra nada para quem não tem o papel**.
 
+## Fase 1.5 — Marketplace de microprojetos (pedido direto da Mel, 2026-10-17)
+
+Dentro da página da empresa: **microprojetos** — a empresa publica um problema REAL e contrata
+profissionais para **pilotos pagos de escopo limitado**, com entregáveis e critérios de aceite
+definidos ANTES de começar.
+
+Modelo (V56, mesmo commit da fundação):
+- `micro_projects`: id, company_id, created_by (usuário humano), title, problem, scope,
+  deliverables (linhas), acceptance_criteria (linhas), budget (texto livre — o pagamento
+  acontece FORA da plataforma; o registro é o contrato de escopo), deadline (data, opcional),
+  status OPEN | IN_PROGRESS | COMPLETED | CANCELLED, selected_proposal_id?, created_at,
+  updated_at.
+- `micro_project_proposals`: id, project_id, user_id (uma proposta por pessoa), message,
+  status SENT | SELECTED | DECLINED, proposed_at, decided_at?. Uma proposta selecionada
+  move o projeto para IN_PROGRESS e as demais viram DECLINED.
+
+Fluxo (com notificações em cada virada):
+1. Empresa (papel EDITOR+) publica o microprojeto → status OPEN, público na página.
+2. Profissional se candidata com mensagem → empresa é avisada.
+3. Empresa SELECIONA um candidato → projeto IN_PROGRESS; profissional avisado; demais recusados.
+4. Profissional entrega (mensagem/link pela conversa da página — Fase 2; MVP: aceite manual).
+5. Empresa marca COMPLETED (critérios de aceite conferidos).
+
+Regras: quem publica precisa de papel na página; um profissional não candidata a projeto da
+própria empresa; projeto CANCELLED some da vitrine mas mantém histórico. Aceite: projeto
+aberto aparece na página e no diretório; fluxo candidato→selecionado→entrega→aceite funciona
+com notificações.
+
 ## Fase 2 — Caixa de mensagens empresarial (independente da pessoal)
 - `conversations.company_page_id` (nullable) — conversa empresarial é vinculada à página; acesso
   depende do papel na página (backend). Nunca aparece na caixa pessoal.
