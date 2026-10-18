@@ -23,10 +23,15 @@ public class Game {
 	private final Instant reviewedAt;
 	private final Instant createdAt;
 	private final Instant updatedAt;
+	private final GameDetails details;
+	private final int plays;
+	private final Instant publishedAt;
+	private final Instant suspendedAt;
 
 	private Game(String id, String userId, String slug, String title, String description, String cover, String url,
 			String tags, GameStatus status, String reviewedBy, String reviewNote, Instant submittedAt,
-			Instant reviewedAt, Instant createdAt, Instant updatedAt) {
+			Instant reviewedAt, Instant createdAt, Instant updatedAt, GameDetails details, int plays,
+			Instant publishedAt, Instant suspendedAt) {
 		this.id = id;
 		this.userId = userId;
 		this.slug = slug;
@@ -42,34 +47,78 @@ public class Game {
 		this.reviewedAt = reviewedAt;
 		this.createdAt = createdAt;
 		this.updatedAt = updatedAt;
+		this.details = details == null ? GameDetails.empty() : details;
+		this.plays = plays;
+		this.publishedAt = publishedAt;
+		this.suspendedAt = suspendedAt;
 	}
 
 	public static Game submit(String id, String userId, String slug, String title, String description, String cover,
 			String url, String tags, Instant now) {
+		return submit(id, userId, slug, title, description, cover, url, tags, GameDetails.empty(), now);
+	}
+
+	/** Envio com a ficha completa (o painel manda tudo de uma vez). */
+	public static Game submit(String id, String userId, String slug, String title, String description, String cover,
+			String url, String tags, GameDetails details, Instant now) {
 		return new Game(id, userId, slug, title, description, cover, url, tags, GameStatus.SUBMITTED, null, null,
-			now, null, now, now);
+			now, null, now, now, details, 0, null, null);
 	}
 
 	public static Game restore(String id, String userId, String slug, String title, String description, String cover,
 			String url, String tags, GameStatus status, String reviewedBy, String reviewNote, Instant submittedAt,
 			Instant reviewedAt, Instant createdAt, Instant updatedAt) {
+		return restore(id, userId, slug, title, description, cover, url, tags, status, reviewedBy, reviewNote,
+			submittedAt, reviewedAt, createdAt, updatedAt, GameDetails.empty(), 0, null, null);
+	}
+
+	public static Game restore(String id, String userId, String slug, String title, String description, String cover,
+			String url, String tags, GameStatus status, String reviewedBy, String reviewNote, Instant submittedAt,
+			Instant reviewedAt, Instant createdAt, Instant updatedAt, GameDetails details, int plays,
+			Instant publishedAt, Instant suspendedAt) {
 		return new Game(id, userId, slug, title, description, cover, url, tags, status, reviewedBy, reviewNote,
-			submittedAt, reviewedAt, createdAt, updatedAt);
+			submittedAt, reviewedAt, createdAt, updatedAt, details, plays, publishedAt, suspendedAt);
 	}
 
 	public Game approve(String reviewerId, String note, Instant now) {
 		return new Game(id, userId, slug, title, description, cover, url, tags, GameStatus.PUBLISHED, reviewerId,
-			note, submittedAt, now, createdAt, now);
+			note, submittedAt, now, createdAt, now, details, plays, publishedAt == null ? now : publishedAt, null);
 	}
 
 	public Game reject(String reviewerId, String note, Instant now) {
 		return new Game(id, userId, slug, title, description, cover, url, tags, GameStatus.REJECTED, reviewerId,
-			note, submittedAt, now, createdAt, now);
+			note, submittedAt, now, createdAt, now, details, plays, publishedAt, suspendedAt);
 	}
 
 	public Game resubmit(Instant now) {
 		return new Game(id, userId, slug, title, description, cover, url, tags, GameStatus.SUBMITTED, null, null,
-			now, null, createdAt, now);
+			now, null, createdAt, now, details, plays, publishedAt, suspendedAt);
+	}
+
+	/** Edição pelo dono: a ficha e os textos mudam, o ciclo de vida e a moderação não. */
+	public Game edit(String title, String description, String cover, String url, String tags, GameDetails details,
+			Instant now) {
+		return new Game(id, userId, slug, title, description, cover, url, tags, status, reviewedBy, reviewNote,
+			submittedAt, reviewedAt, createdAt, now, details == null ? this.details : details, plays, publishedAt,
+			suspendedAt);
+	}
+
+	/** Moderação tira do ar (o registro, as licenças e o histórico continuam existindo). */
+	public Game suspend(String reviewerId, String note, Instant now) {
+		return new Game(id, userId, slug, title, description, cover, url, tags, GameStatus.SUSPENDED, reviewerId,
+			note, submittedAt, now, createdAt, now, details, plays, publishedAt, now);
+	}
+
+	/** A moderação devolve o jogo ao ar depois de uma suspensão. */
+	public Game restoreFromSuspension(String reviewerId, Instant now) {
+		return new Game(id, userId, slug, title, description, cover, url, tags, GameStatus.PUBLISHED, reviewerId,
+			reviewNote, submittedAt, now, createdAt, now, details, plays, publishedAt, null);
+	}
+
+	/** Uma sessão de jogo começou (o servidor é quem conta). */
+	public Game countPlay() {
+		return new Game(id, userId, slug, title, description, cover, url, tags, status, reviewedBy, reviewNote,
+			submittedAt, reviewedAt, createdAt, updatedAt, details, plays + 1, publishedAt, suspendedAt);
 	}
 
 	public boolean ownedBy(String userId) {
@@ -95,4 +144,14 @@ public class Game {
 	public Instant reviewedAt() { return reviewedAt; }
 	public Instant createdAt() { return createdAt; }
 	public Instant updatedAt() { return updatedAt; }
+	public GameDetails details() { return details; }
+	public int plays() { return plays; }
+	public Instant publishedAt() { return publishedAt; }
+	public Instant suspendedAt() { return suspendedAt; }
+
+	/** Atalhos da ficha, para quem só quer um campo (view, catálogo, painel). */
+	public GameStage stage() { return details.stage(); }
+	public GameDistribution distribution() { return details.distribution(); }
+	public int priceCoins() { return details.priceCoins(); }
+	public GameAspect aspect() { return details.aspect(); }
 }

@@ -11,7 +11,11 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.socialcoisa.rede.games.application.GameCatalogService;
+import com.socialcoisa.rede.games.application.GamePageView;
+import com.socialcoisa.rede.games.application.GameSearchCriteria;
 import com.socialcoisa.rede.games.application.GameService;
+import com.socialcoisa.rede.games.application.GameView;
 import com.socialcoisa.rede.games.domain.Game;
 import com.socialcoisa.rede.shared.web.AdminGuard;
 import com.socialcoisa.rede.shared.web.CurrentUser;
@@ -25,13 +29,16 @@ import com.socialcoisa.rede.shared.web.CurrentUserResolver;
 class GameController {
 
 	private final GameService games;
+	private final GameCatalogService catalog;
 	private final CurrentUserResolver currentUserResolver;
 	private final AdminGuard adminGuard;
 	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles;
 
-	GameController(GameService games, CurrentUserResolver currentUserResolver, AdminGuard adminGuard,
+	GameController(GameService games, GameCatalogService catalog, CurrentUserResolver currentUserResolver,
+			AdminGuard adminGuard,
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles) {
 		this.games = games;
+		this.catalog = catalog;
 		this.currentUserResolver = currentUserResolver;
 		this.adminGuard = adminGuard;
 		this.profiles = profiles;
@@ -39,9 +46,19 @@ class GameController {
 
 	// --- leitura pública ---
 
+	/**
+	 * Catálogo público com busca e filtros. `order` é lista fechada (`recent`, `plays`, `title`) e o
+	 * cursor é o deslocamento da próxima página — a resposta diz quando acabou.
+	 */
 	@GetMapping("/games")
-	List<GameView> catalog(@RequestParam(defaultValue = "60") int limit) {
-		return withUsernames(games.catalog(limit));
+	GamePageView catalog(@RequestParam(required = false) String query, @RequestParam(required = false) String genre,
+			@RequestParam(required = false) String tag, @RequestParam(required = false) String stage,
+			@RequestParam(required = false) String distribution, @RequestParam(required = false) String order,
+			@RequestParam(required = false) Integer limit, @RequestParam(required = false) String cursor) {
+		var criteria = GameSearchCriteria.of(query, genre, tag, GameSearchCriteria.stageOrNull(stage),
+			GameSearchCriteria.distributionOrNull(distribution), order);
+		var page = catalog.search(criteria, limit, cursor);
+		return new GamePageView(page.items().stream().map(game -> view(game, null)).toList(), page.nextCursor());
 	}
 
 	@GetMapping("/games/{username}")
@@ -50,8 +67,26 @@ class GameController {
 	}
 
 	@GetMapping("/games/{username}/{gameSlug}")
-	GameView bySlug(@PathVariable String username, @PathVariable String gameSlug) {
-		return withUsernames(List.of(games.byUserAndSlug(username, gameSlug))).get(0);
+	GameView bySlug(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@PathVariable String username, @PathVariable String gameSlug) {
+		// Com sessão, o dono abre o próprio jogo em qualquer estado (rascunho, recusado, suspenso).
+		return view(games.byUserAndSlug(username, gameSlug, viewerIdOrNull(userId, sessionToken)), null);
+	}
+
+	/** A view de um jogo, com o @ do criador resolvido (o endereço público usa ele). */
+	private GameView view(Game game, String viewerId) {
+		String username = profiles.findById(game.userId()).map(p -> p.username()).orElse(null);
+		return GameView.of(game, username, 0, false, viewerId);
+	}
+
+	private String viewerIdOrNull(String userId, String sessionToken) {
+		try {
+			return currentUserResolver.resolve(userId, sessionToken).id().value();
+		}
+		catch (Exception ignored) {
+			return null;
+		}
 	}
 
 	/** O endereço público do jogo é /games/{username}/{slug} — o username sai do perfil. */
@@ -60,8 +95,7 @@ class GameController {
 		profiles.findAllByIds(list.stream().map(Game::userId).distinct().toList())
 			.forEach(p -> names.put(p.id(), p.username()));
 		return list.stream()
-			.map(g -> new GameView(g.id(), g.userId(), names.get(g.userId()), g.slug(), g.title(), g.description(),
-				g.cover(), g.url(), g.tags(), g.status().name(), g.reviewNote(), g.submittedAt().toString()))
+			.map(g -> GameView.of(g, names.get(g.userId()), 0, false, null))
 			.toList();
 	}
 
@@ -130,7 +164,4 @@ class GameController {
 	record ReviewRequest(String note) {
 	}
 
-	record GameView(String id, String userId, String username, String slug, String title, String description,
-			String cover, String url, String tags, String status, String reviewNote, String submittedAt) {
-	}
 }

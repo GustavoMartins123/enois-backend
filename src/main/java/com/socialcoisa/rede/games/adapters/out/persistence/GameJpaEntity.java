@@ -3,6 +3,10 @@ package com.socialcoisa.rede.games.adapters.out.persistence;
 import java.time.Instant;
 
 import com.socialcoisa.rede.games.domain.Game;
+import com.socialcoisa.rede.games.domain.GameAspect;
+import com.socialcoisa.rede.games.domain.GameDetails;
+import com.socialcoisa.rede.games.domain.GameDistribution;
+import com.socialcoisa.rede.games.domain.GameStage;
 import com.socialcoisa.rede.games.domain.GameStatus;
 
 import jakarta.persistence.Column;
@@ -53,6 +57,60 @@ class GameJpaEntity {
 	@Column(name = "review_note", length = 500)
 	private String reviewNote;
 
+	@Column(name = "short_description", length = 300)
+	private String shortDescription;
+
+	@Column(length = 300)
+	private String genres;
+
+	@Column(length = 200)
+	private String languages;
+
+	@Column(length = 500)
+	private String controls;
+
+	@Column(length = 500)
+	private String requirements;
+
+	@Column(name = "content_warnings", length = 300)
+	private String contentWarnings;
+
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false, length = 24)
+	private GameStage stage = GameStage.RELEASED;
+
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false, length = 16)
+	private GameDistribution distribution = GameDistribution.FREE;
+
+	@Column(name = "price_coins", nullable = false)
+	private int priceCoins;
+
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false, length = 16)
+	private GameAspect aspect = GameAspect.WIDESCREEN;
+
+	@Column(length = 40)
+	private String version;
+
+	@Column(name = "website_url", length = 500)
+	private String websiteUrl;
+
+	@Column(name = "support_url", length = 500)
+	private String supportUrl;
+
+	@Column(name = "media_ids", length = 1000)
+	private String mediaIds;
+
+	@Column(nullable = false)
+	private int plays;
+
+	@Column(name = "published_at")
+	private Instant publishedAt;
+
+	@Column(name = "suspended_at")
+	private Instant suspendedAt;
+
 	@Column(name = "submitted_at", nullable = false)
 	private Instant submittedAt;
 
@@ -85,11 +143,32 @@ class GameJpaEntity {
 		e.reviewedAt = game.reviewedAt();
 		e.createdAt = game.createdAt();
 		e.updatedAt = game.updatedAt();
+		GameDetails details = game.details();
+		e.shortDescription = details.shortDescription();
+		e.genres = details.genres();
+		e.languages = details.languages();
+		e.controls = details.controls();
+		e.requirements = details.requirements();
+		e.contentWarnings = details.contentWarnings();
+		e.stage = details.stage();
+		e.distribution = details.distribution();
+		e.priceCoins = details.priceCoins();
+		e.aspect = details.aspect();
+		e.version = details.version();
+		e.websiteUrl = details.websiteUrl();
+		e.supportUrl = details.supportUrl();
+		e.mediaIds = details.mediaIds();
+		e.plays = game.plays();
+		e.publishedAt = game.publishedAt();
+		e.suspendedAt = game.suspendedAt();
 		return e;
 	}
 
 	Game toDomain() {
 		return Game.restore(id, userId, slug, title, description, cover, url, tags, status, reviewedBy, reviewNote,
-			submittedAt, reviewedAt, createdAt, updatedAt);
+			submittedAt, reviewedAt, createdAt, updatedAt,
+			GameDetails.of(shortDescription, genres, languages, controls, requirements, contentWarnings, stage,
+				distribution, priceCoins, aspect, version, websiteUrl, supportUrl, mediaIds),
+			plays, publishedAt, suspendedAt);
 	}
 }

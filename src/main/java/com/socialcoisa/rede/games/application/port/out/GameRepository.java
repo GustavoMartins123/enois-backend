@@ -1,8 +1,11 @@
 package com.socialcoisa.rede.games.application.port.out;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
+import com.socialcoisa.rede.games.application.GameSearchCriteria;
+import com.socialcoisa.rede.games.application.GameSearchPage;
 import com.socialcoisa.rede.games.domain.Game;
 import com.socialcoisa.rede.games.domain.GameStatus;
 
@@ -24,4 +27,13 @@ public interface GameRepository {
 	List<Game> findPublished(int limit);
 
 	boolean existsByUserAndSlug(String userId, String slug);
+
+	/** Catálogo com busca/filtros/ordem e paginação por deslocamento (diz se há próxima página). */
+	GameSearchPage search(GameSearchCriteria criteria, int limit, int offset);
+
+	/** Quantos jogos publicados cada criador tem (chave = id do usuário). */
+	Map<String, Long> publishedCountByUser();
+
+	/** Jogos publicados de uma lista de criadores (a página de quem a pessoa acompanha). */
+	List<Game> findPublishedByUsers(List<String> userIds, int limit);
 }

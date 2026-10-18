@@ -25,12 +25,23 @@ public class GameService {
 
 	private final GameRepository games;
 	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles;
+	private final GameUrlGuard urlGuard;
+	private final com.socialcoisa.rede.games.application.port.out.GameUpdateRepository updates;
+	private final com.socialcoisa.rede.games.application.port.out.DeveloperFollowRepository follows;
+	private final com.socialcoisa.rede.notifications.application.NotificationService notifications;
 	private final Clock clock;
 
 	public GameService(GameRepository games,
-			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles, Clock clock) {
+			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles, GameUrlGuard urlGuard,
+			com.socialcoisa.rede.games.application.port.out.GameUpdateRepository updates,
+			com.socialcoisa.rede.games.application.port.out.DeveloperFollowRepository follows,
+			com.socialcoisa.rede.notifications.application.NotificationService notifications, Clock clock) {
 		this.games = games;
 		this.profiles = profiles;
+		this.urlGuard = urlGuard;
+		this.updates = updates;
+		this.follows = follows;
+		this.notifications = notifications;
 		this.clock = clock;
 	}
 
@@ -40,16 +51,11 @@ public class GameService {
 		if (!StringUtils.hasText(title) || title.trim().length() < 3) {
 			throw new ApiException(400, "INVALID_TITLE", "Título do jogo precisa de pelo menos 3 caracteres.");
 		}
-		if (!StringUtils.hasText(url) || !url.trim().toLowerCase(Locale.ROOT).startsWith("https://")) {
-			throw new ApiException(400, "INVALID_GAME_URL", "O link do jogo precisa ser https.");
-		}
-		if (url.trim().length() > 500 || StringUtils.containsWhitespace(url.trim())) {
-			throw new ApiException(400, "INVALID_GAME_URL", "Link inválido.");
-		}
+		String safeUrl = urlGuard.validate(url);
 		String slug = uniqueSlug(userId, StringUtils.hasText(slugBase) ? slugFrom(slugBase) : slugFrom(title));
 		Game game = Game.submit("game_" + UUID.randomUUID().toString().replace("-", ""), userId, slug, title.trim(),
 			StringUtils.hasText(description) ? description.trim() : null,
-			StringUtils.hasText(cover) ? cover.trim() : null, url.trim(),
+			StringUtils.hasText(cover) ? cover.trim() : null, safeUrl,
 			StringUtils.hasText(tags) ? tags.trim() : null, clock.instant());
 		return games.save(game);
 	}
@@ -66,6 +72,88 @@ public class GameService {
 		return games.save(game.resubmit(clock.instant()));
 	}
 
+	/**
+	 * Edição pelo dono. O endereço passa pelo mesmo guarda do envio, e a edição NÃO publica sozinha:
+	 * quem já estava publicado continua publicado (corrigir a ficha não é passar pela fila de novo),
+	 * e quem foi recusado volta para a fila pelo `resubmit`.
+	 */
+	@Transactional
+	public Game edit(String gameId, String userId, String title, String description, String cover, String url,
+			String tags, com.socialcoisa.rede.games.domain.GameDetails details) {
+		Game game = owned(gameId, userId);
+		if (!StringUtils.hasText(title) || title.trim().length() < 3) {
+			throw new ApiException(400, "INVALID_TITLE", "Título do jogo precisa de pelo menos 3 caracteres.");
+		}
+		String safeUrl = urlGuard.validate(url);
+		return games.save(game.edit(title.trim(),
+			StringUtils.hasText(description) ? description.trim() : null,
+			StringUtils.hasText(cover) ? cover.trim() : null, safeUrl,
+			StringUtils.hasText(tags) ? tags.trim() : null, details, clock.instant()));
+	}
+
+	/** Moderação tira o jogo do ar. O registro e o histórico continuam (suspender não é apagar). */
+	@Transactional
+	public Game suspend(String gameId, String reviewerId, String note) {
+		Game game = game(gameId);
+		if (game.status() == GameStatus.SUSPENDED) {
+			throw new ApiException(409, "ALREADY_SUSPENDED", "Este jogo já está suspenso.");
+		}
+		return games.save(game.suspend(reviewerId, StringUtils.hasText(note) ? note.trim() : null, clock.instant()));
+	}
+
+	/** A moderação devolve o jogo ao ar depois da suspensão. */
+	@Transactional
+	public Game unsuspend(String gameId, String reviewerId) {
+		Game game = game(gameId);
+		if (game.status() != GameStatus.SUSPENDED) {
+			throw new ApiException(409, "NOT_SUSPENDED", "Este jogo não está suspenso.");
+		}
+		return games.save(game.restoreFromSuspension(reviewerId, clock.instant()));
+	}
+
+	/** Nota do diário de desenvolvimento: o que mudou nesta versão. Avisa quem acompanha. */
+	@Transactional
+	public com.socialcoisa.rede.games.domain.GameUpdate publishUpdate(String gameId, String userId, String title,
+			String body, String version) {
+		Game game = owned(gameId, userId);
+		if (!StringUtils.hasText(title)) {
+			throw new ApiException(400, "INVALID_TITLE", "A novidade precisa de um título.");
+		}
+		com.socialcoisa.rede.games.domain.GameUpdate update = updates.save(
+			com.socialcoisa.rede.games.domain.GameUpdate.create(
+				"gup_" + UUID.randomUUID().toString().replace("-", ""), game.id(), userId, title.trim(),
+				StringUtils.hasText(body) ? body.trim() : null,
+				StringUtils.hasText(version) ? version.trim() : game.details().version(), clock.instant()));
+		notifyFollowers(game, "Novidade em " + game.title(), update.title());
+		return update;
+	}
+
+	@Transactional(readOnly = true)
+	public java.util.List<com.socialcoisa.rede.games.domain.GameUpdate> updatesOf(String gameId, int limit) {
+		return updates.findByGame(gameId, limit);
+	}
+
+	private Game owned(String gameId, String userId) {
+		Game game = game(gameId);
+		if (!game.ownedBy(userId)) {
+			throw new ApiException(403, "NOT_AUTHORIZED", "Este jogo não é seu.");
+		}
+		return game;
+	}
+
+	/** Quem acompanha o criador recebe um aviso — nunca o próprio criador. */
+	private void notifyFollowers(Game game, String title, String body) {
+		String author = profiles.findById(game.userId()).map(p -> p.name()).orElse("Um criador");
+		String href = "/games/" + profiles.findById(game.userId()).map(p -> p.username()).orElse("") + "/"
+			+ game.slug();
+		for (String followerId : follows.followersOf(game.userId())) {
+			if (followerId.equals(game.userId())) {
+				continue;
+			}
+			notifications.create(followerId, "NEW_GAME", game.userId(), author + " · " + title, body, href, "Ver");
+		}
+	}
+
 	/** Resolve o username da URL para o id do perfil (404 quando o perfil não existe). */
 	@Transactional(readOnly = true)
 	public String userIdFromUsername(String username) {
@@ -76,9 +164,16 @@ public class GameService {
 
 	@Transactional(readOnly = true)
 	public Game byUserAndSlug(String username, String slug) {
+		return byUserAndSlug(username, slug, null);
+	}
+
+	/** Com o leitor: o dono vê o próprio jogo em qualquer estado; os outros, só publicado. */
+	@Transactional(readOnly = true)
+	public Game byUserAndSlug(String username, String slug, String viewerId) {
 		Game game = games.findByUserAndSlug(userIdFromUsername(username), slug)
 			.orElseThrow(() -> new ApiException(404, "GAME_NOT_FOUND", "Jogo não encontrado."));
-		if (game.status() != GameStatus.PUBLISHED && !game.ownedBy(userIdFromUsername(username))) {
+		boolean owner = viewerId != null && game.ownedBy(viewerId);
+		if (game.status() != GameStatus.PUBLISHED && !owner) {
 			throw new ApiException(404, "GAME_NOT_FOUND", "Jogo não encontrado.");
 		}
 		return game;
@@ -110,7 +205,10 @@ public class GameService {
 		if (game.status() != GameStatus.SUBMITTED) {
 			throw new ApiException(409, "NOT_SUBMITTED", "Este jogo não está na fila de revisão.");
 		}
-		return games.save(game.approve(reviewerId, StringUtils.hasText(note) ? note.trim() : null, clock.instant()));
+		Game published = games.save(game.approve(reviewerId, StringUtils.hasText(note) ? note.trim() : null,
+			clock.instant()));
+		notifyFollowers(published, "Jogo publicado no Énóis", published.title());
+		return published;
 	}
 
 	@Transactional
@@ -130,8 +228,14 @@ public class GameService {
 			.orElseThrow(() -> new ApiException(404, "GAME_NOT_FOUND", "Jogo não encontrado."));
 	}
 
+	/**
+	 * O endereço do jogo a partir do título. Acento vira letra (é → e) em vez de sumir: sem isso,
+	 * "Café com Código" virava "caf-com-c-digo", que não é o título de ninguém.
+	 */
 	private String slugFrom(String value) {
-		return value.toLowerCase(Locale.ROOT)
+		return java.text.Normalizer.normalize(value, java.text.Normalizer.Form.NFD)
+			.replaceAll("\\p{M}+", "")
+			.toLowerCase(Locale.ROOT)
 			.replaceAll("[^a-z0-9]+", "-")
 			.replaceAll("(^-|-$)", "");
 	}
