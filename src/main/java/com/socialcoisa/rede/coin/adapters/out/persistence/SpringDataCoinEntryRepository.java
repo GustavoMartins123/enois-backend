@@ -27,4 +27,6 @@ interface SpringDataCoinEntryRepository extends JpaRepository<CoinEntryJpaEntity
 	/** O LEDGER é a verdade: a soma dos lançamentos reconstrói o saldo. */
 	@Query("SELECT COALESCE(SUM(e.amount), 0) FROM CoinEntryJpaEntity e WHERE e.accountId = :accountId")
 	long sumAmounts(@Param("accountId") String accountId);
+
+	long countByKindAndRefIdStartingWith(com.socialcoisa.rede.coin.domain.CoinEntry.Kind kind, String refPrefix);
 }

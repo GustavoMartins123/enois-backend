@@ -32,4 +32,7 @@ public interface CoinLedgerRepository {
 
 	/** O LEDGER é a verdade: a soma dos lançamentos reconstrói o saldo da conta. */
 	long balanceFromLedger(String accountId);
+
+	/** Recompensas (kind=REWARD) com refId começando com o prefixo — tetos mensais do earned. */
+	long countRewardsByRefPrefix(String prefix);
 }

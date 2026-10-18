@@ -28,13 +28,34 @@ public class MicroProjectService {
 	private final CompanyService companyService;
 	private final NotificationService notificationService;
 	private final Clock clock;
+	private final com.socialcoisa.rede.coin.application.CoinService coins;
 
 	public MicroProjectService(MicroProjectRepository projects, CompanyService companyService,
-			NotificationService notificationService, Clock clock) {
+			NotificationService notificationService, Clock clock,
+			com.socialcoisa.rede.coin.application.CoinService coins) {
 		this.projects = projects;
 		this.companyService = companyService;
 		this.notificationService = notificationService;
 		this.clock = clock;
+		this.coins = coins;
+	}
+
+	/**
+	 * Bônus da plataforma para o profissional selecionado (plano C2): +200 faíscas por
+	 * microprojeto concluído, teto de 3 por mês. Idempotente por projeto; falha aqui não
+	 * desfaz o aceite.
+	 */
+	private void rewardProfessional(String professionalId, String projectId) {
+		try {
+			String mes = java.time.YearMonth.now(clock).toString();
+			String prefix = "mpbonus:" + professionalId + ":" + mes + ":";
+			if (coins.rewardCountByPrefix(prefix) >= 3) {
+				return;
+			}
+			coins.reward(professionalId, 200, prefix + projectId, "Microprojeto concluído (bônus da plataforma)");
+		} catch (RuntimeException ignored) {
+			// o aceite já aconteceu; a faísca não pode ser motivo de erro para a empresa
+		}
 	}
 
 	@Transactional
@@ -150,10 +171,13 @@ public class MicroProjectService {
 		}
 		MicroProject completed = projects.save(project.complete(clock.instant()));
 		if (project.selectedProposalId() != null) {
-			projects.findProposalById(project.selectedProposalId()).ifPresent(proposal -> notificationService.create(
-				proposal.userId(), "MICROPROJETO", userId, "Microprojeto concluido",
-				"A empresa confirmou o aceite dos entregaveis de \"" + project.title() + "\".",
-				"/api/empresa/" + companySlug(project.companyId()), "Ver"));
+			projects.findProposalById(project.selectedProposalId()).ifPresent(proposal -> {
+				notificationService.create(
+					proposal.userId(), "MICROPROJETO", userId, "Microprojeto concluido",
+					"A empresa confirmou o aceite dos entregaveis de \"" + project.title() + "\".",
+					"/api/empresa/" + companySlug(project.companyId()), "Ver");
+				rewardProfessional(proposal.userId(), project.id());
+			});
 		}
 		return completed;
 	}

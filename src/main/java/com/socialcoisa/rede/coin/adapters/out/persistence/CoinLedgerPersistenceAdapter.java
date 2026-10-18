@@ -94,4 +94,9 @@ class CoinLedgerPersistenceAdapter implements CoinLedgerRepository {
 	public long balanceFromLedger(String accountId) {
 		return entries.sumAmounts(accountId);
 	}
+
+	@Override
+	public long countRewardsByRefPrefix(String prefix) {
+		return entries.countByKindAndRefIdStartingWith(com.socialcoisa.rede.coin.domain.CoinEntry.Kind.REWARD, prefix);
+	}
 }

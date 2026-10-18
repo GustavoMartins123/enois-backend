@@ -254,6 +254,11 @@ public class CoinService {
 			message == null ? "" : message, now);
 	}
 
+	/** Recompensas do mês por prefixo (teto mensal do earned, ex.: microprojetos 3/mês). */
+	public long rewardCountByPrefix(String prefix) {
+		return ledger.countRewardsByRefPrefix(prefix);
+	}
+
 	/** A conta já ganhou essa recompensa? (idempotência legível para os hooks do earned) */
 	public boolean hasReward(String ref) {
 		return ledger.existsByKindAndRefId(CoinEntry.Kind.REWARD, ref);
