@@ -27,4 +27,9 @@ public interface CoinLedgerRepository {
 	long transferredOn(String accountId, java.time.Instant startOfDay, java.time.Instant endOfDay);
 
 	boolean accountExistsForUser(String userId);
+
+	java.util.List<CoinAccount> allAccounts();
+
+	/** O LEDGER é a verdade: a soma dos lançamentos reconstrói o saldo da conta. */
+	long balanceFromLedger(String accountId);
 }

@@ -84,4 +84,14 @@ class CoinLedgerPersistenceAdapter implements CoinLedgerRepository {
 	public boolean accountExistsForUser(String userId) {
 		return accounts.existsById(userId);
 	}
+
+	@Override
+	public java.util.List<CoinAccount> allAccounts() {
+		return accounts.findAll().stream().map(CoinAccountJpaEntity::toDomain).toList();
+	}
+
+	@Override
+	public long balanceFromLedger(String accountId) {
+		return entries.sumAmounts(accountId);
+	}
 }

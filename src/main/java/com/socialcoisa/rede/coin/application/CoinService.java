@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,6 +43,9 @@ public class CoinService {
 	private static final long TREASURY_GENESIS = 2_000_000L;
 	public static final long AIRDROP_PER_USER = 100L;
 	public static final long AIRDROP_OWNER = 150_000L;
+	/** Presença diária (plano C2): 5/dia, bônus de 25 a cada 7 dias seguidos. */
+	public static final long DAILY_PRESENCE = 5L;
+	public static final long STREAK_BONUS = 25L;
 	/** Teto de envio para contas com menos de 7 dias. */
 	private static final long NEW_ACCOUNT_DAILY_CAP = 500L;
 	private static final Duration NEW_ACCOUNT_WINDOW = Duration.ofDays(7);
@@ -59,13 +63,46 @@ public class CoinService {
 	public record Wallet(long balance, String chave, List<CoinEntry> entries) {
 	}
 
-	/** Conta da moeda: cria a conta e, na primeira vez, executa o airdrop do genesis. */
+	/** Conta da moeda: cria a conta, executa o airdrop do genesis e marca a presença do dia. */
 	@Transactional
 	public Wallet wallet(String accountId, String username) {
 		CoinAccount account = ensureAccount(accountId);
 		ensureGenesis(accountId, username);
+		ensureDailyPresence(accountId);
 		return new Wallet(ensureAccount(accountId).balance(), username,
 			ledger.recentEntries(accountId, 50));
+	}
+
+	/**
+	 * Presença diária (plano C2): +5 por dia; a cada 7 dias consecutivos de presença,
+	 * +25 de bônus. Idempotente por conta+dia — abrir a carteira mil vezes não duplica.
+	 */
+	private void ensureDailyPresence(String accountId) {
+		LocalDate today = LocalDate.now(clock);
+		String ref = "presenca:" + accountId + ":" + today;
+		if (ledger.existsByKindAndRefId(CoinEntry.Kind.REWARD, ref)) {
+			return;
+		}
+		Instant now = Instant.now(clock);
+		// Contagem de presenças na janela de 7 dias: o 7º dia consecutivo ganha o bônus.
+		long dias = 1; // hoje conta
+		for (int i = 1; i <= 7; i++) {
+			String prevRef = "presenca:" + accountId + ":" + today.minusDays(i);
+			if (!ledger.existsByKindAndRefId(CoinEntry.Kind.REWARD, prevRef)) {
+				break;
+			}
+			dias++;
+		}
+		long amount = DAILY_PRESENCE;
+		String message = "Presença diária";
+		if (dias >= 7) {
+			amount += STREAK_BONUS;
+			message = "Presença diária (bônus de " + dias + " dias seguidos)";
+		}
+		ensureTreasury();
+		grant(TREASURY_ACCOUNT, -amount, CoinEntry.Kind.GENESIS_TREASURY, "presenca-tesouraria:" + ref,
+			message, now);
+		grant(accountId, amount, CoinEntry.Kind.REWARD, ref, message, now);
 	}
 
 	/** Airdrop idempotente: 100 faíscas da tesouraria (150.000 para a dona), uma vez por conta. */
@@ -215,6 +252,23 @@ public class CoinService {
 			message == null ? "" : message, now);
 		grant(buyerAccountId, amount, CoinEntry.Kind.REFUND_IN, purchaseRef + ":refund",
 			message == null ? "" : message, now);
+	}
+
+	/**
+	 * Reconciliação (plano C4): o LEDGER é a verdade — reconstrói o saldo de cada conta
+	 * somando os lançamentos e compara com o snapshot. Divergência LOGA ALERTA (nada de
+	 * auto-correção silenciosa: a investigação vem primeiro). Roda de madrugada.
+	 */
+	@Scheduled(cron = "0 17 4 * * *")
+	@Transactional(readOnly = true)
+	public void reconcile() {
+		for (CoinAccount account : ledger.allAccounts()) {
+			long rebuilt = ledger.balanceFromLedger(account.accountId());
+			if (rebuilt != account.balance()) {
+				System.out.println("[FAISCA][RECONCILIACAO] DIVERGENCIA conta=" + account.accountId()
+					+ " snapshot=" + account.balance() + " ledger=" + rebuilt);
+			}
+		}
 	}
 
 	private boolean isNewAccount(CoinAccount account) {

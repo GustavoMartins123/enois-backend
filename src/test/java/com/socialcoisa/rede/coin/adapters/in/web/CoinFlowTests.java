@@ -56,7 +56,7 @@ class CoinFlowTests {
 			.as("carteira2: " + wallet2.getResponse().getContentAsString()).isEqualTo(200);
 		org.assertj.core.api.Assertions.assertThat(
 			objectMapper.readTree(wallet2.getResponse().getContentAsString()).get("balance").asLong())
-			.isEqualTo(100);
+			.isEqualTo(105); // 100 do airdrop + 5 da presença do dia
 
 		// Transferência P2P por username (estilo Pix).
 		mockMvc.perform(post("/carteira/transferencias")
@@ -71,10 +71,10 @@ class CoinFlowTests {
 		// Saldo nos dois lados: 70 e 130.
 		mockMvc.perform(get("/carteira").header("X-Session-Token", sender.token()))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.balance").value(70));
+			.andExpect(jsonPath("$.balance").value(75));
 		mockMvc.perform(get("/carteira").header("X-Session-Token", receiver.token()))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.balance").value(130));
+			.andExpect(jsonPath("$.balance").value(135));
 
 		// O extrato de cada um registra a MESMA transferência (a ordem dentro do mesmo
 		// segundo não é determinística — filtra por tipo).
@@ -116,7 +116,7 @@ class CoinFlowTests {
 
 		mockMvc.perform(get("/carteira").header("X-Session-Token", sender.token()))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.balance").value(70));
+			.andExpect(jsonPath("$.balance").value(75));
 
 		// Não transfere para si mesmo.
 		mockMvc.perform(post("/carteira/transferencias")

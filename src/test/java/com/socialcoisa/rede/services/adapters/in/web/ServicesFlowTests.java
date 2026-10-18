@@ -59,14 +59,14 @@ class ServicesFlowTests {
 				.header("X-Session-Token", seller.token()))
 			.andExpect(status().isBadRequest());
 
-		// O comprador contrata: escrow retém (100 -> 70).
+		// O comprador contrata: escrow retém (105 -> 75).
 		MvcResult contract = mockMvc.perform(post("/servicos/ofertas/" + listingId + "/contratar")
 				.header("X-Session-Token", buyer.token()))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.state").value("HELD"))
 			.andReturn();
 		String contractId = objectMapper.readTree(contract.getResponse().getContentAsString()).get("contractId").asText();
-		balance(buyer.token(), 70);
+		balance(buyer.token(), 75);
 
 		// O vendedor entrega e o comprador aceita: 90% (27) para o vendedor.
 		mockMvc.perform(post("/servicos/contratos/" + contractId + "/entregar")
@@ -78,7 +78,7 @@ class ServicesFlowTests {
 				.header("X-Session-Token", buyer.token()))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.state").value("RELEASED"));
-		balance(seller.token(), 127);
+		balance(seller.token(), 132);
 	}
 
 	@Test
@@ -128,14 +128,14 @@ class ServicesFlowTests {
 			.andReturn();
 		String proposalId = objectMapper.readTree(proposal.getResponse().getContentAsString()).get("id").asText();
 
-		// Escolher a proposta: escrow retém (100 -> 50) e o pedido fecha.
+		// Escolher a proposta: escrow retém (105 -> 55) e o pedido fecha.
 		mockMvc.perform(post("/servicos/pedidos/" + requestId + "/escolher")
 				.header("X-Session-Token", requester.token())
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(objectMapper.writeValueAsString(Map.of("proposalId", proposalId))))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.state").value("HELD"));
-		balance(requester.token(), 50);
+		balance(requester.token(), 55);
 
 		// Reembolso: devolve 100%.
 		MvcResult mine = mockMvc.perform(get("/servicos/minhas").header("X-Session-Token", requester.token()))
@@ -148,7 +148,7 @@ class ServicesFlowTests {
 				.header("X-Session-Token", requester.token()))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.state").value("REFUNDED"));
-		balance(requester.token(), 100);
+		balance(requester.token(), 105);
 	}
 
 	private void wallet(String token) throws Exception {

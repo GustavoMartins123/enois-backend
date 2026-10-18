@@ -23,4 +23,8 @@ interface SpringDataCoinEntryRepository extends JpaRepository<CoinEntryJpaEntity
 		"WHERE e.accountId = :accountId AND e.amount < 0 AND e.createdAt >= :start AND e.createdAt < :end")
 	long sumDebitsBetween(@Param("accountId") String accountId, @Param("start") Instant start,
 			@Param("end") Instant end);
+
+	/** O LEDGER é a verdade: a soma dos lançamentos reconstrói o saldo. */
+	@Query("SELECT COALESCE(SUM(e.amount), 0) FROM CoinEntryJpaEntity e WHERE e.accountId = :accountId")
+	long sumAmounts(@Param("accountId") String accountId);
 }

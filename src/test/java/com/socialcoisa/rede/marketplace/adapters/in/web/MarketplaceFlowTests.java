@@ -71,7 +71,7 @@ class MarketplaceFlowTests {
 				.header("X-Session-Token", author.token()))
 			.andExpect(status().isBadRequest());
 
-		// O comprador paga: escrow retém, o saldo cai 100 -> 60.
+		// O comprador paga: escrow retém, o saldo cai 105 -> 65.
 		MvcResult bought = mockMvc.perform(post("/marketplace/" + listingId + "/buy")
 				.header("X-Session-Token", buyer.token()))
 			.andExpect(status().isOk())
@@ -79,14 +79,14 @@ class MarketplaceFlowTests {
 			.andReturn();
 		String purchaseId = objectMapper.readTree(bought.getResponse().getContentAsString())
 			.get("purchaseId").asText();
-		expectBalance(buyer.token(), 60);
+		expectBalance(buyer.token(), 65);
 
 		// Confirmado: o criador recebe 90% (36) e a taxa fica na tesouraria.
 		mockMvc.perform(post("/marketplace/purchases/" + purchaseId + "/confirm")
 				.header("X-Session-Token", buyer.token()))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.state").value("RELEASED"));
-		expectBalance(author.token(), 136);
+		expectBalance(author.token(), 141);
 
 		// Um segundo ciclo para o reembolso: nova listagem, compra e devolução integral.
 		MvcResult created2 = mockMvc.perform(post("/temas/galeria")
@@ -115,12 +115,12 @@ class MarketplaceFlowTests {
 		String purchase2 = objectMapper.readTree(bought2.getResponse().getContentAsString())
 			.get("purchaseId").asText();
 
-		// Reembolso: o comprador volta a ter o valor (60 -> 60: comprou 25, devolveu 25).
+		// Reembolso: o comprador volta a ter o valor (65 -> 65: comprou 25, devolveu 25).
 		mockMvc.perform(post("/marketplace/purchases/" + purchase2 + "/refund")
 				.header("X-Session-Token", buyer.token()))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.state").value("REFUNDED"));
-		expectBalance(buyer.token(), 60);
+		expectBalance(buyer.token(), 65);
 	}
 
 	private void openWallet(String token) throws Exception {
