@@ -6,11 +6,13 @@ import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.socialcoisa.rede.coin.application.CoinService;
+import com.socialcoisa.rede.coin.dispute.CoinDisputeService;
 import com.socialcoisa.rede.coin.domain.CoinEntry;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import org.springframework.http.ResponseEntity;
@@ -31,16 +33,19 @@ class CoinController {
 	private final IdempotencyApplicationService idempotency;
 	private final UserProfileRepository profiles;
 	private final com.socialcoisa.rede.shared.web.AdminGuard adminGuard;
+	private final com.socialcoisa.rede.coin.dispute.CoinDisputeService disputes;
 
 	CoinController(CoinService coins, com.socialcoisa.rede.coin.application.CoinRateService rates,
 			CurrentUserResolver currentUserResolver, IdempotencyApplicationService idempotency,
-			UserProfileRepository profiles, com.socialcoisa.rede.shared.web.AdminGuard adminGuard) {
+			UserProfileRepository profiles, com.socialcoisa.rede.shared.web.AdminGuard adminGuard,
+			com.socialcoisa.rede.coin.dispute.CoinDisputeService disputes) {
 		this.coins = coins;
 		this.rates = rates;
 		this.currentUserResolver = currentUserResolver;
 		this.idempotency = idempotency;
 		this.profiles = profiles;
 		this.adminGuard = adminGuard;
+		this.disputes = disputes;
 	}
 
 	/**
@@ -94,6 +99,64 @@ class CoinController {
 	record PrizeRequest(String toUsername, Long amount, String ref, String message) {
 	}
 
+	/** A vítima (quem enviou) contesta a transferência — vai para a fila de moderação. */
+	@PostMapping("/carteira/transacoes/{refId}/contestar")
+	Map<String, Object> contest(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@PathVariable String refId, @RequestBody ContestRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		var dispute = disputes.contest(user.id().value(), refId, request.reason(), request.description());
+		return Map.of("id", dispute.id(), "state", dispute.state().name());
+	}
+
+	/** As contestações da pessoa (o acompanhamento). */
+	@GetMapping("/carteira/contestacoes")
+	List<Map<String, Object>> myContestations(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		return disputes.bySender(user.id().value()).stream().map(CoinDisputeService::disputeView).toList();
+	}
+
+	/** A fila das contestações (moderação). */
+	@GetMapping("/admin/carteira/disputas")
+	List<Map<String, Object>> disputesQueue(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestParam(defaultValue = "30") int limit) {
+		CurrentUser admin = currentUserResolver.resolve(userId, sessionToken);
+		adminGuard.requireAdmin(admin);
+		return disputes.pending(limit).stream().map(CoinDisputeService::disputeView).toList();
+	}
+
+	/** Contestação VERDADEIRA: reverte a transferência e restringe o golpista. */
+	@PostMapping("/admin/carteira/disputas/{disputeId}/deferir")
+	Map<String, Object> uphold(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@PathVariable String disputeId, @RequestBody(required = false) DisputeDecisionRequest request) {
+		CurrentUser admin = currentUserResolver.resolve(userId, sessionToken);
+		adminGuard.requireAdmin(admin);
+		var saved = disputes.uphold(disputeId, admin.id().value(),
+			request == null ? null : request.note());
+		return Map.of("id", saved.id(), "state", saved.state().name());
+	}
+
+	/** Contestação FALSA: quem contestou é restringido. */
+	@PostMapping("/admin/carteira/disputas/{disputeId}/rejeitar")
+	Map<String, Object> reject(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@PathVariable String disputeId, @RequestBody(required = false) DisputeDecisionRequest request) {
+		CurrentUser admin = currentUserResolver.resolve(userId, sessionToken);
+		adminGuard.requireAdmin(admin);
+		var saved = disputes.reject(disputeId, admin.id().value(),
+			request == null ? null : request.note());
+		return Map.of("id", saved.id(), "state", saved.state().name());
+	}
+
+	record ContestRequest(String reason, String description) {
+	}
+
+	record DisputeDecisionRequest(String note) {
+	}
+
 	@GetMapping("/carteira")
 	Map<String, Object> wallet(@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
@@ -133,17 +196,17 @@ class CoinController {
 				CoinEntry out = coins.transfer(user.id().value(), request.toUsername(), request.amount(),
 					request.message(), toUserId, request.toUsername());
 				return new CommandResponse(200, Map.of("status", "SENT", "amount", request.amount(),
-					"toUsername", request.toUsername()));
+					"toUsername", request.toUsername(), "refId", out != null ? out.refId() : null));
 			});
 	}
 
 	record TransferRequest(String toUsername, Long amount, String message) {
 	}
 
-	record EntryView(long amount, String kind, String message, String createdAt) {
+	record EntryView(long amount, String kind, String message, String refId, String createdAt) {
 		static EntryView from(CoinEntry entry) {
 			return new EntryView(entry.amount(), entry.kind().name(), entry.message(),
-				entry.createdAt().toString());
+				entry.refId(), entry.createdAt().toString());
 		}
 	}
 

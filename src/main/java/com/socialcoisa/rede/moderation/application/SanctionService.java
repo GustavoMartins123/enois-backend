@@ -83,6 +83,24 @@ public class SanctionService {
 	}
 
 	/**
+	 * Restrição DIRETA de um usuário por decisão humana (ex.: contestação de transação
+	 * julgada FALSA). Sem denúncia por trás — o reportId de referência é o id do registro
+	 * da decisão (disputa/apelação) para o recurso do usuário funcionar.
+	 */
+	@Transactional
+	public UserSanction restrictUser(String userId, String referenceId, String motive) {
+		if (sanctions.findActiveByUser(userId).isPresent()) {
+			return sanctions.findActiveByUser(userId).orElseThrow();
+		}
+		String id = "sanc_" + UUID.randomUUID().toString().replace("-", "");
+		UserSanction saved = sanctions.save(UserSanction.create(id, userId, referenceId, motive, Instant.now(clock)));
+		notificationService.create(userId, "SANCAO", "sistema", "Conta restrita",
+			"Sua conta foi restrita: " + motive + ". Se foi um erro, você pode recorrer.",
+			"/api/penalidades", "Recorrer");
+		return saved;
+	}
+
+	/**
 	 * Banimento direto por decisao humana: salva a sancao e escala para BAN, revogando
 	 * todas as sessoes (o padrao do recurso negado, sem passar pelo recurso).
 	 */

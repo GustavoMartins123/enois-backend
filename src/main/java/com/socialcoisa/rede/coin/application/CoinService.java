@@ -65,11 +65,14 @@ public class CoinService {
 
 	private final CoinLedgerRepository ledger;
 	private final CoinRateService rateService;
+	private final com.socialcoisa.rede.shared.security.SecretCipher cipher;
 	private final Clock clock;
 
-	public CoinService(CoinLedgerRepository ledger, CoinRateService rateService, Clock clock) {
+	public CoinService(CoinLedgerRepository ledger, CoinRateService rateService,
+			com.socialcoisa.rede.shared.security.SecretCipher cipher, Clock clock) {
 		this.ledger = ledger;
 		this.rateService = rateService;
+		this.cipher = cipher;
 		this.clock = clock;
 	}
 
@@ -82,8 +85,11 @@ public class CoinService {
 		CoinAccount account = ensureAccount(accountId);
 		ensureGenesis(accountId, username);
 		ensureDailyPresence(accountId);
+		List<CoinEntry> extrato = ledger.recentEntries(accountId, 50).stream()
+			.map(e -> e.withMessage(decifrar(e.message())))
+			.toList();
 		return new Wallet(ensureAccount(accountId).balance(), username, SCALE,
-			rateService.currentBrlCents(), ledger.recentEntries(accountId, 50));
+			rateService.currentBrlCents(), extrato);
 	}
 
 	/**
@@ -163,7 +169,7 @@ public class CoinService {
 		String idem = kind.name().toLowerCase(Locale.ROOT) + ":" + refId;
 		String hash = hashOf(prevHash, accountId, amount, kind, refId, idem);
 		CoinEntry entry = CoinEntry.create("cent_" + UUID.randomUUID().toString().replace("-", ""), accountId,
-			amount, kind, refId, message, idem, prevHash, hash, now);
+			amount, kind, refId, cifrar(message), idem, prevHash, hash, now);
 		CoinEntry saved = ledger.insertEntry(entry);
 		long nextBalance = account.balance() + amount;
 		CoinAccount updated = ledger.updateBalance(accountId, nextBalance, account.version(), account.version() + 1);
@@ -171,6 +177,30 @@ public class CoinService {
 			throw new ApiException(409, "COIN_CONCURRENCY", "Movimentação concorrente; tente de novo.");
 		}
 		return saved;
+	}
+
+	private static final String ENC_PREFIX = "enc:v1:";
+
+	/** A mensagem da transferência é DADO PESSOAL: cifra em repouso (AES-GCM) quando a chave existe. */
+	private String cifrar(String message) {
+		if (message == null || message.isBlank() || !cipher.isEnabled()) {
+			return message;
+		}
+		return ENC_PREFIX + cipher.encrypt(message);
+	}
+
+	private String decifrar(String message) {
+		if (message == null || !message.startsWith(ENC_PREFIX)) {
+			return message;
+		}
+		if (!cipher.isEnabled()) {
+			return "[mensagem protegida]";
+		}
+		try {
+			return cipher.decrypt(message.substring(ENC_PREFIX.length()));
+		} catch (RuntimeException e) {
+			return "[mensagem protegida]";
+		}
 	}
 
 	private String hashOf(String prevHash, String accountId, long amount, CoinEntry.Kind kind, String refId,
@@ -331,6 +361,21 @@ public class CoinService {
 		Instant now = Instant.now(clock);
 		grant(TREASURY_ACCOUNT, -amount, CoinEntry.Kind.GENESIS_TREASURY, "reward-tesouraria:" + ref, message, now);
 		grant(accountId, amount, CoinEntry.Kind.REWARD, ref, message, now);
+	}
+
+	/**
+	 * REVERSÃO de transferência (contestation de golpe, decisão da moderação): espelho no
+	 * ledger — o receptor devolve e o remetente recebe de volta. Append-only: nada de
+	 * UPDATE/DELETE; os lançamentos espelho contam com o motivo.
+	 */
+	@Transactional
+	public void reverseTransfer(String receiverId, String senderId, long amount, String originalRef, String reason) {
+		if (amount <= 0) {
+			throw new ApiException(400, "INVALID_AMOUNT", "O valor da reversão precisa ser positivo.");
+		}
+		Instant now = Instant.now(clock);
+		grant(receiverId, -amount, CoinEntry.Kind.REVERSAL_OUT, originalRef + ":reversao", reason, now);
+		grant(senderId, amount, CoinEntry.Kind.REVERSAL_IN, originalRef + ":reversao", reason, now);
 	}
 
 	/**

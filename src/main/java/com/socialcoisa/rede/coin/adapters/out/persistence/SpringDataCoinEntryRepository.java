@@ -28,5 +28,10 @@ interface SpringDataCoinEntryRepository extends JpaRepository<CoinEntryJpaEntity
 	@Query("SELECT COALESCE(SUM(e.amount), 0) FROM CoinEntryJpaEntity e WHERE e.accountId = :accountId")
 	long sumAmounts(@Param("accountId") String accountId);
 
+	java.util.Optional<CoinEntryJpaEntity> findByAccountIdAndRefId(String accountId, String refId);
+
+	java.util.Optional<CoinEntryJpaEntity> findFirstByRefIdAndKindOrderByIdAsc(String refId,
+			com.socialcoisa.rede.coin.domain.CoinEntry.Kind kind);
+
 	long countByKindAndRefIdStartingWith(com.socialcoisa.rede.coin.domain.CoinEntry.Kind kind, String refPrefix);
 }

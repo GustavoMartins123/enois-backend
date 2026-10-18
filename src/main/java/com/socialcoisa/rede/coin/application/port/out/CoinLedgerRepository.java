@@ -28,6 +28,12 @@ public interface CoinLedgerRepository {
 
 	boolean accountExistsForUser(String userId);
 
+	/** O lançamento de uma conta por refId (a contestação fala pelo ref da transferência). */
+	Optional<CoinEntry> findByAccountIdAndRefId(String accountId, String refId);
+
+	/** O outro lado da transferência: o lançamento de um ref em qualquer conta. */
+	Optional<CoinEntry> findByRefIdAndKind(String refId, com.socialcoisa.rede.coin.domain.CoinEntry.Kind kind);
+
 	java.util.List<CoinAccount> allAccounts();
 
 	/** O LEDGER é a verdade: a soma dos lançamentos reconstrói o saldo da conta. */

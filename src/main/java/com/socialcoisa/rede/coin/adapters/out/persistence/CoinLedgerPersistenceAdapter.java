@@ -86,6 +86,16 @@ class CoinLedgerPersistenceAdapter implements CoinLedgerRepository {
 	}
 
 	@Override
+	public java.util.Optional<CoinEntry> findByAccountIdAndRefId(String accountId, String refId) {
+		return entries.findByAccountIdAndRefId(accountId, refId).map(CoinEntryJpaEntity::toDomain);
+	}
+
+	@Override
+	public java.util.Optional<CoinEntry> findByRefIdAndKind(String refId, com.socialcoisa.rede.coin.domain.CoinEntry.Kind kind) {
+		return entries.findFirstByRefIdAndKindOrderByIdAsc(refId, kind).map(CoinEntryJpaEntity::toDomain);
+	}
+
+	@Override
 	public java.util.List<CoinAccount> allAccounts() {
 		return accounts.findAll().stream().map(CoinAccountJpaEntity::toDomain).toList();
 	}
