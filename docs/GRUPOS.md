@@ -131,9 +131,12 @@ Enquanto houver pendência real, a automação fica viva.
       tópico para quem administra, compositor e publicações com os emblemas do autor,
       **comentários (lista + envio) e reações** (o `ReactionPicker` do feed é reutilizado, e o
       backend devolve `myReaction` para o estado não se perder ao recarregar) (2026-10-18).
-- [ ] Administração: membros, solicitações, moderação; estados de carregamento/vazio/sem acesso —
-      carregamento, vazio e sem-acesso já tratados na descoberta e na página; faltam as telas de
-      membros, solicitações de ingresso e moderação local.
+- [x] Administração: membros, solicitações, moderação; estados de carregamento/vazio/sem acesso —
+      painel no topo da página do grupo (dono/admin): **pedidos de ingresso** com aprovar/recusar,
+      **lista de membros** com papel, **remover** (com confirmação) e **transferir a propriedade**
+      (só o dono). Carregamento, vazio e sem-acesso tratados na descoberta, na página e no painel.
+      A moderação LOCAL (remover publicação/comentário pela administração) fica para a Etapa 6,
+      junto com o AutoMod e as denúncias (2026-10-18).
 
 ### Etapa 6 — Segurança e moderação
 - [ ] AutoMod integrado ao contexto do grupo; denúncias; auditoria.
