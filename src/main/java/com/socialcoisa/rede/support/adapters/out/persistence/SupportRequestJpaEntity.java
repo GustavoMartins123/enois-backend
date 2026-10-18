@@ -33,6 +33,10 @@ class SupportRequestJpaEntity {
 	@Column(name = "contact_email", nullable = false)
 	private String contactEmail;
 
+	/** Anexo de imagem (URL do CDN, opcional): o print que explica o pedido. */
+	@Column(name = "image_url", length = 500)
+	private String imageUrl;
+
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 32)
 	private SupportStatus status;
@@ -50,12 +54,13 @@ class SupportRequestJpaEntity {
 		entity.subject = request.subject();
 		entity.message = request.message();
 		entity.contactEmail = request.contactEmail();
+		entity.imageUrl = request.imageUrl();
 		entity.status = request.status();
 		entity.createdAt = request.createdAt();
 		return entity;
 	}
 
 	SupportRequest toDomain() {
-		return SupportRequest.restore(id, userId, subject, message, contactEmail, status, createdAt);
+		return SupportRequest.restore(id, userId, subject, message, contactEmail, imageUrl, status, createdAt);
 	}
 }

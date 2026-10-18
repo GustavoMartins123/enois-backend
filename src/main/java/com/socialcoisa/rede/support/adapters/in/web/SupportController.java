@@ -52,7 +52,7 @@ class SupportController {
 			@RequestBody CreateSupportRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		SupportRequest created = supportService.open(user.id().value(), request.subject(), request.message(),
-			request.contactEmail());
+			request.contactEmail(), request.imageUrl());
 		return ResponseEntity.status(HttpStatus.CREATED).body(SupportRequestView.from(created));
 	}
 
@@ -70,13 +70,13 @@ class SupportController {
 	record SupportConfigView(String email) {
 	}
 
-	record CreateSupportRequest(String subject, String message, String contactEmail) {
+	record CreateSupportRequest(String subject, String message, String contactEmail, String imageUrl) {
 	}
 
-	record SupportRequestView(String id, String subject, String message, String contactEmail, String status,
+	record SupportRequestView(String id, String subject, String message, String contactEmail, String imageUrl, String status,
 			String createdAt) {
 		static SupportRequestView from(SupportRequest request) {
-			return new SupportRequestView(request.id(), request.subject(), request.message(), request.contactEmail(),
+			return new SupportRequestView(request.id(), request.subject(), request.message(), request.contactEmail(), request.imageUrl(),
 				request.status().name(), request.createdAt().toString());
 		}
 	}

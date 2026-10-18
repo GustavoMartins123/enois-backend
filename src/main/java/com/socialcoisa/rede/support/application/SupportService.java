@@ -42,7 +42,7 @@ public class SupportService {
 	}
 
 	@Transactional
-	public SupportRequest open(String userId, String subject, String message, String contactEmail) {
+	public SupportRequest open(String userId, String subject, String message, String contactEmail, String imageUrl) {
 		String cleanSubject = subject == null ? "" : subject.trim();
 		String cleanMessage = message == null ? "" : message.trim();
 		String cleanEmail = StringUtils.hasText(contactEmail) ? contactEmail.trim().toLowerCase(java.util.Locale.ROOT)
@@ -68,9 +68,17 @@ public class SupportService {
 				"Voce ja abriu varios pedidos nas ultimas 24h. Aguarde o retorno do time.");
 		}
 
+		String cleanImage = imageUrl == null || imageUrl.isBlank() ? null : imageUrl.trim();
+		if (cleanImage != null && !cleanImage.startsWith("https://")) {
+			throw new ApiException(400, "INVALID_SUPPORT_REQUEST", "O anexo deve ser um link https do CDN.");
+		}
+		if (cleanImage != null && cleanImage.length() > 500) {
+			throw new ApiException(400, "INVALID_SUPPORT_REQUEST", "O anexo de imagem deve ter no maximo 500 caracteres.");
+		}
+
 		SupportRequest request = repository.save(SupportRequest.create(
 			"support_" + UUID.randomUUID().toString().replace("-", ""), userId, cleanSubject, cleanMessage, cleanEmail,
-			clock.instant()));
+			cleanImage, clock.instant()));
 
 		if (StringUtils.hasText(supportEmail)) {
 			emailService.sendSupportRequestEmail(supportEmail, request.subject(), request.message(), cleanEmail);
@@ -81,5 +89,39 @@ public class SupportService {
 	@Transactional(readOnly = true)
 	public List<SupportRequest> listByStatus(SupportStatus status, int limit) {
 		return repository.findByStatus(status, limit < 1 ? 20 : Math.min(limit, 100));
+	}
+
+	/** Baixa a imagem do anexo (https, ate 5 MB); falha de download NAO bloqueia o pedido. */
+	private byte[] fetchImage(String url) {
+		if (url == null) {
+			return null;
+		}
+		try {
+			var request = java.net.http.HttpRequest.newBuilder(java.net.URI.create(url))
+				.timeout(java.time.Duration.ofSeconds(8))
+				.GET()
+				.build();
+			var response = java.net.http.HttpClient.newBuilder()
+				.connectTimeout(java.time.Duration.ofSeconds(5))
+				.build()
+				.send(request, java.net.http.HttpResponse.BodyHandlers.ofByteArray());
+			byte[] bytes = response.body();
+			if (response.statusCode() != 200 || bytes == null || bytes.length == 0 || bytes.length > 5 * 1024 * 1024) {
+				return null;
+			}
+			return bytes;
+		} catch (Exception e) {
+			org.slf4j.LoggerFactory.getLogger(SupportService.class)
+				.warn("Falha ao baixar o anexo de imagem do suporte", e);
+			return null;
+		}
+	}
+
+	private String imageName(String url) {
+		if (url == null) {
+			return "anexo.png";
+		}
+		String name = url.substring(url.lastIndexOf('/') + 1);
+		return name.matches("[A-Za-z0-9._-]{1,80}") ? name : "anexo.png";
 	}
 }

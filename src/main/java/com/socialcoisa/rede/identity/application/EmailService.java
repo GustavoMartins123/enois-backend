@@ -149,7 +149,15 @@ public class EmailService {
 
 	/** Notifica o time de suporte sobre um pedido aberto no app (responde para o usuario). */
 	public void sendSupportRequestEmail(String toEmail, String requestSubject, String requestMessage, String replyTo) {
-		String subject = "[Suporte] " + requestSubject;
+		sendSupportRequestEmail(toEmail, requestSubject, requestMessage, replyTo, null, null);
+	}
+
+	/**
+	 * Suporte com ANEXO DE IMAGEM: o print que a pessoa juntou ao pedido. A imagem vem
+	 * como bytes (baixados do CDN pelo chamador); sem imagem, cai no e-mail simples.
+	 */
+	public void sendSupportRequestEmail(String toEmail, String requestSubject, String requestMessage, String replyTo,
+			byte[] imageBytes, String imageName) {
 		String htmlBody = "<p>Novo pedido de suporte enviado pelo app.</p>"
 			+ "<ul>"
 			+ "<li><b>Usuario:</b> " + escape(replyTo) + "</li>"
@@ -166,8 +174,12 @@ public class EmailService {
 			if (replyTo != null && replyTo.contains("@")) {
 				helper.setReplyTo(replyTo);
 			}
-			helper.setSubject(subject);
+			helper.setSubject("[Suporte] " + requestSubject);
 			helper.setText(htmlBody, true);
+			if (imageBytes != null && imageBytes.length > 0) {
+				helper.addAttachment(imageName == null ? "anexo.png" : imageName,
+					new org.springframework.core.io.ByteArrayResource(imageBytes));
+			}
 			mailSender.send(message);
 		} catch (Exception e) {
 			// O pedido ja esta persistido (aparece em /admin/support): apenas registramos a falha.
