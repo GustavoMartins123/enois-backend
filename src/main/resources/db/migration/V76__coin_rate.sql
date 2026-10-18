@@ -9,4 +9,4 @@ create table if not exists coin_rate_history (
   primary key (id)
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_uca1400_ai_ci;
 
-create index idx_coin_rate_time on coin_rate_history (effective_at);
+create index if not exists idx_coin_rate_time on coin_rate_history (effective_at);

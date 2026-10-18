@@ -18,6 +18,6 @@ create table if not exists coin_disputes (
   primary key (id)
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_uca1400_ai_ci;
 
-create index idx_coin_disputes_state on coin_disputes (state, created_at);
-create index idx_coin_disputes_sender on coin_disputes (sender_id, state);
-create index idx_coin_disputes_receiver on coin_disputes (receiver_id, state);
+create index if not exists idx_coin_disputes_state on coin_disputes (state, created_at);
+create index if not exists idx_coin_disputes_sender on coin_disputes (sender_id, state);
+create index if not exists idx_coin_disputes_receiver on coin_disputes (receiver_id, state);

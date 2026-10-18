@@ -22,5 +22,5 @@ create table if not exists games (
   constraint uk_games_user_slug unique (user_id, slug)
 );
 
-create index idx_games_user on games (user_id, status);
-create index idx_games_status on games (status, submitted_at);
+create index if not exists idx_games_user on games (user_id, status);
+create index if not exists idx_games_status on games (status, submitted_at);

@@ -6,6 +6,6 @@
 --
 -- As linhas que ja existem satisfazem o indice novo por construcao (eram unicas por pessoa), entao
 -- nao ha nada a limpar antes.
-alter table post_seals drop index uk_post_seals_post_user;
+alter table post_seals drop index if exists uk_post_seals_post_user;
 
-create unique index uk_post_seals_post_user_seal on post_seals (post_id, user_id, seal);
+create unique index if not exists uk_post_seals_post_user_seal on post_seals (post_id, user_id, seal);

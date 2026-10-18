@@ -17,8 +17,8 @@ create table if not exists marketplace_listings (
   constraint uk_listing_item unique (item_kind, item_id, status)
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_uca1400_ai_ci;
 
-create index idx_listings_status on marketplace_listings (status, created_at);
-create index idx_listings_seller on marketplace_listings (seller_id, status);
+create index if not exists idx_listings_status on marketplace_listings (status, created_at);
+create index if not exists idx_listings_seller on marketplace_listings (seller_id, status);
 
 create table if not exists marketplace_purchases (
   id varchar(255) not null,
@@ -32,6 +32,6 @@ create table if not exists marketplace_purchases (
   primary key (id)
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_uca1400_ai_ci;
 
-create index idx_purchases_buyer on marketplace_purchases (buyer_id, state);
-create index idx_purchases_seller on marketplace_purchases (seller_id, state);
-create index idx_purchases_held on marketplace_purchases (state, created_at);
+create index if not exists idx_purchases_buyer on marketplace_purchases (buyer_id, state);
+create index if not exists idx_purchases_seller on marketplace_purchases (seller_id, state);
+create index if not exists idx_purchases_held on marketplace_purchases (state, created_at);

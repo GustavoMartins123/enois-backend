@@ -17,8 +17,8 @@ create table if not exists service_listings (
   primary key (id)
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_uca1400_ai_ci;
 
-create index idx_service_listings_status on service_listings (status, category, created_at);
-create index idx_service_listings_seller on service_listings (seller_id, status);
+create index if not exists idx_service_listings_status on service_listings (status, category, created_at);
+create index if not exists idx_service_listings_seller on service_listings (seller_id, status);
 
 create table if not exists service_requests (
   id varchar(255) not null,
@@ -36,7 +36,7 @@ create table if not exists service_requests (
   primary key (id)
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_uca1400_ai_ci;
 
-create index idx_service_requests_status on service_requests (status, category, created_at);
+create index if not exists idx_service_requests_status on service_requests (status, category, created_at);
 
 create table if not exists service_proposals (
   id varchar(255) not null,
@@ -49,7 +49,7 @@ create table if not exists service_proposals (
   primary key (id)
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_uca1400_ai_ci;
 
-create index idx_service_proposals_request on service_proposals (request_id, status);
+create index if not exists idx_service_proposals_request on service_proposals (request_id, status);
 
 create table if not exists service_contracts (
   id varchar(255) not null,
@@ -65,5 +65,5 @@ create table if not exists service_contracts (
   primary key (id)
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_uca1400_ai_ci;
 
-create index idx_service_contracts_buyer on service_contracts (buyer_id, escrow_state);
-create index idx_service_contracts_seller on service_contracts (seller_id, escrow_state);
+create index if not exists idx_service_contracts_buyer on service_contracts (buyer_id, escrow_state);
+create index if not exists idx_service_contracts_seller on service_contracts (seller_id, escrow_state);
