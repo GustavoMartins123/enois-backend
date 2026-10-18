@@ -34,6 +34,10 @@ import com.socialcoisa.rede.shared.web.ApiException;
 public class CoinService {
 
 	public static final String TREASURY_ACCOUNT = "coin_tesouraria";
+	/** Conta de RETENÇÃO do escrow: não pertence a ninguém; as faíscas ficam paradas aqui. */
+	public static final String ESCROW_ACCOUNT = "coin_escrow";
+	/** Taxa da plataforma sobre vendas (Fase 4/D1): 10% do preço, ida para a tesouraria. */
+	public static final long MARKETPLACE_FEE_PERCENT = 10L;
 	/** Volume interno fixo do genesis. Não é público; nunca muda. */
 	private static final long TREASURY_GENESIS = 2_000_000L;
 	public static final long AIRDROP_PER_USER = 100L;
@@ -162,6 +166,55 @@ public class CoinService {
 			message == null ? "" : message, now);
 		grant(toUserId, amount, CoinEntry.Kind.TRANSFER_IN, transferRef, message == null ? "" : message, now);
 		return out;
+	}
+
+	/**
+	 * Escrow (marketplace/serviços): as faíscas SAEM do comprador e ficam RETIDAS na conta de
+	 * escrow — não gastas, não sacáveis por ninguém até a decisão (liberação ou reembolso).
+	 */
+	@Transactional
+	public CoinEntry escrowHold(String buyerAccountId, long amount, String purchaseRef, String message) {
+		if (amount <= 0) {
+			throw new ApiException(400, "INVALID_AMOUNT", "O preço precisa ser positivo.");
+		}
+		Instant now = clock.instant();
+		CoinEntry out = grant(buyerAccountId, -amount, CoinEntry.Kind.ESCROW_OUT, purchaseRef,
+			message == null ? "" : message, now);
+		grant(ESCROW_ACCOUNT, amount, CoinEntry.Kind.ESCROW_HOLD, purchaseRef, message == null ? "" : message, now);
+		return out;
+	}
+
+	/**
+	 * Liberação do escrow: vendedor recebe preço − 10% de taxa; a taxa volta para a
+	 * tesouraria (o supply não muda — as faíscas só mudam de conta).
+	 */
+	@Transactional
+	public void escrowRelease(String sellerAccountId, long amount, String purchaseRef, String message) {
+		if (amount <= 0) {
+			throw new ApiException(400, "INVALID_AMOUNT", "O preço precisa ser positivo.");
+		}
+		Instant now = clock.instant();
+		long fee = amount * MARKETPLACE_FEE_PERCENT / 100;
+		long net = amount - fee;
+		grant(ESCROW_ACCOUNT, -amount, CoinEntry.Kind.ESCROW_RELEASE, purchaseRef, message == null ? "" : message, now);
+		grant(sellerAccountId, net, CoinEntry.Kind.ESCROW_IN, purchaseRef, message == null ? "" : message, now);
+		if (fee > 0) {
+			ensureTreasury();
+			grant(TREASURY_ACCOUNT, fee, CoinEntry.Kind.FEE_IN, purchaseRef, "Taxa de marketplace", now);
+		}
+	}
+
+	/** Reembolso do escrow: volta INTEGRAL para o comprador. */
+	@Transactional
+	public void escrowRefund(String buyerAccountId, long amount, String purchaseRef, String message) {
+		if (amount <= 0) {
+			throw new ApiException(400, "INVALID_AMOUNT", "O preço precisa ser positivo.");
+		}
+		Instant now = clock.instant();
+		grant(ESCROW_ACCOUNT, -amount, CoinEntry.Kind.ESCROW_RELEASE, purchaseRef + ":refund",
+			message == null ? "" : message, now);
+		grant(buyerAccountId, amount, CoinEntry.Kind.REFUND_IN, purchaseRef + ":refund",
+			message == null ? "" : message, now);
 	}
 
 	private boolean isNewAccount(CoinAccount account) {

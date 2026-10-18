@@ -1,0 +1,111 @@
+package com.socialcoisa.rede.marketplace.adapters.in.web;
+
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.socialcoisa.rede.marketplace.application.MarketplaceService;
+import com.socialcoisa.rede.marketplace.domain.MarketplaceListing;
+import com.socialcoisa.rede.marketplace.domain.MarketplacePurchase;
+import com.socialcoisa.rede.shared.web.ApiException;
+import com.socialcoisa.rede.shared.web.CurrentUser;
+import com.socialcoisa.rede.shared.web.CurrentUserResolver;
+import com.socialcoisa.rede.themes.application.ThemeGalleryService;
+import com.socialcoisa.rede.themes.domain.ThemePackage;
+
+/**
+ * O marketplace de itens (Fase 4): listar um tema, comprar com escrow, confirmar
+ * (libera para o criador −10%) ou pedir reembolso (devolve 100%, dentro de 7 dias).
+ */
+@RestController
+class MarketplaceController {
+
+	private final MarketplaceService marketplace;
+	private final ThemeGalleryService gallery;
+	private final CurrentUserResolver currentUserResolver;
+
+	MarketplaceController(MarketplaceService marketplace, ThemeGalleryService gallery,
+			CurrentUserResolver currentUserResolver) {
+		this.marketplace = marketplace;
+		this.gallery = gallery;
+		this.currentUserResolver = currentUserResolver;
+	}
+
+	@GetMapping("/marketplace")
+	List<ListingView> catalog(@RequestParam(defaultValue = "60") int limit) {
+		return marketplace.catalog(limit).stream().map(ListingView::from).toList();
+	}
+
+	@GetMapping("/marketplace/mine")
+	List<ListingView> mine(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		return marketplace.mine(user.id().value()).stream().map(ListingView::from).toList();
+	}
+
+	@PostMapping("/marketplace")
+	Map<String, Object> publish(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken, @RequestBody PublishRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		MarketplaceListing.ItemKind kind = parseKind(request.itemKind());
+		if (kind != MarketplaceListing.ItemKind.THEME) {
+			throw new ApiException(400, "INVALID_ITEM_KIND", "Por enquanto só temas estão à venda.");
+		}
+		ThemePackage theme = gallery.get(request.itemId());
+		if (!user.id().value().equals(theme.authorId())) {
+			throw new ApiException(403, "NOT_THE_AUTHOR", "Só quem publicou o tema pode listá-lo.");
+		}
+		MarketplaceListing listing = marketplace.publish(user.id().value(), request.itemKind(), request.itemId(),
+			request.title() == null ? theme.name() : request.title(), request.description(), request.price());
+		return Map.of("id", listing.id(), "status", listing.status().name());
+	}
+
+	@PostMapping("/marketplace/{listingId}/buy")
+	Map<String, Object> buy(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken, @PathVariable String listingId) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		MarketplacePurchase purchase = marketplace.buy(listingId, user.id().value());
+		return Map.of("purchaseId", purchase.id(), "state", purchase.state().name(), "price", purchase.price());
+	}
+
+	@PostMapping("/marketplace/purchases/{purchaseId}/confirm")
+	Map<String, Object> confirm(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken, @PathVariable String purchaseId) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		MarketplacePurchase purchase = marketplace.confirm(purchaseId, user.id().value());
+		return Map.of("purchaseId", purchase.id(), "state", purchase.state().name());
+	}
+
+	@PostMapping("/marketplace/purchases/{purchaseId}/refund")
+	Map<String, Object> refund(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken, @PathVariable String purchaseId) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		MarketplacePurchase purchase = marketplace.refund(purchaseId, user.id().value());
+		return Map.of("purchaseId", purchase.id(), "state", purchase.state().name());
+	}
+
+	private MarketplaceListing.ItemKind parseKind(String raw) {
+		if (raw == null) {
+			return MarketplaceListing.ItemKind.THEME;
+		}
+		return MarketplaceListing.ItemKind.valueOf(raw.trim().toUpperCase(java.util.Locale.ROOT));
+	}
+
+	record PublishRequest(String itemKind, String itemId, String title, String description, long price) {
+	}
+
+	record ListingView(String id, String sellerId, String itemKind, String itemId, String title, String description,
+			long price, String status, String createdAt) {
+		static ListingView from(MarketplaceListing l) {
+			return new ListingView(l.id(), l.sellerId(), l.itemKind().name(), l.itemId(), l.title(), l.description(),
+				l.price(), l.status().name(), l.createdAt().toString());
+		}
+	}
+}

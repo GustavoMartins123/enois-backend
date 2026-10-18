@@ -7,7 +7,7 @@ public record CoinEntry(String id, String accountId, long amount, Kind kind, Str
 		String idempotencyKey, String prevHash, String hash, Instant createdAt) {
 
 	public enum Kind {
-		AIRDROP, GENESIS_TREASURY, TRANSFER_OUT, TRANSFER_IN, REWARD, PURCHASE, SALE, REFUND, ADJUSTMENT
+		AIRDROP, GENESIS_TREASURY, TRANSFER_OUT, TRANSFER_IN, REWARD, PURCHASE, SALE, REFUND, ADJUSTMENT, ESCROW_OUT, ESCROW_HOLD, ESCROW_RELEASE, ESCROW_IN, REFUND_IN, FEE_IN
 	}
 
 	public static CoinEntry create(String id, String accountId, long amount, Kind kind, String refId, String message,
