@@ -36,7 +36,9 @@ import com.socialcoisa.rede.identity.domain.OAuthProvider;
 @Component
 class LinkedInTokenValidator implements TokenValidator {
 
-	private static final String LINKEDIN_JWKS_URL = "https://api.linkedin.com/v2/openid/jwks";
+	// O endpoint antigo (api.linkedin.com/v2/openid/jwks) passou a exigir access token
+	// (401 EMPTY_ACCESS_TOKEN); o JWKS publico e o do discovery document.
+	private static final String LINKEDIN_JWKS_URL = "https://www.linkedin.com/oauth/openid/jwks";
 	private static final String LINKEDIN_TOKEN_URL = "https://www.linkedin.com/oauth/v2/accessToken";
 	private static final String LINKEDIN_ISSUER = "https://www.linkedin.com/oauth";
 
