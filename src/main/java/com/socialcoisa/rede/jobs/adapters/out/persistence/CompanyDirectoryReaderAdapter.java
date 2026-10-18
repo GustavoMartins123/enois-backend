@@ -29,24 +29,42 @@ class CompanyDirectoryReaderAdapter implements CompanyDirectoryReader {
 
 	@Override
 	public List<CompanySummary> directory(String query, int limit) {
-		Map<String, long[]> totals = new HashMap<>();
-		Map<String, String> display = new LinkedHashMap<>();
-		Map<String, String> logos = new HashMap<>();
+		Map<String, long[]> totalsEnois = new HashMap<>();
+		Map<String, String> displayEnois = new LinkedHashMap<>();
+		Map<String, String> logosEnois = new HashMap<>();
+		merge(jobs.countOpenJobsByCompany(), totalsEnois, displayEnois, logosEnois);
 
-		merge(jobs.countOpenJobsByCompany(), totals, display, logos);
-		merge(externalJobs.countJobsByCompany(), totals, display, logos);
+		Map<String, long[]> totalsExternas = new HashMap<>();
+		Map<String, String> displayExternas = new LinkedHashMap<>();
+		Map<String, String> logosExternas = new HashMap<>();
+		merge(externalJobs.countJobsByCompany(), totalsExternas, displayExternas, logosExternas);
 
 		String needle = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
 		List<CompanySummary> all = new ArrayList<>();
-		for (var key : display.keySet()) {
-			if (!needle.isEmpty() && !key.contains(needle) && !display.get(key).toLowerCase(Locale.ROOT).contains(needle)) {
+		for (var key : displayEnois.keySet()) {
+			if (!aceita(needle, key, displayEnois.get(key))) {
 				continue;
 			}
-			long[] agg = totals.get(key);
-			all.add(new CompanySummary(display.get(key), logos.get(key), agg[0]));
+			all.add(new CompanySummary(displayEnois.get(key), logosEnois.get(key), totalsEnois.get(key)[0], "enois"));
+		}
+		for (var key : displayExternas.keySet()) {
+			if (!aceita(needle, key, displayExternas.get(key))) {
+				continue;
+			}
+			long[] agg = totalsExternas.get(key);
+			// nome repetido entre as origens: as vagas somam, a origem fica como externa
+			if (totalsEnois.containsKey(key)) {
+				totalsEnois.get(key)[0] += agg[0];
+			}
+			all.add(new CompanySummary(displayExternas.get(key), logosExternas.getOrDefault(key, ""), agg[0],
+				"externa"));
 		}
 		all.sort((a, b) -> Long.compare(b.openJobs(), a.openJobs()));
 		return all.subList(0, Math.min(limit, all.size()));
+	}
+
+	private boolean aceita(String needle, String key, String display) {
+		return needle.isEmpty() || key.contains(needle) || display.toLowerCase(Locale.ROOT).contains(needle);
 	}
 
 	private void merge(List<Object[]> rows, Map<String, long[]> totals, Map<String, String> display,
