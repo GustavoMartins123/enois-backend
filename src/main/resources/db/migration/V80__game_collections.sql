@@ -12,4 +12,4 @@ create table if not exists game_collections (
   primary key (id)
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_uca1400_ai_ci;
 
-create index idx_game_collections_status on game_collections (status, created_at);
+create index if not exists idx_game_collections_status on game_collections (status, created_at);

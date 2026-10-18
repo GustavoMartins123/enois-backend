@@ -15,5 +15,5 @@ create table if not exists theme_gallery (
   primary key (id)
 );
 
-create index idx_theme_gallery_status on theme_gallery (status, created_at);
-create index idx_theme_gallery_author on theme_gallery (author_id);
+create index if not exists idx_theme_gallery_status on theme_gallery (status, created_at);
+create index if not exists idx_theme_gallery_author on theme_gallery (author_id);

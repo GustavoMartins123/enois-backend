@@ -65,6 +65,7 @@ class AuthController {
 	private final ChangePasswordUseCase changePasswordUseCase;
 	private final DeleteAccountUseCase deleteAccountUseCase;
 	private final IdempotencyApplicationService idempotency;
+	private final com.socialcoisa.rede.identity.application.AuthThrottle throttle;
 	private final OAuthProperties oAuthProperties;
 
 	AuthController(SignupUseCase signupUseCase, VerifyEmailUseCase verifyEmailUseCase,
@@ -79,7 +80,8 @@ class AuthController {
 			ChangePasswordUseCase changePasswordUseCase,
 			DeleteAccountUseCase deleteAccountUseCase,
 			IdempotencyApplicationService idempotency,
-			OAuthProperties oAuthProperties) {
+			OAuthProperties oAuthProperties,
+			com.socialcoisa.rede.identity.application.AuthThrottle throttle) {
 		this.signupUseCase = signupUseCase;
 		this.verifyEmailUseCase = verifyEmailUseCase;
 		this.twoFactorLoginUseCase = twoFactorLoginUseCase;
@@ -95,13 +97,18 @@ class AuthController {
 		this.changePasswordUseCase = changePasswordUseCase;
 		this.deleteAccountUseCase = deleteAccountUseCase;
 		this.idempotency = idempotency;
+		this.throttle = throttle;
 		this.oAuthProperties = oAuthProperties;
 	}
 
 	@PostMapping("/signup")
 	@RateLimiter(name = "auth")
 	ResponseEntity<String> signup(@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@RequestHeader(value = "X-Forwarded-For", required = false) String forwardedFor,
 			@RequestBody SignupRequest request) {
+		String ip = forwardedFor == null || forwardedFor.isBlank() ? "desconhecido"
+			: forwardedFor.split(",")[0].trim();
+		throttle.exigeSignupPermitido(ip);
 		String scope = authScope(request.email());
 		String hash = idempotency.hash(request);
 		return idempotency.execute(scope, "POST", "/api/auth/signup", idempotencyKey, hash, () -> new CommandResponse(201,
@@ -141,14 +148,23 @@ class AuthController {
 			@RequestBody LoginRequest request) {
 		String scope = authScope(request.email());
 		String hash = idempotency.hash(request);
+		throttle.exigeLoginPermitido(request.email());
 		return idempotency.execute(scope, "POST", "/api/auth/login", idempotencyKey, hash, () -> {
-			LoginResult result = loginUseCase.login(new LoginCommand(request.email(), request.password()));
-			return result.requiresTwoFactor()
-				? new CommandResponse(202, Map.of("twoFactorRequired", true,
-					"challengeId", result.challenge().challengeId(),
-					"method", result.challenge().method(),
-					"expiresAt", result.challenge().expiresAt().toString()))
-				: new CommandResponse(200, result.session());
+			try {
+				LoginResult result = loginUseCase.login(new LoginCommand(request.email(), request.password()));
+				throttle.limpaLogin(request.email());
+				return result.requiresTwoFactor()
+					? new CommandResponse(202, Map.of("twoFactorRequired", true,
+						"challengeId", result.challenge().challengeId(),
+						"method", result.challenge().method(),
+						"expiresAt", result.challenge().expiresAt().toString()))
+					: new CommandResponse(200, result.session());
+			} catch (ApiException falha) {
+				if (falha.status() == 401) {
+					throttle.registraFalhaLogin(request.email());
+				}
+				throw falha;
+			}
 		});
 	}
 

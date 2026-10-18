@@ -4,7 +4,7 @@
 -- coin_accounts como SNAPSHOT — a verdade é o ledger, reconstruído pelo job de conciliação.
 -- Sem FK em users (armadilha de collation); integridade na aplicação.
 
-create table coin_accounts (
+create table if not exists coin_accounts (
   account_id varchar(255) not null,
   balance bigint not null,
   version bigint not null default 0,
@@ -12,7 +12,7 @@ create table coin_accounts (
   primary key (account_id)
 );
 
-create table coin_entries (
+create table if not exists coin_entries (
   id varchar(255) not null,
   account_id varchar(255) not null,
   amount bigint not null,
@@ -27,4 +27,4 @@ create table coin_entries (
   constraint uk_coin_entry_idem unique (account_id, idempotency_key)
 );
 
-create index idx_coin_entries_account on coin_entries (account_id, created_at);
+create index if not exists idx_coin_entries_account on coin_entries (account_id, created_at);
