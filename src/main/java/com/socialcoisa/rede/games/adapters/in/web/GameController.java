@@ -27,28 +27,42 @@ class GameController {
 	private final GameService games;
 	private final CurrentUserResolver currentUserResolver;
 	private final AdminGuard adminGuard;
+	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles;
 
-	GameController(GameService games, CurrentUserResolver currentUserResolver, AdminGuard adminGuard) {
+	GameController(GameService games, CurrentUserResolver currentUserResolver, AdminGuard adminGuard,
+			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles) {
 		this.games = games;
 		this.currentUserResolver = currentUserResolver;
 		this.adminGuard = adminGuard;
+		this.profiles = profiles;
 	}
 
 	// --- leitura pública ---
 
 	@GetMapping("/games")
 	List<GameView> catalog(@RequestParam(defaultValue = "60") int limit) {
-		return games.catalog(limit).stream().map(GameView::from).toList();
+		return withUsernames(games.catalog(limit));
 	}
 
 	@GetMapping("/games/{username}")
 	List<GameView> byUser(@PathVariable String username) {
-		return games.publishedByUser(username).stream().map(GameView::from).toList();
+		return withUsernames(games.publishedByUser(username));
 	}
 
 	@GetMapping("/games/{username}/{gameSlug}")
 	GameView bySlug(@PathVariable String username, @PathVariable String gameSlug) {
-		return GameView.from(games.byUserAndSlug(username, gameSlug));
+		return withUsernames(List.of(games.byUserAndSlug(username, gameSlug))).get(0);
+	}
+
+	/** O endereço público do jogo é /games/{username}/{slug} — o username sai do perfil. */
+	private List<GameView> withUsernames(List<Game> list) {
+		Map<String, String> names = new java.util.HashMap<>();
+		profiles.findAllByIds(list.stream().map(Game::userId).distinct().toList())
+			.forEach(p -> names.put(p.id(), p.username()));
+		return list.stream()
+			.map(g -> new GameView(g.id(), g.userId(), names.get(g.userId()), g.slug(), g.title(), g.description(),
+				g.cover(), g.url(), g.tags(), g.status().name(), g.reviewNote(), g.submittedAt().toString()))
+			.toList();
 	}
 
 	// --- criador ---
@@ -57,7 +71,7 @@ class GameController {
 	List<GameView> myGames(@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		return games.ownedBy(user.id().value()).stream().map(GameView::from).toList();
+		return withUsernames(games.ownedBy(user.id().value()));
 	}
 
 	@PostMapping("/games")
@@ -87,7 +101,7 @@ class GameController {
 			@RequestParam(defaultValue = "30") int limit) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		adminGuard.requireAdmin(user);
-		return games.pending(limit).stream().map(GameView::from).toList();
+		return withUsernames(games.pending(limit));
 	}
 
 	@PostMapping("/admin/games/{gameId}/approve")
@@ -116,11 +130,7 @@ class GameController {
 	record ReviewRequest(String note) {
 	}
 
-	record GameView(String id, String userId, String slug, String title, String description, String cover, String url,
-			String tags, String status, String reviewNote, String submittedAt) {
-		static GameView from(Game g) {
-			return new GameView(g.id(), g.userId(), g.slug(), g.title(), g.description(), g.cover(), g.url(),
-				g.tags(), g.status().name(), g.reviewNote(), g.submittedAt().toString());
-		}
+	record GameView(String id, String userId, String username, String slug, String title, String description,
+			String cover, String url, String tags, String status, String reviewNote, String submittedAt) {
 	}
 }
