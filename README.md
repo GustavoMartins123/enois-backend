@@ -232,47 +232,32 @@ kubectl -n <namespace> create secret generic enois-gifs \
   --from-literal=giphy-key='<chave nova do GIPHY>'
 ```
 
-### 0. URGENTE — o CI parou de deployar (desde ~16:55 de 17/10)
+### 0. O front ainda nao deploya: falta o repositorio dele na trust policy do papel
 
-**São dois bloqueios independentes, e o primeiro explica o sintoma mais estranho.**
+**Estado em 18/10:** o GitHub Actions foi religado nos dois repositorios e o **backend deploya
+normalmente** (o manifesto esta em `enois/backend:dc44362`). O **front** falha em todos os runs no
+passo `⚙️ Configurar Credenciais AWS via OIDC` com
+`Not authorized to perform sts:AssumeRoleWithWebIdentity` (12 retries, sempre igual).
 
-**a) O GitHub Actions está DESABILITADO nos dois repositórios.** É o estado que o GitHub deixa
-depois de um repositório ser transferido de dono, e explica os três sintomas de uma vez: push novo
-**não cria run nenhum**, os runs antigos ficam `queued` para sempre e a esteira parece "travada".
-Uma chamada confirma:
+**Nao e build e nao e o workflow:** os dois arquivos de workflow ficaram identicos — mesmo papel
+(`arn:aws:iam::818928662779:role/forest-dev-enois-ecr`), mesmas permissoes (`id-token: write`),
+mesma versao da action. O backend assume o papel; o front nao. A diferenca esta na **trust policy
+do papel**, que aceita o repositorio do backend e nao o do front.
 
-```
-gh api repos/Rede-ENois/enois-frontend/actions/permissions   → {"enabled":false,...}
-gh api repos/Rede-ENois/enois-backend/actions/permissions    → {"enabled":false,...}
-```
-
-Para religar (ou Settings → Actions → General → permitir as ações):
+**O que fazer (quem tem acesso a AWS):** incluir na trust policy do `forest-dev-enois-ecr`
 
 ```
-gh api -X PUT repos/Rede-ENois/enois-frontend/actions/permissions -F enabled=true
-gh api -X PUT repos/Rede-ENois/enois-backend/actions/permissions -F enabled=true
+repo:Rede-ENois/enois-frontend:*
 ```
 
-**b) A role OIDC ainda espera o nome ANTIGO do repositório.** Com o Actions religado, o primeiro run
-morre no passo `⚙️ Configurar Credenciais AWS via OIDC` com
-`Not authorized to perform sts:AssumeRoleWithWebIdentity` (12 retries, sempre igual): a claim `sub`
-do OIDC passou a ser `repo:Rede-ENois/enois-frontend:...` e a trust policy de
-`arn:aws:iam::818928662779:role/forest-dev-github` não bate mais. É a mesma role nos dois workflows.
+ao lado do que ja existe (`repo:Rede-ENois/enois-backend:*`). Se preferirem um papel por
+repositorio, criar o equivalente para o front e trocar a linha `role-to-assume` no workflow do
+repositorio do front (o nome `forest-dev-github`, usado antes da transferencia, nao vale mais).
 
-**O que conferir no IAM, nesta ordem:**
-1. A role `forest-dev-github` ainda existe e não foi renomeada;
-2. A trust policy confia em `token.actions.githubusercontent.com` com `sts:AssumeRoleWithWebIdentity`,
-   condition `aud = sts.amazonaws.com` **e um `sub` que aceite `repo:Rede-ENois/enois-frontend:*` e
-   `repo:Rede-ENois/enois-backend:*`** (hoje ela aponta para o nome antigo);
-3. O Identity provider OIDC `token.actions.githubusercontent.com` ainda existe na conta.
-
-**Depois de religar:** não precisa de commit novo — a `main` dos dois repos já tem tudo pronto.
-Dispare o workflow (`gh workflow run "Build, Push and GitOps Deploy" --ref main -R
-Rede-ENois/enois-backend`, idem front) ou espere o próximo push. **O primeiro deploy que passar leva
-junto, de uma vez:** a V57 (o 409 ao publicar página grande), V58 (blogs), V60 (selos), V61
-(projetos), V62 (capa de comunidade) e V63 (vulgo) — todas aplicam sozinhas no boot, pelo Flyway.
-
-Two items are also waiting on infrastructure (both are one-time, no code change needed afterwards):
+**Depois disso:** sem commit novo — dispare o workflow ou espere o proximo push. O primeiro deploy
+que passar leva junto tudo o que esta no `main` desde 17/10, incluindo as migracoes V57 (o 409 ao
+publicar pagina grande), V58 (blogs), V60 (selos), V61 (projetos), V62 (capa de comunidade), V63
+(vulgo), V64 (curriculo) e V65 (e-mail de candidatura) — o Flyway aplica sozinho no boot.
 
 ### 1. Content origin for post pages — `paginas.enois.ia.br`
 
