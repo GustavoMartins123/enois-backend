@@ -41,9 +41,14 @@ class ExternalJobPersistenceAdapter implements ExternalJobRepository {
 	@Override
 	@org.springframework.cache.annotation.Cacheable("externalJobs")
 	public List<ExternalJob> search(String query, int limit) {
-		return repository
-			.findByTitleContainingIgnoreCaseOrderByLastCheckedAtDesc(query, PageRequest.of(0, Math.max(1, limit)))
-			.stream().map(ExternalJobJpaEntity::toDomain).toList();
+		// `%` e `_` do texto viram literais: sem isso, buscar "_" casaria com tudo.
+		String escaped = query.toLowerCase(java.util.Locale.ROOT)
+			.replace("\\", "\\\\")
+			.replace("%", "\\%")
+			.replace("_", "\\_");
+		return repository.search("%" + escaped + "%", PageRequest.of(0, Math.max(1, limit))).stream()
+			.map(ExternalJobJpaEntity::toDomain)
+			.toList();
 	}
 
 	@Override

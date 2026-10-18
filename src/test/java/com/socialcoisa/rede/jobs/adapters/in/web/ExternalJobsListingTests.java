@@ -61,6 +61,33 @@ class ExternalJobsListingTests {
 	}
 
 	@Test
+	void searchFindsExternalJobsByCompany() throws Exception {
+		// O diretorio de empresas e feito das empresas das vagas EXTERNAS: clicar num card leva a
+		// busca pelo NOME DA EMPRESA. Enquanto a busca externa so olhava o titulo, esse caminho
+		// devolvia lista vazia ("Monzo - 8 vagas" -> nenhuma vaga).
+		externalJobs.save(new ExternalJob("ext_company_monzo", "BuscaEmpresa", "monzo-1",
+			"Backend Engineer", "Monzo", "Remoto", null, null, "https://exemplo.test/vaga/monzo", Instant.now(),
+			Instant.now(), ExternalJob.FOUND, null, null));
+		externalJobs.save(new ExternalJob("ext_company_outra", "BuscaEmpresa", "outra-1",
+			"Designer", "Outra Empresa", "Remoto", null, null, "https://exemplo.test/vaga/outra", Instant.now(),
+			Instant.now(), ExternalJob.FOUND, null, null));
+
+		MvcResult result = mockMvc.perform(get("/jobs").param("query", "Monzo").param("limit", "50"))
+			.andExpect(status().isOk()).andReturn();
+		JsonNode items = objectMapper.readTree(result.getResponse().getContentAsString()).get("items");
+
+		boolean found = false;
+		for (int i = 0; i < items.size(); i++) {
+			JsonNode item = items.get(i);
+			if ("EXTERNAL".equals(item.path("sourceType").asString())) {
+				assertThat(item.path("company").asString()).containsIgnoringCase("monzo");
+				found = true;
+			}
+		}
+		assertThat(found).as("a busca pelo nome da empresa encontra a vaga externa dela").isTrue();
+	}
+
+	@Test
 	void unknownExternalJobStillReturnsNotFound() throws Exception {
 		mockMvc.perform(get("/jobs/ext_missing_" + System.nanoTime()))
 			.andExpect(status().isNotFound());

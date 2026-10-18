@@ -21,5 +21,20 @@ interface SpringDataExternalJobJpaRepository extends JpaRepository<ExternalJobJp
 		"WHERE e.company IS NOT NULL GROUP BY e.company ORDER BY COUNT(e) DESC")
 	List<Object[]> countJobsByCompany();
 
-	List<ExternalJobJpaEntity> findByTitleContainingIgnoreCaseOrderByLastCheckedAtDesc(String query, Pageable pageable);
+	/**
+	 * Busca das externas: titulo, EMPRESA ou local — a mesma regua da vaga interna.
+	 *
+	 * Antes so o titulo casava, e o diretorio de empresas (que e feito de empresas das vagas
+	 * externas) levava a uma lista vazia: clicar em "Monzo — 8 vagas" buscava "Monzo", que e a
+	 * empresa, e nao achava nada. `escape` e `lower` para o curinga do usuario nao virar busca
+	 * ampla e a comparacao nao depender do collation.
+	 */
+	@Query("""
+			SELECT e FROM ExternalJobJpaEntity e
+			WHERE LOWER(e.title) LIKE :pattern ESCAPE '\\'
+			   OR LOWER(e.company) LIKE :pattern ESCAPE '\\'
+			   OR LOWER(e.location) LIKE :pattern ESCAPE '\\'
+			ORDER BY e.lastCheckedAt DESC""")
+	List<ExternalJobJpaEntity> search(@org.springframework.data.repository.query.Param("pattern") String pattern,
+			Pageable pageable);
 }
