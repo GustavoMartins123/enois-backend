@@ -121,9 +121,18 @@ Enquanto houver pendência real, a automação fica viva.
       (2026-10-18).
 
 ### Etapa 5 — Descoberta e interface
-- [ ] Descoberta e pesquisa públicas (só metadados públicos).
-- [ ] Apresentação pública, criação/edição, página interna, tópicos, feed, publicação.
-- [ ] Administração: membros, solicitações, moderação; estados de carregamento/vazio/sem acesso.
+- [x] Descoberta e pesquisa públicas — `/grupos` (pública, sem sessão): busca por nome/descrição,
+      cards com os metadados públicos e link para a página. O conteúdo interno não aparece
+      (2026-10-18).
+- [x] Apresentação pública, criação/edição, página interna, tópicos, feed, publicação — página
+      `/grupos/$slug` com banner (foto ou HTML sanitizado), descrição, modo de ingresso, contagem
+      de membros e ingresso (entrar/pedido pendente/sair); criação em diálogo; dentro do grupo,
+      tópicos com filtro, criação de tópico para quem administra, compositor e lista de
+      publicações com os emblemas do autor. **Falta nesta etapa:** a tela de edição do grupo e os
+      controles de comentário/reação na publicação (a API já existe) (2026-10-18).
+- [ ] Administração: membros, solicitações, moderação; estados de carregamento/vazio/sem acesso —
+      carregamento, vazio e sem-acesso já tratados na descoberta e na página; faltam as telas de
+      membros, solicitações de ingresso e moderação local.
 
 ### Etapa 6 — Segurança e moderação
 - [ ] AutoMod integrado ao contexto do grupo; denúncias; auditoria.
