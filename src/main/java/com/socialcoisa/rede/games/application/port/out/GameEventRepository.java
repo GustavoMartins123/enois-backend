@@ -14,4 +14,7 @@ public interface GameEventRepository {
 
 	/** Jogadores distintos estimados: ids diferentes que deram PLAY_START. */
 	long distinctPlayers(String gameId);
+
+	/** Compartilhamentos do usuário no jogo desde um instante (o teto diário do G-share). */
+	long countByGameAndUserAndKindSince(String gameId, GameEventKind kind, String userId, java.time.Instant since);
 }

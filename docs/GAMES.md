@@ -196,3 +196,29 @@ Estas **não** são tarefas de código — são decisões que o pedido manda nã
 - Controles: teclado, mouse, gamepad e toque — o quadro repassa `gamepad` e a tela cheia.
 - O Énóis não contorna bloqueio de incorporação: se o site recusar, o player mostra o motivo e
   oferece "abrir na origem".
+
+
+## Compartilhar progresso no feed (G-share)
+
+O jogo roda num iframe de OUTRA origem, sem sessão nenhuma da plataforma. Para o jogo
+oferecer "compartilhar conquista", ele fala com a página pai por `postMessage`:
+
+```js
+// dentro do jogo (iframe)
+window.parent.postMessage({
+  type: "enois:share",
+  texto: "Peguei nível 10 na fazendinha!",
+  imagem: "data:image/png;base64,…"   // opcional (screenshot da conquista), ≤ ~2 MB
+}, "*");
+```
+
+O que a página do Énóis faz:
+1. valida a `origin` da mensagem contra o endereço registrado do jogo (outra janela não
+   consegue forjar);
+2. mostra a PRÉVIA ao jogador (texto + imagem) — o clique de publicar é sempre humano;
+3. sobe a imagem pela mídia normal e publica o post na sessão DO JOGADOR, com as tags
+   `game` e o slug do jogo.
+
+Limites: texto até 600 caracteres; 12 compartilhamentos por dia por pessoa em cada jogo
+(`429 SHARE_LIMIT`). A sessão do jogador nunca atravessa a borda do iframe e o jogo não
+consegue publicar sem o clique humano na prévia.

@@ -10,6 +10,9 @@ interface SpringDataGameEventJpaRepository extends JpaRepository<GameEventJpaEnt
 
 	long countByGameIdAndKind(String gameId, GameEventKind kind);
 
+	long countByGameIdAndKindAndUserIdAndCreatedAtAfter(String gameId, GameEventKind kind, String userId,
+			java.time.Instant after);
+
 	/** Jogadores distintos estimados: quem tem sessão conta uma vez, anônimo conta por evento. */
 	@Query("SELECT COUNT(DISTINCT COALESCE(e.userId, e.id)) FROM GameEventJpaEntity e "
 		+ "WHERE e.gameId = :gameId AND e.kind = :kind")

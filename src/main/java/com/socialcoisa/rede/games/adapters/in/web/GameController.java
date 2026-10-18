@@ -150,6 +150,23 @@ class GameController {
 	record CreateCollectionRequest(String title, String description, List<String> gameIds) {
 	}
 
+	/**
+	 * G-share: publica a conquista no feed com a tag do jogo. O texto/mídia vem do JOGO
+	 * (postMessage) e o APP confirma com o jogador antes de chamar — sessão nunca vaza
+	 * para o iframe. Teto de 12/dia por pessoa em cada jogo.
+	 */
+	@PostMapping("/games/{gameId}/compartilhar")
+	Map<String, Object> compartilhar(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@PathVariable String gameId, @RequestBody ShareRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		var post = games.compartilhar(user.id().value(), gameId, request.texto(), request.mediaIds());
+		return Map.of("postId", post.id(), "status", "SHARED");
+	}
+
+	record ShareRequest(String texto, List<String> mediaIds) {
+	}
+
 	/** Destaque pago (G2): o criador impulsiona o próprio jogo por 7 dias (5 faíscas). */
 	@PostMapping("/games/{gameId}/boost")
 	Map<String, Object> boost(@RequestHeader(value = "X-User-Id", required = false) String userId,

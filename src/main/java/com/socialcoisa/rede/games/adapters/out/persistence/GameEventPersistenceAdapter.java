@@ -27,6 +27,11 @@ class GameEventPersistenceAdapter implements GameEventRepository {
 	}
 
 	@Override
+	public long countByGameAndUserAndKindSince(String gameId, GameEventKind kind, String userId, java.time.Instant since) {
+		return events.countByGameIdAndKindAndUserIdAndCreatedAtAfter(gameId, kind, userId, since);
+	}
+
+	@Override
 	public long distinctPlayers(String gameId) {
 		return events.distinctPlayers(gameId, GameEventKind.PLAY_START);
 	}

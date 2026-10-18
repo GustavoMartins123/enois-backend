@@ -9,5 +9,7 @@ package com.socialcoisa.rede.games.domain;
  */
 public enum GameEventKind {
 	PAGE_VIEW,
-	PLAY_START
+	PLAY_START,
+	/** A conquista compartilhada no feed (o postMessage do jogo, com o clique humano). */
+	SHARE
 }

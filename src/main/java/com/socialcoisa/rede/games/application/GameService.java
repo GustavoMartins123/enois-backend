@@ -12,6 +12,7 @@ import org.springframework.util.StringUtils;
 
 import com.socialcoisa.rede.games.application.port.out.GameRepository;
 import com.socialcoisa.rede.games.domain.Game;
+import com.socialcoisa.rede.games.domain.GameEventKind;
 import com.socialcoisa.rede.games.domain.GameStatus;
 import com.socialcoisa.rede.shared.web.ApiException;
 
@@ -33,6 +34,8 @@ public class GameService {
 	private final com.socialcoisa.rede.coin.application.CoinService coins;
 	private final com.socialcoisa.rede.coin.application.port.out.CoinLedgerRepository ledger;
 	private final com.socialcoisa.rede.games.application.port.out.GameCollectionRepository colecoes;
+	private final com.socialcoisa.rede.games.application.port.out.GameEventRepository events;
+	private final com.socialcoisa.rede.feed.application.PublishPostService feed;
 
 	public GameService(GameRepository games,
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles, GameUrlGuard urlGuard,
@@ -41,7 +44,9 @@ public class GameService {
 			com.socialcoisa.rede.notifications.application.NotificationService notifications, Clock clock,
 			com.socialcoisa.rede.coin.application.CoinService coins,
 			com.socialcoisa.rede.coin.application.port.out.CoinLedgerRepository ledger,
-			com.socialcoisa.rede.games.application.port.out.GameCollectionRepository colecoes) {
+			com.socialcoisa.rede.games.application.port.out.GameCollectionRepository colecoes,
+			com.socialcoisa.rede.games.application.port.out.GameEventRepository events,
+			com.socialcoisa.rede.feed.application.PublishPostService feed) {
 		this.games = games;
 		this.profiles = profiles;
 		this.urlGuard = urlGuard;
@@ -52,6 +57,8 @@ public class GameService {
 		this.coins = coins;
 		this.ledger = ledger;
 		this.colecoes = colecoes;
+		this.events = events;
+		this.feed = feed;
 	}
 
 	@Transactional
@@ -326,5 +333,42 @@ public class GameService {
 	}
 
 	public record ColecaoView(String id, String title, String description, List<GameView> jogos, String createdAt) {
+	}
+
+
+	/**
+	 * G-share (compartilhar progresso): o jogo (iframe de outra origem, SEM sessão) manda o
+	 * texto/mídia por postMessage; o app confirma com o jogador e publica AQUI, com a sessão
+	 * dele — a sessão nunca vaza para o jogo e o clique humano é o que publica. Teto de 12
+	 * compartilhamentos por dia por pessoa em cada jogo.
+	 */
+	@Transactional
+	public com.socialcoisa.rede.feed.application.PostView compartilhar(String userId, String gameId, String texto,
+			List<String> mediaIds) {
+		com.socialcoisa.rede.games.domain.Game game = games.findById(gameId)
+			.orElseThrow(() -> new ApiException(404, "GAME_NOT_FOUND", "Jogo não encontrado."));
+		if (game.status() != GameStatus.PUBLISHED) {
+			throw new ApiException(409, "GAME_NOT_PUBLISHED", "Só jogo publicado compartilha progresso.");
+		}
+		if (!org.springframework.util.StringUtils.hasText(texto)) {
+			throw new ApiException(400, "TEXT_REQUIRED", "A conquista precisa de um texto.");
+		}
+		String textoLimpo = texto.trim();
+		if (textoLimpo.length() > 600) {
+			throw new ApiException(400, "TEXT_TOO_LONG", "A conquista aceita no máximo 600 caracteres.");
+		}
+		java.time.Instant now = java.time.Instant.now(clock);
+		java.time.Instant inicioDoDia = java.time.LocalDate.now(clock).atStartOfDay().toInstant(java.time.ZoneOffset.UTC);
+		if (events.countByGameAndUserAndKindSince(gameId, GameEventKind.SHARE, userId, inicioDoDia) >= 12) {
+			throw new ApiException(429, "SHARE_LIMIT",
+				"Você já compartilhou 12 conquistas deste jogo hoje — amanhã tem mais.");
+		}
+		var post = feed.publish(new com.socialcoisa.rede.feed.application.PublishPostCommand(
+			new com.socialcoisa.rede.feed.domain.UserId(userId), com.socialcoisa.rede.feed.domain.PostType.INSIGHT,
+			textoLimpo, null, null, java.util.List.of("game", game.slug()),
+			mediaIds == null ? List.of() : mediaIds, null, List.of()));
+		events.record("gev_" + java.util.UUID.randomUUID().toString().replace("-", ""), gameId,
+			GameEventKind.SHARE, userId, now);
+		return post;
 	}
 }
