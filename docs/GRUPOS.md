@@ -155,7 +155,15 @@ Enquanto houver pendência real, a automação fica viva.
       resolvem a publicação/comentário do feed privado. Com isso o painel de moderação vê texto e
       autor, e a **triagem por IA** passa a julgar o conteúdo de grupo em vez do id.
       `GroupReportsTests` prova o caminho: denúncia → painel com conteúdo e autor (2026-10-18).
-- [ ] Bateria de testes de segurança da seção 18 (pendente).
+- [x] Bateria de testes de segurança da seção 18 — coberta ao longo da suíte: papel por
+      capacidade (`GroupPermissionsTests`); isolamento entre grupos e interação cruzada com ids
+      alheios (`GroupSecurityTests`); visitante sem leitura (GroupFeedTests); removido perde o
+      acesso na hora (GroupFlow + GroupSecurity); aprovação concorrente sem duplicidade
+      (GroupFlow); suspenso/encerrado com efeito real (GroupPlatform + GroupModeration); HTML do
+      cabeçalho sanitizado — script não é guardado (GroupSecurity); denúncia de grupo chegando com
+      conteúdo e autor (GroupReports) (2026-10-18). **Risco residual:** a corrida "suspensão no
+      meio de uma publicação" não tem teste dedicado (as duas operações passam pela mesma
+      transação, mas o cenário concorrente não está exercitado).
 
 ### Etapa 7 — Comunidades
 - [x] Descrição opcional nas Comunidades (edição e apresentação), sem afetar registros antigos —
