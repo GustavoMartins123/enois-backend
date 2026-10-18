@@ -191,6 +191,11 @@ class GroupDiscussionTests {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.status").value("REACTED"));
 
+		// A listagem devolve a reação de QUEM ESTÁ LENDO (a tela precisa dela para não "perder" o estado).
+		mockMvc.perform(get("/groups/" + groupId + "/posts").header("X-Session-Token", membro.token()))
+			.andExpect(jsonPath("$.items[0].reactions").value(1))
+			.andExpect(jsonPath("$.items[0].myReaction").value("FIRE"));
+
 		mockMvc.perform(delete("/groups/" + groupId + "/posts/" + postId + "/reactions")
 				.header("X-Session-Token", membro.token())
 				.header("Idempotency-Key", "gdisc-unreact-1"))

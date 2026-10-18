@@ -2,8 +2,10 @@ package com.socialcoisa.rede.groups.application.port.out;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
+import com.socialcoisa.rede.feed.domain.ReactionType;
 import com.socialcoisa.rede.groups.domain.GroupComment;
 import com.socialcoisa.rede.groups.domain.GroupPost;
 import com.socialcoisa.rede.groups.domain.GroupReaction;
@@ -50,4 +52,7 @@ public interface GroupContentRepository {
 	void removeReaction(String postId, String userId);
 
 	long countReactions(String postId);
+
+	/** Reações do leitor, por publicação — uma consulta só para a lista inteira (sem N+1). */
+	Map<String, ReactionType> reactionsByUser(String userId, List<String> postIds);
 }

@@ -52,4 +52,12 @@ class GroupReactionJpaEntity {
 	void changeType(ReactionType newType) {
 		this.type = newType;
 	}
+
+	String postId() {
+		return postId;
+	}
+
+	ReactionType type() {
+		return type;
+	}
 }

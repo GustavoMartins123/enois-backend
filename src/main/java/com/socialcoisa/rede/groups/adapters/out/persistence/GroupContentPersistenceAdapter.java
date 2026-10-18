@@ -2,11 +2,14 @@ package com.socialcoisa.rede.groups.adapters.out.persistence;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
 
+import com.socialcoisa.rede.feed.domain.ReactionType;
 import com.socialcoisa.rede.groups.application.port.out.GroupContentRepository;
 import com.socialcoisa.rede.groups.domain.GroupComment;
 import com.socialcoisa.rede.groups.domain.GroupCommentStatus;
@@ -120,5 +123,15 @@ class GroupContentPersistenceAdapter implements GroupContentRepository {
 	@Override
 	public long countReactions(String postId) {
 		return reactions.countByPostId(postId);
+	}
+
+	@Override
+	public Map<String, ReactionType> reactionsByUser(String userId, List<String> postIds) {
+		if (postIds == null || postIds.isEmpty()) {
+			return Map.of();
+		}
+		return reactions.findByUserIdAndPostIdIn(userId, postIds)
+			.stream()
+			.collect(Collectors.toMap(GroupReactionJpaEntity::postId, GroupReactionJpaEntity::type));
 	}
 }

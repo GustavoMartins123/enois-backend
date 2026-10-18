@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -223,6 +224,13 @@ public class GroupFeedService {
 		}
 		refreshCounters(post);
 		return active;
+	}
+
+	/** Reações do leitor por publicação — uma consulta só, para a lista não virar N+1. */
+	@Transactional(readOnly = true)
+	public Map<String, ReactionType> myReactions(String groupId, String actorId, List<String> postIds) {
+		requireMember(groupId, actorId);
+		return content.reactionsByUser(actorId, postIds);
 	}
 
 	/** Remove a reação de vez (o POST alterna; este é o "não quero mais", explícito). */

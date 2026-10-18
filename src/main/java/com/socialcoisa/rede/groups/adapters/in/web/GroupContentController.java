@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.socialcoisa.rede.feed.domain.ReactionType;
 import com.socialcoisa.rede.groups.application.GroupFeedService;
 import com.socialcoisa.rede.groups.domain.GroupComment;
 import com.socialcoisa.rede.groups.domain.GroupPost;
@@ -125,7 +126,7 @@ class GroupContentController {
 		return idempotency.execute(user.id(), "POST", "/api/groups/{groupId}/posts", idempotencyKey, hash, () -> {
 			GroupPost post = feed.publish(groupId, request.topicId(), user.id().value(), request.content(),
 				request.mediaIds());
-			return new CommandResponse(201, postView(post));
+			return new CommandResponse(201, postView(post, null));
 		});
 	}
 
@@ -136,7 +137,10 @@ class GroupContentController {
 		CurrentUser user = currentUserResolver.resolve(null, token);
 		Instant before = cursorCodec.decode(cursor).orElse(null);
 		List<GroupPost> posts = feed.listPosts(groupId, topicId, user.id().value(), before, limit);
-		var items = posts.stream().map(this::postView).toList();
+		// A reação de quem está lendo vem numa consulta só (sem N+1), como no feed principal.
+		Map<String, ReactionType> mine = feed.myReactions(groupId, user.id().value(),
+			posts.stream().map(GroupPost::id).toList());
+		var items = posts.stream().map(post -> postView(post, mine.get(post.id()))).toList();
 		String nextCursor = posts.size() == limit
 			? cursorCodec.encode(posts.get(posts.size() - 1).createdAt()) : null;
 		return new PageResponse<>(items, nextCursor);
@@ -204,7 +208,7 @@ class GroupContentController {
 			comment.parentId(), comment.content(), comment.createdAt());
 	}
 
-	private GroupPostView postView(GroupPost post) {
+	private GroupPostView postView(GroupPost post, ReactionType myReaction) {
 		UserProfile author = profiles.findById(post.authorId()).orElse(null);
 		List<String> badges = author == null ? List.of() : author.allBadges();
 		return new GroupPostView(post.id(), post.groupId(), post.topicId(), post.authorId(),
@@ -212,7 +216,8 @@ class GroupContentController {
 			author == null ? null : author.username(),
 			author == null ? null : author.avatar(),
 			badges,
-			post.content(), post.mediaIds(), post.pinned(), post.reactions(), post.comments(), post.createdAt());
+			post.content(), post.mediaIds(), post.pinned(), post.reactions(), post.comments(),
+			myReaction == null ? null : myReaction.name(), post.createdAt());
 	}
 
 	private static TopicView topicView(GroupTopic topic) {
@@ -235,7 +240,8 @@ class GroupContentController {
 
 	record GroupPostView(String id, String groupId, String topicId, String authorId, String authorName,
 			String authorUsername, String authorAvatar, List<String> authorBadges, String content,
-			List<String> mediaIds, boolean pinned, int reactions, int comments, Instant createdAt) {
+			List<String> mediaIds, boolean pinned, int reactions, int comments, String myReaction,
+			Instant createdAt) {
 	}
 
 	record CommentRequest(String content, String parentCommentId) {

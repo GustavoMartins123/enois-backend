@@ -126,10 +126,11 @@ Enquanto houver pendência real, a automação fica viva.
       (2026-10-18).
 - [x] Apresentação pública, criação/edição, página interna, tópicos, feed, publicação — página
       `/grupos/$slug` com banner (foto ou HTML sanitizado), descrição, modo de ingresso, contagem
-      de membros e ingresso (entrar/pedido pendente/sair); criação em diálogo; dentro do grupo,
-      tópicos com filtro, criação de tópico para quem administra, compositor e lista de
-      publicações com os emblemas do autor. **Falta nesta etapa:** a tela de edição do grupo e os
-      controles de comentário/reação na publicação (a API já existe) (2026-10-18).
+      de membros e ingresso (entrar/pedido pendente/sair); criação em diálogo; **edição em diálogo**
+      para dono/admin (nome, descrição, modo); dentro do grupo, tópicos com filtro, criação de
+      tópico para quem administra, compositor e publicações com os emblemas do autor,
+      **comentários (lista + envio) e reações** (o `ReactionPicker` do feed é reutilizado, e o
+      backend devolve `myReaction` para o estado não se perder ao recarregar) (2026-10-18).
 - [ ] Administração: membros, solicitações, moderação; estados de carregamento/vazio/sem acesso —
       carregamento, vazio e sem-acesso já tratados na descoberta e na página; faltam as telas de
       membros, solicitações de ingresso e moderação local.
