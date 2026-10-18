@@ -18,6 +18,9 @@ public enum PostType {
 	NEWS,
 	TUTORIAL,
 	REVIEW,
+	/** Post divertido: piada, memória, coisa leve — texto curtinho. */
+	DIVERTIDO,
+	/** Momento: some sozinho em 24 horas (o texto fica em 500). */
 	MOMENT,
 	/**
 	 * Ponteiro de um post de blog: o conteudo mora no blog do autor, nao no feed. Entra so no "Para

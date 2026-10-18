@@ -13,7 +13,9 @@ public record PostView(String id, String authorId, String authorUsername, String
 		PostType type, String content, String pageHtml, String articleBody, List<String> tags, List<String> mediaIds,
 		Instant createdAt,
 		Counters counters, ReactionType currentUserReaction, String communityId, CommunityView community,
-		Instant editedAt) {
+		Instant editedAt,
+		/** Prazo do Momento (null = post normal). O front mostra "some em Xh". */
+		Instant expiresAt) {
 
 	/** Comunidade onde o post foi publicado (nome para o texto "publicou em ...") + se quem le participa. */
 	public record CommunityView(String id, String name, boolean joined) {
@@ -32,7 +34,7 @@ public record PostView(String id, String authorId, String authorUsername, String
 	public static PostView from(Post post) {
 		return new PostView(post.id().value(), post.authorId().value(), null, null, null, null, post.type(),
 			post.content(), null, null, post.tags(), post.mediaIds(), post.createdAt(), post.counters(), null,
-			post.communityId(), null, post.editedAt());
+			post.communityId(), null, post.editedAt(), post.expiresAt());
 	}
 
 	public static PostView from(Post post, String authorUsername, String authorName, String authorAvatar) {
@@ -44,31 +46,31 @@ public record PostView(String id, String authorId, String authorUsername, String
 			String authorBadge) {
 		return new PostView(post.id().value(), post.authorId().value(), authorUsername, authorName, authorAvatar,
 			authorBadge, post.type(), post.content(), null, null, post.tags(), post.mediaIds(), post.createdAt(),
-			post.counters(), null, post.communityId(), null, post.editedAt());
+			post.counters(), null, post.communityId(), null, post.editedAt(), post.expiresAt());
 	}
 
 	public PostView withCurrentUserReaction(ReactionType reaction) {
 		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, type, content, pageHtml,
-			articleBody, tags, mediaIds, createdAt, counters, reaction, communityId, community, editedAt);
+			articleBody, tags, mediaIds, createdAt, counters, reaction, communityId, community, editedAt, expiresAt);
 	}
 
 	/** Anexa o HTML da pagina; so o post unico faz isso (ver {@link #from(Post)}). */
 	public PostView withPageHtml(String pageHtml) {
 		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, type, content, pageHtml,
 			articleBody, tags, mediaIds, createdAt, counters, currentUserReaction, communityId, community,
-			editedAt);
+			editedAt, expiresAt);
 	}
 
 	/** Anexa a comunidade (nome + participacao do leitor) depois do enriquecimento. */
 	public PostView withCommunity(String communityId, CommunityView community) {
 		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, type, content, pageHtml,
 			articleBody, tags, mediaIds, createdAt, counters, currentUserReaction, communityId, community,
-			editedAt);
+			editedAt, expiresAt);
 	}
 
 	/** Anexa o corpo do artigo; so a leitura do post unico faz isso (mesma regra da pagina). */
 	public PostView withArticleBody(String body) {
 		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, type, content, pageHtml, body,
-			tags, mediaIds, createdAt, counters, currentUserReaction, communityId, community, editedAt);
+			tags, mediaIds, createdAt, counters, currentUserReaction, communityId, community, editedAt, expiresAt);
 	}
 }

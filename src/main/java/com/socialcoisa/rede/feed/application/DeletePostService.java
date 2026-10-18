@@ -99,6 +99,26 @@ public class DeletePostService implements DeletePostUseCase, BulkDeletePostsUseC
 		return new BulkDeleteResult("COMPLETED", results);
 	}
 
+	/**
+	 * Expiração do Momento (24h): o MESMO caminho da exclusão — some do feed, o cache é limpo e a
+	 * mídia entra na fila de remoção. Automático, então sem auditoria de moderação: o rastro é o
+	 * evento PostDeleted do outbox.
+	 */
+	@Transactional
+	public boolean expireMoment(PostId postId) {
+		Post post = postRepository.findById(postId).orElse(null);
+		if (post == null || !post.isActive()) {
+			return false;
+		}
+		post.delete(clock.instant());
+		postRepository.save(post);
+		feedCacheRepository.removeEverywhere(post.id());
+		outboxEventRepository.append("PostDeleted", post.id().value(), "{\"postId\":\"" + post.id().value()
+			+ "\",\"reason\":\"MOMENT_EXPIRED\"}");
+		requestMediaDeletion(post);
+		return true;
+	}
+
 	@Override
 	@Transactional
 	public void removeAsModerator(String moderatorId, String postId, String reason) {

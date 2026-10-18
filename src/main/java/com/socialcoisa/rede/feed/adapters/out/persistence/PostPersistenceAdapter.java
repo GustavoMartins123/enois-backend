@@ -31,6 +31,13 @@ class PostPersistenceAdapter implements PostRepository {
 	}
 
 	@Override
+	public List<Post> findExpiredMoments(Instant now, int limit) {
+		return repository.findByTypeAndStatusAndExpiresAtBefore(PostType.MOMENT, PostStatus.ACTIVE, now).stream()
+			.limit(Math.max(1, limit))
+			.map(PostJpaEntity::toDomain).toList();
+	}
+
+	@Override
 	public Optional<Post> findById(PostId id) {
 		return repository.findById(id.value()).map(PostJpaEntity::toDomain);
 	}

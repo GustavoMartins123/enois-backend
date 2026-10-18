@@ -28,4 +28,7 @@ interface SpringDataPostJpaRepository extends JpaRepository<PostJpaEntity, Strin
 
 	List<PostJpaEntity> findByTypeAndStatusAndCreatedAtBeforeOrderByCreatedAtDesc(PostType type, PostStatus status,
 			Instant before, Pageable pageable);
+
+	/** Momentos vencidos e ainda ativos — o worker aplica o soft-delete do fluxo normal. */
+	List<PostJpaEntity> findByTypeAndStatusAndExpiresAtBefore(PostType type, PostStatus status, Instant now);
 }

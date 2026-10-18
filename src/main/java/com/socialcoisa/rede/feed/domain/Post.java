@@ -1,5 +1,6 @@
 package com.socialcoisa.rede.feed.domain;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 
@@ -20,10 +21,12 @@ public class Post {
 	private PostStatus status;
 	private Instant deletedAt;
 	private Instant editedAt;
+	/** Quando o post se apaga sozinho (MOMENT: +24h); null = nunca. */
+	private Instant expiresAt;
 
 	private Post(PostId id, UserId authorId, PostType type, String content, String pageHtml, List<String> tags,
 			List<String> mediaIds, String communityId, Instant createdAt, Visibility visibility, Counters counters,
-			PostStatus status, Instant deletedAt, Instant editedAt) {
+			PostStatus status, Instant deletedAt, Instant editedAt, Instant expiresAt) {
 		this.id = id;
 		this.authorId = authorId;
 		this.type = type;
@@ -38,19 +41,22 @@ public class Post {
 		this.status = status;
 		this.deletedAt = deletedAt;
 		this.editedAt = editedAt;
+		this.expiresAt = expiresAt;
 	}
 
 	public static Post publish(PostId id, UserId authorId, PostType type, String content, String pageHtml,
 			List<String> tags, List<String> mediaIds, String communityId, Instant createdAt) {
+		// Momento é efêmero por definição: nasce com prazo de 24 horas e se apaga sozinho.
+		Instant expiresAt = type == PostType.MOMENT ? createdAt.plus(Duration.ofHours(24)) : null;
 		return new Post(id, authorId, type, content, pageHtml, tags, mediaIds, communityId, createdAt,
-			Visibility.PUBLIC, Counters.zero(), PostStatus.ACTIVE, null, null);
+			Visibility.PUBLIC, Counters.zero(), PostStatus.ACTIVE, null, null, expiresAt);
 	}
 
 	public static Post restore(PostId id, UserId authorId, PostType type, String content, String pageHtml,
 			List<String> tags, List<String> mediaIds, String communityId, Instant createdAt, Visibility visibility,
-			Counters counters, PostStatus status, Instant deletedAt, Instant editedAt) {
+			Counters counters, PostStatus status, Instant deletedAt, Instant editedAt, Instant expiresAt) {
 		return new Post(id, authorId, type, content, pageHtml, tags, mediaIds, communityId, createdAt, visibility,
-			counters, status, deletedAt, editedAt);
+			counters, status, deletedAt, editedAt, expiresAt);
 	}
 
 	/**
@@ -59,11 +65,20 @@ public class Post {
 	 */
 	public Post edited(String newContent, String newPageHtml, List<String> newTags, Instant editedAt) {
 		return new Post(id, authorId, type, newContent, newPageHtml, newTags, mediaIds, communityId, createdAt,
-			visibility, counters, status, deletedAt, editedAt);
+			visibility, counters, status, deletedAt, editedAt, expiresAt);
 	}
 
 	public boolean isActive() {
 		return status == PostStatus.ACTIVE;
+	}
+
+	public Instant expiresAt() {
+		return expiresAt;
+	}
+
+	/** O prazo já venceu? (o job apaga; a leitura também pode esconder antes dele rodar) */
+	public boolean expired(Instant now) {
+		return expiresAt != null && !expiresAt.isAfter(now);
 	}
 
 	public boolean belongsTo(UserId userId) {

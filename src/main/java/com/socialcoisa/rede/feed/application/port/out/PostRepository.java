@@ -17,6 +17,9 @@ public interface PostRepository {
 
 	Optional<Post> findById(PostId id);
 
+	/** Momentos ativos cujo prazo de 24h venceu (o worker de expiração). */
+	List<Post> findExpiredMoments(Instant now, int limit);
+
 	List<Post> findByIds(Collection<PostId> ids);
 
 	List<Post> findActiveByAuthors(Set<UserId> authorIds, Instant before, int limit);

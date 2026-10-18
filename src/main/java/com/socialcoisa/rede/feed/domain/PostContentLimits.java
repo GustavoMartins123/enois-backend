@@ -18,6 +18,8 @@ public final class PostContentLimits {
 
 	private static final Map<PostType, Integer> POR_TIPO = Map.of(
 		PostType.QUESTION, 400,
+		PostType.DIVERTIDO, 400,
+		PostType.MOMENT, 500,
 		PostType.REVIEW, 600,
 		PostType.PROJECT, 2_000,
 		PostType.NEWS, 2_000,
