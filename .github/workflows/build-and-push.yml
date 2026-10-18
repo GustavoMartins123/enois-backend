@@ -35,7 +35,7 @@ jobs:
 
     steps:
       - name: 📥 Checkout do código
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: 🏷️ Definir Tag (SHA Curto)
         id: vars
@@ -86,7 +86,7 @@ jobs:
 
     steps:
       - name: 📥 Checkout do Repositório GitOps (integration_onprem)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ${{ env.GITOPS_REPO }}
           ref: ${{ env.GITOPS_BRANCH }}
@@ -107,7 +107,7 @@ jobs:
           git diff "${{ env.MANIFEST_PATH }}"
 
       - name: 📥 Checkout do backend (scripts de deploy)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: backend
 
