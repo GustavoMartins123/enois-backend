@@ -94,9 +94,16 @@ Enquanto houver pendência real, a automação fica viva.
       `GroupDomainTests` (7) rodados: 14/14 verdes (2026-10-18).
 
 ### Etapa 3 — Ciclo de vida e ingresso
-- [ ] Criação e edição do grupo (identidade visual, descrição, modo de ingresso).
-- [ ] Modo aberto e modo por aprovação; solicitações; aprovar/rejeitar sem duplicidade.
-- [ ] Membros: entrada, saída, remoção; permissões revogadas de imediato.
+- [x] Criação e edição do grupo (identidade visual, descrição, modo de ingresso) — `GroupService`
+      + `GroupController` (`POST/PATCH /groups`), slug único com sufixo numérico, capa em HTML
+      sanitizada pela mesma régua do perfil (2026-10-18).
+- [x] Modo aberto e modo por aprovação; solicitações; aprovar/rejeitar sem duplicidade — entrada
+      aberta vira membro na hora; aprovação cria um pendente por pessoa (índice `pending_slot`);
+      a decisão é um UPDATE condicional (`status = PENDING`), então duas aprovações simultâneas
+      não viram duas associações (2026-10-18).
+- [x] Membros: entrada, saída, remoção; permissões revogadas de imediato — listar exige ser membro,
+      remover exige `MANAGE_MEMBERS`, o dono não sai sem transferir a propriedade (e a transferência
+      existe: `POST /groups/{id}/transfer`). `GroupFlowTests` cobre os 7 cenários e passa (2026-10-18).
 
 ### Etapa 4 — Tópicos e feed privado
 - [ ] Tópicos do grupo (criar, editar, reordenar, arquivar).
