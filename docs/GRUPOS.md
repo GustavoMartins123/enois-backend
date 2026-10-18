@@ -82,8 +82,16 @@ Enquanto houver pendência real, a automação fica viva.
       bancada (aplica, reaplica sem erro = idempotente) e com as garantias estruturais testadas
       por SQL: tópico de outro grupo, membro/slug/pendência/reação duplicados e comentário órfão
       são todos recusados pelo banco; apagar o grupo leva o conteúdo junto (2026-10-18).
-- [ ] Índices, unicidade e integridade referencial.
-- [ ] Regras de autorização centrais (proprietário / admin / moderador / membro / visitante).
+- [x] Índices, unicidade e integridade referencial — dentro da própria V81: índice para cada
+      consulta prevista (feed por grupo, tópicos, pendências, autor), unicidade em (grupo, pessoa),
+      slug e (publicação, pessoa) na reação, e chave estrangeira para grupo/autor/pessoa
+      (2026-10-18).
+- [x] Regras de autorização centrais — `groups/domain/{GroupRole,GroupCapability,GroupPermissions}`:
+      uma tabela papel → capacidade lida por todos os endpoints (dono / admin / moderador / membro /
+      visitante), as quatro proibições do plano negadas a todo mundo, e a trava de o grupo nunca
+      ficar sem autoridade (o último dono não sai). Mais o ciclo de vida em
+      `{Group,GroupStatus,GroupJoinMode,GroupMember,GroupSlug}`. `GroupPermissionsTests` (7) e
+      `GroupDomainTests` (7) rodados: 14/14 verdes (2026-10-18).
 
 ### Etapa 3 — Ciclo de vida e ingresso
 - [ ] Criação e edição do grupo (identidade visual, descrição, modo de ingresso).
