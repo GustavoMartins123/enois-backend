@@ -133,6 +133,8 @@ jobs:
     name: 🚧 Front Deploy (contorno)
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.vars.outputs.image_tag }}
     steps:
       - name: 📥 Checkout do FRONT
         uses: actions/checkout@v4
