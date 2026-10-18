@@ -70,12 +70,18 @@ Enquanto houver pendência real, a automação fica viva.
 > Atualize esta seção a cada execução: `- [x] feito — <o que> — <onde> (commit <hash>)`.
 
 ### Etapa 1 — Auditoria
-- [ ] Mapear a arquitetura real: feed, comunidades, autenticação, persistência, mídia,
-      notificações, AutoMod, denúncias (backend `rede` + front `connect-grow`).
-- [ ] Registrar riscos e dependências em "Pendências, riscos e decisões".
+- [x] Mapear a arquitetura real: feed, comunidades, autenticação, persistência, mídia,
+      notificações, AutoMod, denúncias (backend `rede` + front `connect-grow`) — escrito em
+      "Pendências, riscos e decisões".
+- [x] Registrar riscos e dependências em "Pendências, riscos e decisões" (2026-10-18).
 
 ### Etapa 2 — Fundação de dados
-- [ ] Migração V-next com as tabelas de Grupos (próprias, separadas das de Comunidades).
+- [x] Migração `V81__groups.sql` com as tabelas de Grupos (próprias, separadas das de
+      Comunidades): `groups`, `group_members`, `group_join_requests`, `group_topics`,
+      `group_posts`, `group_post_comments`, `group_post_reactions`. Validada em MariaDB 11.4 de
+      bancada (aplica, reaplica sem erro = idempotente) e com as garantias estruturais testadas
+      por SQL: tópico de outro grupo, membro/slug/pendência/reação duplicados e comentário órfão
+      são todos recusados pelo banco; apagar o grupo leva o conteúdo junto (2026-10-18).
 - [ ] Índices, unicidade e integridade referencial.
 - [ ] Regras de autorização centrais (proprietário / admin / moderador / membro / visitante).
 
@@ -106,7 +112,67 @@ Enquanto houver pendência real, a automação fica viva.
 - [ ] Suíte de testes executada; regressões corrigidas; migrations validadas; entrega documentada.
 
 ### Pendências, riscos e decisões
-- (vazio por enquanto)
+
+#### Arquitetura encontrada (auditoria de 2026-10-18)
+
+**Backend (`rede`)** — Spring Boot, um pacote por feature (`domain` / `application` / `adapters`).
+**Não existe Spring Security**: a autorização é por endpoint, via `shared/web/CurrentUserResolver`
+(`resolve` exige sessão E identidade verificada, senão `ApiException(401/403)`; há variante
+tolerante para leitura pública). Erro é sempre `ApiException(status, code, mensagem)`. Escrita
+idempotente passa por `IdempotencyApplicationService`. Migrações Flyway idempotentes.
+
+- **Comunidades** (o análogo mais próximo): `communities/domain/{Community,CommunityMember,MemberRole}`,
+  `application/CommunityService` (a autorização mora no serviço: `community.createdBy().equals(userId)`),
+  `adapters/in/web/CommunityContractController` (`/communities`, header `X-Session-Token`),
+  persistência JPA + `SpringData*Repository`. Papéis hoje: ADMIN | MEMBER (não há moderador).
+- **Feed**: a tabela `posts` é única e **já tem `community_id`** — o feed de comunidade é o feed
+  principal filtrado. É justamente o padrão que o plano proíbe para Grupos: isolamento por consulta
+  em vez de por estrutura (basta um `where` esquecido para vazar).
+- **Transversais reutilizáveis**: `shared/audit` (`record(actor, action, target, metadata)`),
+  `moderation` (denúncia com `TargetType` POST|COMMENT|USER|JOB|GAME + `ReportReason`; AutoMod em
+  `moderation/ai/ModerationAiService`), `notifications/application/NotificationService.create(...)`,
+  `media` (`GET /media/{id}` é **público de propósito**), `shared/html/SafeHtml`,
+  `shared/text/PlainText.defuse`, `shared/web/CursorCodec` + `PageResponse` (paginação por cursor).
+- **Testes**: `@SpringBootTest` + MockMvc + H2, com `TestAuthHelper` (signup e confirmação de
+  e-mail direto no banco) e `TestDatabase`.
+
+**Front (`connect-grow`)** — TanStack Start, rota por arquivo (mãe que também é página precisa de
+`useMatchRoute` + `<Outlet/>`). API em `src/lib/api/<dominio>.ts` sobre `api-client` (header
+`X-Session-Token`), um tipo por arquivo em `src/types/**`, textos num `src/texts.ts` por seção.
+**O `PostCard` e a linha de ações (`post/post-actions`, `post/post-comments`, reações, selos,
+denúncia) são genéricos e já servem dois feeds** — o feed do grupo deve reusá-los mapeando para
+`PostView`, não escrever uma segunda versão. O que **não** existe é um composer extraído: o bloco
+de publicação está duplicado em `routes/feed.tsx` e `routes/comunidades.$communityId.tsx`.
+
+#### Decisões desta rodada
+
+1. **Tabelas próprias, com chave estrangeira** (V81). O isolamento vira estrutural: nenhuma consulta
+   do feed principal, da busca ou dos perfis alcança conteúdo de grupo. FK não é convenção nova —
+   as migrações V1–V14 já usam.
+2. **A publicação amarra o tópico AO MESMO grupo por chave composta**
+   (`(topic_id, group_id) → group_topics (id, group_id)`): publicar num tópico de outro grupo
+   manipulando ids deixa de ser possível, não é só uma checagem na aplicação.
+3. **Uma solicitação pendente por pessoa** (`pending_slot`, que vira NULL ao decidir — índice único
+   ignora NULL): duas aprovações concorrentes não geram associações duplicadas.
+4. **Sem tabela de anexos**: mídia é o serviço transversal de sempre (`media_ids`, como no feed).
+5. **Sem tabela de auditoria própria**: `shared/audit` já registra ação, alvo e metadados; a moderação
+   local escreve nele com o prefixo do grupo.
+6. **Estado do grupo** em `groups.status` (ACTIVE | RESTRICTED | SUSPENDED | CLOSED), validado no
+   backend em cada operação — nunca só na tela.
+
+#### Riscos e pendências
+
+- **Mídia de grupo é alcançável por URL.** `GET /media/{id}` é público (precisou ser, senão o feed
+  não renderiza). Uma imagem publicada num grupo fica acessível a quem tiver o id. Decidir na Etapa 4
+  entre (a) leitura de mídia de grupo com autorização, (b) URL assinada/expirável, ou (c) aceitar e
+  documentar. O plano lista "anexo privado acessado diretamente por URL" como teste obrigatório da
+  seção 18 — não deixar passar em branco.
+- **Contadores desnormalizados** (`member_count`, `post_count`, `reactions`, `comments`): existem
+  para o feed não fazer `count` a cada leitura; precisam ser atualizados na mesma transação da escrita.
+- **Composer duplicado no front**: na Etapa 5, extrair um `PostComposer` em vez de copiar a terceira vez.
+- **O pod do backend está atrás**: nada de backend novo chega ao ar enquanto o rollout não acontecer.
+  A validação de migração é feita na bancada MariaDB (`enois-bench66`, porta 3411) — a V81 foi
+  validada numa base copiada (`enois_grupos`), sem tocar nas bases compartilhadas.
 
 ---
 
