@@ -80,8 +80,9 @@ class CompanyController {
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String companyId, @RequestBody UpdateCompanyRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		Company updated = companies.update(companyId, user.id().value(), request.description(), request.sector(),
-			request.size(), request.location(), request.website(), request.logo(), request.cover());
+		Company updated = companies.update(companyId, user.id().value(), request.name(), request.description(),
+			request.sector(), request.size(), request.location(), request.website(), request.logo(),
+			request.cover());
 		return CompanySummaryView.from(updated);
 	}
 
@@ -180,8 +181,8 @@ class CompanyController {
 			String website) {
 	}
 
-	record UpdateCompanyRequest(String description, String sector, String size, String location, String website,
-			String logo, String cover) {
+	record UpdateCompanyRequest(String name, String description, String sector, String size, String location,
+			String website, String logo, String cover) {
 	}
 
 	record AddMemberRequest(String userId, CompanyRole role) {

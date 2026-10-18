@@ -57,9 +57,10 @@ public class Company {
 	}
 
 	/** Campos da pagina; campos nulos mantem o valor atual. Logo/capa por upload entram por aqui. */
-	public Company update(String description, String sector, String size, String location, String website,
+	public Company update(String name, String description, String sector, String size, String location, String website,
 			String logo, String cover, Instant now) {
-		return new Company(id, slug, name,
+		return new Company(id, slug,
+			org.springframework.util.StringUtils.hasText(name) ? name.trim() : this.name,
 			description != null ? description : this.description,
 			sector != null ? sector : this.sector,
 			size != null ? size : this.size,

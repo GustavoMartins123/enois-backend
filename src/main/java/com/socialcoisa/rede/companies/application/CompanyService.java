@@ -52,11 +52,12 @@ public class CompanyService {
 	}
 
 	@Transactional
-	public Company update(String companyId, String userId, String description, String sector, String size,
+	public Company update(String companyId, String userId, String name, String description, String sector, String size,
 			String location, String website, String logo, String cover) {
 		Company company = company(companyId);
 		requireRole(company, userId, CompanyRole.EDITOR);
 		Company updated = company.update(
+			StringUtils.hasText(name) ? name.trim() : null,
 			StringUtils.hasText(description) ? description.trim() : description,
 			sector, size, location,
 			StringUtils.hasText(website) ? website.trim() : website,
