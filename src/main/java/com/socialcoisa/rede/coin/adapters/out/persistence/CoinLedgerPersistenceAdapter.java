@@ -65,7 +65,7 @@ class CoinLedgerPersistenceAdapter implements CoinLedgerRepository {
 	}
 
 	@Override
-	public boolean existsByKindAndRefId(String kind, String refId) {
+	public boolean existsByKindAndRefId(com.socialcoisa.rede.coin.domain.CoinEntry.Kind kind, String refId) {
 		return entries.existsByKindAndRefId(kind, refId);
 	}
 

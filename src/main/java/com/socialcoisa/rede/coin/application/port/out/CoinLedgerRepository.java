@@ -19,7 +19,7 @@ public interface CoinLedgerRepository {
 
 	CoinEntry insertEntry(CoinEntry entry);
 
-	boolean existsByKindAndRefId(String kind, String refId);
+	boolean existsByKindAndRefId(com.socialcoisa.rede.coin.domain.CoinEntry.Kind kind, String refId);
 
 	List<CoinEntry> recentEntries(String accountId, int limit);
 

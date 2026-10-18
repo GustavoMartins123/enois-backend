@@ -13,7 +13,7 @@ interface SpringDataCoinEntryRepository extends JpaRepository<CoinEntryJpaEntity
 
 	Optional<CoinEntryJpaEntity> findFirstByAccountIdOrderByCreatedAtDesc(String accountId);
 
-	boolean existsByKindAndRefId(String kind, String refId);
+	boolean existsByKindAndRefId(com.socialcoisa.rede.coin.domain.CoinEntry.Kind kind, String refId);
 
 	Optional<CoinEntryJpaEntity> findByAccountIdAndIdempotencyKeyOrderByIdDesc(String accountId, String idempotencyKey);
 

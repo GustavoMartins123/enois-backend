@@ -41,7 +41,13 @@ class CoinController {
 	Map<String, Object> wallet(@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		var wallet = coins.wallet(user.id().value(), usernameOf(user.id().value()));
+		com.socialcoisa.rede.coin.application.CoinService.Wallet wallet;
+		try {
+			wallet = coins.wallet(user.id().value(), usernameOf(user.id().value()));
+		} catch (Exception debug) {
+			org.slf4j.LoggerFactory.getLogger(CoinController.class).error("DEBUG carteira", debug);
+			throw debug;
+		}
 		return Map.of(
 			"balance", wallet.balance(),
 			"chave", wallet.chave(),

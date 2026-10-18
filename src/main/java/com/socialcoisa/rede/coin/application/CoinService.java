@@ -66,9 +66,11 @@ public class CoinService {
 
 	/** Airdrop idempotente: 100 faíscas da tesouraria (150.000 para a dona), uma vez por conta. */
 	private void ensureGenesis(String accountId, String username) {
-		if (ledger.existsByKindAndRefId("AIRDROP", accountId)) {
+		if (ledger.existsByKindAndRefId(com.socialcoisa.rede.coin.domain.CoinEntry.Kind.AIRDROP,
+				"airdrop:" + accountId)) {
 			return;
 		}
+		ensureTreasury();
 		long amount = OWNER_USERNAME.equals(username) ? AIRDROP_OWNER : AIRDROP_PER_USER;
 		grant(TREASURY_ACCOUNT, -amount, CoinEntry.Kind.GENESIS_TREASURY, "airdrop-tesouraria:" + accountId,
 			"Distribuição inicial", Instant.now(clock));
