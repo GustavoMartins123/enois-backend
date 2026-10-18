@@ -145,9 +145,13 @@ Enquanto houver pendência real, a automação fica viva.
 - [x] Estado ENCERRADO com efeito real — o dono encerra (`CLOSE_GROUP`): o grupo sai da descoberta
       e o feed privado responde 404 para leitura (a equipe da plataforma investiga por outro
       caminho) (2026-10-18).
+- [x] Estados RESTRICTED e SUSPENDED aplicados pela plataforma — `POST /groups/{id}/status`
+      restrito a administrador (`AdminGuard`), com motivo na auditoria. RESTRICTED para a entrada e
+      mantém o conteúdo; SUSPENDED congela entrada e conteúdo e some da descoberta (o que existe
+      continua legível para quem já é membro); ACTIVE reativa. Encerrar continua sendo do dono.
+      `GroupPlatformTests` cobre (2026-10-18).
 - [ ] AutoMod no contexto do grupo e denúncias de conteúdo de grupo (pendente).
-- [ ] Estados RESTRICTED e SUSPENDED aplicados pela plataforma (transições administrativas) e a
-      bateria de testes de segurança da seção 18 (pendente).
+- [ ] Bateria de testes de segurança da seção 18 (pendente).
 
 ### Etapa 7 — Comunidades
 - [ ] Descrição opcional nas Comunidades (edição e apresentação), sem afetar registros antigos.

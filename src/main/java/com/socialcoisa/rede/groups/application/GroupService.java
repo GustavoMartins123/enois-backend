@@ -169,6 +169,27 @@ public class GroupService {
 	}
 
 	/**
+	 * Muda o estado pela PLATAFORMA (restrito, suspenso ou reativação).
+	 *
+	 * A autorização de administrador da plataforma é do controller (`AdminGuard`); aqui registra a
+	 * decisão com o motivo. RESTRICTED para de entrar gente e mantém o conteúdo; SUSPENDED congela
+	 * entrada e conteúdo, some da descoberta e mantém a leitura para quem já é membro. Encerrar é
+	 * ação do DONO e tem caminho próprio.
+	 */
+	@Transactional
+	public Group changeStatus(String groupId, GroupStatus status, String reason, String actorId) {
+		Group group = requireGroup(groupId);
+		if (status == GroupStatus.CLOSED) {
+			throw new ApiException(400, "INVALID_STATUS", "Encerrar o grupo e acao do dono.");
+		}
+		Group updated = group.withStatus(status, clock.instant());
+		repository.save(updated);
+		audit.record(new UserId(actorId), "GROUP_STATUS_CHANGED", groupId,
+			"{\"from\":\"" + group.status() + "\",\"to\":\"" + status + "\",\"reason\":\"" + jsonSafe(reason) + "\"}");
+		return updated;
+	}
+
+	/**
 	 * Encerra o grupo (só o dono). Sai da descoberta e o conteúdo deixa de ser acessível para
 	 * leitura — a decisão fica na auditoria.
 	 */
@@ -264,6 +285,11 @@ public class GroupService {
 
 	private static String newId(String prefix) {
 		return prefix + "_" + UUID.randomUUID().toString().replace("-", "");
+	}
+
+	/** O motivo entra no metadado da auditoria (JSON simples): tira o que quebraria a aspa. */
+	private static String jsonSafe(String value) {
+		return value == null ? "" : value.replace("\"", "'").replace("\n", " ").trim();
 	}
 
 	private static String trimToNull(String value) {

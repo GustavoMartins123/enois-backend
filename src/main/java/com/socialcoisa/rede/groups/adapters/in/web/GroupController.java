@@ -22,11 +22,13 @@ import com.socialcoisa.rede.groups.domain.GroupJoinMode;
 import com.socialcoisa.rede.groups.domain.GroupJoinRequest;
 import com.socialcoisa.rede.groups.domain.GroupMember;
 import com.socialcoisa.rede.groups.domain.GroupRole;
+import com.socialcoisa.rede.groups.domain.GroupStatus;
 import com.socialcoisa.rede.groups.domain.JoinOutcome;
 import com.socialcoisa.rede.idempotency.application.CommandResponse;
 import com.socialcoisa.rede.idempotency.application.IdempotencyApplicationService;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.profile.domain.UserProfile;
+import com.socialcoisa.rede.shared.web.AdminGuard;
 import com.socialcoisa.rede.shared.web.CurrentUser;
 import com.socialcoisa.rede.shared.web.CurrentUserResolver;
 import com.socialcoisa.rede.shared.web.CursorCodec;
@@ -49,15 +51,17 @@ class GroupController {
 	private final UserProfileRepository userProfileRepository;
 	private final IdempotencyApplicationService idempotency;
 	private final CursorCodec cursorCodec;
+	private final AdminGuard adminGuard;
 
 	GroupController(GroupService groupService, CurrentUserResolver currentUserResolver,
 			UserProfileRepository userProfileRepository, IdempotencyApplicationService idempotency,
-			CursorCodec cursorCodec) {
+			CursorCodec cursorCodec, AdminGuard adminGuard) {
 		this.groupService = groupService;
 		this.currentUserResolver = currentUserResolver;
 		this.userProfileRepository = userProfileRepository;
 		this.idempotency = idempotency;
 		this.cursorCodec = cursorCodec;
+		this.adminGuard = adminGuard;
 	}
 
 	@GetMapping
@@ -205,6 +209,25 @@ class GroupController {
 			});
 	}
 
+	/**
+	 * Estado do grupo pela PLATAFORMA (admin): restrito, suspenso ou reativação. Encerrar é do
+	 * dono, no endpoint próprio. A decisão vai para a auditoria com o motivo.
+	 */
+	@PostMapping("/{groupId}/status")
+	ResponseEntity<String> changeStatus(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@PathVariable String groupId, @RequestBody StatusRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		adminGuard.requireAdmin(user);
+		GroupStatus status = parseStatus(request.status());
+		String hash = idempotency.hash(Map.of("groupId", groupId, "request", request));
+		return idempotency.execute(user.id(), "POST", "/api/groups/{groupId}/status", idempotencyKey, hash, () -> {
+			Group group = groupService.changeStatus(groupId, status, request.reason(), user.id().value());
+			return new CommandResponse(200, view(group, user));
+		});
+	}
+
 	@PostMapping("/{groupId}/close")
 	ResponseEntity<String> close(@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
@@ -272,6 +295,18 @@ class GroupController {
 	}
 
 	record JoinResponse(String status) {
+	}
+
+	record StatusRequest(String status, String reason) {
+	}
+
+	private static GroupStatus parseStatus(String status) {
+		try {
+			return GroupStatus.valueOf(status == null ? "" : status.trim().toUpperCase(java.util.Locale.ROOT));
+		} catch (IllegalArgumentException error) {
+			throw new com.socialcoisa.rede.shared.web.ApiException(400, "INVALID_STATUS",
+				"Estado desconhecido.");
+		}
 	}
 
 	record GroupView(String id, String slug, String name, String description, String topic, String avatar,
