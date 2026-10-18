@@ -67,10 +67,10 @@ class GameFlowTests {
 			.andReturn();
 		String gameId = objectMapper.readTree(submitted.getResponse().getContentAsString()).get("id").asText();
 
-		// Catálogo público NÃO mostra ainda (não publicado).
+		// Catálogo público NÃO mostra ainda (não publicado). O catálogo vem paginado (items).
 		mockMvc.perform(get("/games?limit=60"))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$[?(@.id == '" + gameId + "')]").isEmpty());
+			.andExpect(jsonPath("$.items[?(@.id == '" + gameId + "')]").isEmpty());
 
 		// Página do criador mostra o jogo PRÓPRIO mesmo não publicado (dono vê o estado).
 		mockMvc.perform(get("/me/games").header("X-Session-Token", creator.token()))
@@ -88,7 +88,7 @@ class GameFlowTests {
 		// Agora aparece no catálogo e na página do criador.
 		mockMvc.perform(get("/games?limit=60"))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$[?(@.id == '" + gameId + "')].status").value("PUBLISHED"));
+			.andExpect(jsonPath("$.items[?(@.id == '" + gameId + "')].status").value("PUBLISHED"));
 		mockMvc.perform(get("/games/gflow-creator"))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$[?(@.id == '" + gameId + "')].url").value("https://aminadojava.itch.io/kawaii-survivors"));
