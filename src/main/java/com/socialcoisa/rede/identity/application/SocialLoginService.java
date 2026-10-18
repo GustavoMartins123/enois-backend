@@ -401,7 +401,13 @@ public class SocialLoginService implements OAuthUseCase {
 		authSessionRepository.save(token, refreshToken, userId, now, expiresAt, refreshExpiresAt);
 		UserProfile profile = userProfileRepository.findById(userId)
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
-		return new AuthResponse(token, refreshToken, expiresAt, refreshExpiresAt, AuthUserView.from(profile));
+		// Quem entrou pelo provedor pode ja ter criado uma senha depois; a tela pergunta por ela
+		// quando existe, e pede para criar quando nao.
+		boolean hasPassword = credentialRepository.findByUserId(userId)
+			.map(StoredCredential::passwordUsable)
+			.orElse(false);
+		return new AuthResponse(token, refreshToken, expiresAt, refreshExpiresAt,
+			AuthUserView.from(profile, hasPassword));
 	}
 
 	private String randomToken() {

@@ -227,7 +227,17 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 			.orElseThrow(() -> new ApiException(401, "UNAUTHENTICATED", "Sessao invalida ou expirada."));
 		UserProfile profile = userProfileRepository.findById(userId)
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
-		return AuthUserView.from(profile);
+		return AuthUserView.from(profile, hasUsablePassword(userId));
+	}
+
+	/**
+	 * A conta tem senha que a pessoa conhece?
+	 *
+	 * Quem entrou por login social nasce com um hash aleatorio (`password_usable = false`) — a tela
+	 * usa isto para pedir "criar senha" em vez de "confirmar a senha atual".
+	 */
+	private boolean hasUsablePassword(String userId) {
+		return credentialRepository.findByUserId(userId).map(StoredCredential::passwordUsable).orElse(false);
 	}
 
 	@Override
@@ -308,8 +318,13 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		}
 		StoredCredential credential = credentialRepository.findByUserId(userId)
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
-		if (!StringUtils.hasText(currentPassword)
-				|| !passwordHasher.matches(currentPassword, credential.passwordHash())) {
+		// Conta criada por login social nasce com um hash aleatorio que ninguem conhece: aqui a
+		// pessoa CRIA a primeira senha, entao nao ha o que confirmar. Exigir a senha atual nesse
+		// caso trancava a conta para fora — o segundo fator manda "defina uma senha" e a troca
+		// pedia uma senha que nunca existiu.
+		if (credential.passwordUsable()
+				&& (!StringUtils.hasText(currentPassword)
+						|| !passwordHasher.matches(currentPassword, credential.passwordHash()))) {
 			throw new ApiException(401, "INVALID_CREDENTIALS", "Senha atual incorreta.");
 		}
 		credentialRepository.save(userId, credential.email(), passwordHasher.hash(newPassword));
@@ -393,7 +408,8 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		String token = newToken();
 		String refreshToken = newToken();
 		authSessionRepository.save(token, refreshToken, profile.id(), now, expiresAt, refreshExpiresAt);
-		return new AuthResponse(token, refreshToken, expiresAt, refreshExpiresAt, AuthUserView.from(profile));
+		return new AuthResponse(token, refreshToken, expiresAt, refreshExpiresAt,
+			AuthUserView.from(profile, hasUsablePassword(profile.id())));
 	}
 
 	private AuthResponse refreshSession(String currentRefreshToken) {
