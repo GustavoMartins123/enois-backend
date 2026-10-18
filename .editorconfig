@@ -1,0 +1,22 @@
+# Convenções que o editor aplica sozinho — vale para quem usa VS Code, JetBrains ou vim.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+# Java deste projeto usa TAB (o padrão do Spring Initializr) — respeite o que está no arquivo.
+indent_style = tab
+indent_size = 4
+
+[*.{md,yml,yaml,json,sql}]
+indent_style = space
+indent_size = 2
+
+[*.sql]
+# As migrações são lidas por gente: duas espaços, como o resto da documentação.
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false

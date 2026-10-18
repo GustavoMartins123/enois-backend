@@ -1,6 +1,42 @@
-# Rede — Social Platform Backend
+# Énóis — backend
 
-Rede is a social platform backend built with **Spring Boot 4** (Java 25) following **hexagonal architecture** (ports & adapters).
+A API do **Énóis** ([enois.ia.br](https://enois.ia.br)): a rede social brasileira para quem trabalha
+com tecnologia. Aqui vivem as regras de negócio, a autorização, a moderação, a carteira (Faísca) e
+as integrações — o frontend só pede, e é aqui que se decide.
+
+**Spring Boot 4** (Java 25), arquitetura hexagonal (portas e adaptadores), um pacote por
+funcionalidade, Flyway para migrações, H2 nos testes e **MariaDB 11.4** em produção.
+
+O frontend fica no [`enois-frontend`](https://github.com/Rede-ENois/enois-frontend). O contrato entre
+os dois é a API — mudar um lado sem o outro é a forma mais comum de quebrar a tela de alguém.
+
+**Começando agora?** Leia o [`CONTRIBUTING.md`](CONTRIBUTING.md) (arquitetura, migrações, testes e
+fluxo de contribuição) e o [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md). Falha de segurança tem canal
+próprio no [`SECURITY.md`](SECURITY.md) — não vira issue pública.
+
+## Onde está cada assunto
+
+| Assunto | Documento |
+| --- | --- |
+| Arquitetura e módulos | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
+| API publicada | [`docs/API.md`](docs/API.md) |
+| Banco, tabelas e migrações | [`docs/DATABASE.md`](docs/DATABASE.md) |
+| Deploy, imagens e GitOps | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) |
+| Segurança, risco e antifraude | [`docs/SECURITY.md`](docs/SECURITY.md) |
+| Identidade e contas | [`docs/IDENTITY.md`](docs/IDENTITY.md) |
+| Jogos indie | [`docs/GAMES.md`](docs/GAMES.md) |
+| Portal do desenvolvedor (API pública) | [`docs/DEVELOPERS_PORTAL.md`](docs/DEVELOPERS_PORTAL.md) |
+
+## Licença
+
+**GNU General Public License v3.0** — o texto completo está em [`LICENSE`](LICENSE).
+
+Copyright (C) 2026 Énóis (Rede-ENois). Este programa é software livre: você pode redistribuí-lo e/ou
+modificá-lo sob os termos da GPL-3.0, **sem nenhuma garantia**. O frontend segue a mesma licença, para
+os dois repositórios ficarem sob o mesmo regime.
+
+---
+
 
 ## Prerequisites
 

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Falha de segurança
+    url: https://github.com/Rede-ENois/enois-backend/security/policy
+    about: Não abra issue pública para vulnerabilidade — veja o canal de reporte responsável.
+  - name: Documentação do projeto
+    url: https://github.com/Rede-ENois/enois-backend/blob/main/CONTRIBUTING.md
+    about: Convenções de código, migrações, testes e fluxo de contribuição.
