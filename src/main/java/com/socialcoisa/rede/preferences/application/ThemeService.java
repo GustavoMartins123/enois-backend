@@ -32,6 +32,17 @@ public class ThemeService {
 		return repository.find(userId).map(UserPreference::themeId);
 	}
 
+	/**
+	 * A preferencia COM a data em que foi gravada.
+	 *
+	 * A data e o que permite resolver conflito entre o que esta no dispositivo e o que esta na
+	 * conta: sem ela, o valor do servidor sempre vencia — e uma escolha feita quando o envio
+	 * falhou (API fora, sessao expirando) voltava ao tema antigo a cada recarga.
+	 */
+	public Optional<UserPreference> preferenceOf(String userId) {
+		return repository.find(userId);
+	}
+
 	public void setTheme(String userId, String themeId) {
 		if (themeId == null || themeId.isBlank()) {
 			repository.delete(userId);

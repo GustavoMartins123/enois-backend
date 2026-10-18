@@ -33,7 +33,9 @@ class ThemeController {
 	ThemeResponse theme(@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		return new ThemeResponse(themeService.themeOf(user.id().value()).orElse(null));
+		return themeService.preferenceOf(user.id().value())
+			.map(preference -> new ThemeResponse(preference.themeId(), preference.updatedAt().toString()))
+			.orElseGet(() -> new ThemeResponse(null, null));
 	}
 
 	@PutMapping("/me/theme")
@@ -45,7 +47,12 @@ class ThemeController {
 		return ResponseEntity.noContent().build();
 	}
 
-	/** `theme` ausente ou vazio limpa a preferência — volta ao padrão da marca. */
-	private record ThemeResponse(String theme) {
+	/**
+	 * `theme` ausente ou vazio limpa a preferência — volta ao padrão da marca.
+	 *
+	 * `updatedAt` é quando a conta gravou a escolha: o front compara com a data da escolha local
+	 * para decidir quem vence, em vez de deixar o servidor sobrescrever sempre.
+	 */
+	private record ThemeResponse(String theme, String updatedAt) {
 	}
 }
