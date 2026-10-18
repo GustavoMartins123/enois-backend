@@ -254,6 +254,29 @@ public class CoinService {
 			message == null ? "" : message, now);
 	}
 
+	/** A conta já ganhou essa recompensa? (idempotência legível para os hooks do earned) */
+	public boolean hasReward(String ref) {
+		return ledger.existsByKindAndRefId(CoinEntry.Kind.REWARD, ref);
+	}
+
+	/**
+	 * Recompensa de earned (plano C2): sai da tesouraria, entra na conta — supply fixo
+	 * preservado. Idempotente por ref (a mesma recompensa nunca duplica).
+	 */
+	@Transactional
+	public void reward(String accountId, long amount, String ref, String message) {
+		if (amount <= 0) {
+			throw new ApiException(400, "INVALID_AMOUNT", "O valor precisa ser positivo.");
+		}
+		if (ledger.existsByKindAndRefId(CoinEntry.Kind.REWARD, ref)) {
+			return;
+		}
+		ensureTreasury();
+		Instant now = Instant.now(clock);
+		grant(TREASURY_ACCOUNT, -amount, CoinEntry.Kind.GENESIS_TREASURY, "reward-tesouraria:" + ref, message, now);
+		grant(accountId, amount, CoinEntry.Kind.REWARD, ref, message, now);
+	}
+
 	/**
 	 * Reconciliação (plano C4): o LEDGER é a verdade — reconstrói o saldo de cada conta
 	 * somando os lançamentos e compara com o snapshot. Divergência LOGA ALERTA (nada de
