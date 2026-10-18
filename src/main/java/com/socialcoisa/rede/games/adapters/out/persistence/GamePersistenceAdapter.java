@@ -82,10 +82,14 @@ class GamePersistenceAdapter implements GameRepository {
 
 	/** A ordem é lista fechada: a coluna nunca vem da URL. */
 	private Sort sortFor(String order) {
+		// Destaque pago primeiro (G2): boostUntil no futuro sobe; nulls ficam por último no DESC.
+		Sort destaque = Sort.by(Sort.Direction.DESC, "boostUntil");
 		return switch (order) {
-			case "plays" -> Sort.by(Sort.Direction.DESC, "plays").and(Sort.by(Sort.Direction.DESC, "publishedAt"));
-			case "title" -> Sort.by(Sort.Direction.ASC, "title");
-			default -> Sort.by(Sort.Direction.DESC, "publishedAt").and(Sort.by(Sort.Direction.DESC, "plays"));
+			case "plays" -> destaque.and(Sort.by(Sort.Direction.DESC, "plays"))
+				.and(Sort.by(Sort.Direction.DESC, "publishedAt"));
+			case "title" -> destaque.and(Sort.by(Sort.Direction.ASC, "title"));
+			default -> destaque.and(Sort.by(Sort.Direction.DESC, "publishedAt"))
+				.and(Sort.by(Sort.Direction.DESC, "plays"));
 		};
 	}
 

@@ -16,7 +16,7 @@ public record GameView(String id, String userId, String username, String slug, S
 		String shortDescription, List<String> genres, List<String> languages, String controls, String requirements,
 		String contentWarnings, String stage, String distribution, int priceCoins, String aspect, String version,
 		String websiteUrl, String supportUrl, List<String> mediaIds, int plays, int favorites, String publishedAt,
-		boolean owned, boolean favorited) {
+		boolean owned, boolean favorited, boolean boosted) {
 
 	/** Monta a view do jogo. `favorites` e `favorited` só são preenchidos onde fazem sentido. */
 	public static GameView of(Game game, String username, int favorites, boolean favorited, String viewerId) {
@@ -28,7 +28,7 @@ public record GameView(String id, String userId, String username, String slug, S
 			details.stage().name(), details.distribution().name(), details.priceCoins(), details.aspect().name(),
 			details.version(), details.websiteUrl(), details.supportUrl(), details.mediaIdList(), game.plays(),
 			favorites, game.publishedAt() == null ? null : game.publishedAt().toString(),
-			viewerId != null && game.ownedBy(viewerId), favorited);
+			viewerId != null && game.ownedBy(viewerId), favorited, game.boosted(java.time.Instant.now()));
 	}
 
 	public static GameView of(Game game, String username) {

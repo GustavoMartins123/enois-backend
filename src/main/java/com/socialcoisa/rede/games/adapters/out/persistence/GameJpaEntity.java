@@ -105,6 +105,9 @@ class GameJpaEntity {
 	@Column(nullable = false)
 	private int plays;
 
+	@Column(name = "boost_until")
+	private java.time.Instant boostUntil;
+
 	@Column(name = "published_at")
 	private Instant publishedAt;
 
@@ -159,6 +162,7 @@ class GameJpaEntity {
 		e.supportUrl = details.supportUrl();
 		e.mediaIds = details.mediaIds();
 		e.plays = game.plays();
+		e.boostUntil = game.boostUntil();
 		e.publishedAt = game.publishedAt();
 		e.suspendedAt = game.suspendedAt();
 		return e;
@@ -169,6 +173,6 @@ class GameJpaEntity {
 			submittedAt, reviewedAt, createdAt, updatedAt,
 			GameDetails.of(shortDescription, genres, languages, controls, requirements, contentWarnings, stage,
 				distribution, priceCoins, aspect, version, websiteUrl, supportUrl, mediaIds),
-			plays, publishedAt, suspendedAt);
+			plays, publishedAt, suspendedAt, boostUntil);
 	}
 }

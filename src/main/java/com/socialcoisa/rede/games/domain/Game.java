@@ -27,11 +27,13 @@ public class Game {
 	private final int plays;
 	private final Instant publishedAt;
 	private final Instant suspendedAt;
+	/** Destaque pago (G2): o jogo sobe no catálogo enquanto o carimbo estiver no futuro. */
+	private final Instant boostUntil;
 
 	private Game(String id, String userId, String slug, String title, String description, String cover, String url,
 			String tags, GameStatus status, String reviewedBy, String reviewNote, Instant submittedAt,
 			Instant reviewedAt, Instant createdAt, Instant updatedAt, GameDetails details, int plays,
-			Instant publishedAt, Instant suspendedAt) {
+			Instant publishedAt, Instant suspendedAt, Instant boostUntil) {
 		this.id = id;
 		this.userId = userId;
 		this.slug = slug;
@@ -51,6 +53,7 @@ public class Game {
 		this.plays = plays;
 		this.publishedAt = publishedAt;
 		this.suspendedAt = suspendedAt;
+		this.boostUntil = boostUntil;
 	}
 
 	public static Game submit(String id, String userId, String slug, String title, String description, String cover,
@@ -62,37 +65,38 @@ public class Game {
 	public static Game submit(String id, String userId, String slug, String title, String description, String cover,
 			String url, String tags, GameDetails details, Instant now) {
 		return new Game(id, userId, slug, title, description, cover, url, tags, GameStatus.SUBMITTED, null, null,
-			now, null, now, now, details, 0, null, null);
+			now, null, now, now, details, 0, null, null, null);
 	}
 
 	public static Game restore(String id, String userId, String slug, String title, String description, String cover,
 			String url, String tags, GameStatus status, String reviewedBy, String reviewNote, Instant submittedAt,
 			Instant reviewedAt, Instant createdAt, Instant updatedAt) {
 		return restore(id, userId, slug, title, description, cover, url, tags, status, reviewedBy, reviewNote,
-			submittedAt, reviewedAt, createdAt, updatedAt, GameDetails.empty(), 0, null, null);
+			submittedAt, reviewedAt, createdAt, updatedAt, GameDetails.empty(), 0, null, null, null);
 	}
 
 	public static Game restore(String id, String userId, String slug, String title, String description, String cover,
 			String url, String tags, GameStatus status, String reviewedBy, String reviewNote, Instant submittedAt,
 			Instant reviewedAt, Instant createdAt, Instant updatedAt, GameDetails details, int plays,
-			Instant publishedAt, Instant suspendedAt) {
+			Instant publishedAt, Instant suspendedAt, Instant boostUntil) {
 		return new Game(id, userId, slug, title, description, cover, url, tags, status, reviewedBy, reviewNote,
-			submittedAt, reviewedAt, createdAt, updatedAt, details, plays, publishedAt, suspendedAt);
+			submittedAt, reviewedAt, createdAt, updatedAt, details, plays, publishedAt, suspendedAt, boostUntil);
 	}
 
 	public Game approve(String reviewerId, String note, Instant now) {
 		return new Game(id, userId, slug, title, description, cover, url, tags, GameStatus.PUBLISHED, reviewerId,
-			note, submittedAt, now, createdAt, now, details, plays, publishedAt == null ? now : publishedAt, null);
+			note, submittedAt, now, createdAt, now, details, plays, publishedAt == null ? now : publishedAt, null,
+			boostUntil);
 	}
 
 	public Game reject(String reviewerId, String note, Instant now) {
 		return new Game(id, userId, slug, title, description, cover, url, tags, GameStatus.REJECTED, reviewerId,
-			note, submittedAt, now, createdAt, now, details, plays, publishedAt, suspendedAt);
+			note, submittedAt, now, createdAt, now, details, plays, publishedAt, suspendedAt, boostUntil);
 	}
 
 	public Game resubmit(Instant now) {
 		return new Game(id, userId, slug, title, description, cover, url, tags, GameStatus.SUBMITTED, null, null,
-			now, null, createdAt, now, details, plays, publishedAt, suspendedAt);
+			now, null, createdAt, now, details, plays, publishedAt, suspendedAt, boostUntil);
 	}
 
 	/** Edição pelo dono: a ficha e os textos mudam, o ciclo de vida e a moderação não. */
@@ -100,25 +104,40 @@ public class Game {
 			Instant now) {
 		return new Game(id, userId, slug, title, description, cover, url, tags, status, reviewedBy, reviewNote,
 			submittedAt, reviewedAt, createdAt, now, details == null ? this.details : details, plays, publishedAt,
-			suspendedAt);
+			suspendedAt, boostUntil);
 	}
 
 	/** Moderação tira do ar (o registro, as licenças e o histórico continuam existindo). */
 	public Game suspend(String reviewerId, String note, Instant now) {
 		return new Game(id, userId, slug, title, description, cover, url, tags, GameStatus.SUSPENDED, reviewerId,
-			note, submittedAt, now, createdAt, now, details, plays, publishedAt, now);
+			note, submittedAt, now, createdAt, now, details, plays, publishedAt, now, boostUntil);
 	}
 
 	/** A moderação devolve o jogo ao ar depois de uma suspensão. */
 	public Game restoreFromSuspension(String reviewerId, Instant now) {
 		return new Game(id, userId, slug, title, description, cover, url, tags, GameStatus.PUBLISHED, reviewerId,
-			reviewNote, submittedAt, now, createdAt, now, details, plays, publishedAt, null);
+			reviewNote, submittedAt, now, createdAt, now, details, plays, publishedAt, null, boostUntil);
 	}
 
 	/** Uma sessão de jogo começou (o servidor é quem conta). */
 	public Game countPlay() {
 		return new Game(id, userId, slug, title, description, cover, url, tags, status, reviewedBy, reviewNote,
-			submittedAt, reviewedAt, createdAt, updatedAt, details, plays + 1, publishedAt, suspendedAt);
+			submittedAt, reviewedAt, createdAt, updatedAt, details, plays + 1, publishedAt, suspendedAt, boostUntil);
+	}
+
+	/** Destaque pago (G2): o carimbo sobe para o limite — estende se já estava em destaque. */
+	public Game boost(Instant until, Instant now) {
+		return new Game(id, userId, slug, title, description, cover, url, tags, status, reviewedBy, reviewNote,
+			submittedAt, reviewedAt, createdAt, now, details, plays, publishedAt, suspendedAt,
+			until.isAfter(boostUntil == null ? Instant.EPOCH : boostUntil) ? until : boostUntil);
+	}
+
+	public Instant boostUntil() {
+		return boostUntil;
+	}
+
+	public boolean boosted(Instant now) {
+		return boostUntil != null && boostUntil.isAfter(now);
 	}
 
 	public boolean ownedBy(String userId) {

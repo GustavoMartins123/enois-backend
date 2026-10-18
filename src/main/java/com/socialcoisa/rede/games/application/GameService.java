@@ -30,12 +30,16 @@ public class GameService {
 	private final com.socialcoisa.rede.games.application.port.out.DeveloperFollowRepository follows;
 	private final com.socialcoisa.rede.notifications.application.NotificationService notifications;
 	private final Clock clock;
+	private final com.socialcoisa.rede.coin.application.CoinService coins;
+	private final com.socialcoisa.rede.coin.application.port.out.CoinLedgerRepository ledger;
 
 	public GameService(GameRepository games,
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles, GameUrlGuard urlGuard,
 			com.socialcoisa.rede.games.application.port.out.GameUpdateRepository updates,
 			com.socialcoisa.rede.games.application.port.out.DeveloperFollowRepository follows,
-			com.socialcoisa.rede.notifications.application.NotificationService notifications, Clock clock) {
+			com.socialcoisa.rede.notifications.application.NotificationService notifications, Clock clock,
+			com.socialcoisa.rede.coin.application.CoinService coins,
+			com.socialcoisa.rede.coin.application.port.out.CoinLedgerRepository ledger) {
 		this.games = games;
 		this.profiles = profiles;
 		this.urlGuard = urlGuard;
@@ -43,6 +47,8 @@ public class GameService {
 		this.follows = follows;
 		this.notifications = notifications;
 		this.clock = clock;
+		this.coins = coins;
+		this.ledger = ledger;
 	}
 
 	@Transactional
@@ -250,4 +256,36 @@ public class GameService {
 		}
 		return candidate;
 	}
+
+
+	/**
+	 * Destaque pago (G2 do plano): o criador impulsiona o PRÓPRIO jogo — 5 faíscas por
+	 * 7 dias, um impulso por semana por jogo. Sai do criador, entra na tesouraria
+	 * (supply fixo preservado); a posse do carimbo é o lançamento do ledger.
+	 */
+	@Transactional
+	public com.socialcoisa.rede.games.domain.Game boost(String gameId, String userId) {
+		com.socialcoisa.rede.games.domain.Game game = games.findById(gameId)
+			.orElseThrow(() -> new ApiException(404, "GAME_NOT_FOUND", "Jogo não encontrado."));
+		if (!game.ownedBy(userId)) {
+			throw new ApiException(403, "NOT_THE_CREATOR", "Só o criador impulsiona o próprio jogo.");
+		}
+		if (game.status() != GameStatus.PUBLISHED) {
+			throw new ApiException(409, "GAME_NOT_PUBLISHED", "Só jogo publicado pode ser impulsionado.");
+		}
+		java.time.Instant now = java.time.Instant.now(clock);
+		var hoje = java.time.LocalDate.now(clock);
+		var wf = java.time.temporal.WeekFields.ISO;
+		String semana = wf.weekBasedYear().getFrom(hoje) + "-W" + wf.weekOfWeekBasedYear().getFrom(hoje);
+		String ref = "boost:" + gameId + ":" + semana;
+		if (ledger.existsByKindAndRefId(com.socialcoisa.rede.coin.domain.CoinEntry.Kind.PURCHASE, ref)) {
+			throw new ApiException(409, "ALREADY_BOOSTED",
+				"Este jogo já foi impulsionado nesta semana — volta no catálogo em sete dias.");
+		}
+		coins.purchase(userId, BOOST_PRICE_MF, ref, "Impulso do jogo: " + game.title());
+		java.time.Instant base = game.boostUntil() != null && game.boostUntil().isAfter(now) ? game.boostUntil() : now;
+		return games.save(game.boost(base.plus(java.time.Duration.ofDays(7)), now));
+	}
+
+	public static final long BOOST_PRICE_MF = 5_000L;
 }

@@ -118,6 +118,16 @@ class GameController {
 		return Map.of("id", created.id(), "slug", created.slug(), "status", created.status().name());
 	}
 
+	/** Destaque pago (G2): o criador impulsiona o próprio jogo por 7 dias (5 faíscas). */
+	@PostMapping("/games/{gameId}/boost")
+	Map<String, Object> boost(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@PathVariable String gameId) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		var boosted = games.boost(gameId, user.id().value());
+		return Map.of("id", boosted.id(), "boosted", boosted.boosted(java.time.Instant.now()));
+	}
+
 	@PostMapping("/games/{gameId}/resubmit")
 	Map<String, Object> resubmit(@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
