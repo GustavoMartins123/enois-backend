@@ -33,6 +33,12 @@ arquivo primeiro e siga a ordem das fases.
    avaliação de risco versionada.
 7. **Painel** — a fila de moderação existe (`/moderacao`), mas sem prioridade, linha do tempo,
    relações entre casos nem permissões por função.
+8. **Enumeração de contas no cadastro** — o cadastro precisa dizer que o e-mail já existe (senão a
+   pessoa não entende por que não entra); a defesa correta é responder igual e avisar o dono por
+   e-mail, o que exige template novo. Fica registrado, não meio-feito.
+9. **Reincidência** — não existe (nem existia) banimento em cadeia por IP/dispositivo; a punição só
+   olha violação confirmada da conta. Nada a corrigir aqui, e o critério está escrito para não
+   aparecer depois.
 
 ## 3. Fases propostas (ordem por risco × esforço)
 

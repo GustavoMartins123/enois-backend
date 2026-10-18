@@ -1,8 +1,11 @@
 package com.socialcoisa.rede.moderation.domain;
 
+/** O que pode ser denunciado. Cada alvo tem um leitor próprio (conteúdo e autor) no módulo. */
 public enum TargetType {
 	POST,
 	COMMENT,
 	USER,
-	JOB
+	JOB,
+	/** Jogo do Énóis Games (página do jogo e do criador). */
+	GAME
 }
