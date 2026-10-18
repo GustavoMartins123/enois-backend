@@ -139,9 +139,15 @@ Enquanto houver pendência real, a automação fica viva.
       junto com o AutoMod e as denúncias (2026-10-18).
 
 ### Etapa 6 — Segurança e moderação
-- [ ] AutoMod integrado ao contexto do grupo; denúncias; auditoria.
-- [ ] Estados do grupo (ativo/restrito/suspenso/encerrado) com efeito real no backend.
-- [ ] Bateria de testes de segurança da seção 18.
+- [x] Moderação local — o autor apaga o próprio post/comentário; quem modera (`MODERATE_CONTENT`)
+      apaga o dos outros. O conteúdo vira REMOVED e some das listagens, e remoção/encerramento vão
+      para a auditoria da plataforma (`shared/audit`). `GroupModerationTests` cobre (2026-10-18).
+- [x] Estado ENCERRADO com efeito real — o dono encerra (`CLOSE_GROUP`): o grupo sai da descoberta
+      e o feed privado responde 404 para leitura (a equipe da plataforma investiga por outro
+      caminho) (2026-10-18).
+- [ ] AutoMod no contexto do grupo e denúncias de conteúdo de grupo (pendente).
+- [ ] Estados RESTRICTED e SUSPENDED aplicados pela plataforma (transições administrativas) e a
+      bateria de testes de segurança da seção 18 (pendente).
 
 ### Etapa 7 — Comunidades
 - [ ] Descrição opcional nas Comunidades (edição e apresentação), sem afetar registros antigos.

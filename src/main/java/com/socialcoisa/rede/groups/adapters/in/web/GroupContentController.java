@@ -198,6 +198,33 @@ class GroupContentController {
 			});
 	}
 
+	@DeleteMapping("/{groupId}/posts/{postId}")
+	ResponseEntity<String> removePost(@RequestHeader(value = "X-Session-Token", required = false) String token,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@PathVariable String groupId, @PathVariable String postId) {
+		CurrentUser user = currentUserResolver.resolve(null, token);
+		String hash = idempotency.hash(Map.of("groupId", groupId, "postId", postId, "action", "remove"));
+		return idempotency.execute(user.id(), "DELETE", "/api/groups/{groupId}/posts/{postId}", idempotencyKey, hash,
+			() -> {
+				feed.removePost(groupId, postId, user.id().value());
+				return new CommandResponse(200, new StatusResponse(postId, "REMOVED"));
+			});
+	}
+
+	@DeleteMapping("/{groupId}/posts/{postId}/comments/{commentId}")
+	ResponseEntity<String> removeComment(@RequestHeader(value = "X-Session-Token", required = false) String token,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@PathVariable String groupId, @PathVariable String postId, @PathVariable String commentId) {
+		CurrentUser user = currentUserResolver.resolve(null, token);
+		String hash = idempotency.hash(Map.of("groupId", groupId, "postId", postId, "commentId", commentId,
+			"action", "remove"));
+		return idempotency.execute(user.id(), "DELETE", "/api/groups/{groupId}/posts/{postId}/comments/{commentId}",
+			idempotencyKey, hash, () -> {
+				feed.removeComment(groupId, postId, commentId, user.id().value());
+				return new CommandResponse(200, new StatusResponse(commentId, "REMOVED"));
+			});
+	}
+
 	private CommentView commentView(GroupComment comment) {
 		UserProfile author = profiles.findById(comment.authorId()).orElse(null);
 		return new CommentView(comment.id(), comment.postId(), comment.authorId(),

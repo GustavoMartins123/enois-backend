@@ -9,8 +9,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import com.socialcoisa.rede.feed.application.port.out.AuditLogRepository;
+import com.socialcoisa.rede.feed.domain.UserId;
 import com.socialcoisa.rede.groups.application.port.out.GroupRepository;
 import com.socialcoisa.rede.groups.domain.Group;
+import com.socialcoisa.rede.groups.domain.GroupStatus;
 import com.socialcoisa.rede.groups.domain.GroupCapability;
 import com.socialcoisa.rede.groups.domain.GroupJoinMode;
 import com.socialcoisa.rede.groups.domain.GroupJoinRequest;
@@ -37,10 +40,12 @@ public class GroupService {
 	private static final int MAX_PAGE = 50;
 
 	private final GroupRepository repository;
+	private final AuditLogRepository audit;
 	private final Clock clock;
 
-	public GroupService(GroupRepository repository, Clock clock) {
+	public GroupService(GroupRepository repository, AuditLogRepository audit, Clock clock) {
 		this.repository = repository;
+		this.audit = audit;
 		this.clock = clock;
 	}
 
@@ -161,6 +166,20 @@ public class GroupService {
 		}
 		repository.removeMember(groupId, targetUserId);
 		repository.adjustMemberCount(groupId, -1);
+	}
+
+	/**
+	 * Encerra o grupo (só o dono). Sai da descoberta e o conteúdo deixa de ser acessível para
+	 * leitura — a decisão fica na auditoria.
+	 */
+	@Transactional
+	public Group close(String groupId, String actorId) {
+		Group group = requireGroup(groupId);
+		require(roleOf(groupId, actorId), GroupCapability.CLOSE_GROUP);
+		Group closed = group.withStatus(GroupStatus.CLOSED, clock.instant());
+		repository.save(closed);
+		audit.record(new UserId(actorId), "GROUP_CLOSED", groupId, "{\"slug\":\"" + group.slug() + "\"}");
+		return closed;
 	}
 
 	/** Passa a propriedade: o novo dono vira OWNER e o antigo continua como ADMIN. */

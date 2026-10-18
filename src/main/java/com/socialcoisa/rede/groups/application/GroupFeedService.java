@@ -12,7 +12,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import com.socialcoisa.rede.feed.application.port.out.AuditLogRepository;
 import com.socialcoisa.rede.feed.domain.ReactionType;
+import com.socialcoisa.rede.feed.domain.UserId;
 import com.socialcoisa.rede.groups.application.port.out.GroupContentRepository;
 import com.socialcoisa.rede.groups.application.port.out.GroupRepository;
 import com.socialcoisa.rede.groups.domain.Group;
@@ -46,16 +48,20 @@ public class GroupFeedService {
 
 	private final GroupRepository groups;
 	private final GroupContentRepository content;
+	private final AuditLogRepository audit;
 	private final Clock clock;
 
-	public GroupFeedService(GroupRepository groups, GroupContentRepository content, Clock clock) {
+	public GroupFeedService(GroupRepository groups, GroupContentRepository content, AuditLogRepository audit,
+			Clock clock) {
 		this.groups = groups;
 		this.content = content;
+		this.audit = audit;
 		this.clock = clock;
 	}
 
 	@Transactional(readOnly = true)
 	public List<GroupTopic> listTopics(String groupId, String actorId) {
+		requireReadable(groupId);
 		requireMember(groupId, actorId);
 		return content.listTopics(groupId);
 	}
@@ -165,9 +171,48 @@ public class GroupFeedService {
 
 	@Transactional(readOnly = true)
 	public List<GroupPost> listPosts(String groupId, String topicId, String actorId, Instant before, int limit) {
+		requireReadable(groupId);
 		requireMember(groupId, actorId);
 		return content.listPosts(groupId, StringUtils.hasText(topicId) ? topicId : null, before,
 			Math.min(Math.max(limit, 1), MAX_PAGE));
+	}
+
+	/**
+	 * Remoção (moderação local ou o próprio autor).
+	 *
+	 * O autor apaga o que escreveu; quem modera apaga o dos outros (`MODERATE_CONTENT`). A
+	 * publicação vira REMOVED — sai do feed e das listagens, e a ação fica na auditoria da
+	 * plataforma (o administrador local não apaga prova de denúncia, mas remover o conteúdo do
+	 * grupo é o trabalho dele).
+	 */
+	@Transactional
+	public void removePost(String groupId, String postId, String actorId) {
+		GroupPost post = requirePost(groupId, postId);
+		if (!post.isPublished()) {
+			throw new ApiException(404, "POST_NOT_FOUND", "Publicacao nao encontrada neste grupo.");
+		}
+		if (!post.authorId().equals(actorId)) {
+			require(roleOf(groupId, actorId), GroupCapability.MODERATE_CONTENT);
+		}
+		content.savePost(post.remove(clock.instant()));
+		audit.record(new UserId(actorId), "GROUP_POST_REMOVED", postId, "{\"groupId\":\"" + groupId + "\"}");
+	}
+
+	/** Comentário: o autor apaga o próprio; quem modera apaga o dos outros. */
+	@Transactional
+	public void removeComment(String groupId, String postId, String commentId, String actorId) {
+		GroupPost post = requirePost(groupId, postId);
+		GroupComment comment = content.findComment(commentId)
+			.filter(item -> item.postId().equals(postId) && item.isPublished())
+			.orElseThrow(() -> new ApiException(404, "COMMENT_NOT_FOUND",
+				"Comentario nao encontrado nesta publicacao."));
+		if (!comment.authorId().equals(actorId)) {
+			require(roleOf(groupId, actorId), GroupCapability.MODERATE_CONTENT);
+		}
+		content.saveComment(comment.remove(clock.instant()));
+		refreshCounters(post);
+		audit.record(new UserId(actorId), "GROUP_COMMENT_REMOVED", commentId,
+			"{\"groupId\":\"" + groupId + "\",\"postId\":\"" + postId + "\"}");
 	}
 
 	@Transactional
@@ -258,6 +303,18 @@ public class GroupFeedService {
 		} catch (IllegalArgumentException error) {
 			throw new ApiException(400, "INVALID_REACTION", "Reacao desconhecida.");
 		}
+	}
+
+	/**
+	 * Grupo encerrado não entrega conteúdo nem a membro — sai da descoberta e some para leitura.
+	 * A equipe da plataforma investiga por outro caminho, não por este.
+	 */
+	private Group requireReadable(String groupId) {
+		Group group = requireGroup(groupId);
+		if (!group.status().readableByMembers()) {
+			throw new ApiException(404, "GROUP_NOT_FOUND", "Grupo nao encontrado.");
+		}
+		return group;
 	}
 
 	private Group requireGroup(String groupId) {

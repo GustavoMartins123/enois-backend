@@ -205,6 +205,19 @@ class GroupController {
 			});
 	}
 
+	@PostMapping("/{groupId}/close")
+	ResponseEntity<String> close(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@PathVariable String groupId) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		String hash = idempotency.hash(Map.of("groupId", groupId, "action", "close"));
+		return idempotency.execute(user.id(), "POST", "/api/groups/{groupId}/close", idempotencyKey, hash, () -> {
+			Group group = groupService.close(groupId, user.id().value());
+			return new CommandResponse(200, view(group, user));
+		});
+	}
+
 	private ResponseEntity<String> decide(String userId, String sessionToken, String idempotencyKey, String groupId,
 			String requestId, boolean approve) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
