@@ -22,4 +22,13 @@ public interface ExternalJobRepository {
 
 	/** Busca por TITULO (as externas nao tem tipo/nivel/local/salario para filtrar). */
 	List<ExternalJob> search(String query, int limit);
+
+	/** Mesma busca, mas restrita a UM agregador (a aba externa filtra por plataforma). */
+	List<ExternalJob> findByPlatform(String platform, String query, int limit);
+
+	/** Os agregadores disponíveis (para popular o filtro) — distintos e ordenados. */
+	List<String> distinctPlatforms();
+
+	/** Resolve as salvas: o id pode ser de uma vaga externa. */
+	List<ExternalJob> findByIds(List<String> ids);
 }

@@ -53,6 +53,35 @@ class ExternalJobPersistenceAdapter implements ExternalJobRepository {
 
 	@Override
 	@org.springframework.cache.annotation.Cacheable("externalJobs")
+	public List<ExternalJob> findByPlatform(String platform, String query, int limit) {
+		PageRequest page = PageRequest.of(0, Math.max(1, limit));
+		if (query == null || query.isBlank()) {
+			return repository.findByPlatformOrderByLastCheckedAtDesc(platform, page).stream()
+				.map(ExternalJobJpaEntity::toDomain).toList();
+		}
+		String escaped = query.toLowerCase(java.util.Locale.ROOT)
+			.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+		return repository.searchByPlatform(platform, "%" + escaped + "%", page).stream()
+			.map(ExternalJobJpaEntity::toDomain).toList();
+	}
+
+	@Override
+	@org.springframework.cache.annotation.Cacheable("externalJobs")
+	public List<String> distinctPlatforms() {
+		return repository.distinctPlatforms();
+	}
+
+	@Override
+	@org.springframework.cache.annotation.Cacheable("externalJobs")
+	public List<ExternalJob> findByIds(List<String> ids) {
+		if (ids == null || ids.isEmpty()) {
+			return List.of();
+		}
+		return repository.findByIdIn(ids).stream().map(ExternalJobJpaEntity::toDomain).toList();
+	}
+
+	@Override
+	@org.springframework.cache.annotation.Cacheable("externalJobs")
 	public List<ExternalJob> findRecent(int limit) {
 		return repository.findAllByOrderByLastCheckedAtDesc(PageRequest.of(0, Math.max(1, limit))).stream()
 			.map(ExternalJobJpaEntity::toDomain)

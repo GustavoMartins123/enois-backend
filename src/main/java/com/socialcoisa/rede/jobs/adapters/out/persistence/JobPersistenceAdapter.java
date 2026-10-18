@@ -211,6 +211,20 @@ class JobPersistenceAdapter implements JobRepository {
 	}
 
 	@Override
+	public java.util.List<Job> findByIds(java.util.Collection<String> ids) {
+		if (ids == null || ids.isEmpty()) {
+			return java.util.List.of();
+		}
+		return springData.findByIdIn(ids).stream().map(JobJpaEntity::toDomain).toList();
+	}
+
+	@Override
+	public java.util.List<String> findSavedJobIds(String userId) {
+		return saveRepo.findByUserIdOrderBySavedAtDesc(userId).stream()
+			.map(JobSaveJpaEntity::jobId).toList();
+	}
+
+	@Override
 	public void saveBookmark(String jobId, String userId) {
 		saveRepo.save(JobSaveJpaEntity.create(jobId, userId, clock.instant()));
 	}

@@ -35,6 +35,12 @@ public interface JobRepository {
 
 	java.util.Set<String> findSavedJobIds(String userId, java.util.Collection<String> jobIds);
 
+	/** Todas as vagas salvas do usuário, mais recentes primeiro (a aba de favoritas). */
+	List<String> findSavedJobIds(String userId);
+
+	/** Vagas internas por id (resolver as favoritas). */
+	List<Job> findByIds(java.util.Collection<String> ids);
+
 	java.util.Map<String, Integer> countApplicationsByJobIds(java.util.Collection<String> jobIds);
 
 	/** Grava a candidatura (com respostas e retrato do perfil) e devolve o id gerado. */

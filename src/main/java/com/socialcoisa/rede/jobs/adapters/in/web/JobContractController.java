@@ -110,9 +110,21 @@ class JobContractController {
 			@RequestParam(required = false) String type, @RequestParam(required = false) String level,
 			@RequestParam(required = false) String location,
 			@RequestParam(required = false) List<String> skills,
+			@RequestParam(required = false) String source, @RequestParam(required = false) String platform,
 			@RequestParam(required = false) String cursor, @RequestParam(defaultValue = "20") int limit,
 			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		// As ABAS: EXTERNAL devolve SO as externas (com filtro de agregador); INTERNAL nunca
+		// mistura. Sem `source` mantem o comportamento antigo (internas + externas na 1a pagina).
+		boolean soExternas = "EXTERNAL".equalsIgnoreCase(source);
+		boolean soInternas = "INTERNAL".equalsIgnoreCase(source);
+		if (soExternas) {
+			List<JobView> externas = org.springframework.util.StringUtils.hasText(platform)
+				? externalJobRepository.findByPlatform(platform.trim(), query, limit).stream()
+					.map(this::toExternalView).toList()
+				: externalJobViews(query);
+			return new PageResponse<>(externas, null);
+		}
 		Instant before = cursorCodec.decode(cursor).orElse(null);
 		List<Job> jobs = jobService.list(query, type, level, location, skills, before, limit);
 		// Externas nao tem tipo/nivel/local/skills: se o usuario filtrou por isso, elas nao entram.
@@ -122,7 +134,55 @@ class JobContractController {
 			|| (skills != null && !skills.isEmpty());
 		boolean firstPage = cursor == null;
 		return page(jobs, limit, viewerId(userId, sessionToken), PageKind.LIST,
-			firstPage && !structuralFilters, query);
+			!soInternas && firstPage && !structuralFilters, query);
+	}
+
+	/** As FAVORITAS: ids salvos resolvidos dos dois lados (interna e externa), na ordem do save. */
+	@GetMapping("/saved")
+	PageResponse<JobView> saved(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		String viewer = viewerId(userId, sessionToken);
+		if (viewer == null) {
+			throw new com.socialcoisa.rede.shared.web.ApiException(401, "UNAUTHENTICATED",
+				"Sessao obrigatoria para ver as vagas favoritas.");
+		}
+		List<String> ids = jobService.savedJobIds(viewer);
+		if (ids.isEmpty()) {
+			return new PageResponse<>(List.of(), null);
+		}
+		java.util.Map<String, Job> internas = new java.util.HashMap<>();
+		for (Job job : jobService.findByIds(ids)) {
+			internas.put(job.id(), job);
+		}
+		java.util.Map<String, ExternalJob> externas = new java.util.HashMap<>();
+		for (ExternalJob ext : externalJobRepository.findByIds(ids)) {
+			externas.put(ext.id(), ext);
+		}
+		List<JobView> views = new java.util.ArrayList<>();
+		for (String id : ids) {
+			Job interna = internas.get(id);
+			if (interna != null) {
+				JobView view = toView(interna, viewer, false, true, 0);
+				views.add(view);
+				continue;
+			}
+			ExternalJob ext = externas.get(id);
+			if (ext != null) {
+				JobView base = toExternalView(ext);
+				views.add(new JobView(base.id(), base.title(), base.company(), base.logo(), base.location(),
+					base.type(), base.level(), base.salary(), base.currency(), base.skills(), base.postedAt(),
+					base.applicationsCount(), base.applied(), true, false, 0, null, base.applicationFields(),
+					base.status(), base.closedAt(), base.sourceType(), base.sourceUrl(), base.sourcePlatform(),
+					base.applyEmail()));
+			}
+		}
+		return new PageResponse<>(views, null);
+	}
+
+	/** Os agregadores das externas (o filtro da aba). Cache do adapter ja cobre. */
+	@GetMapping("/platforms")
+	List<String> platforms() {
+		return externalJobRepository.distinctPlatforms();
 	}
 
 	/** Vagas publicadas pelo usuario autenticado (com o total de candidaturas recebidas). */
@@ -156,7 +216,8 @@ class JobContractController {
 			.map(c -> Map.<String, Object>of(
 				"name", c.name(),
 				"logo", c.logo() == null ? "" : c.logo(),
-				"openJobs", c.openJobs()))
+				"openJobs", c.openJobs(),
+				"origem", c.origem()))
 			.toList();
 	}
 

@@ -22,6 +22,10 @@ class JobSaveJpaEntity {
 	@Column(name = "job_id", nullable = false)
 	private String jobId;
 
+	String jobId() {
+		return jobId;
+	}
+
 	@Column(name = "user_id", nullable = false)
 	private String userId;
 

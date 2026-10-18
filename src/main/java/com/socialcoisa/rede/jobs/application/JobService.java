@@ -349,6 +349,14 @@ public class JobService {
 	public record JobAnswerInput(String fieldId, String value) {
 	}
 
+	public java.util.List<String> savedJobIds(String userId) {
+		return repository.findSavedJobIds(userId);
+	}
+
+	public java.util.List<Job> findByIds(java.util.Collection<String> ids) {
+		return repository.findByIds(ids);
+	}
+
 	@Transactional
 	public void save(String jobId, String userId) {
 		if (repository.hasBookmarked(jobId, userId)) {
