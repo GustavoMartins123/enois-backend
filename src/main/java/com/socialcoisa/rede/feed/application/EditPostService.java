@@ -27,7 +27,7 @@ import com.socialcoisa.rede.shared.web.ApiException;
 @Service
 public class EditPostService implements EditPostUseCase {
 
-	private static final int MAX_CONTENT = 1200;
+
 	private static final int MAX_TAGS = 5;
 
 	private final PostRepository postRepository;
@@ -109,8 +109,10 @@ public class EditPostService implements EditPostUseCase {
 			throw new ApiException(400, "INVALID_CONTENT", "Conteudo obrigatorio.");
 		}
 		String normalized = PlainText.defuse(content.trim());
-		if (normalized.length() > MAX_CONTENT) {
-			throw new ApiException(400, "CONTENT_TOO_LONG", "Conteudo deve ter no maximo 1200 caracteres.");
+		// Mesmo limite da criacao, por tipo: editar nao pode ser a porta dos fundos do limite.
+		int maxContent = com.socialcoisa.rede.feed.domain.PostContentLimits.of(type);
+		if (normalized.length() > maxContent) {
+			throw new ApiException(400, "CONTENT_TOO_LONG", "Este tipo de post aceita no maximo " + maxContent + " caracteres.");
 		}
 		return normalized;
 	}

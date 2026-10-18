@@ -182,8 +182,10 @@ public class PublishPostService implements PublishPostUseCase {
 		if (command.type() != PostType.PAGE && !StringUtils.hasText(command.content())) {
 			throw new ApiException(400, "INVALID_CONTENT", "Conteudo obrigatorio.");
 		}
-		if (command.content() != null && command.content().trim().length() > 1200) {
-			throw new ApiException(400, "CONTENT_TOO_LONG", "Conteudo deve ter no maximo 1200 caracteres.");
+		int limite = com.socialcoisa.rede.feed.domain.PostContentLimits.of(command.type());
+		if (command.content() != null && command.content().trim().length() > limite) {
+			throw new ApiException(400, "CONTENT_TOO_LONG",
+				"Este tipo de post aceita no maximo " + limite + " caracteres.");
 		}
 		if (command.tags() != null && command.tags().stream().filter(StringUtils::hasText).distinct().count() > 5) {
 			throw new ApiException(400, "TOO_MANY_TAGS", "Post deve ter no maximo 5 tags.");
