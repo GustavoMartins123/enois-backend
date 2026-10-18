@@ -68,8 +68,8 @@ class GamePlatformController {
 			@PathVariable String username) {
 		String viewerId = viewerIdOrNull(userId, sessionToken);
 		var page = developers.page(username, viewerId);
-		String badge = profiles.findById(page.user().id()).map(p -> p.primaryBadge()).orElse(null);
-		return DeveloperPageView.from(page, badge);
+		List<String> badges = profiles.findById(page.user().id()).map(p -> p.allBadges()).orElse(List.of());
+		return DeveloperPageView.from(page, badges);
 	}
 
 	/** O dono edita a própria página de criador (vazio limpa o campo). */
@@ -81,8 +81,8 @@ class GamePlatformController {
 		developers.save(user.id().value(), request.displayName(), request.headline(), request.bio(),
 			request.links(), request.avatar(), request.cover());
 		var page = developers.page(usernameOf(user.id().value()), user.id().value());
-		String badge = profiles.findById(user.id().value()).map(p -> p.primaryBadge()).orElse(null);
-		return DeveloperPageView.from(page, badge);
+		List<String> badges = profiles.findById(user.id().value()).map(p -> p.allBadges()).orElse(List.of());
+		return DeveloperPageView.from(page, badges);
 	}
 
 	/** Acompanhar (mão única) é alternar: acompanhar de novo deixa de acompanhar. */

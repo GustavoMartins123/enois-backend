@@ -97,7 +97,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 			profile != null ? profile.displayWithNickname() : null,
 			profile != null ? profile.username() : null,
 			profile != null ? profile.avatar() : null,
-			profile != null ? profile.primaryBadge() : null);
+			profile != null ? profile.allBadges() : java.util.List.of());
 	}
 
 	/**
@@ -149,7 +149,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 					p != null ? p.displayWithNickname() : null,
 					p != null ? p.username() : null,
 					p != null ? p.avatar() : null,
-					p != null ? p.primaryBadge() : null);
+					p != null ? p.allBadges() : java.util.List.of());
 			})
 			.toList();
 		// Reacao do proprio leitor: sem isso o front nao sabe que ele ja reagiu e a reacao

@@ -9,7 +9,7 @@ import com.socialcoisa.rede.feed.domain.PostType;
 import com.socialcoisa.rede.feed.domain.ReactionType;
 
 public record PostView(String id, String authorId, String authorUsername, String authorName, String authorAvatar,
-		String authorBadge,
+		String authorBadge, List<String> authorBadges,
 		PostType type, String content, String pageHtml, String articleBody, List<String> tags, List<String> mediaIds,
 		Instant createdAt,
 		Counters counters, ReactionType currentUserReaction, String communityId, CommunityView community,
@@ -32,45 +32,54 @@ public record PostView(String id, String authorId, String authorUsername, String
 	 * post ja ter sido gravado). Devolver so o essencial mantem essas respostas pequenas.
 	 */
 	public static PostView from(Post post) {
-		return new PostView(post.id().value(), post.authorId().value(), null, null, null, null, post.type(),
-			post.content(), null, null, post.tags(), post.mediaIds(), post.createdAt(), post.counters(), null,
-			post.communityId(), null, post.editedAt(), post.expiresAt());
+		return new PostView(post.id().value(), post.authorId().value(), null, null, null, null, List.of(),
+			post.type(), post.content(), null, null, post.tags(), post.mediaIds(), post.createdAt(), post.counters(),
+			null, post.communityId(), null, post.editedAt(), post.expiresAt());
 	}
 
 	public static PostView from(Post post, String authorUsername, String authorName, String authorAvatar) {
-		return from(post, authorUsername, authorName, authorAvatar, null);
+		return from(post, authorUsername, authorName, authorAvatar, List.of());
 	}
 
-	/** Com o emblema do autor (PNG junto ao nome, onde ele aparecer). */
+	/**
+	 * Com TODOS os emblemas do autor (até 5 PNGs junto ao nome, onde ele aparecer): o perfil mostra
+	 * a lista inteira, e o resto do app passa a mostrar a mesma coisa.
+	 *
+	 * `authorBadge` continua sendo o primeiro — é o campo que uma versão antiga do app lê.
+	 */
 	public static PostView from(Post post, String authorUsername, String authorName, String authorAvatar,
-			String authorBadge) {
+			List<String> authorBadges) {
+		List<String> badges = authorBadges == null ? List.of() : List.copyOf(authorBadges);
 		return new PostView(post.id().value(), post.authorId().value(), authorUsername, authorName, authorAvatar,
-			authorBadge, post.type(), post.content(), null, null, post.tags(), post.mediaIds(), post.createdAt(),
-			post.counters(), null, post.communityId(), null, post.editedAt(), post.expiresAt());
+			badges.isEmpty() ? null : badges.get(0), badges, post.type(), post.content(), null, null, post.tags(),
+			post.mediaIds(), post.createdAt(), post.counters(), null, post.communityId(), null, post.editedAt(),
+			post.expiresAt());
 	}
 
 	public PostView withCurrentUserReaction(ReactionType reaction) {
-		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, type, content, pageHtml,
-			articleBody, tags, mediaIds, createdAt, counters, reaction, communityId, community, editedAt, expiresAt);
+		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
+			content, pageHtml, articleBody, tags, mediaIds, createdAt, counters, reaction, communityId, community,
+			editedAt, expiresAt);
 	}
 
 	/** Anexa o HTML da pagina; so o post unico faz isso (ver {@link #from(Post)}). */
 	public PostView withPageHtml(String pageHtml) {
-		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, type, content, pageHtml,
-			articleBody, tags, mediaIds, createdAt, counters, currentUserReaction, communityId, community,
-			editedAt, expiresAt);
+		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
+			content, pageHtml, articleBody, tags, mediaIds, createdAt, counters, currentUserReaction, communityId,
+			community, editedAt, expiresAt);
 	}
 
 	/** Anexa a comunidade (nome + participacao do leitor) depois do enriquecimento. */
 	public PostView withCommunity(String communityId, CommunityView community) {
-		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, type, content, pageHtml,
-			articleBody, tags, mediaIds, createdAt, counters, currentUserReaction, communityId, community,
-			editedAt, expiresAt);
+		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
+			content, pageHtml, articleBody, tags, mediaIds, createdAt, counters, currentUserReaction, communityId,
+			community, editedAt, expiresAt);
 	}
 
 	/** Anexa o corpo do artigo; so a leitura do post unico faz isso (mesma regra da pagina). */
 	public PostView withArticleBody(String body) {
-		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, type, content, pageHtml, body,
-			tags, mediaIds, createdAt, counters, currentUserReaction, communityId, community, editedAt, expiresAt);
+		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
+			content, pageHtml, body, tags, mediaIds, createdAt, counters, currentUserReaction, communityId, community,
+			editedAt, expiresAt);
 	}
 }

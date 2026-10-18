@@ -337,6 +337,20 @@ public class UserProfile {
 		return badges.isEmpty() ? badge : badges.get(0);
 	}
 
+	/**
+	 * Todos os emblemas, na ordem escolhida — é o que acompanha o nome em TODO lugar (feed,
+	 * comentários, blog, jogos), e não só no perfil.
+	 *
+	 * Lista vazia cai na coluna antiga (`badge`), que guardava um emblema só: uma conta que ainda
+	 * não passou pela lista não perde o emblema que tinha.
+	 */
+	public List<String> allBadges() {
+		if (!badges.isEmpty()) {
+			return badges;
+		}
+		return badge == null || badge.isBlank() ? List.of() : List.of(badge);
+	}
+
 	public String id() {
 		return id;
 	}

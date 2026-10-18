@@ -8,13 +8,19 @@ import java.util.List;
  * `following` é de quem está lendo (false sem sessão), e `owner` diz se é a própria página — o front
  * usa isso para trocar o botão de acompanhar por "editar página".
  */
-public record DeveloperPageView(String userId, String username, String name, String badge, String avatar,
-		String cover, String displayName, String headline, String bio, List<String> links, List<GameView> games,
-		long followers, boolean following, boolean owner) {
+public record DeveloperPageView(String userId, String username, String name, String badge, List<String> badges,
+		String avatar, String cover, String displayName, String headline, String bio, List<String> links,
+		List<GameView> games, long followers, boolean following, boolean owner) {
 
-	public static DeveloperPageView from(DeveloperProfileService.DeveloperPage page, String badge) {
+	/**
+	 * `badges` são TODOS os emblemas do criador (o `badge` continua sendo o primeiro, para uma versão
+	 * antiga do app) — o nome aparece aqui como em qualquer lugar.
+	 */
+	public static DeveloperPageView from(DeveloperProfileService.DeveloperPage page, List<String> badges) {
 		var profile = page.profile();
-		return new DeveloperPageView(page.user().id(), page.user().username(), page.user().name(), badge,
+		List<String> lista = badges == null ? List.of() : List.copyOf(badges);
+		return new DeveloperPageView(page.user().id(), page.user().username(), page.user().name(),
+			lista.isEmpty() ? null : lista.get(0), lista,
 			profile == null ? page.user().avatar() : firstNonBlank(profile.avatar(), page.user().avatar()),
 			profile == null ? null : profile.cover(),
 			profile == null ? null : profile.displayName(),

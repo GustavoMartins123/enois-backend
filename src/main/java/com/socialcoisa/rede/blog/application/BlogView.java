@@ -11,16 +11,18 @@ import com.socialcoisa.rede.profile.domain.UserProfile;
  * diz se quem esta lendo e o dono.
  */
 public record BlogView(String id, String slug, String title, String description, String themeHtml, String authorName,
-		String authorUsername, String authorAvatar, String authorBadge, int posts, boolean subscribed, boolean owner,
-		List<BlogPostView> items) {
+		String authorUsername, String authorAvatar, String authorBadge, List<String> authorBadges, int posts,
+		boolean subscribed, boolean owner, List<BlogPostView> items) {
 
 	public static BlogView from(Blog blog, UserProfile author, int posts, boolean subscribed, boolean owner,
 			List<BlogPostView> items) {
+		List<String> badges = author == null ? List.of() : author.allBadges();
 		return new BlogView(blog.id(), blog.slug(), blog.title(), blog.description(), blog.themeHtml(),
 			author == null ? blog.slug() : author.name(),
 			author == null ? blog.slug() : author.username(),
 			author == null ? null : author.avatar(),
-			author == null ? null : author.badge(),
+			badges.isEmpty() ? null : badges.get(0),
+			badges,
 			posts, subscribed, owner, items);
 	}
 
@@ -31,6 +33,6 @@ public record BlogView(String id, String slug, String title, String description,
 	 */
 	public BlogView withoutItems() {
 		return new BlogView(id, slug, title, description, themeHtml, authorName, authorUsername, authorAvatar,
-			authorBadge, posts, subscribed, owner, List.of());
+			authorBadge, authorBadges, posts, subscribed, owner, List.of());
 	}
 }
