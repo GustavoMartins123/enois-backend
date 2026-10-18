@@ -424,6 +424,50 @@ class JobApplicationFlowTests {
 		assertThat(sentSubjects.get(1)).contains("análise");
 	}
 
+	@Test
+	void rejectingRequiresAReasonAndTheCandidateReadsIt() throws Exception {
+		var employer = auth.authenticate("job_feedback_owner");
+		var candidate = auth.authenticate("job_feedback_candidate");
+		String jobId = createJob(employer, "[]");
+		String applicationId = apply(candidate, jobId);
+
+		String url = "/jobs/" + jobId + "/applications/" + applicationId;
+
+		// Reprovar sem dizer por que: recusado pelo dominio (nao pelo banco).
+		mockMvc.perform(patch(url).header("X-Session-Token", employer.token())
+				.contentType(MediaType.APPLICATION_JSON).content(statusBody("NOT_SELECTED")))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("FEEDBACK_REQUIRED"));
+
+		// Com o motivo: passa, e o retorno volta na resposta.
+		String reason = "Seguimos com quem ja tinha trabalhado com pagamentos.";
+		mockMvc.perform(patch(url).header("X-Session-Token", employer.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("status", "NOT_SELECTED", "feedback", reason))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.status").value("NOT_SELECTED"))
+			.andExpect(jsonPath("$.feedback").value(reason))
+			.andExpect(jsonPath("$.reviewedAt").isNotEmpty());
+
+		// O candidato le o retorno na propria lista (antes so existia no aviso).
+		mockMvc.perform(get("/jobs/applications/mine").header("X-Session-Token", candidate.token()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$[0].jobId").value(jobId))
+			.andExpect(jsonPath("$[0].status").value("NOT_SELECTED"))
+			.andExpect(jsonPath("$[0].feedback").value(reason));
+	}
+
+	private String apply(TestAuthHelper.AuthSession candidate, String jobId) throws Exception {
+		MvcResult applied = mockMvc.perform(post("/jobs/" + jobId + "/applications")
+				.header("X-Session-Token", candidate.token())
+				.header("Idempotency-Key", "feedback-apply-" + jobId)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("message", "Tenho interesse", "answers", List.of()))))
+			.andExpect(status().isCreated())
+			.andReturn();
+		return objectMapper.readTree(applied.getResponse().getContentAsString()).get("id").asText();
+	}
+
 	private String statusBody(String value) throws Exception {
 		return objectMapper.writeValueAsString(Map.of("status", value));
 	}

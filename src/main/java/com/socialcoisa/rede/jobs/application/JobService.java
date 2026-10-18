@@ -130,9 +130,14 @@ public class JobService {
 	 * O lock da vaga e o mesmo do encerramento: duas triagens concorrentes na mesma vaga
 	 * serializam, e uma triagem nao passa por fora de um encerramento em andamento.
 	 */
+	/** Candidaturas que a pessoa fez, com o estado e o retorno do empregador. */
+	public List<JobApplication> myApplications(String userId, int limit) {
+		return repository.findApplicationsByUser(userId, limit);
+	}
+
 	@Transactional
 	public JobApplication updateApplicationStatus(String jobId, String applicationId, String userId,
-			JobApplicationStatus newStatus) {
+			JobApplicationStatus newStatus, String feedback) {
 		Job job = repository.findByIdForUpdate(jobId)
 			.orElseThrow(() -> new ApiException(404, "JOB_NOT_FOUND", "Vaga nao encontrada."));
 		if (!job.postedBy().equals(userId)) {
@@ -144,8 +149,10 @@ public class JobService {
 			.filter(found -> found.jobId().equals(jobId))
 			.orElseThrow(() -> new ApiException(404, "APPLICATION_NOT_FOUND", "Candidatura nao encontrada."));
 
-		JobApplication moved = application.withStatus(newStatus);
-		repository.updateApplicationStatus(applicationId, moved.status());
+		// O dominio valida a transicao E o motivo (reprovar exige retorno): nenhum caminho novo
+		// consegue gravar um "nao selecionado" mudo.
+		JobApplication moved = application.withStatus(newStatus, feedback, clock.instant());
+		repository.updateApplicationStatus(applicationId, moved.status(), moved.feedback(), moved.reviewedAt());
 
 		// So depois de persistir: o estado e a fonte da verdade, a notificacao vem dele.
 		statusNotifier.notifyStatusChange(job, moved, moved.status());
@@ -190,7 +197,7 @@ public class JobService {
 		String applicationId = repository.saveApplication(application);
 		// Candidatura nova nasce sempre APPLIED: o estado nao vem de fora.
 		JobApplication saved = JobApplication.restore(applicationId, jobId, userId, application.message(), snapshot,
-			application.appliedAt(), normalized, JobApplicationStatus.APPLIED);
+			application.appliedAt(), normalized, JobApplicationStatus.APPLIED, null, null);
 
 		// Entrega: o empregador recebe por e-mail e na mensagem direta, com o perfil do candidato.
 		delivery.deliver(job, saved);

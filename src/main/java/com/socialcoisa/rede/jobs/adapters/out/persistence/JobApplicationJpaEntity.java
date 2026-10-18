@@ -52,6 +52,12 @@ class JobApplicationJpaEntity {
 	@Column(name = "candidate_snapshot", length = 4000)
 	private String candidateSnapshot;
 
+	@Column(length = 1000)
+	private String feedback;
+
+	@Column(name = "reviewed_at")
+	private Instant reviewedAt;
+
 	@ElementCollection(fetch = FetchType.EAGER)
 	@CollectionTable(name = "job_application_answers", joinColumns = @JoinColumn(name = "application_id"))
 	@jakarta.persistence.OrderBy("position")
@@ -77,6 +83,8 @@ class JobApplicationJpaEntity {
 		e.appliedAt = application.appliedAt();
 		e.message = application.message();
 		e.candidateSnapshot = application.candidateSnapshot();
+		e.feedback = application.feedback();
+		e.reviewedAt = application.reviewedAt();
 		e.answers = application.answers().stream()
 			.map(JobApplicationAnswerEmbeddable::fromDomain)
 			.collect(java.util.stream.Collectors.toCollection(ArrayList::new));
@@ -87,15 +95,17 @@ class JobApplicationJpaEntity {
 		return id;
 	}
 
-	/** Troca so o estado; as respostas e o retrato do candidato ficam como estao. */
-	void changeStatus(JobApplicationStatus next) {
+	/** Troca o estado e guarda o retorno; as respostas e o retrato do candidato ficam como estao. */
+	void changeStatus(JobApplicationStatus next, String feedback, Instant reviewedAt) {
 		this.status = next;
+		this.feedback = feedback;
+		this.reviewedAt = reviewedAt;
 	}
 
 	com.socialcoisa.rede.jobs.domain.JobApplication toDomain() {
 		return com.socialcoisa.rede.jobs.domain.JobApplication.restore(
 			id == null ? null : String.valueOf(id), jobId, userId, message, candidateSnapshot, appliedAt,
-			answers.stream().map(JobApplicationAnswerEmbeddable::toDomain).toList(), status);
+			answers.stream().map(JobApplicationAnswerEmbeddable::toDomain).toList(), status, feedback, reviewedAt);
 	}
 
 }

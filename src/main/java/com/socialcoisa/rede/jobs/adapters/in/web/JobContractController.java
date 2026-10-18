@@ -88,7 +88,9 @@ class JobContractController {
 				toCandidateView(application), application.message(),
 				application.answers().stream()
 					.map(answer -> new AnswerView(answer.label(), answer.value()))
-					.toList()))
+					.toList(),
+				application.feedback(),
+				application.reviewedAt() != null ? application.reviewedAt().toString() : null))
 			.toList();
 	}
 
@@ -197,6 +199,33 @@ class JobContractController {
 	 * entao trato como se nao fosse o dono". O estado e validado no dominio, e o candidato e avisado
 	 * depois de a mudanca estar persistida.
 	 */
+	/**
+	 * "Minhas candidaturas": o que a pessoa se candidatou, com o estado e o retorno do empregador.
+	 *
+	 * Antes a tela listava as VAGAS (sem o estado da candidatura), entao o "nao selecionado" com o
+	 * motivo so existia no aviso — quem quisesse reler tinha de garimpar a conversa.
+	 */
+	@GetMapping("/applications/mine")
+	List<MyApplicationView> myApplications(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestParam(defaultValue = "50") int limit) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		return jobService.myApplications(user.id().value(), Math.min(limit, 100)).stream()
+			.map(application -> {
+				Job job = jobService.getById(application.jobId());
+				return new MyApplicationView(application.id(), application.jobId(), job.title(), job.company(),
+					application.status().name(), application.feedback(),
+					application.reviewedAt() != null ? application.reviewedAt().toString() : null,
+					application.appliedAt().toString());
+			})
+			.toList();
+	}
+
+	/** Uma candidatura como o CANDIDATO a ve. */
+	record MyApplicationView(String id, String jobId, String jobTitle, String jobCompany, String status,
+			String feedback, String reviewedAt, String appliedAt) {
+	}
+
 	@PatchMapping("/{jobId}/applications/{applicationId}")
 	ResponseEntity<ApplicationView> updateApplicationStatus(@PathVariable String jobId,
 			@PathVariable String applicationId,
@@ -205,9 +234,11 @@ class JobContractController {
 			@RequestBody UpdateApplicationStatusRequest body) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		JobApplicationStatus status = parseStatus(body == null ? null : body.status());
-		JobApplication updated = jobService.updateApplicationStatus(jobId, applicationId, user.id().value(), status);
+		JobApplication updated = jobService.updateApplicationStatus(jobId, applicationId, user.id().value(), status,
+			body == null ? null : body.feedback());
 		return ResponseEntity.ok(new ApplicationView(updated.id(), updated.jobId(), updated.status().name(),
-			updated.appliedAt().toString(), updated.answers().size()));
+			updated.appliedAt().toString(), updated.answers().size(), updated.feedback(),
+			updated.reviewedAt() != null ? updated.reviewedAt().toString() : null));
 	}
 
 	/** Estado desconhecido e erro do cliente (422), nao erro interno. */
@@ -416,7 +447,8 @@ class JobContractController {
 	record ApplyRequest(String message, List<AnswerRequest> answers) {
 	}
 
-	record UpdateApplicationStatusRequest(String status) {
+	/** `feedback` e obrigatorio ao reprovar (o dominio recusa sem ele). */
+	record UpdateApplicationStatusRequest(String status, String feedback) {
 	}
 
 	record AnswerRequest(String fieldId, String value) {
@@ -424,10 +456,15 @@ class JobContractController {
 
 	/** Candidatura como o empregador ve: o retrato do candidato + as respostas. */
 	record ApplicationView(String id, String jobId, String status, String appliedAt, int answersCount,
-			CandidateView candidate, String message, List<AnswerView> answers) {
+			CandidateView candidate, String message, List<AnswerView> answers, String feedback, String reviewedAt) {
 
 		ApplicationView(String id, String jobId, String status, String appliedAt, int answersCount) {
-			this(id, jobId, status, appliedAt, answersCount, null, null, List.of());
+			this(id, jobId, status, appliedAt, answersCount, null, null, List.of(), null, null);
+		}
+
+		ApplicationView(String id, String jobId, String status, String appliedAt, int answersCount,
+				String feedback, String reviewedAt) {
+			this(id, jobId, status, appliedAt, answersCount, null, null, List.of(), feedback, reviewedAt);
 		}
 	}
 

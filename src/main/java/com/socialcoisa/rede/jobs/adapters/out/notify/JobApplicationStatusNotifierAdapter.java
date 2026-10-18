@@ -42,7 +42,7 @@ class JobApplicationStatusNotifierAdapter implements JobApplicationStatusNotifie
 	@Override
 	@Transactional
 	public void notifyStatusChange(Job job, JobApplication application, JobApplicationStatus status) {
-		String text = messageFor(job, status);
+		String text = messageFor(job, application, status);
 
 		try {
 			String conversationId = messagingService.directConversationBetween(application.userId(), job.postedBy());
@@ -60,14 +60,17 @@ class JobApplicationStatusNotifierAdapter implements JobApplicationStatusNotifie
 		}
 	}
 
-	private String messageFor(Job job, JobApplicationStatus status) {
-		return "📋 Atualização da sua candidatura para \"" + job.title() + "\" (" + job.company() + ")\n\n"
-			+ switch (status) {
+	private String messageFor(Job job, JobApplication application, JobApplicationStatus status) {
+		String base = "📋 Atualização da sua candidatura para \"" + job.title() + "\" (" + job.company()
+			+ ")\n\n" + switch (status) {
 				case IN_REVIEW -> "Sua candidatura está em análise.";
 				case ADVANCED -> "Você avançou para a próxima etapa do processo. Fique de olho no seu e-mail.";
 				case NOT_SELECTED -> "A empresa seguiu com outras pessoas desta vez. Obrigado por participar.";
 				case APPLIED -> "Sua candidatura foi recebida.";
 			};
+		// O retorno do empregador vem junto: e o que faz a resposta ser util para quem se candidatou.
+		return application.feedback() == null ? base
+			: base + "\n\nRetorno da empresa: " + application.feedback();
 	}
 
 	private String subjectFor(Job job, JobApplicationStatus status) {

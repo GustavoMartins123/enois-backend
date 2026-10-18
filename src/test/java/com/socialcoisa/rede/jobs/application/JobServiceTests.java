@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -212,11 +213,13 @@ class JobServiceTests {
 		if (status == JobApplicationStatus.APPLIED) {
 			return applied;
 		}
-		JobApplication inReview = applied.withStatus(JobApplicationStatus.IN_REVIEW);
+		JobApplication inReview = applied.withStatus(JobApplicationStatus.IN_REVIEW, null, java.time.Instant.now());
 		return switch (status) {
 			case IN_REVIEW -> inReview;
-			case ADVANCED -> inReview.withStatus(JobApplicationStatus.ADVANCED);
-			case NOT_SELECTED -> inReview.withStatus(JobApplicationStatus.NOT_SELECTED);
+			case ADVANCED -> inReview.withStatus(JobApplicationStatus.ADVANCED, null, java.time.Instant.now());
+			// Reprovar exige motivo no dominio: o teste passa um, como o empregador faria.
+			case NOT_SELECTED -> inReview.withStatus(JobApplicationStatus.NOT_SELECTED,
+				"Seguimos com outra pessoa.", java.time.Instant.now());
 			case APPLIED -> applied;
 		};
 	}
@@ -237,10 +240,10 @@ class JobServiceTests {
 		givenApplication(applicationIn(JobApplicationStatus.APPLIED));
 
 		JobApplication moved = service.updateApplicationStatus("job_1", "app_1", USER,
-			JobApplicationStatus.IN_REVIEW);
+			JobApplicationStatus.IN_REVIEW, null);
 
 		assertThat(moved.status()).isEqualTo(JobApplicationStatus.IN_REVIEW);
-		verify(repository).updateApplicationStatus("app_1", JobApplicationStatus.IN_REVIEW);
+		verify(repository).updateApplicationStatus(eq("app_1"), eq(JobApplicationStatus.IN_REVIEW), isNull(), any());
 		verify(statusNotifier).notifyStatusChange(any(), any(), eq(JobApplicationStatus.IN_REVIEW));
 	}
 
@@ -251,12 +254,12 @@ class JobServiceTests {
 		when(repository.findByIdForUpdate("job_1")).thenReturn(java.util.Optional.of(openJob()));
 		when(repository.findApplicationById("app_1")).thenReturn(java.util.Optional.of(inReview));
 
-		assertThat(service.updateApplicationStatus("job_1", "app_1", USER, JobApplicationStatus.ADVANCED).status())
+		assertThat(service.updateApplicationStatus("job_1", "app_1", USER, JobApplicationStatus.ADVANCED, null).status())
 			.isEqualTo(JobApplicationStatus.ADVANCED);
 
 		when(repository.findApplicationById("app_1"))
 			.thenReturn(java.util.Optional.of(applicationIn(JobApplicationStatus.ADVANCED)));
-		assertThat(service.updateApplicationStatus("job_1", "app_1", USER, JobApplicationStatus.IN_REVIEW).status())
+		assertThat(service.updateApplicationStatus("job_1", "app_1", USER, JobApplicationStatus.IN_REVIEW, null).status())
 			.isEqualTo(JobApplicationStatus.IN_REVIEW);
 	}
 
@@ -265,12 +268,12 @@ class JobServiceTests {
 		givenApplication(applicationIn(JobApplicationStatus.APPLIED));
 
 		assertThatThrownBy(() -> service.updateApplicationStatus("job_1", "app_1", USER,
-			JobApplicationStatus.ADVANCED))
+			JobApplicationStatus.ADVANCED, null))
 			.isInstanceOf(ApiException.class)
 			.hasMessageContaining("nao pode passar");
 
 		// Transicao invalida nao grava e NAO avisa o candidato.
-		verify(repository, never()).updateApplicationStatus(any(), any());
+		verify(repository, never()).updateApplicationStatus(any(), any(), any(), any());
 		verifyNoInteractions(statusNotifier);
 	}
 
@@ -279,7 +282,7 @@ class JobServiceTests {
 		givenApplication(applicationIn(JobApplicationStatus.IN_REVIEW));
 
 		assertThatThrownBy(() -> service.updateApplicationStatus("job_1", "app_1", USER,
-			JobApplicationStatus.IN_REVIEW))
+			JobApplicationStatus.IN_REVIEW, null))
 			.isInstanceOf(ApiException.class);
 
 		// E o que impede o clique repetido de virar mensagem repetida para o candidato.
@@ -291,7 +294,7 @@ class JobServiceTests {
 		givenApplication(applicationIn(JobApplicationStatus.NOT_SELECTED));
 
 		assertThatThrownBy(() -> service.updateApplicationStatus("job_1", "app_1", USER,
-			JobApplicationStatus.IN_REVIEW))
+			JobApplicationStatus.IN_REVIEW, null))
 			.isInstanceOf(ApiException.class);
 
 		verifyNoInteractions(statusNotifier);
@@ -302,11 +305,11 @@ class JobServiceTests {
 		when(repository.findByIdForUpdate("job_1")).thenReturn(java.util.Optional.of(openJob()));
 
 		assertThatThrownBy(() -> service.updateApplicationStatus("job_1", "app_1", "user_outro",
-			JobApplicationStatus.IN_REVIEW))
+			JobApplicationStatus.IN_REVIEW, null))
 			.isInstanceOf(ApiException.class)
 			.hasMessageContaining("So quem publicou");
 
-		verify(repository, never()).updateApplicationStatus(any(), any());
+		verify(repository, never()).updateApplicationStatus(any(), any(), any(), any());
 		verifyNoInteractions(statusNotifier);
 	}
 
@@ -319,7 +322,7 @@ class JobServiceTests {
 				List.of())));
 
 		assertThatThrownBy(() -> service.updateApplicationStatus("job_1", "app_1", USER,
-			JobApplicationStatus.IN_REVIEW))
+			JobApplicationStatus.IN_REVIEW, null))
 			.isInstanceOf(ApiException.class)
 			.hasMessageContaining("Candidatura nao encontrada");
 

@@ -19,6 +19,9 @@ interface SpringDataJobApplicationJpaRepository extends JpaRepository<JobApplica
 
 	List<JobApplicationJpaEntity> findByJobIdOrderByAppliedAtDesc(String jobId, Pageable pageable);
 
+	/** As candidaturas de uma pessoa (a tela "minhas candidaturas", com estado e retorno). */
+	List<JobApplicationJpaEntity> findByUserIdOrderByAppliedAtDesc(String userId, Pageable pageable);
+
 	@Query("SELECT a.jobId FROM JobApplicationJpaEntity a WHERE a.userId = :userId AND a.jobId IN :jobIds")
 	List<String> findJobIdsByUserIdAndJobIdIn(@Param("userId") String userId,
 			@Param("jobIds") java.util.Collection<String> jobIds);

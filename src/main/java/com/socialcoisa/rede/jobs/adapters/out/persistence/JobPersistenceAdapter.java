@@ -173,6 +173,13 @@ class JobPersistenceAdapter implements JobRepository {
 	}
 
 	@Override
+	public List<com.socialcoisa.rede.jobs.domain.JobApplication> findApplicationsByUser(String userId, int limit) {
+		return applicationRepo.findByUserIdOrderByAppliedAtDesc(userId, PageRequest.of(0, limit)).stream()
+			.map(JobApplicationJpaEntity::toDomain)
+			.toList();
+	}
+
+	@Override
 	public Optional<com.socialcoisa.rede.jobs.domain.JobApplication> findApplicationById(String applicationId) {
 		try {
 			return applicationRepo.findById(Long.valueOf(applicationId)).map(JobApplicationJpaEntity::toDomain);
@@ -185,9 +192,10 @@ class JobPersistenceAdapter implements JobRepository {
 
 	@Override
 	public void updateApplicationStatus(String applicationId,
-			com.socialcoisa.rede.jobs.domain.JobApplicationStatus status) {
+			com.socialcoisa.rede.jobs.domain.JobApplicationStatus status, String feedback,
+			java.time.Instant reviewedAt) {
 		applicationRepo.findById(Long.valueOf(applicationId)).ifPresent(entity -> {
-			entity.changeStatus(status);
+			entity.changeStatus(status, feedback, reviewedAt);
 			applicationRepo.save(entity);
 		});
 	}
