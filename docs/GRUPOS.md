@@ -57,6 +57,13 @@ Enquanto houver pendência real, a automação fica viva.
 - Fora do escopo deste plano: os itens da fila da sessão interativa (botões de exportar/importar
   tema, marketplace ampliado). Não mexa neles; se o `git status` mostrar arquivos modificados que
   não são seus, evite-os.
+- **Existe outra automação trabalhando nos DOIS repos a cada 20 min** (a do plano mestre
+  `/home/mel/Documentos/PLANO-temas-loja-e-moeda.md`: temas, moeda faísca, marketplace com
+  escrow, serviços, games). Antes de criar uma migração, confira o maior `V*` existente no
+  instante e o `git status`; se ela estiver com trabalho não commitado nos arquivos que você
+  precisa, escolha outra pendência do plano ou trabalhe por cima sem desfazer nada. Duas
+  migrações com o mesmo número derrubam o boot — na dúvida, a sua vai no número seguinte ao
+  maior que existir naquele momento.
 
 ## Progresso
 
