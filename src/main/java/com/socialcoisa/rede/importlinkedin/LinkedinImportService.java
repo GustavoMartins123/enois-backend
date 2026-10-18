@@ -49,9 +49,20 @@ public class LinkedinImportService {
 			String endDate) {
 	}
 
+	/** Campos do Profile.csv que o perfil do Énóis tem onde guardar. */
+	public record ProfilePreview(String name, String headline, String summary, String location, String industry) {
+	}
+
 	public record LinkedinImportPreview(List<ExperiencePreview> experiences,
 			List<EducationPreview> education, List<CertificationPreview> certifications,
-			List<ProjectPreview> projects, int found) {
+			List<ProjectPreview> projects,
+			/** Headline/sobre/localização/indústria do Profile.csv (aplicados no perfil). */
+			ProfilePreview profile,
+			/** Skills.csv — entram na lista de habilidades do perfil. */
+			List<String> skills,
+			/** O que veio no arquivo mas NÃO tem estrutura no Énóis (idiomas, prêmios, cursos…). */
+			Map<String, Integer> semEstrutura,
+			int found) {
 	}
 
 	public LinkedinImportPreview parse(MultipartFile file) {
@@ -129,8 +140,67 @@ public class LinkedinImportService {
 				parseDate(row.get("started on")), parseDate(row.get("finished on"))));
 		}
 
-		int found = experiences.size() + education.size() + certifications.size() + projects.size();
-		return new LinkedinImportPreview(experiences, education, certifications, projects, found);
+		// Publicações do LinkedIn têm casa nos PROJETOS do perfil (título, descrição, link, data).
+		for (Map<String, String> row : rows(csvs.getOrDefault("Publications.csv", ""))) {
+			String title = row.get("title");
+			if (!StringUtils.hasText(title)) {
+				continue;
+			}
+			projects.add(new ProjectPreview(title, orNull(row.get("description")), orNull(row.get("url")),
+				parseDate(row.get("published on")), null));
+		}
+
+		// Profile.csv: só os campos que o perfil do Énóis tem onde guardar.
+		ProfilePreview profile = null;
+		for (Map<String, String> row : rows(csvs.getOrDefault("Profile.csv", ""))) {
+			String headline = orNull(row.get("headline"));
+			String summary = orNull(row.get("summary"));
+			String location = orNull(row.get("geo location")) != null ? orNull(row.get("geo location"))
+				: orNull(row.get("location"));
+			String industry = orNull(row.get("industry"));
+			String first = orNull(row.get("first name"));
+			String last = orNull(row.get("last name"));
+			String name = (first == null && last == null) ? null
+				: ((first == null ? "" : first) + " " + (last == null ? "" : last)).trim();
+			if (headline != null || summary != null || location != null || industry != null || name != null) {
+				profile = new ProfilePreview(name, headline, summary, location, industry);
+			}
+			break;
+		}
+
+		// Skills.csv: a coluna é "name" no export atual (o antigo usava "skill name").
+		List<String> skills = new ArrayList<>();
+		for (Map<String, String> row : rows(csvs.getOrDefault("Skills.csv", ""))) {
+			String skill = orNull(row.get("name")) != null ? orNull(row.get("name")) : orNull(row.get("skill name"));
+			if (skill != null && !skills.contains(skill)) {
+				skills.add(skill);
+			}
+		}
+
+		// O que veio mas não tem estrutura no Énóis: contamos para a pessoa saber (nada é perdido
+		// em silêncio, e conexões/mensagens NÃO entram — são dados de terceiros, LGPD).
+		Map<String, Integer> semEstrutura = new LinkedHashMap<>();
+		registrarSemEstrutura(semEstrutura, "Idiomas", rows(csvs.getOrDefault("Languages.csv", "")));
+		registrarSemEstrutura(semEstrutura, "Prêmios", rows(csvs.getOrDefault("Honors & Awards.csv", "")));
+		registrarSemEstrutura(semEstrutura, "Voluntariado", rows(csvs.getOrDefault("Volunteering.csv", "")));
+		registrarSemEstrutura(semEstrutura, "Cursos", rows(csvs.getOrDefault("Courses.csv", "")));
+
+		int found = experiences.size() + education.size() + certifications.size() + projects.size()
+			+ skills.size() + (profile != null ? 1 : 0);
+		return new LinkedinImportPreview(experiences, education, certifications, projects, profile, skills,
+			semEstrutura, found);
+	}
+
+	private void registrarSemEstrutura(Map<String, Integer> alvo, String rotulo, List<Map<String, String>> linhas) {
+		int comConteudo = 0;
+		for (Map<String, String> linha : linhas) {
+			if (linha.values().stream().anyMatch(StringUtils::hasText)) {
+				comConteudo++;
+			}
+		}
+		if (comConteudo > 0) {
+			alvo.put(rotulo, comConteudo);
+		}
 	}
 
 	// ===== CSV (com aspas e vírgula escapada) =====

@@ -114,4 +114,48 @@ class LinkedinImportServiceTests {
 		assertThatThrownBy(() -> service.parse(new MockMultipartFile("file", "x.zip", "application/zip",
 			new byte[5 * 1024 * 1024 + 1]))).isInstanceOf(ApiException.class);
 	}
+
+	@Test
+	void parsesProfileSkillsPublicationsAndCountsTheRest() {
+		var preview = service.parse(zip(
+			"Profile.csv",
+			"\"First Name\",\"Last Name\",\"Headline\",\"Summary\",\"Geo Location\",\"Industry\"\n"
+				+ "\"Ada\",\"Silva\",\"Dev backend\",\"Gosto de café e código.\",\"São Paulo, Brasil\",\"Software\"",
+			"Skills.csv",
+			"\"Name\"\n\"Java\"\n\"Spring\"\n\"Kof\"",
+			"Positions.csv",
+			POSITIONS_HEADER + "\n\"Dev\",\"Acme\",\"SP\",\"\",\"2020-01\",\"\"",
+			"Publications.csv",
+			"\"Title\",\"Description\",\"Url\",\"Published On\"\n\"Artigo de IA\",\"Sobre LLMs\",\"https://ex.com/ia\",\"2023-05\"",
+			"Languages.csv",
+			"\"Name\",\"Proficiency\"\n\"Português\",\"Nativo\"\n\"Inglês\",\"Fluente\"",
+			"Honors & Awards.csv",
+			"\"Title\",\"Issuer\"\n\"Hackathon\",\"Acme\"",
+			"Courses.csv",
+			"\"Name\",\"Number\"\n\"Spring Boot\",\"1\"",
+			"Volunteering.csv",
+			"\"Company Name\",\"Role\"\n\"ONG\",\"Mentora\""));
+
+		// Perfil: só os campos com casa no Énóis.
+		assertThat(preview.profile()).isNotNull();
+		assertThat(preview.profile().name()).isEqualTo("Ada Silva");
+		assertThat(preview.profile().headline()).isEqualTo("Dev backend");
+		assertThat(preview.profile().location()).isEqualTo("São Paulo, Brasil");
+		assertThat(preview.profile().summary()).isEqualTo("Gosto de café e código.");
+
+		// Skills: lista do período, na ordem.
+		assertThat(preview.skills()).containsExactly("Java", "Spring", "Kof");
+
+		// Publicação vira projeto (título/descrição/link/data).
+		assertThat(preview.projects()).hasSize(1);
+		assertThat(preview.projects().get(0).title()).isEqualTo("Artigo de IA");
+		assertThat(preview.projects().get(0).url()).isEqualTo("https://ex.com/ia");
+
+		// O que não tem estrutura é CONTADO (nada some em silêncio).
+		assertThat(preview.semEstrutura()).containsEntry("Idiomas", 2).containsEntry("Prêmios", 1)
+			.containsEntry("Cursos", 1).containsEntry("Voluntariado", 1);
+
+		// "found" conta o que dá para importar (posição + skill×3 + publicação + perfil).
+		assertThat(preview.found()).isGreaterThanOrEqualTo(6);
+	}
 }
