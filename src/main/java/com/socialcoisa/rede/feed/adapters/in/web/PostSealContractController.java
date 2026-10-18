@@ -4,6 +4,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -15,9 +16,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.socialcoisa.rede.feed.application.SealPeopleView;
 import com.socialcoisa.rede.feed.application.SealService;
 import com.socialcoisa.rede.feed.application.SealsView;
 import com.socialcoisa.rede.feed.domain.PostSealType;
+import com.socialcoisa.rede.shared.blocks.BlockedUsersReader;
 import com.socialcoisa.rede.shared.web.CurrentUser;
 import com.socialcoisa.rede.shared.web.CurrentUserResolver;
 
@@ -25,8 +28,8 @@ import com.socialcoisa.rede.shared.web.CurrentUserResolver;
  * Selos de post: a marcacao no topo do post ("importante", "dica", "post duplicado"...).
  *
  * A LEITURA e publica (o selo e informacao do post, como a contagem de reacoes; a sessao, quando
- * existe, so acrescenta qual selo e o de quem esta lendo). A ESCRITA exige sessao, e um selo por
- * pessoa por post — clicar no mesmo remove, clicar em outro troca.
+ * existe, so acrescenta quais selos sao de quem esta lendo). A ESCRITA exige sessao, e cada selo e
+ * independente: clicar no mesmo remove, clicar em outro acrescenta — a pessoa pode ter varios.
  */
 @RestController
 @RequestMapping("/feed/posts")
@@ -37,10 +40,13 @@ class PostSealContractController {
 
 	private final SealService sealService;
 	private final CurrentUserResolver currentUserResolver;
+	private final BlockedUsersReader blockedUsersReader;
 
-	PostSealContractController(SealService sealService, CurrentUserResolver currentUserResolver) {
+	PostSealContractController(SealService sealService, CurrentUserResolver currentUserResolver,
+			BlockedUsersReader blockedUsersReader) {
 		this.sealService = sealService;
 		this.currentUserResolver = currentUserResolver;
+		this.blockedUsersReader = blockedUsersReader;
 	}
 
 	/** Selos de varios posts de uma vez: `?ids=post_1,post_2` (a pagina inteira numa consulta). */
@@ -61,6 +67,19 @@ class PostSealContractController {
 		return complete;
 	}
 
+	/**
+	 * Quem marcou o post e com o que — a tela abre isto ao clicar num selo, como faz com as reacoes.
+	 * Leitura publica; o visitante (ou quem tem sessao) so deixa de ver quem bloqueou.
+	 */
+	@GetMapping("/{postId}/seals/people")
+	SealPeopleView people(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@PathVariable String postId) {
+		CurrentUser user = resolveSafely(userId, sessionToken);
+		Set<String> hidden = blockedUsersReader.hiddenIdsFor(user == null ? null : user.id().value());
+		return sealService.people(postId, hidden);
+	}
+
 	@PostMapping("/{postId}/seals")
 	SealsView add(@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
@@ -69,7 +88,7 @@ class PostSealContractController {
 		return sealService.toggle(user.id().value(), postId, request.seal());
 	}
 
-	/** Remover: tira o selo que a pessoa tiver no post. */
+	/** Remover: tira TODOS os selos que a pessoa tiver no post (o seletor tem "tirar meus selos"). */
 	@DeleteMapping("/{postId}/seals")
 	SealsView remove(@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,

@@ -25,9 +25,9 @@ import com.socialcoisa.rede.shared.web.TestAuthHelper;
 /**
  * Selos de post: a marcacao no topo, ao lado da reacao.
  *
- * O que este teste tranca: um selo por pessoa por post (clicar de novo remove, clicar em outro
- * troca), a contagem por selo na leitura em lote, e a leitura publica (sem sessao) mostrando os
- * selos sem o "meu".
+ * O que este teste tranca: VARIOS selos por pessoa no mesmo post (cada um alterna sozinho), a
+ * contagem por selo na leitura em lote, a leitura publica (sem sessao) mostrando os selos sem os
+ * "meus", e a lista de quem marcou (com quem deu o que) — a que a tela abre ao clicar no selo.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -47,7 +47,7 @@ class PostSealTests {
 	}
 
 	@Test
-	void oneSealPerPersonAndCountsInTheBatchRead() throws Exception {
+	void manySealsPerPersonAndCountsInTheBatchRead() throws Exception {
 		var author = auth.authenticate("seal_author1");
 		var first = auth.authenticate("seal_first1");
 		var second = auth.authenticate("seal_second1");
@@ -57,7 +57,7 @@ class PostSealTests {
 		// Duas pessoas marcam o mesmo selo.
 		seal(first, postId, "IMPORTANTE").andExpect(status().isOk());
 		seal(second, postId, "IMPORTANTE").andExpect(status().isOk());
-		// E uma delas troca para outro: continua valendo UM por pessoa.
+		// E a primeira acrescenta OUTRO: a mesma pessoa pode ter mais de um selo.
 		seal(first, postId, "DICA").andExpect(status().isOk());
 
 		MvcResult batch = mockMvc.perform(get("/feed/posts/seals").param("ids", postId))
@@ -65,31 +65,68 @@ class PostSealTests {
 			.andReturn();
 		var node = objectMapper.readTree(batch.getResponse().getContentAsString()).get(postId);
 		assertThat(node.get("seals").valueStream().map(seal -> seal.get("seal").asText()).toList())
-			.containsExactlyInAnyOrder("IMPORTANTE", "DICA");
-		assertThat(node.get("seals").valueStream().mapToInt(seal -> seal.get("count").asInt()).sum()).isEqualTo(2);
-		assertThat(node.get("mySeal").isNull()).isTrue(); // leitura sem sessao
+			.containsExactly("IMPORTANTE", "DICA");
+		assertThat(node.get("seals").valueStream().mapToInt(seal -> seal.get("count").asInt()).sum()).isEqualTo(3);
+		assertThat(node.get("mySeals").isArray()).isTrue();
+		assertThat(node.get("mySeals").valueStream().count()).isZero(); // leitura sem sessao
 
-		// Com sessao, o "meu selo" aparece — e clicar no mesmo remove.
+		// Com sessao, os "meus selos" aparecem todos — e clicar de novo em um tira so ele.
 		MvcResult mine = mockMvc.perform(get("/feed/posts/seals").param("ids", postId)
 				.header("X-Session-Token", first.token()))
 			.andExpect(status().isOk())
 			.andReturn();
-		assertThat(objectMapper.readTree(mine.getResponse().getContentAsString()).get(postId).get("mySeal").asText())
-			.isEqualTo("DICA");
+		var mySeals = objectMapper.readTree(mine.getResponse().getContentAsString()).get(postId).get("mySeals");
+		assertThat(mySeals.valueStream().map(seal -> seal.asText()).toList())
+			.containsExactlyInAnyOrder("IMPORTANTE", "DICA");
 
 		seal(first, postId, "DICA").andExpect(status().isOk());
-		MvcResult after = mockMvc.perform(get("/feed/posts/seals").param("ids", postId))
+		MvcResult after = mockMvc.perform(get("/feed/posts/seals").param("ids", postId)
+				.header("X-Session-Token", first.token()))
 			.andExpect(status().isOk())
 			.andReturn();
-		assertThat(objectMapper.readTree(after.getResponse().getContentAsString()).get(postId).get("seals")
-			.valueStream().mapToInt(seal -> seal.get("count").asInt()).sum()).isEqualTo(1);
+		var afterNode = objectMapper.readTree(after.getResponse().getContentAsString()).get(postId);
+		assertThat(afterNode.get("seals").valueStream().map(seal -> seal.get("seal").asText()).toList())
+			.containsExactly("IMPORTANTE");
+		assertThat(afterNode.get("seals").valueStream().mapToInt(seal -> seal.get("count").asInt()).sum()).isEqualTo(2);
+		assertThat(afterNode.get("mySeals").valueStream().map(seal -> seal.asText()).toList())
+			.containsExactly("IMPORTANTE");
 
-		// Remover pelo DELETE tambem funciona (idempotente).
+		// O DELETE tira TODOS os selos de quem pediu (e e idempotente).
 		mockMvc.perform(delete("/feed/posts/" + postId + "/seals").header("X-Session-Token", second.token()))
 			.andExpect(status().isOk());
 		mockMvc.perform(get("/feed/posts/seals").param("ids", postId))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$." + postId + ".seals").isEmpty());
+			.andExpect(jsonPath("$." + postId + ".seals[0].seal").value("IMPORTANTE"))
+			.andExpect(jsonPath("$." + postId + ".seals[0].count").value(1));
+	}
+
+	/** Quem marcou: a lista que a tela abre ao clicar no selo, com o selo de cada pessoa. */
+	@Test
+	void listsWhoSealedWithTheirSeal() throws Exception {
+		var author = auth.authenticate("seal_author3");
+		var first = auth.authenticate("seal_first3");
+		var second = auth.authenticate("seal_second3");
+
+		String postId = publish(author, "Post para a lista de quem marcou");
+
+		seal(first, postId, "DICA").andExpect(status().isOk());
+		seal(first, postId, "INSPIRADOR").andExpect(status().isOk());
+		seal(second, postId, "DICA").andExpect(status().isOk());
+
+		MvcResult result = mockMvc.perform(get("/feed/posts/" + postId + "/seals/people"))
+			.andExpect(status().isOk())
+			.andReturn();
+		var node = objectMapper.readTree(result.getResponse().getContentAsString());
+
+		// Contagem do topo: DICA 2, INSPIRADOR 1 (do maior para o menor).
+		assertThat(node.get("seals").valueStream().map(seal -> seal.get("seal").asText()).toList())
+			.containsExactly("DICA", "INSPIRADOR");
+		assertThat(node.get("seals").get(0).get("count").asInt()).isEqualTo(2);
+		// E as pessoas, cada uma com o seu selo (a primeira deu dois, entao aparece duas vezes).
+		assertThat(node.get("people").valueStream().map(person -> person.get("userId").asText()).toList())
+			.containsExactly(first.userId(), first.userId(), second.userId());
+		assertThat(node.get("people").valueStream().map(person -> person.get("seal").asText()).toList())
+			.containsExactly("DICA", "INSPIRADOR", "DICA");
 	}
 
 	@Test

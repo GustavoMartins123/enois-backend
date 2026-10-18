@@ -7,6 +7,7 @@ import org.springframework.stereotype.Repository;
 
 import com.socialcoisa.rede.feed.application.port.out.PostSealRepository;
 import com.socialcoisa.rede.feed.domain.PostSeal;
+import com.socialcoisa.rede.feed.domain.PostSealType;
 
 @Repository
 class PostSealPersistenceAdapter implements PostSealRepository {
@@ -18,8 +19,13 @@ class PostSealPersistenceAdapter implements PostSealRepository {
 	}
 
 	@Override
-	public Optional<PostSeal> findByPostAndUser(String postId, String userId) {
-		return springData.findByPostIdAndUserId(postId, userId).map(PostSealJpaEntity::toDomain);
+	public List<PostSeal> findByPostAndUser(String postId, String userId) {
+		return springData.findByPostIdAndUserId(postId, userId).stream().map(PostSealJpaEntity::toDomain).toList();
+	}
+
+	@Override
+	public Optional<PostSeal> findByPostAndUserAndSeal(String postId, String userId, PostSealType seal) {
+		return springData.findByPostIdAndUserIdAndSeal(postId, userId, seal).map(PostSealJpaEntity::toDomain);
 	}
 
 	@Override
@@ -28,12 +34,22 @@ class PostSealPersistenceAdapter implements PostSealRepository {
 	}
 
 	@Override
-	public int delete(String postId, String userId) {
+	public int delete(String postId, String userId, PostSealType seal) {
+		return springData.deleteByPostAndUserAndSeal(postId, userId, seal);
+	}
+
+	@Override
+	public int deleteAll(String postId, String userId) {
 		return springData.deleteByPostAndUser(postId, userId);
 	}
 
 	@Override
 	public List<PostSeal> findByPostIds(List<String> postIds) {
 		return springData.findByPostIdIn(postIds).stream().map(PostSealJpaEntity::toDomain).toList();
+	}
+
+	@Override
+	public List<PostSeal> findByPostId(String postId) {
+		return springData.findByPostIdOrderByCreatedAtAsc(postId).stream().map(PostSealJpaEntity::toDomain).toList();
 	}
 }
