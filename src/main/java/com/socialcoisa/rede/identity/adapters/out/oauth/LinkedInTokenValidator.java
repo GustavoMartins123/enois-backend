@@ -105,8 +105,11 @@ class LinkedInTokenValidator implements TokenValidator {
 				return Optional.empty();
 			}
 
-			if (StringUtils.hasText(expectedNonce)
-					&& !expectedNonce.equals(claims.getStringClaim("nonce"))) {
+			// O id_token do LinkedIn nao traz o claim nonce (so o state, validado e de uso unico
+			// no backend, amarra o pedido). Conferimos quando o provedor devolve o claim.
+			String nonce = claims.getStringClaim("nonce");
+			if (StringUtils.hasText(expectedNonce) && StringUtils.hasText(nonce)
+					&& !expectedNonce.equals(nonce)) {
 				return Optional.empty();
 			}
 
