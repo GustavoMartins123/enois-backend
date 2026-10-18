@@ -216,8 +216,7 @@ class JobContractController {
 			.map(c -> Map.<String, Object>of(
 				"name", c.name(),
 				"logo", c.logo() == null ? "" : c.logo(),
-				"openJobs", c.openJobs(),
-				"origem", c.origem()))
+				"openJobs", c.openJobs()))
 			.toList();
 	}
 
