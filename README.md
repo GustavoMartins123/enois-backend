@@ -206,8 +206,8 @@ e o endpoint exige sessão — anônimo não gasta a cota.
 
 | # | O que | Onde | Bloqueia |
 |---|-------|------|----------|
-| **0** | **Religar o GitHub Actions nos dois repositórios** | `gh api -X PUT repos/Rede-ENois/enois-frontend/actions/permissions -F enabled=true` (idem `enois-backend`) ou Settings → Actions → General | **todo deploy, nos dois repos** |
-| **0b** | **Trust policy: o sub do FRONT ainda falta** (o backend já voltou — imagem `dc44362` no ar). Na trust policy da `forest-dev-github`, o `StringLike` precisa incluir também `repo:Rede-ENois/enois-frontend:ref:refs/heads/main` (e a variante `pull_request` se usada). | IAM `arn:aws:iam::818928662779:role/forest-dev-github` | deploy do FRONT |
+| ~~0~~ | ~~Religar o GitHub Actions nos dois repositórios~~ — **feito em 18/10** | — | — |
+| **0** | **Trust policy: falta o sub do FRONT.** O backend já voltou (imagem `dc44362` no ar) com o papel NOVO `forest-dev-enois-ecr`; o front usa o mesmo papel e é recusado. O `StringLike` do `sub` precisa incluir `repo:Rede-ENois/enois-frontend:*` (o `forest-dev-github`, de antes da transferência, não vale mais). | IAM `arn:aws:iam::818928662779:role/forest-dev-enois-ecr` | deploy do FRONT |
 | 1 | Certificado (ACM) + DNS de `paginas.enois.ia.br` | ACM us-east-1 + DNS do `ia.br` | player dentro das páginas publicadas |
 | 2 | Rotacionar a senha do banco (a antiga está no histórico do Git) | MariaDB + `git filter-repo` | segurança |
 | 3 | `REDE_GIFS_TENOR_KEY` e `REDE_GIFS_GIPHY_KEY` | secrets do Deployment | busca externa de GIF (sem elas, só os GIFs da comunidade) |
