@@ -123,6 +123,16 @@ public class MarketplaceService {
 		return listings.findBySeller(sellerId);
 	}
 
+	/** Compras de quem comprou (o painel do escrow: confirmar ou pedir reembolso). */
+	public List<MarketplacePurchase> purchasesByBuyer(String buyerId) {
+		return listings.findPurchasesByBuyer(buyerId);
+	}
+
+	/** Vendas de quem vendeu (o painel do escrow: acompanhar as liberações). */
+	public List<MarketplacePurchase> salesBySeller(String sellerId) {
+		return listings.findSalesBySeller(sellerId);
+	}
+
 	private MarketplaceListing listing(String id) {
 		return listings.findListingById(id)
 			.orElseThrow(() -> new ApiException(404, "LISTING_NOT_FOUND", "Listagem não encontrada."));

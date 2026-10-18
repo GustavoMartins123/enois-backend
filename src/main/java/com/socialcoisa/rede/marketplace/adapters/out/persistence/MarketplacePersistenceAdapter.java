@@ -36,6 +36,10 @@ interface SpringDataMarketplacePurchaseRepository
 
 	List<MarketplacePurchaseJpaEntity> findByStateAndCreatedAtBefore(String state, java.time.Instant before,
 			Pageable pageable);
+
+	List<MarketplacePurchaseJpaEntity> findByBuyerIdOrderByCreatedAtDesc(String buyerId);
+
+	List<MarketplacePurchaseJpaEntity> findBySellerIdOrderByCreatedAtDesc(String sellerId);
 }
 
 @Repository
@@ -89,6 +93,18 @@ class MarketplacePersistenceAdapter implements MarketplaceRepository {
 	@Override
 	public Optional<MarketplacePurchase> findPurchaseById(String id) {
 		return purchases.findById(id).map(MarketplacePurchaseJpaEntity::toDomain);
+	}
+
+	@Override
+	public List<MarketplacePurchase> findPurchasesByBuyer(String buyerId) {
+		return purchases.findByBuyerIdOrderByCreatedAtDesc(buyerId).stream()
+			.map(MarketplacePurchaseJpaEntity::toDomain).toList();
+	}
+
+	@Override
+	public List<MarketplacePurchase> findSalesBySeller(String sellerId) {
+		return purchases.findBySellerIdOrderByCreatedAtDesc(sellerId).stream()
+			.map(MarketplacePurchaseJpaEntity::toDomain).toList();
 	}
 
 	@Override

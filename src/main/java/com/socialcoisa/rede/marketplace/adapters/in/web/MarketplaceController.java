@@ -50,6 +50,20 @@ class MarketplaceController {
 		return marketplace.mine(user.id().value()).stream().map(ListingView::from).toList();
 	}
 
+	@GetMapping("/marketplace/compras")
+	List<PurchaseView> myPurchases(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		return marketplace.purchasesByBuyer(user.id().value()).stream().map(PurchaseView::from).toList();
+	}
+
+	@GetMapping("/marketplace/vendas")
+	List<PurchaseView> mySales(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		return marketplace.salesBySeller(user.id().value()).stream().map(PurchaseView::from).toList();
+	}
+
 	@PostMapping("/marketplace")
 	Map<String, Object> publish(@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken, @RequestBody PublishRequest request) {
@@ -99,6 +113,14 @@ class MarketplaceController {
 	}
 
 	record PublishRequest(String itemKind, String itemId, String title, String description, long price) {
+	}
+
+	record PurchaseView(String id, String listingId, String buyerId, String sellerId, long price, String state,
+			String createdAt, String decidedAt) {
+		static PurchaseView from(MarketplacePurchase p) {
+			return new PurchaseView(p.id(), p.listingId(), p.buyerId(), p.sellerId(), p.price(), p.state().name(),
+				p.createdAt().toString(), p.decidedAt() == null ? null : p.decidedAt().toString());
+		}
 	}
 
 	record ListingView(String id, String sellerId, String itemKind, String itemId, String title, String description,

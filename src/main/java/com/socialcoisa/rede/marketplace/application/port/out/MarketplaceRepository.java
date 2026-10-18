@@ -23,4 +23,8 @@ public interface MarketplaceRepository {
 	Optional<MarketplacePurchase> findPurchaseById(String id);
 
 	List<MarketplacePurchase> findHeldOlderThan(int limit);
+
+	List<MarketplacePurchase> findPurchasesByBuyer(String buyerId);
+
+	List<MarketplacePurchase> findSalesBySeller(String sellerId);
 }
