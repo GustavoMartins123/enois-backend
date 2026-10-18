@@ -246,7 +246,19 @@ class GamesPlatformTests {
 			.andExpect(jsonPath("$.plays").value(1))
 			.andExpect(jsonPath("$.players").value(1))
 			.andExpect(jsonPath("$.updates").value(1));
-		assertThat(catalogIds("?order=plays").get(0)).isEqualTo("cafe-com-codigo");
+		// O mais jogado lidera a ordem por plays — a menos que um destaque pago (G2) esteja
+		// ativo: o impulso sobe de propósito acima do mais jogado.
+		var primeiro = firstCatalogItem("?order=plays");
+		if (!primeiro.get("slug").asText().equals("cafe-com-codigo")) {
+			org.assertj.core.api.Assertions.assertThat(primeiro.get("boosted").asBoolean())
+				.as("só um destaque pago pode ultrapassar o mais jogado").isTrue();
+		}
+	}
+
+	private tools.jackson.databind.JsonNode firstCatalogItem(String query) throws Exception {
+		MvcResult result = mockMvc.perform(get("/games" + query)).andExpect(status().isOk()).andReturn();
+		var items = objectMapper.readTree(result.getResponse().getContentAsString()).get("items");
+		return items.get(0);
 	}
 
 	@Test

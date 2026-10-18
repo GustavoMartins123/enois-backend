@@ -19,7 +19,8 @@ import com.socialcoisa.rede.media.application.port.out.StorageUrlFactory;
  * O ImageKit continua no projeto (acervo antigo e o caminho de apagar arquivo): o que muda em `s3`
  * e onde nasce a midia NOVA — o CDN antigo fica gravado na propria linha da midia.
  */
-@SpringBootTest(properties = "rede.media.storage=s3")
+@SpringBootTest(properties = {"rede.media.storage=s3", "rede.media.s3.bucket=bucket-de-teste",
+		"rede.media.s3.publicBaseUrl=https://cdn.exemplo.com"})
 class S3StorageModeTests {
 
 	@Autowired

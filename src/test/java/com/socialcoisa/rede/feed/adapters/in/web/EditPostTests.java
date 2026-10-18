@@ -103,7 +103,8 @@ class EditPostTests {
 				.header("X-Session-Token", author.token())
 				.header("Idempotency-Key", "edit-long-1")
 				.contentType(MediaType.APPLICATION_JSON)
-				.content(objectMapper.writeValueAsString(Map.of("content", "a".repeat(1201)))))
+			// Com variação: o antiflood (PlainText.defuse) colapsaria a corrida de "a" antes do limite.
+			.content(objectMapper.writeValueAsString(Map.of("content", "0123456789".repeat(121)))))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("CONTENT_TOO_LONG"));
 	}
