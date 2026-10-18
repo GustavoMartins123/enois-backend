@@ -278,6 +278,10 @@ public class JobService {
 		snapshot.put("experiencesCount", extensionRepository.countExperiencesByUserId(userId));
 		snapshot.put("reputation", reputation);
 		snapshot.put("identityVerified", profile != null && profile.identityVerified());
+		// Curriculo do momento da candidatura: entra no retrato, nao numa coluna nova — se a pessoa
+		// trocar o PDF depois, a candidatura antiga continua mostrando o que foi enviado.
+		snapshot.put("resumeUrl", profile == null || profile.resumeUrl() == null ? "" : profile.resumeUrl());
+		snapshot.put("resumeName", profile == null || profile.resumeName() == null ? "" : profile.resumeName());
 		try {
 			return objectMapper.writeValueAsString(snapshot);
 		}

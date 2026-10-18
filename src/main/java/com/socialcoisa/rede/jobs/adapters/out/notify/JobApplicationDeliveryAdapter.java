@@ -73,6 +73,13 @@ class JobApplicationDeliveryAdapter implements JobApplicationDelivery {
 			text.append(" — ").append(headline);
 		}
 		text.append("\n");
+		// Currículo em anexo-por-link: é o primeiro documento que o empregador procura.
+		String resumeUrl = snapshot(application, "resumeUrl");
+		if (StringUtils.hasText(resumeUrl)) {
+			String resumeName = snapshot(application, "resumeName");
+			text.append("Currículo: ").append(StringUtils.hasText(resumeName) ? resumeName + " — " : "")
+				.append(resumeUrl).append("\n");
+		}
 		String location = snapshot(application, "location");
 		if (StringUtils.hasText(location)) {
 			text.append("Local: ").append(location).append("\n");

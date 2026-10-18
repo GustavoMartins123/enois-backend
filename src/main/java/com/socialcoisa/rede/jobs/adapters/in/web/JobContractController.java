@@ -469,7 +469,8 @@ class JobContractController {
 	}
 
 	record CandidateView(String userId, String name, String socialName, String username, String headline, String location, String avatar,
-			List<String> skills, int experienceYears, int experiencesCount, int reputation, boolean identityVerified) {
+			List<String> skills, int experienceYears, int experiencesCount, int reputation, boolean identityVerified,
+			String resumeUrl, String resumeName) {
 	}
 
 	record AnswerView(String label, String value) {
@@ -510,10 +511,12 @@ class JobContractController {
 				snapshot.path("experienceYears").asInt(0),
 				snapshot.path("experiencesCount").asInt(0),
 				snapshot.path("reputation").asInt(0),
-				snapshot.path("identityVerified").asBoolean(false));
+				snapshot.path("identityVerified").asBoolean(false),
+				snapshot.path("resumeUrl").asText(""),
+				snapshot.path("resumeName").asText(""));
 		}
 		catch (Exception exception) {
-			return new CandidateView(application.userId(), "", "", "", "", "", "", List.of(), 0, 0, 0, false);
+			return new CandidateView(application.userId(), "", "", "", "", "", "", List.of(), 0, 0, 0, false, "", "");
 		}
 	}
 
