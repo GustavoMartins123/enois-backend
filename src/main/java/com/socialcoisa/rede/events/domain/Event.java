@@ -73,7 +73,10 @@ public class Event {
 			// segue para o formato brasileiro
 		}
 		try {
-			return java.time.LocalDate.parse(value, java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+			// STRICT + `uuuu`: o padrao SMART aceita 31/02 e "conserta" para 28/02 sem avisar — data
+			// que a pessoa nao escreveu nao pode virar evento.
+			return java.time.LocalDate.parse(value, java.time.format.DateTimeFormatter.ofPattern("dd/MM/uuuu")
+				.withResolverStyle(java.time.format.ResolverStyle.STRICT));
 		}
 		catch (java.time.format.DateTimeParseException ignored) {
 			return null;
@@ -93,9 +96,45 @@ public class Event {
 		}
 	}
 
-	/** O evento ja passou (com a folga informada). Sem data confiavel, nunca vence. */
+	/**
+	 * O evento ja passou (com a folga informada).
+	 *
+	 * Sem data confiavel, nunca vence — apagar presenca por causa de um palpite seria pior. A
+	 * EXCECAO e a data absurda (ano 220122, que apareceu de verdade): essa nao e "sem data", e uma
+	 * data que nunca vai chegar, e um evento assim nunca sai da vitrine nem entra na faxina. Ela
+	 * conta como vencida para o sistema poder limpar sozinho.
+	 */
 	public boolean isExpired(Instant now, java.time.Duration grace) {
+		if (hasAbsurdSchedule(now)) {
+			return true;
+		}
 		return expiresAt().map(expiry -> now.isAfter(expiry.plus(grace))).orElse(false);
+	}
+
+	/** Quanto no futuro ainda e agendamento, e nao engano (ou brincadeira). */
+	public static final java.time.Duration MAX_AHEAD = java.time.Duration.ofDays(365L * 5);
+
+	/** Quanto no passado ainda faz sentido cadastrar (evento que acabou de acontecer, registro). */
+	public static final java.time.Duration MAX_BEHIND = java.time.Duration.ofDays(365L * 2);
+
+	/**
+	 * A data esta fora da janela do que e agendavel?
+	 *
+	 * Existe porque o campo e texto livre e o banco aceitava qualquer coisa: um "220122-12-12"
+	 * entrava como evento valido, ficava para sempre no topo da lista (ordenado por data) e nunca
+	 * era sanitizado. Data que nao da para ler NAO entra aqui — essa e tratada como "sem data".
+	 */
+	public boolean hasAbsurdSchedule(Instant now) {
+		java.time.LocalDate parsed = parseDate(date);
+		if (parsed == null) {
+			// Nao e data legivel. Se o "ano" que a pessoa escreveu tem mais de quatro digitos, nao e
+			// texto estranho: e a data impossivel que apareceu de verdade ("220122-12-12"), que sem
+			// isto nunca venceria e ficaria no topo da lista para sempre.
+			java.util.regex.Matcher digits = java.util.regex.Pattern.compile("(\\d{5,})").matcher(date == null ? "" : date);
+			return digits.find();
+		}
+		Instant when = parsed.atStartOfDay().toInstant(java.time.ZoneOffset.UTC);
+		return when.isAfter(now.plus(MAX_AHEAD)) || when.isBefore(now.minus(MAX_BEHIND));
 	}
 
 	public boolean isSanitized() {

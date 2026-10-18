@@ -37,8 +37,40 @@ public class EventService {
 		String id = "event_" + UUID.randomUUID().toString().replace("-", "");
 		Event event = Event.create(id, title, date, time, format, host, cover, httpsOrNull(streamUrl), location,
 			userId, clock.instant());
+		requireRealisticSchedule(event);
 		repository.save(event);
 		return event;
+	}
+
+	/**
+	 * A data precisa ser legivel e cair numa janela que existe na vida real.
+	 *
+	 * Sem isto o banco aceitava "220122-12-12": o evento entrava como valido, ficava no topo da
+	 * lista para sempre (a ordem e por data) e a faxina nunca o alcancava, porque ele "ainda nao
+	 * aconteceu". A janela e generosa de proposito — dois anos para tras (registro do que passou) e
+	 * cinco para frente (planejamento de verdade) —, e o que ela barra e o que nao e data.
+	 */
+	private void requireRealisticSchedule(Event event) {
+		if (event.expiresAt().isEmpty()) {
+			throw new ApiException(400, "INVALID_EVENT_DATE",
+				"Data do evento invalida. Use AAAA-MM-DD ou DD/MM/AAAA.");
+		}
+		if (event.hasAbsurdSchedule(clock.instant())) {
+			throw new ApiException(400, "INVALID_EVENT_DATE",
+				"Data fora do periodo aceito: no maximo 5 anos para frente e 2 anos para tras.");
+		}
+	}
+
+	/** Apaga o evento. So o dono ou um administrador — e a faxina de presencas vai junto. */
+	@Transactional
+	public void delete(String eventId, String userId, boolean admin) {
+		Event event = repository.findById(eventId)
+			.orElseThrow(() -> new ApiException(404, "EVENT_NOT_FOUND", "Evento nao encontrado."));
+		if (!admin && !event.createdBy().equals(userId)) {
+			throw new ApiException(403, "NOT_EVENT_OWNER", "Este evento nao e seu.");
+		}
+		repository.deleteAttendees(eventId);
+		repository.deleteById(eventId);
 	}
 
 	/**

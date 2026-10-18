@@ -19,6 +19,7 @@ import com.socialcoisa.rede.events.application.EventService;
 import com.socialcoisa.rede.events.domain.Event;
 import com.socialcoisa.rede.idempotency.application.CommandResponse;
 import com.socialcoisa.rede.idempotency.application.IdempotencyApplicationService;
+import com.socialcoisa.rede.shared.web.AdminGuard;
 import com.socialcoisa.rede.shared.web.CurrentUser;
 import com.socialcoisa.rede.shared.web.CurrentUserResolver;
 import com.socialcoisa.rede.shared.web.CursorCodec;
@@ -34,12 +35,44 @@ class EventContractController {
 	private final EventService eventService;
 	private final CursorCodec cursorCodec;
 
+	private final AdminGuard adminGuard;
+
 	EventContractController(IdempotencyApplicationService idempotency, CurrentUserResolver currentUserResolver,
-			EventService eventService, CursorCodec cursorCodec) {
+			EventService eventService, CursorCodec cursorCodec, AdminGuard adminGuard) {
 		this.idempotency = idempotency;
 		this.currentUserResolver = currentUserResolver;
 		this.eventService = eventService;
 		this.cursorCodec = cursorCodec;
+		this.adminGuard = adminGuard;
+	}
+
+	/**
+	 * Apaga um evento. Quem criou pode apagar o seu; administrador apaga qualquer um — e e assim que
+	 * um evento absurdo (data que nao existe na vida real) sai da vitrine sem depender de banco.
+	 */
+	@DeleteMapping("/{eventId}")
+	ResponseEntity<String> delete(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@PathVariable String eventId) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		String hash = idempotency.hash(java.util.Map.of("eventId", eventId));
+		return idempotency.execute(user.id(), "DELETE", "/api/events/{eventId}", idempotencyKey, hash,
+			() -> {
+				eventService.delete(eventId, user.id().value(), isAdmin(user));
+				return new CommandResponse(200, new StatusResponse(eventId, "DELETED"));
+			});
+	}
+
+	/** O guarda de admin lança 403 para quem nao e: aqui queremos saber sem quebrar o fluxo. */
+	private boolean isAdmin(CurrentUser user) {
+		try {
+			adminGuard.requireAdmin(user);
+			return true;
+		}
+		catch (RuntimeException notAdmin) {
+			return false;
+		}
 	}
 
 	/** Lista os eventos que ainda vao acontecer; `includePast=true` inclui o historico (com selo). */
