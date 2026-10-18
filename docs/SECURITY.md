@@ -17,6 +17,24 @@ arquivo primeiro e siga a ordem das fases.
 | Rate limiting | resilience4j, `instances.auth` (20/periodo) e `instances.search` | **só nesses dois** — não há limiter global por IP |
 | Validação de URL externa | `games/application/GameUrlGuard` (2026-10-18) | https, sem credencial, host público (loopback/privado/link-local/IPv6 local) |
 
+## 0.1 Fase B — o que já estava de pé e o que foi provado (2026-10-18)
+
+A triagem por IA **já tinha** as defesas certas de autoridade: o conteúdo denunciado entra na
+mensagem de usuário entre marcadores e rotulado como dado não confiável; o prompt de sistema diz que
+o modelo não bane nem executa nada; o veredito gravado é **revalidado na hora de aplicar** ("o JSON
+gravado não pode valer mais do que a política do dia"); e a única ação automática possível é uma
+restrição com recurso — banimento só com um humano negando o recurso.
+
+O que faltava era **prova**. `AiTriageGuardTests` (3/3, sem provedor e sem contexto de Spring):
+um payload que tenta fechar o marcador e dar ordens fica dentro do bloco de dado e não aparece no
+prompt de sistema; a penalidade automática exige confiança acima do piso e ausência de ambiguidade
+(confiança baixa, `ambiguo: true`, campo ausente e valor não numérico **não** passam); alvo sem
+conteúdo vira "(conteudo indisponivel)" e vai para revisão humana. Os construtores de prompt viraram
+`static` (texto puro) para poderem ser testados sem subir a aplicação.
+
+Ainda **não** feito na Fase B: limite de chamadas/custo/concorrência por denúncia e métrica de
+latência/custo da IA (Fase F).
+
 ## 2. Lacunas conhecidas (do que a auditoria desta sessão já viu)
 
 1. **Rate limiting global por IP** — cadastro, login, recuperação e envio de código têm `auth`, mas
