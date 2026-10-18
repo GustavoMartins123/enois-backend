@@ -8,8 +8,11 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
 
 import com.socialcoisa.rede.groups.application.port.out.GroupContentRepository;
+import com.socialcoisa.rede.groups.domain.GroupComment;
+import com.socialcoisa.rede.groups.domain.GroupCommentStatus;
 import com.socialcoisa.rede.groups.domain.GroupPost;
 import com.socialcoisa.rede.groups.domain.GroupPostStatus;
+import com.socialcoisa.rede.groups.domain.GroupReaction;
 import com.socialcoisa.rede.groups.domain.GroupTopic;
 
 @Repository
@@ -17,11 +20,16 @@ class GroupContentPersistenceAdapter implements GroupContentRepository {
 
 	private final SpringDataGroupTopicJpaRepository topics;
 	private final SpringDataGroupPostJpaRepository posts;
+	private final SpringDataGroupCommentJpaRepository comments;
+	private final SpringDataGroupPostReactionJpaRepository reactions;
 
 	GroupContentPersistenceAdapter(SpringDataGroupTopicJpaRepository topics,
-			SpringDataGroupPostJpaRepository posts) {
+			SpringDataGroupPostJpaRepository posts, SpringDataGroupCommentJpaRepository comments,
+			SpringDataGroupPostReactionJpaRepository reactions) {
 		this.topics = topics;
 		this.posts = posts;
+		this.comments = comments;
+		this.reactions = reactions;
 	}
 
 	@Override
@@ -55,10 +63,62 @@ class GroupContentPersistenceAdapter implements GroupContentRepository {
 	}
 
 	@Override
+	public Optional<GroupPost> findPost(String postId) {
+		return posts.findById(postId).map(GroupPostJpaEntity::toDomain);
+	}
+
+	@Override
 	public List<GroupPost> listPosts(String groupId, String topicId, Instant before, int limit) {
 		return posts.list(groupId, GroupPostStatus.PUBLISHED, topicId, before, PageRequest.of(0, limit))
 			.stream()
 			.map(GroupPostJpaEntity::toDomain)
 			.toList();
+	}
+
+	@Override
+	public void saveComment(GroupComment comment) {
+		comments.save(GroupCommentJpaEntity.fromDomain(comment));
+	}
+
+	@Override
+	public Optional<GroupComment> findComment(String commentId) {
+		return comments.findById(commentId).map(GroupCommentJpaEntity::toDomain);
+	}
+
+	@Override
+	public List<GroupComment> listComments(String postId, int limit) {
+		return comments.findByPostIdAndStatusOrderByCreatedAtAsc(postId, GroupCommentStatus.PUBLISHED,
+			PageRequest.of(0, limit))
+			.stream()
+			.map(GroupCommentJpaEntity::toDomain)
+			.toList();
+	}
+
+	@Override
+	public long countComments(String postId) {
+		return comments.countByPostIdAndStatus(postId, GroupCommentStatus.PUBLISHED);
+	}
+
+	@Override
+	public void saveReaction(GroupReaction reaction) {
+		reactions.findByPostIdAndUserId(reaction.postId(), reaction.userId()).ifPresentOrElse(existing -> {
+			existing.changeType(reaction.type());
+			reactions.save(existing);
+		}, () -> reactions.save(GroupReactionJpaEntity.fromDomain(reaction)));
+	}
+
+	@Override
+	public Optional<GroupReaction> findReaction(String postId, String userId) {
+		return reactions.findByPostIdAndUserId(postId, userId).map(GroupReactionJpaEntity::toDomain);
+	}
+
+	@Override
+	public void removeReaction(String postId, String userId) {
+		reactions.deleteByPostIdAndUserId(postId, userId);
+	}
+
+	@Override
+	public long countReactions(String postId) {
+		return reactions.countByPostId(postId);
 	}
 }

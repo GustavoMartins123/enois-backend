@@ -63,6 +63,16 @@ public class GroupPost {
 			reactions, comments, createdAt, now);
 	}
 
+	/**
+	 * Contadores desnormalizados: a contagem vem das tabelas de reação/comentário, na mesma transação.
+	 * O `updatedAt` NÃO muda — reagir ou comentar não edita a publicação.
+	 */
+	public GroupPost withCounters(long reactionCount, long commentCount) {
+		return new GroupPost(id, groupId, topicId, authorId, content, mediaIds, status, pinned,
+			(int) Math.min(reactionCount, Integer.MAX_VALUE), (int) Math.min(commentCount, Integer.MAX_VALUE),
+			createdAt, updatedAt);
+	}
+
 	public boolean isPublished() {
 		return status == GroupPostStatus.PUBLISHED;
 	}

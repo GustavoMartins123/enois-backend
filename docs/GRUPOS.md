@@ -113,8 +113,12 @@ Enquanto houver pendência real, a automação fica viva.
       a V81 perdeu as chaves estrangeiras (collation da `users` de produção), então a checagem
       tópico↔grupo mora no serviço e é testada (tópico de outro grupo → 404). **Isolamento
       provado**: a publicação de grupo não aparece no `GET /feed` (2026-10-18).
-- [ ] Comentários e reações do grupo (pendente). Anexos já viajam como `mediaIds` (serviço de
-      mídia compartilhado) e o isolamento do feed principal já está provado.
+- [x] Comentários e reações do grupo — comentar/reagir exigem ser membro (`INTERACT`); a resposta
+      só aponta para comentário da MESMA publicação; a reação é uma por pessoa e alterna (mesma de
+      novo remove, outra troca, DELETE remove de vez), com os contadores da publicação acompanhando
+      na mesma transação. Anexos viajam como `mediaIds` (serviço de mídia compartilhado) e o
+      isolamento do feed principal está provado. `GroupDiscussionTests` + a suíte de grupos verdes
+      (2026-10-18).
 
 ### Etapa 5 — Descoberta e interface
 - [ ] Descoberta e pesquisa públicas (só metadados públicos).

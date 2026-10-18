@@ -11,13 +11,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import com.socialcoisa.rede.feed.domain.ReactionType;
 import com.socialcoisa.rede.groups.application.port.out.GroupContentRepository;
 import com.socialcoisa.rede.groups.application.port.out.GroupRepository;
 import com.socialcoisa.rede.groups.domain.Group;
 import com.socialcoisa.rede.groups.domain.GroupCapability;
+import com.socialcoisa.rede.groups.domain.GroupComment;
 import com.socialcoisa.rede.groups.domain.GroupMember;
 import com.socialcoisa.rede.groups.domain.GroupPermissions;
 import com.socialcoisa.rede.groups.domain.GroupPost;
+import com.socialcoisa.rede.groups.domain.GroupReaction;
 import com.socialcoisa.rede.groups.domain.GroupRole;
 import com.socialcoisa.rede.groups.domain.GroupTopic;
 import com.socialcoisa.rede.shared.text.PlainText;
@@ -164,6 +167,89 @@ public class GroupFeedService {
 		requireMember(groupId, actorId);
 		return content.listPosts(groupId, StringUtils.hasText(topicId) ? topicId : null, before,
 			Math.min(Math.max(limit, 1), MAX_PAGE));
+	}
+
+	@Transactional
+	public GroupComment comment(String groupId, String postId, String authorId, String text, String parentCommentId) {
+		GroupPost post = requirePost(groupId, postId);
+		require(roleOf(groupId, authorId), GroupCapability.INTERACT);
+		if (!StringUtils.hasText(text)) {
+			throw new ApiException(400, "EMPTY_COMMENT", "Escreva alguma coisa antes de comentar.");
+		}
+		String clean = PlainText.defuse(text.trim());
+		if (clean.length() > GroupComment.MAX_CONTENT) {
+			throw new ApiException(400, "CONTENT_TOO_LONG", "Comentario deve ter ate 1.200 caracteres.");
+		}
+		if (StringUtils.hasText(parentCommentId)) {
+			// Resposta só aponta para comentário DESTA publicação (não de outro post nem de outro grupo).
+			content.findComment(parentCommentId)
+				.filter(parent -> parent.postId().equals(postId) && parent.isPublished())
+				.orElseThrow(() -> new ApiException(404, "COMMENT_NOT_FOUND",
+					"Comentario nao encontrado nesta publicacao."));
+		}
+		GroupComment comment = GroupComment.create(newId("group_comment"), postId, groupId, authorId,
+			StringUtils.hasText(parentCommentId) ? parentCommentId : null, clean, clock.instant());
+		content.saveComment(comment);
+		refreshCounters(post);
+		return comment;
+	}
+
+	@Transactional(readOnly = true)
+	public List<GroupComment> listComments(String groupId, String postId, String actorId, int limit) {
+		requireMember(groupId, actorId);
+		requirePost(groupId, postId);
+		return content.listComments(postId, Math.min(Math.max(limit, 1), 100));
+	}
+
+	/**
+	 * Alterna a reação: mesma reação de novo remove; outra troca. Uma por pessoa por publicação.
+	 *
+	 * Devolve `true` quando a reação ficou ativa.
+	 */
+	@Transactional
+	public boolean toggleReaction(String groupId, String postId, String actorId, String type) {
+		GroupPost post = requirePost(groupId, postId);
+		require(roleOf(groupId, actorId), GroupCapability.INTERACT);
+		ReactionType parsed = parseReaction(type);
+		boolean active;
+		var existing = content.findReaction(postId, actorId);
+		if (existing.isPresent() && existing.get().type() == parsed) {
+			content.removeReaction(postId, actorId);
+			active = false;
+		} else {
+			content.saveReaction(GroupReaction.create(newId("group_reaction"), postId, actorId, parsed,
+				clock.instant()));
+			active = true;
+		}
+		refreshCounters(post);
+		return active;
+	}
+
+	/** Remove a reação de vez (o POST alterna; este é o "não quero mais", explícito). */
+	@Transactional
+	public void removeReaction(String groupId, String postId, String actorId) {
+		GroupPost post = requirePost(groupId, postId);
+		require(roleOf(groupId, actorId), GroupCapability.INTERACT);
+		content.removeReaction(postId, actorId);
+		refreshCounters(post);
+	}
+
+	private GroupPost requirePost(String groupId, String postId) {
+		return content.findPost(postId)
+			.filter(post -> post.groupId().equals(groupId))
+			.orElseThrow(() -> new ApiException(404, "POST_NOT_FOUND", "Publicacao nao encontrada neste grupo."));
+	}
+
+	private void refreshCounters(GroupPost post) {
+		content.savePost(post.withCounters(content.countReactions(post.id()), content.countComments(post.id())));
+	}
+
+	private static ReactionType parseReaction(String type) {
+		try {
+			return ReactionType.valueOf(type == null ? "" : type.trim().toUpperCase(java.util.Locale.ROOT));
+		} catch (IllegalArgumentException error) {
+			throw new ApiException(400, "INVALID_REACTION", "Reacao desconhecida.");
+		}
 	}
 
 	private Group requireGroup(String groupId) {

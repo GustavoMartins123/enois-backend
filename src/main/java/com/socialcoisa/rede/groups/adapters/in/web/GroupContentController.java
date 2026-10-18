@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.socialcoisa.rede.groups.application.GroupFeedService;
+import com.socialcoisa.rede.groups.domain.GroupComment;
 import com.socialcoisa.rede.groups.domain.GroupPost;
 import com.socialcoisa.rede.groups.domain.GroupTopic;
 import com.socialcoisa.rede.idempotency.application.CommandResponse;
@@ -26,6 +28,7 @@ import com.socialcoisa.rede.shared.web.CurrentUser;
 import com.socialcoisa.rede.shared.web.CurrentUserResolver;
 import com.socialcoisa.rede.shared.web.CursorCodec;
 import com.socialcoisa.rede.shared.web.PageResponse;
+import com.socialcoisa.rede.shared.web.StatusResponse;
 
 /**
  * Tópicos e feed privado do grupo.
@@ -139,6 +142,68 @@ class GroupContentController {
 		return new PageResponse<>(items, nextCursor);
 	}
 
+	@PostMapping("/{groupId}/posts/{postId}/comments")
+	ResponseEntity<String> comment(@RequestHeader(value = "X-Session-Token", required = false) String token,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@PathVariable String groupId, @PathVariable String postId, @RequestBody CommentRequest request) {
+		CurrentUser user = currentUserResolver.resolve(null, token);
+		String hash = idempotency.hash(Map.of("groupId", groupId, "postId", postId, "request", request));
+		return idempotency.execute(user.id(), "POST", "/api/groups/{groupId}/posts/{postId}/comments",
+			idempotencyKey, hash, () -> {
+				GroupComment comment = feed.comment(groupId, postId, user.id().value(), request.content(),
+					request.parentCommentId());
+				return new CommandResponse(201, commentView(comment));
+			});
+	}
+
+	@GetMapping("/{groupId}/posts/{postId}/comments")
+	PageResponse<CommentView> comments(@RequestHeader(value = "X-Session-Token", required = false) String token,
+			@PathVariable String groupId, @PathVariable String postId,
+			@RequestParam(defaultValue = "100") int limit) {
+		CurrentUser user = currentUserResolver.resolve(null, token);
+		var items = feed.listComments(groupId, postId, user.id().value(), limit)
+			.stream()
+			.map(this::commentView)
+			.toList();
+		return new PageResponse<>(items, null);
+	}
+
+	@PostMapping("/{groupId}/posts/{postId}/reactions")
+	ResponseEntity<String> react(@RequestHeader(value = "X-Session-Token", required = false) String token,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@PathVariable String groupId, @PathVariable String postId, @RequestBody ReactionRequest request) {
+		CurrentUser user = currentUserResolver.resolve(null, token);
+		String hash = idempotency.hash(Map.of("groupId", groupId, "postId", postId, "request", request));
+		return idempotency.execute(user.id(), "POST", "/api/groups/{groupId}/posts/{postId}/reactions",
+			idempotencyKey, hash, () -> {
+				boolean active = feed.toggleReaction(groupId, postId, user.id().value(), request.type());
+				return new CommandResponse(200, new StatusResponse(postId, active ? "REACTED" : "UNREACTED"));
+			});
+	}
+
+	@DeleteMapping("/{groupId}/posts/{postId}/reactions")
+	ResponseEntity<String> unreact(@RequestHeader(value = "X-Session-Token", required = false) String token,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@PathVariable String groupId, @PathVariable String postId) {
+		CurrentUser user = currentUserResolver.resolve(null, token);
+		String hash = idempotency.hash(Map.of("groupId", groupId, "postId", postId, "action", "unreact"));
+		return idempotency.execute(user.id(), "DELETE", "/api/groups/{groupId}/posts/{postId}/reactions",
+			idempotencyKey, hash, () -> {
+				feed.removeReaction(groupId, postId, user.id().value());
+				return new CommandResponse(200, new StatusResponse(postId, "UNREACTED"));
+			});
+	}
+
+	private CommentView commentView(GroupComment comment) {
+		UserProfile author = profiles.findById(comment.authorId()).orElse(null);
+		return new CommentView(comment.id(), comment.postId(), comment.authorId(),
+			author == null ? null : author.displayWithNickname(),
+			author == null ? null : author.username(),
+			author == null ? null : author.avatar(),
+			author == null ? List.of() : author.allBadges(),
+			comment.parentId(), comment.content(), comment.createdAt());
+	}
+
 	private GroupPostView postView(GroupPost post) {
 		UserProfile author = profiles.findById(post.authorId()).orElse(null);
 		List<String> badges = author == null ? List.of() : author.allBadges();
@@ -171,5 +236,16 @@ class GroupContentController {
 	record GroupPostView(String id, String groupId, String topicId, String authorId, String authorName,
 			String authorUsername, String authorAvatar, List<String> authorBadges, String content,
 			List<String> mediaIds, boolean pinned, int reactions, int comments, Instant createdAt) {
+	}
+
+	record CommentRequest(String content, String parentCommentId) {
+	}
+
+	record ReactionRequest(String type) {
+	}
+
+	record CommentView(String id, String postId, String authorId, String authorName, String authorUsername,
+			String authorAvatar, List<String> authorBadges, String parentCommentId, String content,
+			Instant createdAt) {
 	}
 }
