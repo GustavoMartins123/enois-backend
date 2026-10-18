@@ -9,6 +9,9 @@ import org.springframework.util.StringUtils;
 import com.socialcoisa.rede.feed.application.port.out.CommentRepository;
 import com.socialcoisa.rede.feed.application.port.out.PostRepository;
 import com.socialcoisa.rede.feed.domain.PostId;
+import com.socialcoisa.rede.groups.application.port.out.GroupContentRepository;
+import com.socialcoisa.rede.groups.domain.GroupComment;
+import com.socialcoisa.rede.groups.domain.GroupPost;
 import com.socialcoisa.rede.moderation.application.port.out.ReportedContentReader;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.profile.domain.UserProfile;
@@ -30,11 +33,14 @@ class ReportedContentAdapter implements ReportedContentReader {
 	private final PostRepository posts;
 	private final CommentRepository comments;
 	private final UserProfileRepository profiles;
+	private final GroupContentRepository groupContent;
 
-	ReportedContentAdapter(PostRepository posts, CommentRepository comments, UserProfileRepository profiles) {
+	ReportedContentAdapter(PostRepository posts, CommentRepository comments, UserProfileRepository profiles,
+			GroupContentRepository groupContent) {
 		this.posts = posts;
 		this.comments = comments;
 		this.profiles = profiles;
+		this.groupContent = groupContent;
 	}
 
 	@Override
@@ -43,6 +49,8 @@ class ReportedContentAdapter implements ReportedContentReader {
 			case "POST" -> posts.findById(new PostId(targetId)).map(this::postText);
 			case "COMMENT" -> comments.findById(targetId).map(comment -> comment.content());
 			case "USER" -> profiles.findById(targetId).map(this::profileText);
+			case "GROUP_POST" -> groupContent.findPost(targetId).map(GroupPost::content);
+			case "GROUP_COMMENT" -> groupContent.findComment(targetId).map(GroupComment::content);
 			default -> Optional.empty();
 		};
 		return content.map(this::shorten).filter(StringUtils::hasText);

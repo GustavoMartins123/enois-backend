@@ -7,5 +7,9 @@ public enum TargetType {
 	USER,
 	JOB,
 	/** Jogo do Énóis Games (página do jogo e do criador). */
-	GAME
+	GAME,
+	/** Publicação do feed privado de um grupo. */
+	GROUP_POST,
+	/** Comentário de uma publicação de grupo. */
+	GROUP_COMMENT
 }

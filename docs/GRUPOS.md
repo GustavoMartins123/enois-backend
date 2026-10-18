@@ -150,7 +150,11 @@ Enquanto houver pendência real, a automação fica viva.
       mantém o conteúdo; SUSPENDED congela entrada e conteúdo e some da descoberta (o que existe
       continua legível para quem já é membro); ACTIVE reativa. Encerrar continua sendo do dono.
       `GroupPlatformTests` cobre (2026-10-18).
-- [ ] AutoMod no contexto do grupo e denúncias de conteúdo de grupo (pendente).
+- [x] AutoMod e denúncias no contexto do grupo — `GROUP_POST`/`GROUP_COMMENT` entram no
+      `TargetType`; os leitores de conteúdo e autor (os mesmos do feed, agora cientes do grupo)
+      resolvem a publicação/comentário do feed privado. Com isso o painel de moderação vê texto e
+      autor, e a **triagem por IA** passa a julgar o conteúdo de grupo em vez do id.
+      `GroupReportsTests` prova o caminho: denúncia → painel com conteúdo e autor (2026-10-18).
 - [ ] Bateria de testes de segurança da seção 18 (pendente).
 
 ### Etapa 7 — Comunidades
