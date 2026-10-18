@@ -25,15 +25,18 @@ class MessagingPersistenceAdapter implements MessagingRepository {
 	private final SpringDataConversationParticipantJpaRepository participantRepo;
 	private final SpringDataMessageJpaRepository messageRepo;
 	private final SpringDataMessageReactionJpaRepository messageReactionRepo;
+	private final SpringDataMessageHiddenJpaRepository messageHiddenRepo;
 
 	MessagingPersistenceAdapter(SpringDataConversationJpaRepository conversationRepo,
 			SpringDataConversationParticipantJpaRepository participantRepo,
 			SpringDataMessageJpaRepository messageRepo,
-			SpringDataMessageReactionJpaRepository messageReactionRepo) {
+			SpringDataMessageReactionJpaRepository messageReactionRepo,
+			SpringDataMessageHiddenJpaRepository messageHiddenRepo) {
 		this.conversationRepo = conversationRepo;
 		this.participantRepo = participantRepo;
 		this.messageRepo = messageRepo;
 		this.messageReactionRepo = messageReactionRepo;
+		this.messageHiddenRepo = messageHiddenRepo;
 	}
 
 	@Override
@@ -130,11 +133,12 @@ class MessagingPersistenceAdapter implements MessagingRepository {
 	}
 
 	@Override
-	public List<Message> findMessagesByConversation(String conversationId, java.time.Instant before, int limit) {
+	public List<Message> findMessagesByConversation(String conversationId, String viewerId,
+			java.time.Instant before, int limit) {
 		var page = PageRequest.of(0, limit);
 		var messages = before == null
-			? messageRepo.findByConversationIdOrderByCreatedAtDesc(conversationId, page)
-			: messageRepo.findByConversationIdAndCreatedAtLessThanOrderByCreatedAtDesc(conversationId, before, page);
+			? messageRepo.visibleMessages(conversationId, viewerId, page)
+			: messageRepo.visibleMessagesBefore(conversationId, viewerId, before, page);
 		return messages.stream().map(MessageJpaEntity::toDomain).toList();
 	}
 
@@ -142,6 +146,32 @@ class MessagingPersistenceAdapter implements MessagingRepository {
 	public Optional<Message> findLastMessage(String conversationId) {
 		return messageRepo.findTopByConversationIdOrderByCreatedAtDesc(conversationId)
 			.map(MessageJpaEntity::toDomain);
+	}
+
+	@Override
+	public int hideMessages(String userId, java.util.Collection<String> messageIds, java.time.Instant now) {
+		if (messageIds == null || messageIds.isEmpty()) {
+			return 0;
+		}
+		int hidden = 0;
+		for (String messageId : messageIds) {
+			// Idempotente: apagar de novo nao cria linha repetida (a unique tambem protege).
+			if (messageHiddenRepo.existsByUserIdAndMessageId(userId, messageId)) {
+				continue;
+			}
+			messageHiddenRepo.save(MessageHiddenJpaEntity.of(
+				"mhid_" + java.util.UUID.randomUUID().toString().replace("-", ""), userId, messageId, now));
+			hidden++;
+		}
+		return hidden;
+	}
+
+	@Override
+	public java.util.Set<String> hiddenMessageIds(String userId, java.util.Collection<String> messageIds) {
+		if (messageIds == null || messageIds.isEmpty()) {
+			return java.util.Set.of();
+		}
+		return new java.util.LinkedHashSet<>(messageHiddenRepo.hiddenIds(userId, messageIds));
 	}
 
 	@Override

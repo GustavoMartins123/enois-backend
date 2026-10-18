@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -16,6 +17,26 @@ interface SpringDataMessageJpaRepository extends JpaRepository<MessageJpaEntity,
 			java.time.Instant before, org.springframework.data.domain.Pageable pageable);
 
 	Optional<MessageJpaEntity> findTopByConversationIdOrderByCreatedAtDesc(String conversationId);
+
+	/** Mensagens da conversa SEM as que este leitor apagou para si (filtro no banco: a paginacao
+	 *  continua coerente, e nao sobra buraco na pagina). */
+	@Query("""
+			SELECT m FROM MessageJpaEntity m
+			WHERE m.conversationId = :conversationId
+			AND NOT EXISTS (SELECT h FROM MessageHiddenJpaEntity h
+				WHERE h.messageId = m.id AND h.userId = :viewerId)
+			ORDER BY m.createdAt DESC""")
+	List<MessageJpaEntity> visibleMessages(@Param("conversationId") String conversationId,
+			@Param("viewerId") String viewerId, Pageable pageable);
+
+	@Query("""
+			SELECT m FROM MessageJpaEntity m
+			WHERE m.conversationId = :conversationId AND m.createdAt < :before
+			AND NOT EXISTS (SELECT h FROM MessageHiddenJpaEntity h
+				WHERE h.messageId = m.id AND h.userId = :viewerId)
+			ORDER BY m.createdAt DESC""")
+	List<MessageJpaEntity> visibleMessagesBefore(@Param("conversationId") String conversationId,
+			@Param("viewerId") String viewerId, @Param("before") java.time.Instant before, Pageable pageable);
 
 	@Query("""
 			SELECT COUNT(m) FROM MessageJpaEntity m

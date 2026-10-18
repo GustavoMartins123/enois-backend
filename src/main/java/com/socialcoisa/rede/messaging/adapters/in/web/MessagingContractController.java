@@ -126,7 +126,7 @@ class MessagingContractController {
 			throw new ApiException(403, "NOT_PARTICIPANT", "Voce nao participa desta conversa.");
 		}
 		Instant before = cursorCodec.decode(cursor).orElse(null);
-		List<Message> msgs = messagingService.getMessages(conversationId, before, limit);
+		List<Message> msgs = messagingService.getMessages(conversationId, user.id().value(), before, limit);
 		var items = msgs.stream()
 			.map(m -> new MessageView(m.id(), m.conversationId(), m.senderId(), m.text(),
 				m.createdAt() != null ? m.createdAt().toString() : null))
@@ -135,6 +135,34 @@ class MessagingContractController {
 		String nextCursor = msgs.size() == limit && !msgs.isEmpty()
 			? cursorCodec.encode(msgs.get(msgs.size() - 1).createdAt()) : null;
 		return new PageResponse<>(items, nextCursor);
+	}
+
+	/**
+	 * "Apagar para mim" por MENSAGEM: some so para quem apagou (o outro participante mantem).
+	 *
+	 * Diferente do apagar a conversa inteira (`/conversations/hide`), aqui a pessoa escolhe o que
+	 * sumiu — mesmo padrao do inbox: selecionar, selecionar tudo, apagar.
+	 */
+	@PostMapping("/{conversationId}/messages/hide")
+	ResponseEntity<String> hideMessages(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@PathVariable String conversationId, @RequestBody HideConversationsRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		if (!messagingService.isParticipant(conversationId, user.id().value())) {
+			throw new ApiException(403, "NOT_PARTICIPANT", "Voce nao participa desta conversa.");
+		}
+		List<String> ids = request.ids() == null ? List.of()
+			: request.ids().stream().filter(id -> id != null && !id.isBlank()).map(String::trim).distinct().toList();
+		if (ids.isEmpty()) {
+			throw new ApiException(400, "EMPTY_MESSAGE_LIST", "Selecione ao menos uma mensagem.");
+		}
+		String hash = idempotency.hash(Map.of("ids", ids));
+		return idempotency.execute(user.id(), "POST", "/api/conversations/{conversationId}/messages/hide",
+			idempotencyKey, hash, () -> {
+				int hidden = messagingService.hideMessages(user.id().value(), ids);
+				return new CommandResponse(200, Map.of("hidden", hidden));
+			});
 	}
 
 	@PostMapping("/{conversationId}/messages")

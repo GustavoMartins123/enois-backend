@@ -146,11 +146,17 @@ public class MessagingService {
 		return repository.countUnread(conversationId, userId);
 	}
 
-	public List<Message> getMessages(String conversationId, java.time.Instant before, int limit) {
+	public List<Message> getMessages(String conversationId, String viewerId, java.time.Instant before, int limit) {
 		if (!repository.findConversationById(conversationId).isPresent()) {
 			throw new ApiException(404, "CONVERSATION_NOT_FOUND", "Conversa nao encontrada.");
 		}
-		return repository.findMessagesByConversation(conversationId, before, limit);
+		// O leitor entra na consulta: a mensagem que ELE apagou nao volta (para o outro continua).
+		return repository.findMessagesByConversation(conversationId, viewerId, before, limit);
+	}
+
+	/** "Apagar para mim" por mensagem: some so para quem apagou. */
+	public int hideMessages(String userId, java.util.List<String> messageIds) {
+		return repository.hideMessages(userId, messageIds, clock.instant());
 	}
 
 	public String getLastMessageText(String conversationId) {

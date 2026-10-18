@@ -2,6 +2,7 @@ package com.socialcoisa.rede.messaging.application.port.out;
 
 import java.time.Instant;
 import java.util.Collection;
+import java.util.Set;
 import java.util.List;
 import java.util.Optional;
 
@@ -43,12 +44,19 @@ public interface MessagingRepository {
 
 	void saveMessage(Message message);
 
-	List<Message> findMessagesByConversation(String conversationId, java.time.Instant before, int limit);
+	List<Message> findMessagesByConversation(String conversationId, String viewerId, java.time.Instant before,
+			int limit);
 
 	Optional<Message> findLastMessage(String conversationId);
 
 	/** A mensagem por id (para conferir de qual conversa ela e antes de mexer nela). */
 	Optional<Message> findMessageById(String messageId);
+
+	/** Apaga mensagens SO para quem chama (o outro participante mantem). */
+	int hideMessages(String userId, Collection<String> messageIds, java.time.Instant now);
+
+	/** Ids de mensagem que esta pessoa apagou para si (a listagem esconde). */
+	Set<String> hiddenMessageIds(String userId, Collection<String> messageIds);
 
 	boolean addMessageReaction(String id, String messageId, String userId, com.socialcoisa.rede.feed.domain.ReactionType type, java.time.Instant createdAt);
 	boolean removeMessageReaction(String messageId, String userId);
