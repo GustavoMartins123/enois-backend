@@ -207,7 +207,7 @@ e o endpoint exige sessão — anônimo não gasta a cota.
 | # | O que | Onde | Bloqueia |
 |---|-------|------|----------|
 | **0** | **Religar o GitHub Actions nos dois repositórios** | `gh api -X PUT repos/Rede-ENois/enois-frontend/actions/permissions -F enabled=true` (idem `enois-backend`) ou Settings → Actions → General | **todo deploy, nos dois repos** |
-| **0b** | **Trust policy do papel OIDC com os nomes novos dos repos** | IAM `arn:aws:iam::818928662779:role/forest-dev-github` | **todo deploy** |
+| **0b** | **Trust policy: o sub do FRONT ainda falta** (o backend já voltou — imagem `dc44362` no ar). Na trust policy da `forest-dev-github`, o `StringLike` precisa incluir também `repo:Rede-ENois/enois-frontend:ref:refs/heads/main` (e a variante `pull_request` se usada). | IAM `arn:aws:iam::818928662779:role/forest-dev-github` | deploy do FRONT |
 | 1 | Certificado (ACM) + DNS de `paginas.enois.ia.br` | ACM us-east-1 + DNS do `ia.br` | player dentro das páginas publicadas |
 | 2 | Rotacionar a senha do banco (a antiga está no histórico do Git) | MariaDB + `git filter-repo` | segurança |
 | 3 | `REDE_GIFS_TENOR_KEY` e `REDE_GIFS_GIPHY_KEY` | secrets do Deployment | busca externa de GIF (sem elas, só os GIFs da comunidade) |
