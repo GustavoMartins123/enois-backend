@@ -106,9 +106,15 @@ Enquanto houver pendência real, a automação fica viva.
       existe: `POST /groups/{id}/transfer`). `GroupFlowTests` cobre os 7 cenários e passa (2026-10-18).
 
 ### Etapa 4 — Tópicos e feed privado
-- [ ] Tópicos do grupo (criar, editar, reordenar, arquivar).
-- [ ] Publicações sempre presas a grupo + tópico do mesmo grupo.
-- [ ] Comentários, reações, anexos; isolamento total do feed principal.
+- [x] Tópicos do grupo (criar, editar, reordenar, arquivar) — `GroupFeedService` + endpoints
+      (`/groups/{id}/topics`); nome único por grupo, arquivado para de receber publicação, e a
+      reordenação exige a lista COMPLETA do grupo (ordem parcial é recusada) (2026-10-18).
+- [x] Publicações sempre presas a grupo + tópico do mesmo grupo — `group_posts` em tabela própria;
+      a V81 perdeu as chaves estrangeiras (collation da `users` de produção), então a checagem
+      tópico↔grupo mora no serviço e é testada (tópico de outro grupo → 404). **Isolamento
+      provado**: a publicação de grupo não aparece no `GET /feed` (2026-10-18).
+- [ ] Comentários e reações do grupo (pendente). Anexos já viajam como `mediaIds` (serviço de
+      mídia compartilhado) e o isolamento do feed principal já está provado.
 
 ### Etapa 5 — Descoberta e interface
 - [ ] Descoberta e pesquisa públicas (só metadados públicos).
