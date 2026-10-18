@@ -73,6 +73,27 @@ class CoinController {
 	record SetQuoteRequest(long brlCents, String note) {
 	}
 
+	/**
+	 * Prêmio de evento/comunidade (plano C2): concedido por papel com permissão — cada
+	 * concessão vira lançamento auditável no ledger. Idempotente por ref.
+	 */
+	@PostMapping("/carteira/premios")
+	Map<String, Object> grantPrize(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestBody PrizeRequest request) {
+		CurrentUser admin = currentUserResolver.resolve(userId, sessionToken);
+		adminGuard.requireAdmin(admin);
+		var target = profiles.findByUsername(request.toUsername().trim().toLowerCase())
+			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuário de destino não encontrado."));
+		String ref = "premio:" + request.ref();
+		coins.grantPrize(target.id(), request.amount(), ref,
+			request.message() == null ? "Prêmio de evento" : request.message());
+		return Map.of("status", "GRANTED", "ref", ref);
+	}
+
+	record PrizeRequest(String toUsername, Long amount, String ref, String message) {
+	}
+
 	@GetMapping("/carteira")
 	Map<String, Object> wallet(@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {

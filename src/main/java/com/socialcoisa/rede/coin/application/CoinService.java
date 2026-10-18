@@ -267,9 +267,47 @@ public class CoinService {
 			message == null ? "" : message, now);
 	}
 
+	/**
+	 * Compra na LOJA da plataforma (plano C3): o valor sai do comprador e VOLTA para a
+	 * tesouraria — o supply não muda, a faísca só circula de volta. Idempotente por ref
+	 * (a mesma compra nunca duplica; quem já tem o item não paga duas vezes).
+	 */
+	@Transactional
+	public void purchase(String accountId, long amount, String ref, String message) {
+		if (amount <= 0) {
+			throw new ApiException(400, "INVALID_AMOUNT", "O preço precisa ser positivo.");
+		}
+		if (ledger.existsByKindAndRefId(CoinEntry.Kind.PURCHASE, ref)) {
+			return;
+		}
+		ensureTreasury();
+		Instant now = Instant.now(clock);
+		grant(accountId, -amount, CoinEntry.Kind.PURCHASE, ref, message, now);
+		grant(TREASURY_ACCOUNT, amount, CoinEntry.Kind.GENESIS_TREASURY, "loja-tesouraria:" + ref, message, now);
+	}
+
 	/** Recompensas do mês por prefixo (teto mensal do earned, ex.: microprojetos 3/mês). */
 	public long rewardCountByPrefix(String prefix) {
 		return ledger.countRewardsByRefPrefix(prefix);
+	}
+
+	/**
+	 * Prêmio concedido por papel com permissão (plano C2: prêmios de evento/comunidade —
+	 * auditado: cada grant vira lançamento do ledger com o motivo). Sai da tesouraria;
+	 * supply fixo preservado.
+	 */
+	@Transactional
+	public void grantPrize(String accountId, long amount, String ref, String message) {
+		if (amount <= 0) {
+			throw new ApiException(400, "INVALID_AMOUNT", "O valor precisa ser positivo.");
+		}
+		if (ledger.existsByKindAndRefId(CoinEntry.Kind.REWARD, ref)) {
+			return;
+		}
+		ensureTreasury();
+		Instant now = Instant.now(clock);
+		grant(TREASURY_ACCOUNT, -amount, CoinEntry.Kind.GENESIS_TREASURY, "premio-tesouraria:" + ref, message, now);
+		grant(accountId, amount, CoinEntry.Kind.REWARD, ref, message, now);
 	}
 
 	/** A conta já ganhou essa recompensa? (idempotência legível para os hooks do earned) */

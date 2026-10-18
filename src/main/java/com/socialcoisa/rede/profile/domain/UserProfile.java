@@ -10,6 +10,9 @@ public class UserProfile {
 	private String email;
 	private String name;
 	private String headline;
+
+	/** Moldura de avatar equipada (loja de cosméticos); null = sem moldura. */
+	private String avatarFrame;
 	private String company;
 	private String location;
 	private String avatar;
@@ -388,8 +391,24 @@ public class UserProfile {
 		this.resumeName = name;
 	}
 
+	/** Equipa (ou desequipa, com null) a moldura de avatar da loja de cosméticos. */
+	public void updateAvatarFrame(String frameId, Instant now) {
+		boolean empty = frameId == null || frameId.isBlank();
+		this.avatarFrame = empty ? null : frameId.trim();
+		this.updatedAt = now;
+	}
+
+	/** Hidrata a moldura (vem da coluna, nao do fluxo de compra). */
+	public void hydrateAvatarFrame(String frameId) {
+		this.avatarFrame = frameId;
+	}
+
 	public String headline() {
 		return headline;
+	}
+
+	public String avatarFrame() {
+		return avatarFrame;
 	}
 
 	public String company() {

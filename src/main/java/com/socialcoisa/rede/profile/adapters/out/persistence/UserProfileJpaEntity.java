@@ -32,6 +32,9 @@ class UserProfileJpaEntity {
 	@Column(length = 180)
 	private String headline;
 
+	@Column(name = "avatar_frame", length = 40)
+	private String avatarFrame;
+
 	@Column(nullable = false, unique = true)
 	private String email;
 
@@ -144,6 +147,7 @@ class UserProfileJpaEntity {
 		entity.username = profile.username();
 		entity.name = profile.name();
 		entity.headline = profile.headline();
+		entity.avatarFrame = profile.avatarFrame();
 		entity.email = profile.email();
 		entity.company = profile.company();
 		entity.location = profile.location();
@@ -200,6 +204,7 @@ class UserProfileJpaEntity {
 		profile.hydrateIdentityDisplay(nickname, socialName, pronouns);
 		profile.hydrateAka(aka);
 		profile.hydrateResume(resumeUrl, resumeName);
+		profile.hydrateAvatarFrame(avatarFrame);
 		profile.hydrateBadges(badges == null || badges.isBlank() ? List.of() : List.of(badges.split("\n")));
 		return profile;
 	}
