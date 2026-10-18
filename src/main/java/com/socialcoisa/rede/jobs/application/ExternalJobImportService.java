@@ -74,6 +74,8 @@ public class ExternalJobImportService {
 			}
 			String canonicalUrl = com.socialcoisa.rede.jobs.domain.UrlCanonicalizer
 				.canonicalize(external.url());
+			// E-mail de candidatura: sai da descricao que a propria fonte publica (nulo quando nao ha).
+			String applyEmail = ExternalJob.extractApplyEmail(external.description());
 			var sameSource = repository.findBySource(platform, external.externalId());
 			if (sameSource.isPresent()) {
 				// Mesma fonte e mesmo id: atualiza os dados e a verificacao (upsert).
@@ -81,7 +83,7 @@ public class ExternalJobImportService {
 				repository.save(new ExternalJob(current.id(), current.platform(), current.externalId(),
 					external.title(), external.company(), external.location(), external.salary(),
 					current.currency(), external.url(), current.importedAt(), clock.instant(),
-					ExternalJob.FOUND, canonicalUrl));
+					ExternalJob.FOUND, canonicalUrl, applyEmail));
 				saved++;
 				continue;
 			}
@@ -94,14 +96,14 @@ public class ExternalJobImportService {
 				repository.save(new ExternalJob(original.id(), original.platform(), original.externalId(),
 					original.title(), original.company(), original.location(), original.salary(),
 					original.currency(), original.url(), original.importedAt(), clock.instant(),
-					original.status(), original.canonicalUrl()));
+					original.status(), original.canonicalUrl(), original.applyEmail()));
 				saved++;
 				continue;
 			}
 			repository.save(new ExternalJob("ext_" + platform + "_" + external.externalId(), platform,
 				external.externalId(), external.title(), external.company(), external.location(),
 				external.salary(), null, external.url(), clock.instant(), clock.instant(), ExternalJob.FOUND,
-				canonicalUrl));
+				canonicalUrl, applyEmail));
 			saved++;
 		}
 		return saved;

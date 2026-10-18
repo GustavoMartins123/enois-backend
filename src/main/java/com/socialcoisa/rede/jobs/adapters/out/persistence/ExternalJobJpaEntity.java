@@ -54,6 +54,9 @@ class ExternalJobJpaEntity {
 	@Column(name = "canonical_url", length = 1000)
 	private String canonicalUrl;
 
+	@Column(name = "apply_email", length = 320)
+	private String applyEmail;
+
 	protected ExternalJobJpaEntity() {
 	}
 
@@ -72,11 +75,12 @@ class ExternalJobJpaEntity {
 		e.lastCheckedAt = job.lastCheckedAt();
 		e.externalStatus = job.status() == null ? ExternalJob.FOUND : job.status();
 		e.canonicalUrl = job.canonicalUrl();
+		e.applyEmail = job.applyEmail();
 		return e;
 	}
 
 	ExternalJob toDomain() {
 		return new ExternalJob(id, platform, externalId, title, company, location, salary, currency, url,
-			importedAt, lastCheckedAt, externalStatus, canonicalUrl);
+			importedAt, lastCheckedAt, externalStatus, canonicalUrl, applyEmail);
 	}
 }

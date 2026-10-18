@@ -26,7 +26,7 @@ class OpenJobApisConfig {
 			"https://remotive.com/api/remote-jobs?limit=200", false, "jobs", "id", "title", "company_name",
 			"candidate_required_location", "salary", null, null, null, "job_type", "url", null,
 			"publication_date", false, null,
-			"Remotive (https://remotive.com) — credito obrigatorio."), objectMapper);
+			"Remotive (https://remotive.com) — credito obrigatorio.", "description"), objectMapper);
 	}
 
 	/** Jobicy — API v2 publica; credito + link de origem exigidos. */
@@ -36,7 +36,7 @@ class OpenJobApisConfig {
 			"https://jobicy.com/api/v2/remote-jobs?count=50", false, "jobs", "id", "jobTitle", "companyName",
 			"jobGeo", null, "annualSalaryMin", "annualSalaryMax", "salaryCurrency", "jobType[0]", "url", null,
 			"pubDate", false, null,
-			"Jobicy (https://jobicy.com) — credito e link de origem obrigatorios."), objectMapper);
+			"Jobicy (https://jobicy.com) — credito e link de origem obrigatorios.", "jobDescription"), objectMapper);
 	}
 
 	/** RemoteOK — JSON publico (primeiro item da lista e um aviso legal; ignorado). */
@@ -45,7 +45,7 @@ class OpenJobApisConfig {
 		return new OpenJobApiSource(new OpenJobApiSource.Spec("RemoteOK",
 			"https://remoteok.com/api", true, null, "id", "position", "company", "location", null,
 			"salary_min", "salary_max", null, null, "url", "apply_url", "date", false, null,
-			"RemoteOK (https://remoteok.com) — credito obrigatorio."), objectMapper);
+			"RemoteOK (https://remoteok.com) — credito obrigatorio.", "description"), objectMapper);
 	}
 
 	/** Himalayas — API publica de vagas remotas. */
@@ -55,6 +55,6 @@ class OpenJobApisConfig {
 			"https://himalayas.app/jobs/api?limit=100", false, "jobs", "applicationLink", "title", "companyName",
 			"locationRestrictions[0]", null, "minSalary", "maxSalary", "salaryCurrency", null,
 			"applicationLink", "applicationLink", "pubDate", true, null,
-			"Himalayas (https://himalayas.app)."), objectMapper);
+			"Himalayas (https://himalayas.app).", "description"), objectMapper);
 	}
 }

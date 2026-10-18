@@ -29,6 +29,9 @@ public class UserProfile {
 	private String pronouns;
 	/** Vulgo: como a pessoa e conhecida (etiqueta ao lado do nome, so no perfil). */
 	private String aka;
+	/** Curriculo em PDF: endereco no storage + nome do arquivo (so o dono ve). */
+	private String resumeUrl;
+	private String resumeName;
 	/** Ate 5 emblemas; o primeiro e o que acompanha o nome por todo o app. */
 	private List<String> badges = List.of();
 	private List<String> skills;
@@ -361,6 +364,28 @@ public class UserProfile {
 
 	public String aka() {
 		return aka;
+	}
+
+	public String resumeUrl() {
+		return resumeUrl;
+	}
+
+	public String resumeName() {
+		return resumeName;
+	}
+
+	/** Curriculo do perfil (endereco + nome do arquivo). Vazio limpa os dois. */
+	public void updateResume(String url, String name, Instant now) {
+		boolean empty = url == null || url.isBlank();
+		this.resumeUrl = empty ? null : url.trim();
+		this.resumeName = empty || name == null || name.isBlank() ? null : name.trim();
+		this.updatedAt = now;
+	}
+
+	/** Hidrata o curriculo (vem das colunas, nao do fluxo de edicao). */
+	public void hydrateResume(String url, String name) {
+		this.resumeUrl = url;
+		this.resumeName = name;
 	}
 
 	public String headline() {

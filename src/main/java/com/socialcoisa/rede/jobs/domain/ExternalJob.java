@@ -9,10 +9,39 @@ import java.time.Instant;
  */
 public record ExternalJob(String id, String platform, String externalId, String title, String company,
 		String location, String salary, String currency, String url, Instant importedAt, Instant lastCheckedAt,
-		String status, String canonicalUrl) {
+		String status, String canonicalUrl, String applyEmail) {
 
 	public static final String FOUND = "FOUND";
 	public static final String POSSIBLY_CLOSED = "POSSIBLY_CLOSED";
+
+	private static final java.util.regex.Pattern EMAIL = java.util.regex.Pattern
+		.compile("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}");
+
+	/**
+	 * Primeiro e-mail de candidatura que a descricao do anuncio publica (nulo quando nao ha).
+	 *
+	 * A descricao vem em HTML: as tags saem antes da busca, senao um endereco quebrado por marcacao
+	 * passaria batido. Endereco de disparo automatico (noreply) e de exemplo nao entram — nao sao
+	 * caixa de candidatura e so sujam o botao.
+	 */
+	public static String extractApplyEmail(String description) {
+		if (description == null || description.isBlank()) {
+			return null;
+		}
+		String text = description.replaceAll("<[^>]+>", " ");
+		java.util.regex.Matcher matcher = EMAIL.matcher(text);
+		while (matcher.find()) {
+			String candidate = matcher.group().toLowerCase(java.util.Locale.ROOT);
+			// Endereco que continua em caminho (`banner@empresa.com/logo.png`) e asset, nao caixa.
+			boolean pathAfter = matcher.end() < text.length() && text.charAt(matcher.end()) == '/';
+			if (pathAfter || candidate.startsWith("noreply@") || candidate.startsWith("no-reply@")
+					|| candidate.contains("@example.")) {
+				continue;
+			}
+			return candidate.length() > 320 ? candidate.substring(0, 320) : candidate;
+		}
+		return null;
+	}
 
 	/** Chave de deduplicacao entre fontes: a URL normalizada (ver UrlCanonicalizer). */
 	public String dedupeKey() {

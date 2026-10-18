@@ -319,7 +319,7 @@ class JobContractController {
 					!owner && appliedIds.contains(job.id()), savedIds.contains(job.id()), owner,
 					owner ? counts.getOrDefault(job.id(), 0) : 0, authorOf(job), fieldViews(job),
 					job.status().name(), job.closedAt() != null ? job.closedAt().toString() : null,
-					"INTERNAL", null, null);
+					"INTERNAL", null, null, null);
 			})
 			.toList();
 		String nextCursor = jobs.size() == limit
@@ -353,7 +353,7 @@ class JobContractController {
 		return new JobView(job.id(), job.title(), job.company(), null, job.location(), null, null,
 			job.salary(), job.currency(), List.of(),
 			job.importedAt() != null ? job.importedAt().toString() : null, 0, false, false, false, 0, null,
-			List.of(), "OPEN", null, "EXTERNAL", job.url(), job.platform());
+			List.of(), "OPEN", null, "EXTERNAL", job.url(), job.platform(), job.applyEmail());
 	}
 
 	private JobView toView(Job job, String viewer, boolean applied, boolean saved, int applicationsCount) {
@@ -361,7 +361,7 @@ class JobContractController {
 			job.salary(), job.currency(), job.skills(), job.postedAt() != null ? job.postedAt().toString() : null, 0,
 			applied, saved, viewer != null && viewer.equals(job.postedBy()), applicationsCount, authorOf(job),
 			fieldViews(job), job.status().name(), job.closedAt() != null ? job.closedAt().toString() : null,
-			"INTERNAL", null, null);
+			"INTERNAL", null, null, null);
 	}
 
 	/** Quem criou a vaga (com reputacao e verificacao): o candidato precisa saber com quem fala. */
@@ -394,7 +394,7 @@ class JobContractController {
 			String salary, String currency, List<String> skills, String postedAt, int matchScore, boolean applied,
 			boolean saved, boolean owner, int applicationsCount, AuthorView author, List<ApplicationFieldView>
 			applicationFields, String status, String closedAt, String sourceType, String sourceUrl,
-			String sourcePlatform) {
+			String sourcePlatform, String applyEmail) {
 	}
 
 	/** Quem publicou a vaga, com o que sustenta a credibilidade dele. */

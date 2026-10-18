@@ -74,6 +74,8 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 		check("banner", command.banner(), 500);
 		check("emblema", command.badge(), 500);
 		check("vulgo", command.aka(), 60);
+		check("curriculo", command.resumeUrl(), 500);
+		check("nome do curriculo", command.resumeName(), 200);
 		if (command.externalLinks() != null) {
 			command.externalLinks().forEach(link -> check("link", link, 500));
 		}
@@ -133,6 +135,11 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 			clean(command.skills()),
 			clean(command.goals()), trim(command.availability()), trim(command.portfolio()), clean(command.externalLinks()),
 			command.openToWork(), command.isMentor(), username, trim(command.aka()), clock.instant());
+		// Curriculo: ausente no corpo da requisicao mantem o que ja estava; vazio limpa. Nao passa
+		// pelo `update` geral porque nao e campo de exibicao — e arquivo, e so o dono le.
+		if (command.resumeUrl() != null) {
+			profile.updateResume(command.resumeUrl(), command.resumeName(), clock.instant());
+		}
 		// A bio em HTML e sanitizada aqui, como o HTML do post de pagina: allowlist de tags e CSS.
 		// Vazio limpa (o perfil volta para a bio de texto); ausente no corpo da requisicao mantem.
 		if (command.bioHtml() != null) {

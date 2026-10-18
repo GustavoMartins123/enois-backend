@@ -49,7 +49,7 @@ class ExternalJobsListingTests {
 		String id = "ext_detail_" + System.nanoTime();
 		externalJobs.save(new ExternalJob(id, "Teste", id, "Vaga compartilhada",
 			null, null, null, null, "https://exemplo.test/vaga/detalhe", Instant.now(), Instant.now(),
-			ExternalJob.FOUND, null));
+			ExternalJob.FOUND, null, null));
 
 		MvcResult result = mockMvc.perform(get("/jobs/{id}", id))
 			.andExpect(status().isOk()).andReturn();
@@ -70,10 +70,10 @@ class ExternalJobsListingTests {
 	void searchFiltersExternalJobsByTitle() throws Exception {
 		externalJobs.save(new ExternalJob("ext_search_java", "BuscaExterna", "java-1", "Desenvolvedor Java Senior",
 			null, null, null, null, "https://exemplo.test/vaga/java", Instant.now(), Instant.now(),
-			ExternalJob.FOUND, null));
+			ExternalJob.FOUND, null, null));
 		externalJobs.save(new ExternalJob("ext_search_design", "BuscaExterna", "design-1", "Designer de Produto",
 			null, null, null, null, "https://exemplo.test/vaga/design", Instant.now(), Instant.now(),
-			ExternalJob.FOUND, null));
+			ExternalJob.FOUND, null, null));
 
 		MvcResult result = mockMvc.perform(get("/jobs").param("query", "java").param("limit", "50"))
 			.andExpect(status().isOk()).andReturn();
@@ -97,7 +97,7 @@ class ExternalJobsListingTests {
 		String id = "ext_structural_" + System.nanoTime();
 		externalJobs.save(new ExternalJob(id, "BuscaExterna", "s-1", "Vaga Externa Sem Tipo",
 			null, null, null, null, "https://exemplo.test/vaga/s", Instant.now(), Instant.now(),
-			ExternalJob.FOUND, null));
+			ExternalJob.FOUND, null, null));
 
 		MvcResult result = mockMvc.perform(get("/jobs").param("type", "FULL_TIME").param("limit", "50"))
 			.andExpect(status().isOk()).andReturn();
@@ -116,7 +116,7 @@ class ExternalJobsListingTests {
 
 		externalJobs.save(new ExternalJob("ext_listing_1", "ListagemExterna", "ext-1", "Vaga Externa de Teste",
 			null, null, null, null, "https://exemplo.test/vaga/1", Instant.now(), Instant.now(),
-			ExternalJob.FOUND, null));
+			ExternalJob.FOUND, null, null));
 
 		MvcResult result = mockMvc.perform(get("/jobs").param("limit", "20"))
 			.andExpect(status().isOk()).andReturn();

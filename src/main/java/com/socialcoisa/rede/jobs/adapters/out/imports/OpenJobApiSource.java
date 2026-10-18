@@ -41,7 +41,8 @@ public class OpenJobApiSource implements JobImportSource {
 	public record Spec(String name, String url, boolean rootIsArray, String rootPath, String idPath,
 			String titlePath, String companyPath, String locationPath, String salaryTextPath, String salaryMinPath,
 			String salaryMaxPath, String currencyPath, String typePath, String urlPath, String applyPath,
-			String publishedAtPath, boolean publishedAtEpochSeconds, String dateFormat, String attribution) {
+			String publishedAtPath, boolean publishedAtEpochSeconds, String dateFormat, String attribution,
+			String descriptionPath) {
 	}
 
 	@Override
@@ -76,8 +77,9 @@ public class OpenJobApiSource implements JobImportSource {
 				continue;
 			}
 			String apply = value(node, spec.applyPath());
+			String description = value(node, spec.descriptionPath());
 			jobs.add(new ExternalJob(StringUtils.hasText(id) ? id : stableId(url), title,
-				value(node, spec.companyPath()), value(node, spec.locationPath()), null,
+				value(node, spec.companyPath()), value(node, spec.locationPath()), description,
 				salary(node), value(node, spec.typePath()), url,
 				StringUtils.hasText(apply) ? apply : url, spec.name(), publishedAt(node)));
 		}
