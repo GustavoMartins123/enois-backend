@@ -17,6 +17,10 @@ env:
   GITOPS_BRANCH: main
   MANIFEST_PATH: clusters/forest-dev/applications/enois-app.yaml
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   build-front:
     name: 🏗️ Build & Push da imagem do FRONT
