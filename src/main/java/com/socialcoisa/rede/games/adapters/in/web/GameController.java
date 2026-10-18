@@ -33,15 +33,18 @@ class GameController {
 	private final CurrentUserResolver currentUserResolver;
 	private final AdminGuard adminGuard;
 	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles;
+	private final com.socialcoisa.rede.games.application.GameIdentityService identities;
 
 	GameController(GameService games, GameCatalogService catalog, CurrentUserResolver currentUserResolver,
 			AdminGuard adminGuard,
-			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles) {
+			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles,
+			com.socialcoisa.rede.games.application.GameIdentityService identities) {
 		this.games = games;
 		this.catalog = catalog;
 		this.currentUserResolver = currentUserResolver;
 		this.adminGuard = adminGuard;
 		this.profiles = profiles;
+		this.identities = identities;
 	}
 
 	// --- leitura pública ---
@@ -116,6 +119,46 @@ class GameController {
 		Game created = games.submit(user.id().value(), request.slug(), request.title(), request.description(),
 			request.cover(), request.url(), request.tags());
 		return Map.of("id", created.id(), "slug", created.slug(), "status", created.status().name());
+	}
+
+	/**
+	 * IDENTIDADE DO JOGO: emite o token opaco (15 min, uso único) + o pseudônimo estável.
+	 * A sessão do Énóis fica AQUI — o jogo recebe só o token. Sessão obrigatória.
+	 */
+	@PostMapping("/games/{gameId}/identity")
+	Map<String, Object> identity(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@PathVariable String gameId) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		var issued = identities.mint(user.id().value(), gameId);
+		return Map.of("token", issued.token(), "expiresAt", issued.expiresAt().toString(),
+			"playerRef", identities.playerRef(user.id().value(), gameId));
+	}
+
+	/** O SERVIDOR DO JOGO troca o token pela identidade pseudônima (uso único). Público. */
+	@PostMapping("/games/tokens/validate")
+	Map<String, Object> validateToken(@RequestBody ValidateTokenRequest request) {
+		var identity = identities.validate(request.token());
+		return Map.of("gameId", identity.gameId(), "playerRef", identity.playerRef());
+	}
+
+	/**
+	 * GASTO DE FAÍSCA DENTRO DO JOGO: o jogo PEDE (postMessage), a pessoa CONFIRMA na
+	 * plataforma e ESTE endpoint (sessão do jogador) debita. O jogo nunca autentica.
+	 */
+	@PostMapping("/games/{gameId}/despesas")
+	Map<String, Object> spend(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@PathVariable String gameId, @RequestBody SpendRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		games.spendInGame(user.id().value(), gameId, request.amount(), request.motivo(), request.requestId());
+		return Map.of("status", "DEBITED", "requestId", request.requestId());
+	}
+
+	record ValidateTokenRequest(String token) {
+	}
+
+	record SpendRequest(Long amount, String motivo, String requestId) {
 	}
 
 	/** As coleções curadas (G3) com os jogos resolvidos. */

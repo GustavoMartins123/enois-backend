@@ -269,6 +269,32 @@ public class GameService {
 
 
 	/**
+	 * GASTO DENTRO DO JOGO: o jogo PEDE (postMessage) e a pessoa CONFIRMA na plataforma — o
+	 * débito sai daqui, com a sessão DELA. Idempotente por (jogo, requestId do jogo): um pedido
+	 * repetido não cobra duas vezes. O valor volta para a tesouraria (supply fixo).
+	 */
+	@Transactional
+	public void spendInGame(String userId, String gameId, Long amount, String motivo, String requestId) {
+		com.socialcoisa.rede.games.domain.Game game = games.findById(gameId)
+			.orElseThrow(() -> new ApiException(404, "GAME_NOT_FOUND", "Jogo não encontrado."));
+		if (game.status() != GameStatus.PUBLISHED) {
+			throw new ApiException(409, "GAME_NOT_PUBLISHED", "Só jogo publicado cobra faíscas.");
+		}
+		if (amount == null || amount <= 0) {
+			throw new ApiException(400, "INVALID_AMOUNT", "Valor da despesa obrigatório.");
+		}
+		if (!org.springframework.util.StringUtils.hasText(requestId)) {
+			throw new ApiException(400, "REQUEST_ID_REQUIRED", "O pedido do jogo precisa de um id.");
+		}
+		String ref = "game:" + gameId + ":" + requestId.trim();
+		coins.purchase(userId, amount, ref,
+			"Gasto no jogo " + game.title() + (org.springframework.util.StringUtils.hasText(motivo)
+				? " — " + motivo.trim() : ""));
+		events.record("gev_" + java.util.UUID.randomUUID().toString().replace("-", ""), gameId,
+			GameEventKind.SHARE, userId, java.time.Instant.now(clock));
+	}
+
+	/**
 	 * Destaque pago (G2 do plano): o criador impulsiona o PRÓPRIO jogo — 5 faíscas por
 	 * 7 dias, um impulso por semana por jogo. Sai do criador, entra na tesouraria
 	 * (supply fixo preservado); a posse do carimbo é o lançamento do ledger.
