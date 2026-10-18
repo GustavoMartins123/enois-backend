@@ -1,23 +1,23 @@
 -- Énóis Games: o módulo vira plataforma (catálogo com descoberta, página do criador, página do
 -- jogo e biblioteca do jogador). Tudo ADITIVO: nada do que a V70 criou é renomeado ou removido, e
 -- as linhas que já existem continuam válidas (as colunas novas entram nulas ou com default).
-alter table games add column if not exists if not exists short_description varchar(300);
-alter table games add column if not exists if not exists genres varchar(300);
-alter table games add column if not exists if not exists languages varchar(200);
-alter table games add column if not exists if not exists controls varchar(500);
-alter table games add column if not exists if not exists requirements varchar(500);
-alter table games add column if not exists if not exists content_warnings varchar(300);
-alter table games add column if not exists if not exists stage varchar(24) not null default 'RELEASED';
-alter table games add column if not exists if not exists distribution varchar(16) not null default 'FREE';
-alter table games add column if not exists if not exists price_coins integer not null default 0;
-alter table games add column if not exists if not exists aspect varchar(16) not null default 'WIDESCREEN';
-alter table games add column if not exists if not exists version varchar(40);
-alter table games add column if not exists if not exists website_url varchar(500);
-alter table games add column if not exists if not exists support_url varchar(500);
-alter table games add column if not exists if not exists media_ids varchar(1000);
-alter table games add column if not exists if not exists plays integer not null default 0;
-alter table games add column if not exists if not exists published_at timestamp;
-alter table games add column if not exists if not exists suspended_at timestamp;
+alter table games add column if not exists short_description varchar(300);
+alter table games add column if not exists genres varchar(300);
+alter table games add column if not exists languages varchar(200);
+alter table games add column if not exists controls varchar(500);
+alter table games add column if not exists requirements varchar(500);
+alter table games add column if not exists content_warnings varchar(300);
+alter table games add column if not exists stage varchar(24) not null default 'RELEASED';
+alter table games add column if not exists distribution varchar(16) not null default 'FREE';
+alter table games add column if not exists price_coins integer not null default 0;
+alter table games add column if not exists aspect varchar(16) not null default 'WIDESCREEN';
+alter table games add column if not exists version varchar(40);
+alter table games add column if not exists website_url varchar(500);
+alter table games add column if not exists support_url varchar(500);
+alter table games add column if not exists media_ids varchar(1000);
+alter table games add column if not exists plays integer not null default 0;
+alter table games add column if not exists published_at timestamp;
+alter table games add column if not exists suspended_at timestamp;
 
 -- Descoberta: as consultas do catálogo são por status + ordem, e por gênero/tag.
 create index if not exists idx_games_status_published on games (status, published_at);
