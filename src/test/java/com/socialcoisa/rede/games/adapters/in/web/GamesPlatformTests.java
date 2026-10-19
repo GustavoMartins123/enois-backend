@@ -76,15 +76,16 @@ class GamesPlatformTests {
 		publish(creator, admin, "Cave Story BR", "https://8.8.8.8/cave", "Plataforma de caverna",
 			"PLATAFORMA,catalogo1", "DEMO", "PAID");
 
-		// Busca textual acha por título, descrição e tag.
-		assertThat(catalogIds("?query=neon")).containsExactly("neon-drift");
-		assertThat(catalogIds("?query=padaria")).containsExactly("padaria-do-ze");
-		assertThat(catalogIds("?query=arcade")).containsExactly("neon-drift");
+		// Busca textual acha por título, descrição e tag. O marcador vale também aqui: o banco é
+		// dividido com as outras classes, e o GameFlowTests publica um jogo com a tag "arcade".
+		assertThat(catalogIds("?tag=catalogo1&query=neon")).containsExactly("neon-drift");
+		assertThat(catalogIds("?tag=catalogo1&query=padaria")).containsExactly("padaria-do-ze");
+		assertThat(catalogIds("?tag=catalogo1&query=arcade")).containsExactly("neon-drift");
 
 		// Filtros.
-		assertThat(catalogIds("?genre=PLATAFORMA")).containsExactly("cave-story-br");
-		assertThat(catalogIds("?stage=EARLY_ACCESS")).containsExactly("padaria-do-ze");
-		assertThat(catalogIds("?distribution=PAID")).containsExactly("cave-story-br");
+		assertThat(catalogIds("?tag=catalogo1&genre=PLATAFORMA")).containsExactly("cave-story-br");
+		assertThat(catalogIds("?tag=catalogo1&stage=EARLY_ACCESS")).containsExactly("padaria-do-ze");
+		assertThat(catalogIds("?tag=catalogo1&distribution=PAID")).containsExactly("cave-story-br");
 		assertThat(catalogIds("?tag=retro")).containsExactly("neon-drift");
 
 		// Ordem: por título é alfabética e estável (só os jogos deste teste).
