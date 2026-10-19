@@ -22,8 +22,7 @@ import com.socialcoisa.rede.shared.web.TestAuthHelper;
  * O comunicado de desculpas só sai quando o S3 está configurado (upload assinado disponível),
  * uma única vez, com 100 faíscas idempotentes por usuário e notificação para cada um.
  */
-@SpringBootTest(properties = {"rede.media.storage=s3", "rede.media.s3.bucket=bucket-de-teste",
-		"rede.media.s3.publicBaseUrl=https://cdn.exemplo.com"})
+@SpringBootTest(properties = {"rede.media.storage=s3", "rede.media.s3.bucket=bucket-de-teste"})
 @AutoConfigureMockMvc
 class MediaRecoveryApologyTests {
 
