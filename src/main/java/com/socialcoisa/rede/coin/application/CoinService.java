@@ -234,7 +234,8 @@ public class CoinService {
 			long sentToday = ledger.transferredOn(fromAccountId, start, start.plus(Duration.ofDays(1)));
 			if (sentToday + amount > NEW_ACCOUNT_DAILY_CAP) {
 				throw new ApiException(403, "NEW_ACCOUNT_LIMIT",
-					"Contas novas enviam até " + NEW_ACCOUNT_DAILY_CAP + " faíscas por dia nos primeiros 7 dias.");
+					"Contas novas enviam até " + (NEW_ACCOUNT_DAILY_CAP / SCALE)
+						+ " faíscas por dia nos primeiros 7 dias.");
 			}
 		}
 		if (from.balance() < amount) {
