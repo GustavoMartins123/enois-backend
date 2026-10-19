@@ -125,10 +125,71 @@ class MediaMigrationServiceTests {
 		assertThat(media.cdnUrl()).isEqualTo("/uploads/media_5/media%2Ffile");
 	}
 
+	@Test
+	void migracaoOportunistaCopiaQuandoGanhaOClaim() {
+		MediaAsset media = asset("media_lazy_1", "image/jpeg");
+		repository.save(media);
+		repository.claimGranted = true;
+
+		assertThat(service(false).copyOne("media_lazy_1")).isTrue();
+
+		MediaAsset saved = repository.byId.get("media_lazy_1");
+		assertThat(saved.s3CdnUrl()).isEqualTo("https://s3.example/uploads/media_lazy_1/media/file");
+		// A referencia so muda no flip (cdn_url segue o antigo ate a verificacao publica).
+		assertThat(saved.cdnUrl()).isEqualTo("/uploads/media_lazy_1/media%2Ffile");
+		assertThat(repository.claimed).containsExactly("media_lazy_1");
+	}
+
+	@Test
+	void migracaoOportunistaSemClaimNaoCopiaNemBaixa() {
+		MediaAsset media = asset("media_lazy_2", "image/jpeg");
+		repository.save(media);
+		repository.claimGranted = false;
+
+		assertThat(service(false).copyOne("media_lazy_2")).isFalse();
+		assertThat(downloader.urls).isEmpty();
+		assertThat(copier.keys).isEmpty();
+	}
+
+	@Test
+	void falhaNaCopiaOportunistaRegistraErroSemPerderAReferencia() {
+		MediaAsset media = asset("media_lazy_3", "image/jpeg");
+		repository.save(media);
+		repository.claimGranted = true;
+		downloader.failNext = true;
+
+		assertThat(service(false).copyOne("media_lazy_3")).isFalse();
+
+		MediaAsset saved = repository.byId.get("media_lazy_3");
+		assertThat(saved.cdnUrl()).isEqualTo("/uploads/media_lazy_3/media%2Ffile");
+		assertThat(saved.s3LastError()).isNotNull();
+	}
+
+	@Test
+	void midiaJaCopiadaNaoEntraDeNovoNaFila() {
+		MediaAsset media = asset("media_lazy_4", "image/jpeg");
+		media.markS3Copy("https://s3.example/uploads/media_lazy_4/media/file", NOW);
+		repository.save(media);
+		repository.claimGranted = true;
+
+		assertThat(service(false).copyOne("media_lazy_4")).isFalse();
+		assertThat(downloader.urls).isEmpty();
+	}
+
 	private static final class FakeRepository implements MediaAssetRepository {
 		private final List<MediaAsset> copy = new ArrayList<>();
 		private final List<MediaAsset> flip = new ArrayList<>();
 		private final Map<String, MediaAsset> byId = new HashMap<>();
+		private final List<String> claimed = new ArrayList<>();
+		private boolean claimGranted = true;
+
+		@Override
+		public boolean claimForS3Copy(String id, java.time.Instant now, java.time.Instant staleBefore, int maxAttempts) {
+			claimed.add(id);
+			boolean permitido = claimGranted;
+			claimGranted = false; // claim e de UMA vez: a chamada seguinte perde (outra replica/rodada)
+			return permitido;
+		}
 
 		@Override
 		public MediaAsset save(MediaAsset asset) {
@@ -189,10 +250,14 @@ class MediaMigrationServiceTests {
 
 	private static final class FakeDownloader implements MediaSourceDownloader {
 		private final List<String> urls = new ArrayList<>();
+		private boolean failNext;
 
 		@Override
 		public Path download(String sourceUrl) {
 			urls.add(sourceUrl);
+			if (failNext) {
+				throw new IllegalStateException("origem respondeu 404");
+			}
 			try {
 				Path file = Files.createTempFile("migration-test-", ".bin");
 				Files.writeString(file, "abc");

@@ -57,6 +57,26 @@ Verificação feita contra a produção e o código deste repo:
   o vídeo de teste responde **206** com Range e `readyState=4` no Chrome. Em S3 a URL fica
   intacta (sem transformação), mas o poster de vídeo continua sem derivada (limitação abaixo).
 
+## Migração OPORTUNISTA (uso normal converte o acervo)
+
+Além do lote, o acervo migra sozinho conforme é USADO — ligado pelo MESMO
+`REDE_MEDIA_MIGRATION_ENABLED` (desligado = nada migra, nem no acesso):
+
+- **Mídia de post/comentário**: a grade do post chama `GET /media/{id}`; essa leitura agenda a
+  cópia do asset para o S3 (claim ATÔMICO no banco — `media_assets.s3_claimed_at` — garante UMA
+  cópia por asset mesmo com várias réplicas; claim velho expira em 10 min).
+- **Fotos de perfil**: as respostas de perfil agendam a migração de `avatar`/`banner`.
+- **Demais referências** (capas de comunidade/grupo/empresa/evento/jogo, logo de vaga, página de
+  criador): a varredura em lote (`media_url_migrations` + registro de colunas no
+  `UrlReferencePersistenceAdapter`) agenda as que ninguém acessou.
+- **Troca de referência**: só depois de a URL pública do S3 responder (`verify`), por UPDATE
+  condicional (`where coluna = :antiga`) — mudança concorrente de foto nunca é sobrescrita e
+  referências compartilhadas são trocadas de uma vez.
+- **SSRF**: só https nos hosts do ImageKit (allowlist) ou caminho relativo `/uploads/`; nenhuma
+  outra origem é baixada.
+- **Falhas**: ficam registradas (`attempts`/`last_error`), referências intactas, até 5 tentativas;
+  a leitura NUNCA depende da migração.
+
 **Ordem para destravar:** (1) **credencial S3 para o pod**: role IRSA com
 `s3:PutObject/GetObject/DeleteObject` no bucket/prefixo, anexada à `socialthing-sa` (é o que o
 worker já acusou em `lastError`) — o módulo `sts`, que faltava no build, já foi adicionado; com o

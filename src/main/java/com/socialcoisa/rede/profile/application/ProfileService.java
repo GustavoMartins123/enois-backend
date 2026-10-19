@@ -20,12 +20,24 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 
 	private final UserProfileRepository repository;
 	private final ReputationService reputationService;
+	private final org.springframework.beans.factory.ObjectProvider<com.socialcoisa.rede.media.application.LazyUrlMigrationService> lazyMedia;
 	private final Clock clock;
 
-	public ProfileService(UserProfileRepository repository, ReputationService reputationService, Clock clock) {
+	public ProfileService(UserProfileRepository repository, ReputationService reputationService,
+			org.springframework.beans.factory.ObjectProvider<com.socialcoisa.rede.media.application.LazyUrlMigrationService> lazyMedia,
+			Clock clock) {
 		this.repository = repository;
 		this.reputationService = reputationService;
+		this.lazyMedia = lazyMedia;
 		this.clock = clock;
+	}
+
+	/** Foto/capa lidas no perfil: agenda a migração para o S3 (sem bloquear a resposta). */
+	private void agendarMigracaoDeMidia(UserProfile profile) {
+		lazyMedia.ifAvailable(lazy -> {
+			lazy.onAccess(profile.avatar());
+			lazy.onAccess(profile.banner());
+		});
 	}
 
 	@Override
@@ -44,6 +56,7 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 		UserProfile profile = repository.findByUsername(username)
 			.map(this::populateCounts)
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
+		agendarMigracaoDeMidia(profile);
 		return UserProfileView.from(profile).withBioHtml(profile.bioHtml()).withBannerHtml(profile.bannerHtml());
 	}
 

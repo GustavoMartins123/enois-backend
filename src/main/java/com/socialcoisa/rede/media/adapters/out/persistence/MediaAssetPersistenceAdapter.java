@@ -42,10 +42,16 @@ class MediaAssetPersistenceAdapter implements MediaAssetRepository {
 	public List<MediaAsset> findForS3Copy(int limit, java.time.Instant before, int maxAttempts) {
 		return repository
 			.findForS3Copy(MediaStorageProvider.IMAGEKIT, com.socialcoisa.rede.media.domain.MediaDeleteStatus.NONE,
-				before, maxAttempts, PageRequest.of(0, Math.max(1, limit)))
+				before, maxAttempts, before, PageRequest.of(0, Math.max(1, limit)))
 			.stream()
 			.map(MediaAssetJpaEntity::toDomain)
 			.toList();
+	}
+
+	@Override
+	@org.springframework.transaction.annotation.Transactional
+	public boolean claimForS3Copy(String id, java.time.Instant now, java.time.Instant staleBefore, int maxAttempts) {
+		return repository.claimForS3Copy(id, now, staleBefore, maxAttempts) > 0;
 	}
 
 	@Override

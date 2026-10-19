@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.Duration;
 import java.util.List;
 
@@ -74,37 +75,65 @@ public class MediaMigrationService {
 		return new MigrationResult(copied, flipped);
 	}
 
+	/** Claim velho expira: pod que morreu no meio da cópia não trava a mídia para sempre. */
+	private static final Duration STALE_CLAIM = Duration.ofMinutes(10);
+
 	public int copyBatch(int limit) {
 		List<MediaAsset> assets = repository.findForS3Copy(limit, clock.instant().minus(MIN_AGE), MAX_ATTEMPTS);
 		int copied = 0;
 		for (MediaAsset asset : assets) {
-			if (!asset.needsS3Copy()) {
-				continue;
-			}
-			Path source = null;
-			try {
-				source = downloader.download(sourceUrl(asset));
-				String s3Url = copier.copy(s3Key(asset.objectKey()), source, asset.mimeType());
-				asset.markS3Copy(s3Url, clock.instant());
-				repository.save(asset);
+			if (copyAsset(asset)) {
 				copied++;
-			}
-			catch (Exception exception) {
-				asset.markS3MigrationFailure(exception.getMessage(), clock.instant());
-				repository.save(asset);
-				log.warn("Falha ao copiar a midia {} para o S3: {}", asset.id(), exception.getMessage());
-			}
-			finally {
-				if (source != null) {
-					try {
-						Files.deleteIfExists(source);
-					}
-					catch (Exception ignored) {
-					}
-				}
 			}
 		}
 		return copied;
+	}
+
+	/**
+	 * Migração OPORTUNISTA de UMA mídia (chamada quando alguém lê o asset): o claim atômico
+	 * garante que só uma réplica copia; sem o claim (outra já copiando, já copiado ou tentativas
+	 * esgotadas) a resposta é false e NADA acontece.
+	 */
+	public boolean copyOne(String mediaId) {
+		Instant now = clock.instant();
+		if (!repository.claimForS3Copy(mediaId, now, now.minus(STALE_CLAIM), MAX_ATTEMPTS)) {
+			return false;
+		}
+		MediaAsset asset = repository.findById(mediaId).orElse(null);
+		if (asset == null || !asset.needsS3Copy()) {
+			return false;
+		}
+		return copyAsset(asset);
+	}
+
+	/** Cópia em si (idempotente no S3: mesma chave, mesmo conteúdo). Falha fica registrada. */
+	boolean copyAsset(MediaAsset asset) {
+		if (!asset.needsS3Copy()) {
+			return false;
+		}
+		Path source = null;
+		try {
+			source = downloader.download(sourceUrl(asset));
+			String s3Url = copier.copy(s3Key(asset.objectKey()), source, asset.mimeType());
+			asset.markS3Copy(s3Url, clock.instant());
+			repository.save(asset);
+			return true;
+		}
+		catch (Exception exception) {
+			asset.markS3MigrationFailure(exception.getMessage(), clock.instant());
+			repository.save(asset);
+			log.warn("Falha ao copiar a midia {} para o S3: {}", asset.id(), exception.getMessage());
+			return false;
+		}
+		finally {
+			if (source != null) {
+				try {
+					Files.deleteIfExists(source);
+				}
+				catch (Exception ignored) {
+				}
+			}
+		}
 	}
 
 	public int flipBatch(int limit) {
