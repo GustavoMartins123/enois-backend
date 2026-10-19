@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -57,11 +58,12 @@ public class BlogService {
 	private final DeletePostUseCase deletePost;
 	private final NotificationService notifications;
 	private final UserProfileRepository profiles;
+	private final ApplicationEventPublisher events;
 	private final Clock clock;
 
 	public BlogService(BlogRepository blogs, BlogPostRepository posts, BlogSubscriptionRepository subscriptions,
 			PublishPostUseCase publishPost, DeletePostUseCase deletePost, NotificationService notifications,
-			UserProfileRepository profiles, Clock clock) {
+			UserProfileRepository profiles, ApplicationEventPublisher events, Clock clock) {
 		this.blogs = blogs;
 		this.posts = posts;
 		this.subscriptions = subscriptions;
@@ -69,6 +71,7 @@ public class BlogService {
 		this.deletePost = deletePost;
 		this.notifications = notifications;
 		this.profiles = profiles;
+		this.events = events;
 		this.clock = clock;
 	}
 
@@ -122,9 +125,19 @@ public class BlogService {
 		return view(saved, userId, POSTS_PAGE);
 	}
 
-	/** Publica um post no blog: ponteiro no feed (tag "blog"), notificacao para quem segue. */
+	/** Publica um post no blog avisando quem segue (comportamento de sempre). */
 	@Transactional
 	public BlogPostView publish(String userId, String title, String body, BlogPostFormat format) {
+		return publish(userId, title, body, format, true);
+	}
+
+	/**
+	 * Publica um post no blog: ponteiro no feed (tag "blog"), notificacao in-app e E-MAIL para os
+	 * assinantes — o toggle `notify` desliga os dois avisos (e so no PRIMEIRO publish; editar
+	 * nunca reenvia). O e-mail roda depois do commit (ver BlogNewsletterService).
+	 */
+	@Transactional
+	public BlogPostView publish(String userId, String title, String body, BlogPostFormat format, boolean notify) {
 		String cleanTitle = requireText(title, MAX_POST_TITLE, "titulo", "Post precisa de um titulo.");
 		String cleanBody = cleanBody(body, format);
 		Blog blog = ensureBlog(userId);
@@ -135,7 +148,12 @@ public class BlogService {
 		String postId = pointer.id();
 		BlogPost saved = posts.save(BlogPost.publish(postId, blog.id(), userId, cleanTitle, cleanBody, format,
 			Instant.now(clock)));
-		notifySubscribers(blog, saved);
+		if (notify) {
+			notifySubscribers(blog, saved);
+			// O fan-out de e-mail escuta DEPOIS do commit: nada sai se a transacao reverter.
+			events.publishEvent(new BlogPostPublishedEvent(blog.id(), blog.slug(), blog.title(), blog.userId(),
+				saved.id(), cleanTitle, cleanBody));
+		}
 		return BlogPostView.from(saved);
 	}
 
@@ -201,7 +219,12 @@ public class BlogService {
 
 	private void notifySubscribers(Blog blog, BlogPost post) {
 		String author = profiles.findById(blog.userId()).map(UserProfile::name).orElse(blog.slug());
-		String href = "/blog/" + blog.slug() + "/" + post.id();
+		// O endereço da página do blog é o USERNAME ATUAL, não o slug gravado: quem trocou de
+		// username sem editar o blog ficava com notificação apontando para blog inexistente
+		// (relato de suporte: "clico em ler e nada acontece").
+		String href = "/blog/"
+			+ profiles.findById(blog.userId()).map(UserProfile::username).orElse(blog.slug()) + "/"
+			+ post.id();
 		for (String subscriberId : subscriptions.findSubscriberIds(blog.id())) {
 			if (subscriberId.equals(blog.userId())) {
 				continue; // o autor nao precisa ser avisado do proprio post

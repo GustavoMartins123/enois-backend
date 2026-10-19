@@ -175,6 +175,41 @@ public class EmailService {
         }
     }
 
+    /**
+     * HTML com remetente NOMEADO ("{blog} via Énóis"), Reply-To e List-Unsubscribe.
+     *
+     * <p>É o que permite um blog enviar aos assinantes sem credencial de ninguém: o envio continua
+     * sendo da plataforma (SMTP do Énóis), e a resposta do leitor cai direto no e-mail do dono.</p>
+     */
+    public boolean sendHtml(String toEmail, String subject, String htmlBody, String fromName, String replyTo,
+            String listUnsubscribeUrl, String kind) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            if (org.springframework.util.StringUtils.hasText(fromName)) {
+                helper.setFrom(new jakarta.mail.internet.InternetAddress(fromEmail, fromName, "UTF-8"));
+            } else {
+                helper.setFrom(fromEmail);
+            }
+            helper.setTo(toEmail);
+            if (org.springframework.util.StringUtils.hasText(replyTo)) {
+                helper.setReplyTo(replyTo);
+            }
+            if (org.springframework.util.StringUtils.hasText(listUnsubscribeUrl)) {
+                message.setHeader("List-Unsubscribe", "<" + listUnsubscribeUrl + ">");
+            }
+            helper.setSubject(subject);
+            helper.setText(htmlBody, true);
+            mailSender.send(message);
+            recordEmail(toEmail, subject, kind, true, null);
+            return true;
+        } catch (Exception e) {
+            recordEmail(toEmail, subject, kind, false, e.getMessage());
+            LOG.error("Falha ao enviar email para {}: {}", toEmail, e.getMessage(), e);
+            return false;
+        }
+    }
+
     private String buildResetLink(String resetToken) {
         return frontendUrl + "/auth/reset?token=" + resetToken;
     }
