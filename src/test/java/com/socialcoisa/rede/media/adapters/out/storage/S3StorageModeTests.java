@@ -29,9 +29,14 @@ class S3StorageModeTests {
 	@Autowired
 	private MediaUploadSigner mediaUploadSigner;
 
+	@Autowired
+	private com.socialcoisa.rede.media.application.port.out.MediaStorageGateway mediaStorageGateway;
+
 	@Test
 	void contextoDoSobeEUsaAFabricaDoS3ComAssinaturaDeUpload() {
 		assertThat(storageUrlFactory).isInstanceOf(S3StorageUrlFactory.class);
 		assertThat(mediaUploadSigner).isInstanceOf(S3UploadSigner.class);
+		// Em modo s3 a exclusão é no S3 — o gateway do ImageKit (comprometido) não pode existir.
+		assertThat(mediaStorageGateway).isInstanceOf(S3MediaStorageGateway.class);
 	}
 }

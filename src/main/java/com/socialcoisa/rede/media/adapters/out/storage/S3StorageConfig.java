@@ -42,6 +42,20 @@ class S3StorageConfig {
 		return new S3UploadSigner(presigner, props.getBucket(), props.getPrefix());
 	}
 
+	@Bean
+	software.amazon.awssdk.services.s3.S3Client s3Client(S3Properties props) {
+		return software.amazon.awssdk.services.s3.S3Client.builder()
+			.region(Region.of(props.getRegion()))
+			.build();
+	}
+
+	/** Exclusão no S3: em modo `s3` o gateway do ImageKit NAO existe (ver ImageKitConfig). */
+	@Bean
+	com.socialcoisa.rede.media.application.port.out.MediaStorageGateway s3MediaStorageGateway(
+			software.amazon.awssdk.services.s3.S3Client s3Client, S3Properties props) {
+		return new S3MediaStorageGateway(s3Client, props.getBucket());
+	}
+
 	@ConfigurationProperties(prefix = "rede.media.s3")
 	static class S3Properties {
 

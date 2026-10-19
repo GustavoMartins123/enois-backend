@@ -27,6 +27,7 @@ class ImageKitConfig {
 	}
 
 	@Bean
+	@ConditionalOnProperty(name = "rede.media.storage", havingValue = "imagekit", matchIfMissing = true)
 	MediaStorageGateway mediaStorageGateway(ImageKitProperties props) {
 		String auth = Base64.getEncoder().encodeToString((props.getPrivateKey() + ":").getBytes());
 		RestClient client = RestClient.builder()
