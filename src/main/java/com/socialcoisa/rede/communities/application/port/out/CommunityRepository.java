@@ -44,5 +44,14 @@ public interface CommunityRepository {
 
 	List<CommunityMember> findMembersByCommunity(String communityId);
 
+	Optional<CommunityMember> findMember(String communityId, String userId);
+
+	/** Fixa um post (substitui o anterior da mesma comunidade; a PK garante o único). */
+	void savePinnedPost(String communityId, String postId, String pinnedBy, Instant pinnedAt);
+
+	Optional<String> findPinnedPostId(String communityId);
+
+	void removePinnedPost(String communityId);
+
 	void delete(String communityId);
 }

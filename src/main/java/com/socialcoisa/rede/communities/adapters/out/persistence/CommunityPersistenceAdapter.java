@@ -19,13 +19,16 @@ class CommunityPersistenceAdapter implements CommunityRepository {
 	private final SpringDataCommunityJpaRepository springData;
 	private final SpringDataCommunityMemberJpaRepository memberRepo;
 	private final SpringDataFavoriteCommunityJpaRepository favoriteRepo;
+	private final SpringDataCommunityPinnedPostJpaRepository pinnedRepo;
 
 	CommunityPersistenceAdapter(SpringDataCommunityJpaRepository springData,
 			SpringDataCommunityMemberJpaRepository memberRepo,
-			SpringDataFavoriteCommunityJpaRepository favoriteRepo) {
+			SpringDataFavoriteCommunityJpaRepository favoriteRepo,
+			SpringDataCommunityPinnedPostJpaRepository pinnedRepo) {
 		this.springData = springData;
 		this.memberRepo = memberRepo;
 		this.favoriteRepo = favoriteRepo;
+		this.pinnedRepo = pinnedRepo;
 	}
 
 	@Override
@@ -78,6 +81,27 @@ class CommunityPersistenceAdapter implements CommunityRepository {
 	@Override
 	public void removeAllMembers(String communityId) {
 		memberRepo.deleteByCommunityId(communityId);
+	}
+
+	@Override
+	public Optional<CommunityMember> findMember(String communityId, String userId) {
+		return memberRepo.findByCommunityIdAndUserId(communityId, userId).map(CommunityMemberJpaEntity::toDomain);
+	}
+
+	@Override
+	public void savePinnedPost(String communityId, String postId, String pinnedBy, Instant pinnedAt) {
+		// O id e a comunidade: salvar substitui o fixado anterior na mesma transacao.
+		pinnedRepo.save(new CommunityPinnedPostJpaEntity(communityId, postId, pinnedBy, pinnedAt));
+	}
+
+	@Override
+	public Optional<String> findPinnedPostId(String communityId) {
+		return pinnedRepo.findById(communityId).map(CommunityPinnedPostJpaEntity::postId);
+	}
+
+	@Override
+	public void removePinnedPost(String communityId) {
+		pinnedRepo.deleteById(communityId);
 	}
 
 	@Override

@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -219,6 +220,44 @@ public class GroupFeedService {
 		audit.record(new UserId(actorId), "GROUP_COMMENT_REMOVED", commentId,
 			"{\"groupId\":\"" + groupId + "\",\"postId\":\"" + postId + "\"}");
 		notifier.contentRemoved(group, comment.authorId(), actorId, "comentário");
+	}
+
+	/**
+	 * Fixa UMA publicação no topo do grupo. O `clearPinned` roda na mesma transação: nunca sobra
+	 * mais de uma fixada, e a anterior volta ao lugar cronológico dela.
+	 */
+	@Transactional
+	public GroupPost pinPost(String groupId, String postId, String actorId) {
+		GroupPost post = requirePost(groupId, postId);
+		if (!post.isPublished()) {
+			throw new ApiException(404, "POST_NOT_FOUND", "Publicacao nao encontrada neste grupo.");
+		}
+		require(roleOf(groupId, actorId), GroupCapability.PIN_CONTENT);
+		content.clearPinned(groupId);
+		GroupPost pinned = post.withPinned(true);
+		content.savePost(pinned);
+		audit.record(new UserId(actorId), "GROUP_POST_PINNED", postId, "{\"groupId\":\"" + groupId + "\"}");
+		return pinned;
+	}
+
+	@Transactional
+	public GroupPost unpinPost(String groupId, String postId, String actorId) {
+		GroupPost post = requirePost(groupId, postId);
+		require(roleOf(groupId, actorId), GroupCapability.PIN_CONTENT);
+		if (!post.pinned()) {
+			return post;
+		}
+		GroupPost unpinned = post.withPinned(false);
+		content.savePost(unpinned);
+		audit.record(new UserId(actorId), "GROUP_POST_UNPINNED", postId, "{\"groupId\":\"" + groupId + "\"}");
+		return unpinned;
+	}
+
+	@Transactional(readOnly = true)
+	public Optional<GroupPost> pinnedPost(String groupId, String actorId) {
+		requireReadable(groupId);
+		requireMember(groupId, actorId);
+		return content.findPinned(groupId).filter(GroupPost::isPublished);
 	}
 
 	@Transactional

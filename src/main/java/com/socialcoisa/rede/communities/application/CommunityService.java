@@ -2,6 +2,7 @@ package com.socialcoisa.rede.communities.application;
 
 import java.time.Clock;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -11,16 +12,21 @@ import com.socialcoisa.rede.communities.application.port.out.CommunityRepository
 import com.socialcoisa.rede.communities.domain.Community;
 import com.socialcoisa.rede.communities.domain.CommunityMember;
 import com.socialcoisa.rede.communities.domain.MemberRole;
+import com.socialcoisa.rede.feed.application.port.out.PostRepository;
+import com.socialcoisa.rede.feed.domain.Post;
+import com.socialcoisa.rede.feed.domain.PostId;
 import com.socialcoisa.rede.shared.web.ApiException;
 
 @Service
 public class CommunityService {
 
 	private final CommunityRepository repository;
+	private final PostRepository postRepository;
 	private final Clock clock;
 
-	public CommunityService(CommunityRepository repository, Clock clock) {
+	public CommunityService(CommunityRepository repository, PostRepository postRepository, Clock clock) {
 		this.repository = repository;
+		this.postRepository = postRepository;
 		this.clock = clock;
 	}
 
@@ -170,6 +176,42 @@ public class CommunityService {
 
 	public boolean isMember(String communityId, String userId) {
 		return repository.isMember(communityId, userId);
+	}
+
+	/**
+	 * Fixa UM post no topo da comunidade. Só ADMIN (dono/administração) fixa; o post precisa ser
+	 * daquela comunidade e estar ativo. Fixar outro substitui o anterior (a PK é a comunidade).
+	 */
+	@Transactional
+	public String pinPost(String communityId, String postId, String userId) {
+		getById(communityId);
+		requireAdmin(communityId, userId);
+		Post post = postRepository.findById(new PostId(postId))
+			.filter(Post::isActive)
+			.orElseThrow(() -> new ApiException(404, "POST_NOT_FOUND", "Post nao encontrado."));
+		if (!communityId.equals(post.communityId())) {
+			throw new ApiException(404, "POST_NOT_FOUND", "Post nao pertence a esta comunidade.");
+		}
+		repository.savePinnedPost(communityId, postId, userId, clock.instant());
+		return postId;
+	}
+
+	@Transactional
+	public void unpinPost(String communityId, String userId) {
+		getById(communityId);
+		requireAdmin(communityId, userId);
+		repository.removePinnedPost(communityId);
+	}
+
+	public Optional<String> pinnedPostId(String communityId) {
+		return repository.findPinnedPostId(communityId);
+	}
+
+	private void requireAdmin(String communityId, String userId) {
+		repository.findMember(communityId, userId)
+			.filter(member -> member.role() == MemberRole.ADMIN)
+			.orElseThrow(() -> new ApiException(403, "FORBIDDEN",
+				"So quem administra a comunidade pode fixar publicacoes."));
 	}
 
 	public int countMembers(String communityId) {

@@ -276,6 +276,52 @@ class CommunityContractController {
 			user != null ? user.id() : new com.socialcoisa.rede.feed.domain.UserId("anonymous"));
 	}
 
+	/** O post fixado no topo (um só). Visitante pode ler: o feed da comunidade é público. */
+	@GetMapping("/{communityId}/pin")
+	Object pinned(@PathVariable String communityId,
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = resolveSafely(userId, sessionToken);
+		String postId = communityService.pinnedPostId(communityId)
+			.orElseThrow(() -> new com.socialcoisa.rede.shared.web.ApiException(404, "NO_PINNED_POST",
+				"Nao ha publicacao fixada nesta comunidade."));
+		return getFeedService.getPost(postId, user != null ? user.id() : null);
+	}
+
+	@PostMapping("/{communityId}/pin")
+	ResponseEntity<String> pin(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@PathVariable String communityId, @RequestBody PinRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		if (request == null || request.postId() == null || request.postId().isBlank()) {
+			throw new com.socialcoisa.rede.shared.web.ApiException(400, "BAD_REQUEST", "Informe o post.");
+		}
+		String hash = idempotency.hash(Map.of("communityId", communityId, "postId", request.postId()));
+		return idempotency.execute(user.id(), "POST", "/api/communities/{communityId}/pin", idempotencyKey, hash,
+			() -> {
+				String postId = communityService.pinPost(communityId, request.postId().trim(), user.id().value());
+				return new CommandResponse(200, getFeedService.getPost(postId, user.id()));
+			});
+	}
+
+	@DeleteMapping("/{communityId}/pin")
+	ResponseEntity<String> unpin(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@PathVariable String communityId) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		String hash = idempotency.hash(Map.of("communityId", communityId, "action", "unpin"));
+		return idempotency.execute(user.id(), "DELETE", "/api/communities/{communityId}/pin", idempotencyKey, hash,
+			() -> {
+				communityService.unpinPost(communityId, user.id().value());
+				return new CommandResponse(200, new StatusResponse(communityId, "UNPINNED"));
+			});
+	}
+
+	record PinRequest(String postId) {
+	}
+
 	record CommunityView(String id, String name, String description, int members, String topic, String cover,
 			String avatar, String bannerHtml, boolean joined) {
 	}

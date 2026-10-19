@@ -73,6 +73,12 @@ public class GroupPost {
 			createdAt, updatedAt);
 	}
 
+	/** Fixar/desafixar não edita o texto: o `updatedAt` fica como está. */
+	public GroupPost withPinned(boolean pinned) {
+		return new GroupPost(id, groupId, topicId, authorId, content, mediaIds, status, pinned, reactions, comments,
+			createdAt, updatedAt);
+	}
+
 	public boolean isPublished() {
 		return status == GroupPostStatus.PUBLISHED;
 	}

@@ -36,6 +36,12 @@ public interface GroupContentRepository {
 	/** Publicações do grupo, opcionalmente presas a um tópico, mais novas primeiro. */
 	List<GroupPost> listPosts(String groupId, String topicId, Instant before, int limit);
 
+	/** A publicação fixada no topo do grupo (no máximo uma). */
+	Optional<GroupPost> findPinned(String groupId);
+
+	/** Desafixa todas as publicações do grupo — usado antes de fixar a nova. */
+	void clearPinned(String groupId);
+
 	void saveComment(GroupComment comment);
 
 	Optional<GroupComment> findComment(String commentId);
