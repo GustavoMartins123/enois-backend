@@ -137,6 +137,13 @@ Enquanto houver pendência real, a automação fica viva.
       (só o dono). Carregamento, vazio e sem-acesso tratados na descoberta, na página e no painel.
       A moderação LOCAL (remover publicação/comentário pela administração) fica para a Etapa 6,
       junto com o AutoMod e as denúncias (2026-10-18).
+- [x] **Logo e banner na criação e na edição** — a API já aceitava `avatar`/`banner`/`bannerHtml`,
+      mas nenhum diálogo oferecia os campos; pior, o em branco virava nulo (que significa "mantém"),
+      então era impossível REMOVER a imagem. Agora: a criação envia logo + banner; a edição tem as
+      abas Foto/HTML (HtmlEditor sanitizado no backend) com trocar/remover; a página mostra o logo
+      ao lado do nome; no backend, nulo mantém e em branco limpa. `GroupIdentityTests` (2) e a
+      suíte de grupos **48/48** verdes, build do front verificado (2026-10-19; backend `22ada06`,
+      front `7996b99`).
 
 ### Etapa 6 — Segurança e moderação
 - [x] Moderação local — o autor apaga o próprio post/comentário; quem modera (`MODERATE_CONTENT`)
