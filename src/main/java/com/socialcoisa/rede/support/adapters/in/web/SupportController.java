@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.socialcoisa.rede.shared.web.AdminGuard;
 import com.socialcoisa.rede.shared.web.CurrentUser;
 import com.socialcoisa.rede.shared.web.CurrentUserResolver;
+import com.socialcoisa.rede.shared.web.PiiMask;
 import com.socialcoisa.rede.support.application.SupportService;
 import com.socialcoisa.rede.support.domain.SupportCategory;
 import com.socialcoisa.rede.support.domain.SupportRequest;
@@ -109,7 +110,8 @@ class SupportController {
 			String repliedAt, String createdAt) {
 		static SupportRequestView from(SupportRequest request) {
 			return new SupportRequestView(request.id(), request.userId(), request.subject(), request.message(),
-				request.contactEmail(), request.imageUrl(), request.category().name(), request.status().name(),
+				PiiMask.email(request.contactEmail()), request.imageUrl(), request.category().name(),
+				request.status().name(),
 				request.adminReply(), request.repliedBy(),
 				request.repliedAt() == null ? null : request.repliedAt().toString(),
 				request.createdAt().toString());
