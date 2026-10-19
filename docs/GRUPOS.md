@@ -69,6 +69,12 @@ Enquanto houver pendência real, a automação fica viva.
 
 > Atualize esta seção a cada execução: `- [x] feito — <o que> — <onde> (commit <hash>)`.
 
+> **Plano CONCLUÍDO em 2026-10-19.** Não há mais nenhum item aberto. A automação de 30 minutos
+> (`automation-423f2e18-213d-4b4e-9698-1252869e9bd2`) **não pôde ser removida por esta sessão**:
+> a ferramenta `CronDelete` não está disponível (só `CronList`) e o Computer Use responde
+> "unavailable" neste ambiente. Remover pela página de Automações do app. Enquanto ela existir,
+> cada execução deve apenas confirmar este estado — nada a implementar.
+
 ### Etapa 1 — Auditoria
 - [x] Mapear a arquitetura real: feed, comunidades, autenticação, persistência, mídia,
       notificações, AutoMod, denúncias (backend `rede` + front `connect-grow`) — escrito em
