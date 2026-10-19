@@ -127,6 +127,14 @@
 			<artifactId>s3</artifactId>
 			<version>${awssdk.version}</version>
 		</dependency>
+		<!-- STS: a cadeia padrao usa WebIdentityTokenCredentialsProvider (IRSA) para trocar o token
+		     do service account por credenciais. Sem este modulo o provider nao consegue assumir a
+		     role e o S3 falha com "Unable to load credentials". -->
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>sts</artifactId>
+			<version>${awssdk.version}</version>
+		</dependency>
 		<dependency>
 			<groupId>software.amazon.awssdk</groupId>
 			<artifactId>apache-client</artifactId>

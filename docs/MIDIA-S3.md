@@ -38,6 +38,17 @@ Verificação feita contra a produção e o código deste repo:
   agora roda em segundo plano (`MediaMigrationWorker`) e a fase de flip está implementada, mas
   **desligada por padrão** até o Bloqueio 1 (CDN) ser resolvido. O status público
   `GET /media/migration` mostra `total`, `imagekit`, `s3Copied`, `s3Active`, `errors` e `lastError`.
+- **Causa de código encontrada e corrigida (2026-10-19): faltava o módulo `sts`.** A cadeia padrão
+  lista `WebIdentityTokenCredentialsProvider()`, mas trocar o token do service account por
+  credenciais é chamada de STS; sem `software.amazon.awssdk:sts` no classpath o provider não assume
+  a role e a cadeia termina em "Unable to load credentials" mesmo com o IRSA configurado. O módulo
+  entrou no `pom.xml` na mesma versão do `s3` (2.21.1), e o `dependency:tree` confirma
+  `software.amazon.awssdk:sts:jar:2.21.1:compile`. Os três clientes (`S3Client` do storage, o da
+  migração e o `S3Presigner`) já usavam a cadeia padrão, sem credencial em código nem provider
+  fixo. **Continua dependendo do cluster:** conferir no pod `AWS_ROLE_ARN` /
+  `AWS_WEB_IDENTITY_TOKEN_FILE` (IRSA) ou `AWS_CONTAINER_CREDENTIALS_FULL_URI` (EKS Pod Identity)
+  com `kubectl -n forest-apps describe pod`, e a role com `s3:PutObject/GetObject/DeleteObject` no
+  bucket. Só depois disso religar a migração e ver `errors` parar de crescer com `s3Copied` subindo.
 - **Upload assinado nunca rodou contra o bucket real** (não há credencial AWS nesta máquina); a
   primeira virada é a estreia.
 - **Vídeo enviado como arquivo:** o player do Énóis pedia a URL crua do ImageKit e recebia
@@ -48,7 +59,8 @@ Verificação feita contra a produção e o código deste repo:
 
 **Ordem para destravar:** (1) **credencial S3 para o pod**: role IRSA com
 `s3:PutObject/GetObject/DeleteObject` no bucket/prefixo, anexada à `socialthing-sa` (é o que o
-worker já acusou em `lastError`) — depois religar `REDE_MEDIA_MIGRATION_ENABLED=true`; (2)
+worker já acusou em `lastError`) — o módulo `sts`, que faltava no build, já foi adicionado; com o
+pod novo e a role válida, religar `REDE_MEDIA_MIGRATION_ENABLED=true`; (2)
 CloudFront com alternate domain + ACM e conferir o `curl -I` com certificado válido; (3)
 `S3MediaStorageGateway` (delete) e condicionar o gateway do ImageKit ao modo `imagekit`; (4) ligar
 o flip (`REDE_MEDIA_MIGRATION_FLIP_ENABLED=true`) e conferir o `s3Active` subindo; (5) testar um
