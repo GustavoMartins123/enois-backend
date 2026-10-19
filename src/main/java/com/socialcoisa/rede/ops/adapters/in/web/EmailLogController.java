@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.socialcoisa.rede.ops.application.port.out.EmailLogRepository;
 import com.socialcoisa.rede.ops.domain.EmailLog;
 import com.socialcoisa.rede.shared.web.AdminGuard;
+import com.socialcoisa.rede.shared.web.PiiMask;
 import com.socialcoisa.rede.shared.web.CurrentUserResolver;
 
 /** Log de metadados dos e-mails enviados (painel central, apenas administradores). */
@@ -42,7 +43,8 @@ class EmailLogController {
 	record EmailLogView(String id, String toEmail, String subject, String kind, String status, String error,
 			String createdAt) {
 		static EmailLogView from(EmailLog log) {
-			return new EmailLogView(log.id(), log.toEmail(), log.subject(), log.kind(), log.status().name(),
+			return new EmailLogView(log.id(), PiiMask.email(log.toEmail()), log.subject(), log.kind(),
+				log.status().name(),
 				log.error(), log.createdAt().toString());
 		}
 	}
