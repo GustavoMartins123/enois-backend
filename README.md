@@ -214,6 +214,15 @@ back** is setting `REDE_MEDIA_STORAGE=imagekit` and restarting: objects already 
 served through their stored address. A `403` on upload is almost always bucket CORS or a
 `Content-Type` different from the signed one.
 
+### Comunicado de recuperação (incidente do ImageKit, 19/10/2026)
+
+Com o ImageKit comprometido, a escrita foi desativada (`UPLOADS_DISABLED` até o S3 estar
+configurado). Quando o S3 entra (bean de upload assinado presente), o worker
+`MediaRecoveryApologyWorker` envia **uma única vez** (marcador em `system_announcements`, V98)
+uma notificação a todos os usuários pedindo desculpas pelo incidente e credita **100 faíscas**
+por conta, com referência idempotente. Leitura das mídias antigas continua pelos URLs gravados
+(ImageKit) e as novas passam a ir para o S3.
+
 ## Busca de GIF (seletor de comentário)
 
 O seletor de GIF do comentário busca num provedor externo e devolve a URL da mídia — a mesma que o
