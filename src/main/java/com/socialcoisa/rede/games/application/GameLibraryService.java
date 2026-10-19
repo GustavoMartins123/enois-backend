@@ -57,6 +57,11 @@ public class GameLibraryService {
 		return userId != null && favorites.exists(userId, gameId);
 	}
 
+	@Transactional(readOnly = true)
+	public long count(String gameId) {
+		return favorites.countByGame(gameId);
+	}
+
 	/** A biblioteca: os favoritos, com o jogo de cada um (o que saiu do ar sai da lista). */
 	@Transactional(readOnly = true)
 	public List<Game> library(String userId) {

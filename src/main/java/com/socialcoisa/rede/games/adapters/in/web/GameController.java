@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.socialcoisa.rede.games.application.GameCatalogService;
+import com.socialcoisa.rede.games.application.GameLibraryService;
 import com.socialcoisa.rede.games.application.GamePageView;
 import com.socialcoisa.rede.games.application.GameSearchCriteria;
 import com.socialcoisa.rede.games.application.GameService;
@@ -34,17 +35,19 @@ class GameController {
 	private final AdminGuard adminGuard;
 	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles;
 	private final com.socialcoisa.rede.games.application.GameIdentityService identities;
+	private final GameLibraryService library;
 
 	GameController(GameService games, GameCatalogService catalog, CurrentUserResolver currentUserResolver,
 			AdminGuard adminGuard,
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles,
-			com.socialcoisa.rede.games.application.GameIdentityService identities) {
+			com.socialcoisa.rede.games.application.GameIdentityService identities, GameLibraryService library) {
 		this.games = games;
 		this.catalog = catalog;
 		this.currentUserResolver = currentUserResolver;
 		this.adminGuard = adminGuard;
 		this.profiles = profiles;
 		this.identities = identities;
+		this.library = library;
 	}
 
 	// --- leitura pública ---
@@ -74,7 +77,10 @@ class GameController {
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String username, @PathVariable String gameSlug) {
 		// Com sessão, o dono abre o próprio jogo em qualquer estado (rascunho, recusado, suspenso).
-		return view(games.byUserAndSlug(username, gameSlug, viewerIdOrNull(userId, sessionToken)), null);
+		String viewerId = viewerIdOrNull(userId, sessionToken);
+		Game game = games.byUserAndSlug(username, gameSlug, viewerId);
+		String owner = profiles.findById(game.userId()).map(p -> p.username()).orElse(null);
+		return GameView.of(game, owner, (int) library.count(game.id()), library.has(viewerId, game.id()), viewerId);
 	}
 
 	/** A view de um jogo, com o @ do criador resolvido (o endereço público usa ele). */

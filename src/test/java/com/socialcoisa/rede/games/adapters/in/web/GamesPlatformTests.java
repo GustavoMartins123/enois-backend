@@ -303,6 +303,45 @@ class GamesPlatformTests {
 		assertThat(catalogIds("?query=suspeito")).containsExactly("jogo-suspeito");
 	}
 
+	@Test
+	void gamePageReportsFavoritesAndOwnershipOfTheReader() throws Exception {
+		var creator = auth.authenticate("gplat_creator6");
+		var player = auth.authenticate("gplat_player6");
+		var admin = auth.authenticate("gplat_admin");
+		String gameId = publish(creator, admin, "Horta Noturna", "https://8.8.8.8/horta", "Jogo de horta",
+			"SIMULACAO", "RELEASED", "FREE");
+		String page = "/games/gplat-creator6/horta-noturna";
+
+		// Antes a página do jogo devolvia sempre favorited=false: o botão mostrava "Guardar" para quem
+		// já tinha guardado, e o clique seguinte (POST alterna) tirava o jogo da biblioteca.
+		mockMvc.perform(post("/games/" + gameId + "/favorite").header("X-Session-Token", player.token()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.favorited").value(true));
+		mockMvc.perform(get(page).header("X-Session-Token", player.token()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.favorited").value(true))
+			.andExpect(jsonPath("$.favorites").value(1))
+			.andExpect(jsonPath("$.owned").value(false));
+
+		mockMvc.perform(get(page))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.favorited").value(false))
+			.andExpect(jsonPath("$.favorites").value(1))
+			.andExpect(jsonPath("$.owned").value(false));
+
+		mockMvc.perform(get(page).header("X-Session-Token", creator.token()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.favorited").value(false))
+			.andExpect(jsonPath("$.owned").value(true));
+
+		mockMvc.perform(delete("/games/" + gameId + "/favorite").header("X-Session-Token", player.token()))
+			.andExpect(status().isOk());
+		mockMvc.perform(get(page).header("X-Session-Token", player.token()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.favorited").value(false))
+			.andExpect(jsonPath("$.favorites").value(0));
+	}
+
 	// --- apoio ---
 
 	private List<String> catalogIds(String query) throws Exception {
