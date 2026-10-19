@@ -21,4 +21,6 @@ public interface ModeratorApplicationRepository {
 	boolean existsPendingByUser(String userId);
 
 	List<ModeratorApplication> findByStatus(ModeratorApplicationStatus status, int limit);
+
+	long countByStatus(ModeratorApplicationStatus status);
 }

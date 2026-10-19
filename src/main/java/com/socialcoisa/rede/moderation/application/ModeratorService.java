@@ -82,14 +82,18 @@ public class ModeratorService {
 		this.voteQuorum = Math.max(1, voteQuorum);
 	}
 
+	/** Punição por votação de moderadores só existe a partir deste tamanho de time. */
+	public static final int MIN_MODERATORS_FOR_SANCTION = 10;
+
 	/** Estado do usuario na tela: credibilidade, elegibilidade, papel e ultima candidatura. */
 	@Transactional(readOnly = true)
 	public MeView me(String userId) {
 		int reputation = reputationService.reputationOf(userId);
 		ModeratorApplication latest = applications.findLatestByUser(userId).orElse(null);
 		boolean moderator = applications.findApprovedByUser(userId).isPresent();
-		return new MeView(reputation, minReputation, reputation >= minReputation, moderator,
-			latest == null ? null : applicationView(latest));
+		long moderatorCount = applications.countByStatus(ModeratorApplicationStatus.APPROVED);
+		return new MeView(reputation, minReputation, reputation >= minReputation, moderator, moderatorCount,
+			MIN_MODERATORS_FOR_SANCTION, latest == null ? null : applicationView(latest));
 	}
 
 	@Transactional
@@ -170,6 +174,42 @@ public class ModeratorService {
 			"Seu acesso ao painel de moderação foi revogado por um administrador.",
 			"/moderador", "Ver");
 		return applicationView(revoked);
+	}
+
+	/**
+	 * Nomeação direta por administrador. Se houver candidatura pendente, ela é aprovada; senão
+	 * criamos uma candidatura já aprovada — o papel de moderador continua vindo só daqui.
+	 */
+	@Transactional
+	public ApplicationView appoint(String username, String adminId, String note) {
+		UserProfile target = profiles.findByUsername(trim(username))
+			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuário não encontrado."));
+		if (applications.findApprovedByUser(target.id()).isPresent()) {
+			throw new ApiException(409, "ALREADY_MODERATOR", "Este usuário já é moderador.");
+		}
+		Instant now = Instant.now(clock);
+		String cleanNote = trimOrNull(note);
+		ModeratorApplication pending = applications.findLatestByUser(target.id())
+			.filter(ModeratorApplication::isPending)
+			.orElse(null);
+		ModeratorApplication approved = pending == null
+			? ModeratorApplication.create("modapp_" + randomId(), target.id(),
+				"Nomeação direta por administrador.", null, null, now)
+				.approve(adminId, cleanNote, now)
+			: pending.approve(adminId, cleanNote, now);
+		ModeratorApplication saved = applications.save(approved);
+		notifications.create(target.id(), "MODERACAO", adminId, "Agora você é moderador",
+			"Você foi nomeado moderador por um administrador. O painel de moderação já está liberado.",
+			"/moderador", "Abrir painel");
+		return applicationView(saved);
+	}
+
+	/** Moderadores ativos, para a lista de gestão da aba de candidaturas. */
+	@Transactional(readOnly = true)
+	public List<ApplicationView> approvedModerators(int limit) {
+		return applications.findByStatus(ModeratorApplicationStatus.APPROVED, limit).stream()
+			.map(this::applicationView)
+			.toList();
 	}
 
 	@Transactional(readOnly = true)
@@ -308,7 +348,7 @@ public class ModeratorService {
 	}
 
 	public record MeView(int reputation, int minReputation, boolean eligible, boolean moderator,
-			ApplicationView application) {
+			long moderatorCount, int minModeratorsForSanction, ApplicationView application) {
 	}
 
 	public record ApplicationView(String id, String userId, String username, String name,

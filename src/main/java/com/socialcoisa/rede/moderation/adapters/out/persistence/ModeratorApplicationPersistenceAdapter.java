@@ -55,4 +55,9 @@ class ModeratorApplicationPersistenceAdapter implements ModeratorApplicationRepo
 			.map(ModeratorApplicationJpaEntity::toDomain)
 			.toList();
 	}
+
+	@Override
+	public long countByStatus(ModeratorApplicationStatus status) {
+		return jpaRepository.countByStatus(status);
+	}
 }

@@ -14,9 +14,11 @@ import org.springframework.web.bind.annotation.RestController;
 import com.socialcoisa.rede.games.application.GameService;
 import com.socialcoisa.rede.games.domain.Game;
 import com.socialcoisa.rede.moderation.application.ModeratorService;
+import com.socialcoisa.rede.moderation.application.SanctionProposalService;
 import com.socialcoisa.rede.moderation.domain.ModerationVoteType;
 import com.socialcoisa.rede.moderation.domain.ModeratorApplicationStatus;
 import com.socialcoisa.rede.moderation.domain.SanctionType;
+import com.socialcoisa.rede.moderation.domain.SanctionVoteType;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.shared.web.AdminGuard;
 import com.socialcoisa.rede.shared.web.ApiException;
@@ -35,14 +37,17 @@ import com.socialcoisa.rede.shared.web.CurrentUserResolver;
 class ModeratorController {
 
 	private final ModeratorService moderators;
+	private final SanctionProposalService sanctionProposals;
 	private final GameService games;
 	private final UserProfileRepository profiles;
 	private final CurrentUserResolver currentUserResolver;
 	private final AdminGuard adminGuard;
 
-	ModeratorController(ModeratorService moderators, GameService games, UserProfileRepository profiles,
-			CurrentUserResolver currentUserResolver, AdminGuard adminGuard) {
+	ModeratorController(ModeratorService moderators, SanctionProposalService sanctionProposals,
+			GameService games, UserProfileRepository profiles, CurrentUserResolver currentUserResolver,
+			AdminGuard adminGuard) {
 		this.moderators = moderators;
+		this.sanctionProposals = sanctionProposals;
 		this.games = games;
 		this.profiles = profiles;
 		this.currentUserResolver = currentUserResolver;
@@ -55,7 +60,7 @@ class ModeratorController {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		ModeratorService.MeView me = moderators.me(user.id().value());
 		return new MeResponse(me.reputation(), me.minReputation(), me.eligible(), me.moderator(),
-			adminGuard.isAdmin(user), me.application());
+			adminGuard.isAdmin(user), me.moderatorCount(), me.minModeratorsForSanction(), me.application());
 	}
 
 	@PostMapping("/moderation/applications")
@@ -120,6 +125,26 @@ class ModeratorController {
 			request == null ? null : request.note());
 	}
 
+	@GetMapping("/admin/moderators")
+	List<ModeratorService.ApplicationView> moderatorList(
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader("X-Session-Token") String sessionToken,
+			@RequestParam(defaultValue = "200") int limit) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		adminGuard.requireAdmin(user);
+		return moderators.approvedModerators(limit);
+	}
+
+	@PostMapping("/admin/moderators")
+	ModeratorService.ApplicationView appoint(
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader("X-Session-Token") String sessionToken,
+			@RequestBody AppointmentRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		adminGuard.requireAdmin(user);
+		return moderators.appoint(request.username(), user.id().value(), request.note());
+	}
+
 	@PostMapping("/admin/moderators/{userId}/revoke")
 	ModeratorService.ApplicationView revoke(
 			@RequestHeader(value = "X-User-Id", required = false) String requesterId,
@@ -138,6 +163,45 @@ class ModeratorController {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		adminGuard.requireAdmin(user);
 		return moderators.sanctionUser(user.id().value(), username, request.type(), request.reason());
+	}
+
+	@GetMapping("/moderation/sanction-proposals")
+	List<SanctionProposalService.ProposalView> sanctionProposals(
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader("X-Session-Token") String sessionToken,
+			@RequestParam(defaultValue = "50") int limit) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		requireModerator(user);
+		return sanctionProposals.pending(user.id().value(), limit);
+	}
+
+	@PostMapping("/moderation/sanction-proposals")
+	SanctionProposalService.ProposalView proposeSanction(
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader("X-Session-Token") String sessionToken,
+			@RequestBody SanctionProposalRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		requireModerator(user);
+		return sanctionProposals.propose(user.id().value(), request.username(), request.type(), request.reason());
+	}
+
+	@PostMapping("/moderation/sanction-proposals/{proposalId}/vote")
+	SanctionProposalService.DecisionResult voteSanction(
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String proposalId,
+			@RequestBody SanctionProposalVoteRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		requireModerator(user);
+		return sanctionProposals.vote(proposalId, user.id().value(), request.vote(), request.note());
+	}
+
+	@PostMapping("/admin/sanction-proposals/{proposalId}/cancel")
+	SanctionProposalService.ProposalView cancelSanction(
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String proposalId) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		adminGuard.requireAdmin(user);
+		return sanctionProposals.cancel(proposalId, user.id().value());
 	}
 
 	@GetMapping("/moderation/games")
@@ -183,7 +247,8 @@ class ModeratorController {
 	}
 
 	record MeResponse(int reputation, int minReputation, boolean eligible, boolean moderator,
-			boolean admin, ModeratorService.ApplicationView application) {
+			boolean admin, long moderatorCount, int minModeratorsForSanction,
+			ModeratorService.ApplicationView application) {
 	}
 
 	record ApplicationRequest(String motivation, String experience, String availability) {
@@ -192,10 +257,19 @@ class ModeratorController {
 	record DecisionRequest(String note) {
 	}
 
+	record AppointmentRequest(String username, String note) {
+	}
+
 	record VoteRequest(ModerationVoteType vote, String note) {
 	}
 
 	record SanctionRequest(SanctionType type, String reason) {
+	}
+
+	record SanctionProposalRequest(String username, SanctionType type, String reason) {
+	}
+
+	record SanctionProposalVoteRequest(SanctionVoteType vote, String note) {
 	}
 
 	record GameReviewView(String id, String userId, String username, String title, String description,

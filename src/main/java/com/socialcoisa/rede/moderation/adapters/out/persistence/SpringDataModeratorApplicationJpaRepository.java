@@ -20,4 +20,6 @@ interface SpringDataModeratorApplicationJpaRepository
 
 	List<ModeratorApplicationJpaEntity> findByStatusOrderByCreatedAtAsc(ModeratorApplicationStatus status,
 			Pageable pageable);
+
+	long countByStatus(ModeratorApplicationStatus status);
 }
