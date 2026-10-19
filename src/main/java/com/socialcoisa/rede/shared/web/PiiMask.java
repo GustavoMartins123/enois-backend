@@ -1,25 +1,24 @@
 package com.socialcoisa.rede.shared.web;
 
 /**
- * Mascara dados pessoais em respostas de painel. O operador precisa reconhecer o destino
- * (domínio e primeira letra), mas não precisa ver o endereço completo de quem usa a plataforma.
+ * Remove dados pessoais das respostas de painel. Endereço de e-mail não é necessário para
+ * operar a fila (o envio e a resposta usam o registro no banco), então o painel recebe apenas
+ * um marcador — nem inicial nem domínio.
  */
 public final class PiiMask {
+
+	private static final java.util.regex.Pattern EMAIL =
+		java.util.regex.Pattern.compile("[\\w.+-]+@[\\w.-]+\\.[A-Za-z]{2,}");
 
 	private PiiMask() {
 	}
 
 	public static String email(String value) {
-		if (value == null || value.isBlank()) {
-			return value;
-		}
-		String trimmed = value.trim();
-		int at = trimmed.indexOf('@');
-		if (at <= 0 || at == trimmed.length() - 1) {
-			return "***";
-		}
-		String local = trimmed.substring(0, at);
-		String domain = trimmed.substring(at);
-		return (local.length() <= 1 ? "***" : local.charAt(0) + "***") + domain;
+		return value == null || value.isBlank() ? value : "***";
+	}
+
+	/** Texto livre (assunto/erro de envio) pode carregar um endereço colado; ele também sai. */
+	public static String text(String value) {
+		return value == null ? null : EMAIL.matcher(value).replaceAll("***");
 	}
 }
