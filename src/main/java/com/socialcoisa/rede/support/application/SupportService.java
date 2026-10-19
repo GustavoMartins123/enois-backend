@@ -12,6 +12,7 @@ import org.springframework.util.StringUtils;
 
 import com.socialcoisa.rede.identity.application.EmailService;
 import com.socialcoisa.rede.support.application.port.out.SupportRequestRepository;
+import com.socialcoisa.rede.support.domain.SupportCategory;
 import com.socialcoisa.rede.support.domain.SupportRequest;
 import com.socialcoisa.rede.support.domain.SupportStatus;
 import com.socialcoisa.rede.shared.web.ApiException;
@@ -42,7 +43,8 @@ public class SupportService {
 	}
 
 	@Transactional
-	public SupportRequest open(String userId, String subject, String message, String contactEmail, String imageUrl) {
+	public SupportRequest open(String userId, String subject, String message, String contactEmail, String imageUrl,
+			SupportCategory category) {
 		String cleanSubject = subject == null ? "" : subject.trim();
 		String cleanMessage = message == null ? "" : message.trim();
 		String cleanEmail = StringUtils.hasText(contactEmail) ? contactEmail.trim().toLowerCase(java.util.Locale.ROOT)
@@ -78,7 +80,7 @@ public class SupportService {
 
 		SupportRequest request = repository.save(SupportRequest.create(
 			"support_" + UUID.randomUUID().toString().replace("-", ""), userId, cleanSubject, cleanMessage, cleanEmail,
-			cleanImage, clock.instant()));
+			cleanImage, category, clock.instant()));
 
 		if (StringUtils.hasText(supportEmail)) {
 			emailService.sendSupportRequestEmail(supportEmail, request.subject(), request.message(), cleanEmail);
@@ -87,8 +89,23 @@ public class SupportService {
 	}
 
 	@Transactional(readOnly = true)
-	public List<SupportRequest> listByStatus(SupportStatus status, int limit) {
-		return repository.findByStatus(status, limit < 1 ? 20 : Math.min(limit, 100));
+	public List<SupportRequest> list(SupportCategory category, SupportStatus status, int limit) {
+		return repository.findFiltered(category, status, limit < 1 ? 30 : Math.min(limit, 100));
+	}
+
+	/** Triagem do painel: move o ticket entre aberto/em andamento/resolvido e/ou recategoriza. */
+	@Transactional
+	public SupportRequest update(String id, SupportStatus status, SupportCategory category) {
+		SupportRequest request = repository.findById(id)
+			.orElseThrow(() -> new ApiException(404, "SUPPORT_REQUEST_NOT_FOUND", "Pedido de suporte não encontrado."));
+		SupportRequest updated = request;
+		if (status != null) {
+			updated = updated.withStatus(status);
+		}
+		if (category != null) {
+			updated = updated.withCategory(category);
+		}
+		return repository.save(updated);
 	}
 
 	/** Baixa a imagem do anexo (https, ate 5 MB); falha de download NAO bloqueia o pedido. */

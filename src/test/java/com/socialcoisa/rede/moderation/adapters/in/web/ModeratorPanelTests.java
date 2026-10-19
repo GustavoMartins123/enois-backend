@@ -222,6 +222,49 @@ class ModeratorPanelTests {
 			.andExpect(jsonPath("$.myVote").value("DISMISS"));
 	}
 
+	@Test
+	void moderatorReviewsGameSubmission() throws Exception {
+		var dev = new TestAuthHelper(mockMvc, objectMapper).authenticate("mp_gamedev");
+		var applicant = new TestAuthHelper(mockMvc, objectMapper).authenticate("mp_mod3");
+		var admin = new TestAuthHelper(mockMvc, objectMapper).authenticate("mp_admin");
+
+		String applicationId = apply(applicant, "Quero revisar jogos da comunidade com cuidado.");
+		mockMvc.perform(post("/admin/moderator-applications/" + applicationId + "/approve")
+				.header("X-Session-Token", admin.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("note", "ok"))))
+			.andExpect(status().isOk());
+
+		// Jogo enviado pelo criador entra na fila (SUBMITTED).
+		MvcResult submitted = mockMvc.perform(post("/games")
+				.header("X-Session-Token", dev.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of(
+					"slug", "mp-jogo",
+					"title", "Jogo de teste",
+					"description", "Um jogo simples para a fila de revisão.",
+					"cover", "",
+					"url", "https://example.com/jogo",
+					"tags", "puzzle"))))
+			.andExpect(status().isOk())
+			.andReturn();
+		String gameId = objectMapper.readTree(submitted.getResponse().getContentAsString()).get("id").asText();
+
+		// O moderador vê a fila e aprova pelo painel.
+		mockMvc.perform(get("/moderation/games").header("X-Session-Token", applicant.token()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$[?(@.id == '" + gameId + "')].title").value("Jogo de teste"));
+
+		mockMvc.perform(post("/moderation/games/" + gameId + "/approve")
+				.header("X-Session-Token", applicant.token()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.status").value("PUBLISHED"));
+
+		// Um usuário comum não acessa a fila do painel.
+		mockMvc.perform(get("/moderation/games").header("X-Session-Token", dev.token()))
+			.andExpect(status().isForbidden());
+	}
+
 	private String apply(TestAuthHelper.AuthSession session, String motivation) throws Exception {
 		MvcResult result = mockMvc.perform(post("/moderation/applications")
 				.header("X-Session-Token", session.token())

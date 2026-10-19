@@ -10,6 +10,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 
+import com.socialcoisa.rede.support.domain.SupportCategory;
 import com.socialcoisa.rede.support.domain.SupportRequest;
 import com.socialcoisa.rede.support.domain.SupportStatus;
 
@@ -38,6 +39,10 @@ class SupportRequestJpaEntity {
 	private String imageUrl;
 
 	@Enumerated(EnumType.STRING)
+	@Column(nullable = false, length = 24)
+	private SupportCategory category;
+
+	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 32)
 	private SupportStatus status;
 
@@ -55,12 +60,14 @@ class SupportRequestJpaEntity {
 		entity.message = request.message();
 		entity.contactEmail = request.contactEmail();
 		entity.imageUrl = request.imageUrl();
+		entity.category = request.category();
 		entity.status = request.status();
 		entity.createdAt = request.createdAt();
 		return entity;
 	}
 
 	SupportRequest toDomain() {
-		return SupportRequest.restore(id, userId, subject, message, contactEmail, imageUrl, status, createdAt);
+		return SupportRequest.restore(id, userId, subject, message, contactEmail, imageUrl, category, status,
+			createdAt);
 	}
 }

@@ -1,5 +1,8 @@
 package com.socialcoisa.rede.identity.application;
 
+import java.time.Instant;
+import java.util.UUID;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -8,6 +11,10 @@ import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
+
+import com.socialcoisa.rede.ops.application.port.out.EmailLogRepository;
+import com.socialcoisa.rede.ops.domain.EmailLog;
+import com.socialcoisa.rede.ops.domain.EmailLogStatus;
 
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
@@ -21,18 +28,43 @@ public class EmailService {
     private final TemplateEngine templateEngine;
     private final String frontendUrl;
     private final String fromEmail;
+    private final EmailLogRepository emailLogs;
 
     public EmailService(
             JavaMailSender mailSender,
             TemplateEngine templateEngine,
             @Value("${rede.frontend.url}") String frontendUrl,
-            @Value("${spring.mail.username}") String fromEmail) {
+            @Value("${spring.mail.username}") String fromEmail,
+            EmailLogRepository emailLogs) {
         this.mailSender = mailSender;
         this.templateEngine = templateEngine;
         this.frontendUrl = frontendUrl.endsWith("/")
                 ? frontendUrl.substring(0, frontendUrl.length() - 1)
                 : frontendUrl;
         this.fromEmail = fromEmail;
+        this.emailLogs = emailLogs;
+    }
+
+    /**
+     * Registra o metadado do envio sem nunca atrapalhar o envio em si: se o log falhar, o e-mail
+     * (que é o que importa) segue normalmente.
+     */
+    private void recordEmail(String toEmail, String subject, String kind, boolean sent, String error) {
+        try {
+            emailLogs.save(EmailLog.create("email_" + UUID.randomUUID().toString().replace("-", ""),
+                truncate(toEmail, 180), truncate(subject, 200), kind,
+                sent ? EmailLogStatus.SENT : EmailLogStatus.FAILED, truncate(error, 500), Instant.now()));
+        } catch (RuntimeException logFailure) {
+            LOG.warn("Nao foi possivel registrar o envio de e-mail para {}: {}", toEmail,
+                logFailure.getMessage());
+        }
+    }
+
+    private static String truncate(String value, int max) {
+        if (value == null) {
+            return "";
+        }
+        return value.length() <= max ? value : value.substring(0, max);
     }
 
     public void sendPasswordResetEmail(String toEmail, String userName, String resetToken) {
@@ -48,7 +80,9 @@ public class EmailService {
             helper.setSubject(subject);
             helper.setText(htmlBody, true);
             mailSender.send(message);
+            recordEmail(toEmail, subject, "PASSWORD_RESET", true, null);
         } catch (Exception e) {
+            recordEmail(toEmail, subject, "PASSWORD_RESET", false, e.getMessage());
             LOG.error("Falha ao enviar email de reset para {}: {}", toEmail, e.getMessage(), e);
         }
     }
@@ -73,8 +107,10 @@ public class EmailService {
             helper.setSubject("Confirme seu e-mail no Énóis");
             helper.setText(templateEngine.process("email-verification", context), true);
             mailSender.send(message);
+            recordEmail(toEmail, "Confirme seu e-mail no Énóis", "EMAIL_VERIFICATION", true, null);
             return true;
         } catch (Exception e) {
+            recordEmail(toEmail, "Confirme seu e-mail no Énóis", "EMAIL_VERIFICATION", false, e.getMessage());
             LOG.error("Falha ao enviar email de confirmacao para {}: {}", toEmail, e.getMessage(), e);
             return false;
         }
@@ -100,8 +136,10 @@ public class EmailService {
             helper.setSubject("Seu código de acesso: " + code);
             helper.setText(templateEngine.process("two-factor-code", context), true);
             mailSender.send(message);
+            recordEmail(toEmail, "Seu código de acesso: " + code, "TWO_FACTOR", true, null);
             return true;
         } catch (Exception e) {
+            recordEmail(toEmail, "Seu código de acesso: " + code, "TWO_FACTOR", false, e.getMessage());
             LOG.error("Falha ao enviar o codigo do segundo fator para {}: {}", toEmail, e.getMessage(), e);
             return false;
         }
@@ -124,8 +162,10 @@ public class EmailService {
             helper.setSubject(subject);
             helper.setText(htmlBody, true);
             mailSender.send(message);
+            recordEmail(toEmail, subject, "HTML", true, null);
             return true;
         } catch (Exception e) {
+            recordEmail(toEmail, subject, "HTML", false, e.getMessage());
             LOG.error("Falha ao enviar email para {}: {}", toEmail, e.getMessage(), e);
             return false;
         }
@@ -181,7 +221,9 @@ public class EmailService {
 					new org.springframework.core.io.ByteArrayResource(imageBytes));
 			}
 			mailSender.send(message);
+			recordEmail(toEmail, "[Suporte] " + requestSubject, "SUPPORT", true, null);
 		} catch (Exception e) {
+			recordEmail(toEmail, "[Suporte] " + requestSubject, "SUPPORT", false, e.getMessage());
 			// O pedido ja esta persistido (aparece em /admin/support): apenas registramos a falha.
 			LOG.error("Falha ao notificar o suporte ({}) sobre o pedido: {}", toEmail, e.getMessage(), e);
 		}
@@ -197,7 +239,9 @@ public class EmailService {
 			helper.setSubject(subject);
 			helper.setText(htmlBody, true);
 			mailSender.send(message);
+			recordEmail(toEmail, subject, "HTML", true, null);
 		} catch (Exception e) {
+			recordEmail(toEmail, subject, "HTML", false, e.getMessage());
 			LOG.error("Falha ao enviar e-mail para {}: {}", toEmail, e.getMessage(), e);
 		}
 	}
