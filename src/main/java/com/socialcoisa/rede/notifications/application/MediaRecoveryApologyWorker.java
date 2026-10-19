@@ -52,16 +52,18 @@ public class MediaRecoveryApologyWorker {
 	private final CoinService coins;
 	private final NotificationService notifications;
 	private final SystemAnnouncementRepository announcements;
+	private final String publicBaseUrl;
 	private final Clock clock;
 
 	MediaRecoveryApologyWorker(Optional<MediaUploadSigner> uploadSigner, UserProfileRepository profiles,
 			CoinService coins, NotificationService notifications, SystemAnnouncementRepository announcements,
-			Clock clock) {
+			@Value("${rede.media.s3.public-base-url:}") String publicBaseUrl, Clock clock) {
 		this.uploadSigner = uploadSigner;
 		this.profiles = profiles;
 		this.coins = coins;
 		this.notifications = notifications;
 		this.announcements = announcements;
+		this.publicBaseUrl = publicBaseUrl == null ? "" : publicBaseUrl.trim();
 		this.clock = clock;
 	}
 
@@ -73,6 +75,12 @@ public class MediaRecoveryApologyWorker {
 		}
 		if (uploadSigner.isEmpty()) {
 			// S3 ainda não configurado: as fotos novas ainda não voltaram — não é o momento.
+			return;
+		}
+		if (!publicUrlServing()) {
+			// Storage configurado, mas a URL pública ainda não responde com TLS válido (CDN sem
+			// certificado): as fotos novas não ABRIRIAM — o comunicado espera.
+			LOG.info("Comunicado de recuperação aguardando a URL pública de mídia ({}) responder.", publicBaseUrl);
 			return;
 		}
 		int announced = 0;
@@ -105,5 +113,30 @@ public class MediaRecoveryApologyWorker {
 		announcements.markSent(ANNOUNCEMENT_KEY, clock.instant());
 		LOG.info("Comunicado de desculpas enviado: {} usuários, {} faíscas cada.", announced,
 			BONUS / CoinService.SCALE);
+	}
+
+	/**
+	 * "Fotos funcionando" inclui a URL pública responder com TLS válido. Sem public base
+	 * configurada (URL direta do bucket), não há o que sondar — a existência do signer basta.
+	 */
+	private boolean publicUrlServing() {
+		if (publicBaseUrl.isEmpty()) {
+			return true;
+		}
+		try {
+			var client = java.net.http.HttpClient.newBuilder()
+				.connectTimeout(java.time.Duration.ofSeconds(3))
+				.build();
+			var request = java.net.http.HttpRequest.newBuilder(java.net.URI.create(publicBaseUrl))
+				.method("HEAD", java.net.http.HttpRequest.BodyPublishers.noBody())
+				.timeout(java.time.Duration.ofSeconds(5))
+				.build();
+			int status = client.send(request, java.net.http.HttpResponse.BodyHandlers.discarding()).statusCode();
+			// Qualquer resposta HTTP prova que o TLS está bom; 5xx indica origem quebrada.
+			return status < 500;
+		}
+		catch (Exception notServing) {
+			return false;
+		}
 	}
 }

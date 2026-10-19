@@ -60,7 +60,15 @@ public class MediaService implements CreateMediaUploadUseCase, GetMediaAssetUseC
 			storageUrlFactory.cdnUrl(objectKey), clock.instant(), clock.instant().plus(Duration.ofMinutes(15)),
 			storageUrlFactory.provider());
 		MediaAsset saved = mediaAssetRepository.save(asset);
-		return MediaUploadView.fromSigned(saved, signer.sign(objectKey, saved.mimeType()));
+		try {
+			return MediaUploadView.fromSigned(saved, signer.sign(objectKey, saved.mimeType()));
+		}
+		catch (RuntimeException assinaturaFalhou) {
+			// Credencial do S3 ausente/ruim (IRSA) virava 500 generico — o operador nao tinha o
+			// que ler. Aqui a falha fica explicita e o cliente recebe algo acionavel.
+			throw new ApiException(503, "STORAGE_UNAVAILABLE",
+				"O armazenamento de midia esta indisponivel no momento. Tente novamente em instantes.");
+		}
 	}
 
 	@Override
