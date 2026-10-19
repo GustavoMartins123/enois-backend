@@ -2,6 +2,7 @@ package com.socialcoisa.rede.games.adapters.in.web;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -33,6 +34,9 @@ class GameFlowTests {
 
 	@Autowired
 	private ObjectMapper objectMapper;
+
+	@Autowired
+	private com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles;
 
 	@org.springframework.test.context.DynamicPropertySource
 	static void adminAllowlist(org.springframework.test.context.DynamicPropertyRegistry registry) {
@@ -135,6 +139,47 @@ class GameFlowTests {
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(objectMapper.writeValueAsString(Map.of("title", "Anônimo", "url", "https://x.com"))))
 			.andExpect(status().isUnauthorized());
+	}
+
+	/**
+	 * Página de criador VAZIA não é presença de dev: o dono enxerga a própria página (é a rota
+	 * do painel), mas ninguém mais — e salvar em branco não "abre" a página para os outros.
+	 * (O selo "Dev de jogos" no perfil depende exatamente disto.)
+	 */
+	@Test
+	void emptyDeveloperPageIsOnlyVisibleToItsOwner() throws Exception {
+		var dono = auth("gflow_empty_dev");
+		var outra = auth("gflow_other_viewer");
+		// O username é derivado no cadastro (slug/unicidade) — nunca presumir a forma final.
+		String username = profiles.findById(dono.userId()).orElseThrow().username();
+
+		// O dono vê a própria página, mesmo sem jogo e sem nada preenchido.
+		mockMvc.perform(get("/games/" + username + "/profile").header("X-Session-Token", dono.token()))
+			.andExpect(status().isOk());
+		// Para qualquer outra pessoa (e para visitante), não existe página.
+		mockMvc.perform(get("/games/" + username + "/profile").header("X-Session-Token", outra.token()))
+			.andExpect(status().isNotFound());
+		mockMvc.perform(get("/games/" + username + "/profile"))
+			.andExpect(status().isNotFound());
+
+		// Salvar em branco cria/atualiza a linha, mas não conta como conteúdo.
+		mockMvc.perform(put("/games/profile")
+				.header("X-Session-Token", dono.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{}"))
+			.andExpect(status().isOk());
+		mockMvc.perform(get("/games/" + username + "/profile").header("X-Session-Token", outra.token()))
+			.andExpect(status().isNotFound());
+
+		// Com conteúdo preenchido, a página passa a existir para todo mundo.
+		mockMvc.perform(put("/games/profile")
+				.header("X-Session-Token", dono.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("displayName", "Estúdio Kawaii"))))
+			.andExpect(status().isOk());
+		mockMvc.perform(get("/games/" + username + "/profile").header("X-Session-Token", outra.token()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.displayName").value("Estúdio Kawaii"));
 	}
 
 	private TestAuthHelper.AuthSession auth(String name) throws Exception {
