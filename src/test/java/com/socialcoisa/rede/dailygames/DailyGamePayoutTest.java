@@ -50,7 +50,7 @@ class DailyGamePayoutTest {
     }
 
     @Test void wordPayoutRanksByAttemptsAndExcludesThoseWhoMissed() {
-        JdbcTemplate jdbc = jdbc("db/migration/V86__daily_word_games.sql");
+        JdbcTemplate jdbc = jdbc("db/migration/V99__daily_word_games.sql");
         Clock clock = Clock.fixed(T0, ZoneOffset.UTC);
         DailyWordService service = new DailyWordService(jdbc, clock);
         jdbc.update("insert into daily_word_challenges values (?,?)", Date.valueOf(DAY), "AMORA");
@@ -66,7 +66,7 @@ class DailyGamePayoutTest {
     }
 
     @Test void mazePayoutRanksByTimeThenMovesAndExcludesTheStillLost() {
-        JdbcTemplate jdbc = jdbc("db/migration/V87__daily_maze_games.sql");
+        JdbcTemplate jdbc = jdbc("db/migration/V100__daily_maze_games.sql");
         jdbc.update("insert into daily_maze_challenges values (?,12345)", Date.valueOf(DAY));
         jdbc.update("insert into daily_maze_sessions values (?,?,?,4,?,?)", Date.valueOf(DAY), "u1", 63, at(0), at(30));
         jdbc.update("insert into daily_maze_sessions values (?,?,?,6,?,?)", Date.valueOf(DAY), "u2", 63, at(0), at(30));
@@ -75,7 +75,7 @@ class DailyGamePayoutTest {
     }
 
     @Test void blocksPayoutRanksByScoreThenTimeAndExcludesNonWinners() {
-        JdbcTemplate jdbc = jdbc("db/migration/V88__daily_blocks_games.sql");
+        JdbcTemplate jdbc = jdbc("db/migration/V101__daily_blocks_games.sql");
         jdbc.update("insert into daily_blocks_challenges values (?,12345,3,1)", Date.valueOf(DAY));
         jdbc.update("insert into daily_blocks_sessions values (?,?,?,null,?,'WON',400,3)", Date.valueOf(DAY), "u1", at(90), at(300));
         jdbc.update("insert into daily_blocks_sessions values (?,?,?,null,?,'WON',400,3)", Date.valueOf(DAY), "u2", at(90), at(200));
