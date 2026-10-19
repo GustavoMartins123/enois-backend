@@ -81,6 +81,16 @@ class SupportController {
 		return SupportRequestView.from(supportService.update(id, request.status(), request.category()));
 	}
 
+	/** Resposta oficial ao solicitante: grava, envia por e-mail e notifica no app. */
+	@PostMapping("/admin/support/{id}/reply")
+	SupportRequestView reply(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@PathVariable String id, @RequestBody ReplySupportRequest request) {
+		CurrentUser admin = currentUserResolver.resolve(userId, sessionToken);
+		adminGuard.requireAdmin(admin);
+		return SupportRequestView.from(supportService.reply(id, admin.id().value(), request.message()));
+	}
+
 	record SupportConfigView(String email) {
 	}
 
@@ -91,11 +101,17 @@ class SupportController {
 	record UpdateSupportRequest(SupportStatus status, SupportCategory category) {
 	}
 
+	record ReplySupportRequest(String message) {
+	}
+
 	record SupportRequestView(String id, String userId, String subject, String message, String contactEmail,
-			String imageUrl, String category, String status, String createdAt) {
+			String imageUrl, String category, String status, String adminReply, String repliedBy,
+			String repliedAt, String createdAt) {
 		static SupportRequestView from(SupportRequest request) {
 			return new SupportRequestView(request.id(), request.userId(), request.subject(), request.message(),
 				request.contactEmail(), request.imageUrl(), request.category().name(), request.status().name(),
+				request.adminReply(), request.repliedBy(),
+				request.repliedAt() == null ? null : request.repliedAt().toString(),
 				request.createdAt().toString());
 		}
 	}

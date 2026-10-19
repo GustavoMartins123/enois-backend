@@ -17,6 +17,7 @@ import com.socialcoisa.rede.ops.domain.EmailLog;
 import com.socialcoisa.rede.ops.domain.EmailLogStatus;
 
 import jakarta.mail.MessagingException;
+import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeMessage;
 
 @Service
@@ -212,7 +213,7 @@ public class EmailService {
 		try {
 			MimeMessage message = mailSender.createMimeMessage();
 			MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-			helper.setFrom(fromEmail);
+			helper.setFrom(new InternetAddress(fromEmail, "Suporte Énóis", "UTF-8"));
 			helper.setTo(toEmail);
 			if (replyTo != null && replyTo.contains("@")) {
 				helper.setReplyTo(replyTo);
@@ -229,6 +230,32 @@ public class EmailService {
 			recordEmail(toEmail, "[Suporte] " + requestSubject, "SUPPORT", false, e.getMessage());
 			// O pedido ja esta persistido (aparece em /admin/support): apenas registramos a falha.
 			LOG.error("Falha ao notificar o suporte ({}) sobre o pedido: {}", toEmail, e.getMessage(), e);
+		}
+	}
+
+	/**
+	 * Resposta oficial do suporte ao solicitante. O remetente aparece como "Suporte Énóis" e a
+	 * resposta é registrada em metadados (sem o corpo) no log do painel.
+	 */
+	public void sendSupportReplyEmail(String toEmail, String originalSubject, String reply) {
+		String subject = "Resposta do suporte do Énóis — " + (originalSubject == null ? "" : originalSubject);
+		String htmlBody = "<p>Olá,</p>"
+			+ "<p>Sobre o seu pedido <b>" + escape(originalSubject) + "</b>:</p>"
+			+ "<blockquote style=\"margin:8px 0;padding:8px 12px;border-left:3px solid #ccc;"
+			+ "white-space:pre-wrap\">" + escape(reply) + "</blockquote>"
+			+ "<p>— Equipe Énóis</p>";
+		try {
+			MimeMessage message = mailSender.createMimeMessage();
+			MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+			helper.setFrom(new InternetAddress(fromEmail, "Suporte Énóis", "UTF-8"));
+			helper.setTo(toEmail);
+			helper.setSubject(subject);
+			helper.setText(htmlBody, true);
+			mailSender.send(message);
+			recordEmail(toEmail, subject, "SUPPORT_REPLY", true, null);
+		} catch (Exception e) {
+			recordEmail(toEmail, subject, "SUPPORT_REPLY", false, e.getMessage());
+			LOG.error("Falha ao enviar resposta do suporte para {}: {}", toEmail, e.getMessage(), e);
 		}
 	}
 

@@ -46,6 +46,15 @@ class SupportRequestJpaEntity {
 	@Column(nullable = false, length = 32)
 	private SupportStatus status;
 
+	@Column(name = "admin_reply", length = 4000)
+	private String adminReply;
+
+	@Column(name = "replied_by")
+	private String repliedBy;
+
+	@Column(name = "replied_at")
+	private Instant repliedAt;
+
 	@Column(name = "created_at", nullable = false)
 	private Instant createdAt;
 
@@ -62,12 +71,15 @@ class SupportRequestJpaEntity {
 		entity.imageUrl = request.imageUrl();
 		entity.category = request.category();
 		entity.status = request.status();
+		entity.adminReply = request.adminReply();
+		entity.repliedBy = request.repliedBy();
+		entity.repliedAt = request.repliedAt();
 		entity.createdAt = request.createdAt();
 		return entity;
 	}
 
 	SupportRequest toDomain() {
 		return SupportRequest.restore(id, userId, subject, message, contactEmail, imageUrl, category, status,
-			createdAt);
+			adminReply, repliedBy, repliedAt, createdAt);
 	}
 }

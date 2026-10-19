@@ -89,9 +89,29 @@ class SupportCategoriesTests {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$[?(@.id == '" + ticketId + "')].status").value("IN_PROGRESS"));
 
+		// Resposta oficial: fica no ticket, dispara e-mail (SMTP ausente no teste) e notifica.
+		String reply = "Corrigimos o botão na versão mais recente; atualize o app e tente de novo.";
+		mockMvc.perform(post("/admin/support/" + ticketId + "/reply")
+				.header("X-Session-Token", admin.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("message", reply))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.adminReply").value(reply))
+			.andExpect(jsonPath("$.status").value("IN_PROGRESS"));
+
+		// Concluir o ticket.
+		mockMvc.perform(patch("/admin/support/" + ticketId)
+				.header("X-Session-Token", admin.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("status", "CLOSED"))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.status").value("CLOSED"))
+			.andExpect(jsonPath("$.adminReply").value(reply));
+
 		// O cadastro tenta confirmar e-mail (SMTP ausente no teste) e isso fica no log de metadados.
 		mockMvc.perform(get("/admin/emails").header("X-Session-Token", admin.token()))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$[?(@.toEmail == 'sc_user@test.com')].status").value("FAILED"));
+			.andExpect(jsonPath("$[?(@.toEmail == 'sc_user@test.com')].status",
+				org.hamcrest.Matchers.hasItem("FAILED")));
 	}
 }

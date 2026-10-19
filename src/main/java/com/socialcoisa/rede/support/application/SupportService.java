@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import com.socialcoisa.rede.identity.application.EmailService;
+import com.socialcoisa.rede.notifications.application.NotificationService;
 import com.socialcoisa.rede.support.application.port.out.SupportRequestRepository;
 import com.socialcoisa.rede.support.domain.SupportCategory;
 import com.socialcoisa.rede.support.domain.SupportRequest;
@@ -31,13 +32,16 @@ public class SupportService {
 
 	private final SupportRequestRepository repository;
 	private final EmailService emailService;
+	private final NotificationService notifications;
 	private final Clock clock;
 	private final String supportEmail;
 
-	public SupportService(SupportRequestRepository repository, EmailService emailService, Clock clock,
+	public SupportService(SupportRequestRepository repository, EmailService emailService,
+			NotificationService notifications, Clock clock,
 			@Value("${rede.support.email:}") String supportEmail) {
 		this.repository = repository;
 		this.emailService = emailService;
+		this.notifications = notifications;
 		this.clock = clock;
 		this.supportEmail = supportEmail;
 	}
@@ -106,6 +110,34 @@ public class SupportService {
 			updated = updated.withCategory(category);
 		}
 		return repository.save(updated);
+	}
+
+	/**
+	 * Resposta oficial do time ao solicitante: grava o texto, envia por e-mail para o contato e
+	 * deixa uma notificação no app (quando o pedido veio de uma conta). O ticket sai de OPEN para
+	 * IN_PROGRESS; concluir é uma ação separada (`update` com CLOSED).
+	 */
+	@Transactional
+	public SupportRequest reply(String id, String adminId, String message) {
+		String clean = message == null ? "" : message.trim();
+		if (clean.length() < 5) {
+			throw new ApiException(400, "INVALID_SUPPORT_REPLY",
+				"Escreva uma resposta com pelo menos 5 caracteres.");
+		}
+		if (clean.length() > MAX_MESSAGE) {
+			throw new ApiException(400, "INVALID_SUPPORT_REPLY", "A resposta deve ter no máximo 4000 caracteres.");
+		}
+		SupportRequest request = repository.findById(id)
+			.orElseThrow(() -> new ApiException(404, "SUPPORT_REQUEST_NOT_FOUND", "Pedido de suporte não encontrado."));
+		SupportRequest withReply = request.withReply(clean, adminId, clock.instant());
+		SupportRequest saved = repository.save(
+			withReply.status() == SupportStatus.OPEN ? withReply.withStatus(SupportStatus.IN_PROGRESS) : withReply);
+		emailService.sendSupportReplyEmail(saved.contactEmail(), saved.subject(), clean);
+		if (StringUtils.hasText(saved.userId())) {
+			notifications.create(saved.userId(), "SUPORTE", adminId, "Resposta do suporte", clean,
+				"/suporte", "Ver");
+		}
+		return saved;
 	}
 
 	/** Baixa a imagem do anexo (https, ate 5 MB); falha de download NAO bloqueia o pedido. */
