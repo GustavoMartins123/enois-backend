@@ -61,6 +61,7 @@ public class SocialLoginService implements OAuthUseCase {
 	private final AuthSessionRepository authSessionRepository;
 	private final PasswordHasher passwordHasher;
 	private final OAuthProperties oAuthProperties;
+	private final com.socialcoisa.rede.linkedin.application.LinkedInIntegrationService linkedin;
 	private final Clock clock;
 	private final SecureRandom secureRandom = new SecureRandom();
 
@@ -74,6 +75,7 @@ public class SocialLoginService implements OAuthUseCase {
 			AuthSessionRepository authSessionRepository,
 			PasswordHasher passwordHasher,
 			OAuthProperties oAuthProperties,
+			com.socialcoisa.rede.linkedin.application.LinkedInIntegrationService linkedin,
 			Clock clock) {
 		this.accessTokenTtl = Duration.ofMinutes(accessTokenTtlMinutes);
 		this.refreshTokenTtl = Duration.ofDays(refreshTokenTtlDays);
@@ -85,6 +87,7 @@ public class SocialLoginService implements OAuthUseCase {
 		this.authSessionRepository = authSessionRepository;
 		this.passwordHasher = passwordHasher;
 		this.oAuthProperties = oAuthProperties;
+		this.linkedin = linkedin;
 		this.clock = clock;
 	}
 
@@ -111,10 +114,12 @@ public class SocialLoginService implements OAuthUseCase {
 			now.plus(STATE_TTL), now));
 		// Faxina oportunista: o state nao precisa sobreviver no banco depois de vencer.
 		authorizationRequestRepository.deleteExpired(now);
-		return new OAuthStartResponse(provider, state, buildAuthorizationUrl(provider, state, nonce));
+		return new OAuthStartResponse(provider, state,
+			buildAuthorizationUrl(provider, state, nonce, linkUserId != null));
 	}
 
-	private String buildAuthorizationUrl(OAuthProvider provider, String state, String nonce) {
+	private String buildAuthorizationUrl(OAuthProvider provider, String state, String nonce,
+			boolean includePosting) {
 		return switch (provider) {
 			case GOOGLE -> {
 				var config = oAuthProperties.getGoogle();
@@ -146,9 +151,13 @@ public class SocialLoginService implements OAuthUseCase {
 				}
 				// OIDC do LinkedIn ("Sign In with LinkedIn using OpenID Connect"): os escopos
 				// openid/profile/email sao de aprovacao automatica — importam nome, foto e e-mail.
+				// No VINCULO pedimos tambem w_member_social (produto "Share on LinkedIn"), que
+				// autoriza publicar em nome da pessoa; o login puro nao pede esse escopo para nao
+				// assustar quem so quer entrar. Se o app ainda nao tem o produto, so o vinculo falha.
 				yield "https://www.linkedin.com/oauth/v2/authorization?client_id=" + urlEncode(config.getClientId())
 					+ "&redirect_uri=" + urlEncode(config.getRedirectUri())
 					+ "&response_type=code&scope=openid+profile+email"
+					+ (includePosting ? "+w_member_social" : "")
 					+ "&state=" + urlEncode(state) + "&nonce=" + urlEncode(nonce);
 			}
 		};
@@ -166,10 +175,11 @@ public class SocialLoginService implements OAuthUseCase {
 		}
 		OAuthAuthorizationRequest request = consumeAuthorizationRequest(provider, state);
 		TokenValidationResult validation = validate(provider, code, request.nonce());
-		if (request.isLinkRequest()) {
-			return attachIdentity(request.userId(), provider, validation);
-		}
-		return login(provider, validation, appleUserPayload);
+		AuthResponse response = request.isLinkRequest()
+			? attachIdentity(request.userId(), provider, validation)
+			: login(provider, validation, appleUserPayload);
+		rememberLinkedInAccess(provider, response, validation);
+		return response;
 	}
 
 	@Override
@@ -182,10 +192,24 @@ public class SocialLoginService implements OAuthUseCase {
 		// pedido. Aceitamos o login por id_token apenas quando ele veio do nosso /start.
 		OAuthAuthorizationRequest request = consumeAuthorizationRequest(provider, state);
 		TokenValidationResult validation = validate(provider, idToken, request.nonce());
-		if (request.isLinkRequest()) {
-			return attachIdentity(request.userId(), provider, validation);
+		AuthResponse response = request.isLinkRequest()
+			? attachIdentity(request.userId(), provider, validation)
+			: login(provider, validation, null);
+		rememberLinkedInAccess(provider, response, validation);
+		return response;
+	}
+
+	/**
+	 * O token de acesso do LinkedIn só existe no fluxo por `code` e só é guardado quando o
+	 * vínculo pediu `w_member_social`. Fica cifrado (ver LinkedInIntegrationService) e nunca
+	 * viaja para o cliente.
+	 */
+	private void rememberLinkedInAccess(OAuthProvider provider, AuthResponse response,
+			TokenValidationResult validation) {
+		if (provider == OAuthProvider.LINKEDIN && StringUtils.hasText(validation.accessToken())) {
+			linkedin.remember(response.user().id(), validation.externalUserId(), validation.accessToken(),
+				validation.accessTokenExpiresAt());
 		}
-		return login(provider, validation, null);
 	}
 
 	/**
@@ -352,6 +376,10 @@ public class SocialLoginService implements OAuthUseCase {
 				"Este e o unico jeito de entrar na sua conta. Defina uma senha antes de desvincular.");
 		}
 		externalIdentityRepository.deleteByUserIdAndProvider(userId, provider.name());
+		if (provider == OAuthProvider.LINKEDIN) {
+			// Sem o vinculo nao ha publicacao: apaga o token de "Share on LinkedIn" junto.
+			linkedin.remove(userId);
+		}
 	}
 
 	@Override

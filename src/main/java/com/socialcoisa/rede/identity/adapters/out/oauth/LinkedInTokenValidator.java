@@ -79,6 +79,11 @@ class LinkedInTokenValidator implements TokenValidator {
 	}
 
 	private Optional<TokenValidationResult> verifyIdToken(String idToken, String expectedNonce) {
+		return verifyIdToken(idToken, expectedNonce, null, null);
+	}
+
+	private Optional<TokenValidationResult> verifyIdToken(String idToken, String expectedNonce,
+			String accessToken, java.time.Instant accessTokenExpiresAt) {
 		try {
 			SignedJWT signedJWT = SignedJWT.parse(idToken);
 			JWSVerifier verifier = new RSASSAVerifier(findRsaKey(signedJWT));
@@ -118,7 +123,8 @@ class LinkedInTokenValidator implements TokenValidator {
 			String name = claims.getStringClaim("name");
 			boolean emailVerified = isTruthy(claims.getClaim("email_verified"));
 
-			return Optional.of(new TokenValidationResult(externalUserId, email, name, emailVerified));
+			return Optional.of(new TokenValidationResult(externalUserId, email, name, emailVerified,
+				accessToken, accessTokenExpiresAt));
 		} catch (Exception e) {
 			return Optional.empty();
 		}
@@ -163,7 +169,14 @@ class LinkedInTokenValidator implements TokenValidator {
 				return Optional.empty();
 			}
 
-			return verifyIdToken(idToken, expectedNonce);
+			// O mesmo token que autentica serve para publicar quando o vinculo pediu w_member_social;
+			// a validade vem do expires_in (segundos) do proprio LinkedIn.
+			String accessToken = (String) tokenResponse.get("access_token");
+			Number expiresIn = (Number) tokenResponse.get("expires_in");
+			java.time.Instant tokenExpiresAt = expiresIn == null ? null
+				: java.time.Instant.now().plusSeconds(expiresIn.longValue());
+
+			return verifyIdToken(idToken, expectedNonce, accessToken, tokenExpiresAt);
 		} catch (Exception e) {
 			return Optional.empty();
 		}
