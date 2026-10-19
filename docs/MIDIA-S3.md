@@ -26,6 +26,14 @@ Verificação feita contra a produção e o código deste repo:
   signer; **não** cria `MediaStorageGateway`. O bean do ImageKit é incondicional, então em modo s3
   o delete de mídia chamaria a API do ImageKit. Falta um `S3MediaStorageGateway` (`DeleteObject`)
   e condicionar o gateway do ImageKit ao modo `imagekit`.
+- **Cópia executada em produção (2026-10-19): falhou por CREDENCIAL, não por código.**
+  `GET /api/media/migration` mostrou `total=1537, imagekit=1537, s3Copied=0, errors=5` e
+  `lastError="copia para o S3 falhou: Unable to load credentials from any of the providers in the
+  chain AwsCredentialsProviderChain(...)"`. O pod usa a ServiceAccount **`socialthing-sa`**, que
+  não tem uma role IRSA com acesso ao bucket. **Nada foi relinkado** (`cdn_url` intacto) — a
+  garantia de não perder mídia funcionou na prática. A cópia ficou **pausada** (env `false`) até
+  a role `s3:PutObject/GetObject/DeleteObject` ser anexada à SA (annotation
+  `eks.amazonaws.com/role-arn` ou role no node/IRSA).
 - **Bloqueio 3 — migração dos antigos: RESOLVIDO no código (V92, 2026-10-19).** A cópia para o S3
   agora roda em segundo plano (`MediaMigrationWorker`) e a fase de flip está implementada, mas
   **desligada por padrão** até o Bloqueio 1 (CDN) ser resolvido. O status público
@@ -38,11 +46,14 @@ Verificação feita contra a produção e o código deste repo:
   o vídeo de teste responde **206** com Range e `readyState=4` no Chrome. Em S3 a URL fica
   intacta (sem transformação), mas o poster de vídeo continua sem derivada (limitação abaixo).
 
-**Ordem para destravar:** (1) CloudFront com alternate domain + ACM e conferir o `curl -I` com
-certificado válido; (2) `S3MediaStorageGateway` (delete) e condicionar o gateway do ImageKit ao
-modo `imagekit`; (3) ligar o flip (`REDE_MEDIA_MIGRATION_FLIP_ENABLED=true`) e conferir o
-`s3Active` subindo; (4) testar um upload real numa réplica e só então virar
-`REDE_MEDIA_STORAGE=s3`; (5) preservar os objetos no ImageKit (a migração nunca apaga).
+**Ordem para destravar:** (1) **credencial S3 para o pod**: role IRSA com
+`s3:PutObject/GetObject/DeleteObject` no bucket/prefixo, anexada à `socialthing-sa` (é o que o
+worker já acusou em `lastError`) — depois religar `REDE_MEDIA_MIGRATION_ENABLED=true`; (2)
+CloudFront com alternate domain + ACM e conferir o `curl -I` com certificado válido; (3)
+`S3MediaStorageGateway` (delete) e condicionar o gateway do ImageKit ao modo `imagekit`; (4) ligar
+o flip (`REDE_MEDIA_MIGRATION_FLIP_ENABLED=true`) e conferir o `s3Active` subindo; (5) testar um
+upload real numa réplica e só então virar `REDE_MEDIA_STORAGE=s3`; (6) preservar os objetos no
+ImageKit (a migração nunca apaga).
 
 ## O que a AWS precisa ter
 
