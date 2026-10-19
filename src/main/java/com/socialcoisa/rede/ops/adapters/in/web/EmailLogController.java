@@ -43,9 +43,9 @@ class EmailLogController {
 	record EmailLogView(String id, String toEmail, String subject, String kind, String status, String error,
 			String createdAt) {
 		static EmailLogView from(EmailLog log) {
-			return new EmailLogView(log.id(), PiiMask.email(log.toEmail()), log.subject(), log.kind(),
-				log.status().name(),
-				log.error(), log.createdAt().toString());
+			return new EmailLogView(log.id(), PiiMask.email(log.toEmail()), PiiMask.text(log.subject()),
+				log.kind(), log.status().name(),
+				PiiMask.text(log.error()), log.createdAt().toString());
 		}
 	}
 }
