@@ -26,8 +26,10 @@ Verificação feita contra a produção e o código deste repo:
   signer; **não** cria `MediaStorageGateway`. O bean do ImageKit é incondicional, então em modo s3
   o delete de mídia chamaria a API do ImageKit. Falta um `S3MediaStorageGateway` (`DeleteObject`)
   e condicionar o gateway do ImageKit ao modo `imagekit`.
-- **Bloqueio 3 — migração dos antigos não existe.** Não há coluna `storage_provider` nem gatilho
-  de migração por leitura (`GET /media/{id}`); o desenho abaixo segue válido.
+- **Bloqueio 3 — migração dos antigos: RESOLVIDO no código (V92, 2026-10-19).** A cópia para o S3
+  agora roda em segundo plano (`MediaMigrationWorker`) e a fase de flip está implementada, mas
+  **desligada por padrão** até o Bloqueio 1 (CDN) ser resolvido. O status público
+  `GET /media/migration` mostra `total`, `imagekit`, `s3Copied`, `s3Active`, `errors` e `lastError`.
 - **Upload assinado nunca rodou contra o bucket real** (não há credencial AWS nesta máquina); a
   primeira virada é a estreia.
 - **Vídeo enviado como arquivo:** o player do Énóis pedia a URL crua do ImageKit e recebia
@@ -37,9 +39,10 @@ Verificação feita contra a produção e o código deste repo:
   intacta (sem transformação), mas o poster de vídeo continua sem derivada (limitação abaixo).
 
 **Ordem para destravar:** (1) CloudFront com alternate domain + ACM e conferir o `curl -I` com
-certificado válido; (2) `S3MediaStorageGateway` + coluna `storage_provider` + migração por leitura
-(desligada por padrão até o item 1); (3) testar um upload real numa réplica e só então virar
-`REDE_MEDIA_STORAGE=s3`; (4) rodar a migração em lotes, preservando os objetos no ImageKit.
+certificado válido; (2) `S3MediaStorageGateway` (delete) e condicionar o gateway do ImageKit ao
+modo `imagekit`; (3) ligar o flip (`REDE_MEDIA_MIGRATION_FLIP_ENABLED=true`) e conferir o
+`s3Active` subindo; (4) testar um upload real numa réplica e só então virar
+`REDE_MEDIA_STORAGE=s3`; (5) preservar os objetos no ImageKit (a migração nunca apaga).
 
 ## O que a AWS precisa ter
 
@@ -81,12 +84,39 @@ cluster (IRSA no service account). As tarefas de permissão acima são no **role
 Se a subida falhar com **403**, quase sempre é uma das duas: CORS do bucket sem `PUT` para
 `https://enois.ia.br`, ou `Content-Type` diferente do assinado.
 
-## Migração dos objetos antigos (ainda não implementada)
+## Migração dos objetos antigos (implementada na V92)
 
-O desenho combinado, para quem for pegar: rodada incremental e idempotente — pega N assets cujo
-`cdn_url` ainda é do ImageKit, baixa, sobe para o S3 no mesmo `objectKey`, **confere** e só então
-atualiza o `cdn_url`; o objeto no ImageKit é preservado (é a segurança para voltar atrás). Rodadas
-pequenas, repetidas, é o "aos poucos" — sem janela de manutenção e sem apagar nada no ImageKit.
+Duas fases, ambas idempotentes e em rodadas pequenas (sem janela de manutenção):
+
+1. **Cópia** (`REDE_MEDIA_MIGRATION_ENABLED=true`): a cada rodada o worker pega um lote de assets
+   ainda no ImageKit, baixa o **original** (vídeo/áudio com `?tr=orig-true`, senão a cota de
+   transformação responde 403), sobe para o S3 com a chave em barras de verdade
+   (`uploads/media_<id>/media/<uuid>/<arquivo>`) e **confere pelo HeadObject** que o tamanho bate.
+   Só então grava `s3_cdn_url` e `s3_migrated_at`. O `cdn_url` **não muda** nesta fase e o objeto
+   no ImageKit é preservado — nenhum usuário perde mídia. Falha incrementa
+   `s3_migration_attempts`/`s3_last_error` e tenta de novo (até 10 tentativas).
+2. **Flip** (`REDE_MEDIA_MIGRATION_FLIP_ENABLED=true`): só troca o `cdn_url` para o endereço do S3
+   **depois de a URL pública responder** (HEAD 2xx com o content-type certo). Se o CDN estiver
+   fora, o asset continua no ImageKit. É o que impede a migração de quebrar a leitura.
+
+Variáveis (todas opcionais; o padrão é desligado):
+
+| variável | padrão | para quê |
+|---|---|---|
+| `REDE_MEDIA_MIGRATION_ENABLED` | `false` | liga a fase de cópia |
+| `REDE_MEDIA_MIGRATION_FLIP_ENABLED` | `false` | liga o flip (só com o CDN válido) |
+| `REDE_MEDIA_MIGRATION_BATCH_SIZE` | `10` | assets por rodada |
+| `REDE_MEDIA_MIGRATION_DELAY_MS` | `30000` | intervalo entre rodadas |
+| `REDE_MEDIA_MIGRATION_INITIAL_DELAY_MS` | `45000` | espera depois do boot |
+
+Progresso: `GET /api/media/migration` (contagens agregadas e o último erro; sem ids/URLs).
+O asset só conta em `s3Active` quando o `cdn_url` já aponta para o S3; `s3Copied` inclui a cópia
+verificada que ainda não foi relinkada.
+
+**Fora desta fase:** as URLs gravadas fora de `media_assets` (avatar/banner de perfil, capa de
+comunidade, banner de grupo, capa de evento etc.) continuam apontando para o ImageKit, que
+**preserva os objetos**. O relink dessas colunas é a etapa seguinte, com o mesmo mapa
+objeto→S3; nada quebra enquanto isso porque o ImageKit segue servindo.
 
 ## Limitações conhecidas
 

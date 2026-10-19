@@ -39,9 +39,20 @@ class S3StorageUrlFactory implements StorageUrlFactory {
 	}
 
 	@Override
+	public com.socialcoisa.rede.media.domain.MediaStorageProvider provider() {
+		return com.socialcoisa.rede.media.domain.MediaStorageProvider.S3;
+	}
+
+	@Override
 	public String objectKey(String mediaId, String fileName) {
 		// Mesma forma do ImageKit (`uploads/{id}/{arquivo}`): quem migrar depois sabe onde procurar.
-		return prefix + mediaId + "/" + UriUtils.encodePathSegment(fileName, StandardCharsets.UTF_8);
+		// As BARRAS do nome são separadores de verdade (o front manda `media/<uuid>/<arquivo>`):
+		// codificar o nome inteiro viraria `media%2F<uuid>%2F...` dentro da CHAVE, e a URL pública
+		// (que decodifica) passaria a apontar para outra chave. Codifica segmento a segmento.
+		String encoded = java.util.Arrays.stream(fileName.split("/", -1))
+			.map(segment -> UriUtils.encodePathSegment(segment, StandardCharsets.UTF_8))
+			.collect(java.util.stream.Collectors.joining("/"));
+		return prefix + mediaId + "/" + encoded;
 	}
 
 	@Override
