@@ -49,6 +49,15 @@ Verificação feita contra a produção e o código deste repo:
   `AWS_WEB_IDENTITY_TOKEN_FILE` (IRSA) ou `AWS_CONTAINER_CREDENTIALS_FULL_URI` (EKS Pod Identity)
   com `kubectl -n forest-apps describe pod`, e a role com `s3:PutObject/GetObject/DeleteObject` no
   bucket. Só depois disso religar a migração e ver `errors` parar de crescer com `s3Copied` subindo.
+- **CORS do bucket continua ausente (provado 19/10): o upload do NAVEGADOR falha.** O preflight
+  `OPTIONS` contra `forest-dev-socialthing-images` responde 403 sem nenhum header
+  `Access-Control-*`; o `PUT` assinado do browser é bloqueado e o composer mostra
+  "NetworkError when attempting to fetch resource". **Cuidado com o status:** `s3Copied` conta
+  linhas com `s3_migrated_at`, e todo upload novo em S3 NASCE com esse campo preenchido
+  (`MediaAsset.pending`, `onS3 ? createdAt : null`) — as 13 unidades vistas em 19/10 são linhas
+  órfãs de tentativas que falharam no PUT, não mídia no bucket. Corrigir no bucket
+  (Permissions → CORS configuration) liberando `PUT` para `https://enois.ia.br`; não precisa
+  deploy de código.
 - **Upload assinado nunca rodou contra o bucket real** (não há credencial AWS nesta máquina); a
   primeira virada é a estreia.
 - **Vídeo enviado como arquivo:** o player do Énóis pedia a URL crua do ImageKit e recebia
