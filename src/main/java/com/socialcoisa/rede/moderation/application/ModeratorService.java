@@ -32,9 +32,10 @@ import com.socialcoisa.rede.shared.web.ApiException;
 /**
  * Candidatura a moderador e o painel de votacao das denuncias.
  *
- * Regra de entrada: credibilidade ACIMA de {@code rede.moderation.moderator-min-reputation} (500)
- * e uma candidatura aprovada por admin. O papel nao existe em `users` — a candidatura APPROVED
- * vigente e a fonte da verdade; revogar muda o estado e nao apaga o historico.
+ * Regra de entrada: credibilidade de NO MINIMO {@code rede.moderation.moderator-min-reputation}
+ * (200, calibrado para a escala do modelo de componentes) e uma candidatura aprovada por admin.
+ * O papel nao existe em `users` — a candidatura APPROVED vigente e a fonte da verdade; revogar
+ * muda o estado e nao apaga o historico.
  *
  * Votacao: cada moderador tem um voto por denuncia (PUNISH/DISMISS). Quando um lado atinge o
  * quorum ({@code rede.moderation.vote-quorum}, 3) e esta a frente, a decisao e aplicada pelo
@@ -64,7 +65,7 @@ public class ModeratorService {
 			ReputationService reputationService, ReportedContentAuthorReader contentAuthors,
 			NotificationService notifications, UserProfileRepository profiles, AuthSessionRepository sessions,
 			Clock clock,
-			@Value("${rede.moderation.moderator-min-reputation:500}") int minReputation,
+			@Value("${rede.moderation.moderator-min-reputation:200}") int minReputation,
 			@Value("${rede.moderation.vote-quorum:3}") int voteQuorum) {
 		this.applications = applications;
 		this.votes = votes;
@@ -87,7 +88,7 @@ public class ModeratorService {
 		int reputation = reputationService.reputationOf(userId);
 		ModeratorApplication latest = applications.findLatestByUser(userId).orElse(null);
 		boolean moderator = applications.findApprovedByUser(userId).isPresent();
-		return new MeView(reputation, minReputation, reputation > minReputation, moderator,
+		return new MeView(reputation, minReputation, reputation >= minReputation, moderator,
 			latest == null ? null : applicationView(latest));
 	}
 
@@ -108,9 +109,9 @@ public class ModeratorService {
 			throw new ApiException(409, "APPLICATION_PENDING", "Sua candidatura já está em análise.");
 		}
 		int reputation = reputationService.reputationOf(userId);
-		if (reputation <= minReputation) {
+		if (reputation < minReputation) {
 			throw new ApiException(403, "LOW_REPUTATION",
-				"Para se candidatar é preciso ter mais de " + minReputation + " de credibilidade.");
+				"Para se candidatar é preciso ter pelo menos " + minReputation + " de credibilidade.");
 		}
 		ModeratorApplication application = ModeratorApplication.create("mapp_" + randomId(), userId, why,
 			trimOrNull(experience), trimOrNull(availability), Instant.now(clock));

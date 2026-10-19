@@ -18,7 +18,7 @@ import com.socialcoisa.rede.shared.web.TestAuthHelper;
 
 import tools.jackson.databind.ObjectMapper;
 
-/** O limiar real do produto: sem mais de 500 de credibilidade, a candidatura e recusada. */
+/** O limiar real do produto: sem pelo menos 200 de credibilidade, a candidatura e recusada. */
 @SpringBootTest
 @AutoConfigureMockMvc
 class ModeratorEligibilityTests {
@@ -35,7 +35,7 @@ class ModeratorEligibilityTests {
 
 		mockMvc.perform(get("/moderation/me").header("X-Session-Token", user.token()))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.minReputation").value(500))
+			.andExpect(jsonPath("$.minReputation").value(200))
 			.andExpect(jsonPath("$.eligible").value(false))
 			.andExpect(jsonPath("$.moderator").value(false));
 

@@ -539,7 +539,7 @@ currículo (10 por tipo); limite de frequência por conta em denúncias (10/h) e
 (20/dia) via `shared/security/ActionThrottle`.
 
 **Limiares:** publicar vaga exige **> 150** (JobService/JobPublishingPolicy/front alinhados);
-candidatar-se a moderador exige **> 500** (`rede.moderation.moderator-min-reputation`).
+candidatar-se a moderador exige **pelo menos 200** (`rede.moderation.moderator-min-reputation`, padrão 200 desde 19/10).
 
 ## Segurança — pendências que exigem ação manual
 
