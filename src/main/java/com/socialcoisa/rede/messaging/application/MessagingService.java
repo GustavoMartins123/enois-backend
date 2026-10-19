@@ -78,8 +78,10 @@ public class MessagingService {
 			throw new ApiException(403, "NOT_PARTICIPANT", "Voce nao participa desta conversa.");
 		}
 		String id = "message_" + UUID.randomUUID().toString().replace("-", "");
-		Message message = Message.create(id, conversationId, senderId, text, clock.instant());
+		var now = clock.instant();
+		Message message = Message.create(id, conversationId, senderId, text, now);
 		repository.saveMessage(message);
+		repository.markRead(conversationId, senderId, now);
 		String preview = text.length() > 80 ? text.substring(0, 77) + "..." : text;
 		List<ConversationParticipant> participants = repository.findParticipantsByConversation(conversationId);
 		for (ConversationParticipant p : participants) {
