@@ -190,7 +190,9 @@ class UserProfilePersistenceAdapter implements UserProfileRepository {
 
 	@Override
 	public List<UserProfile> findTopByReputation(int limit) {
-		return repository.findByOrderByReputationDesc().stream()
+		// Ordem CRESCENTE (o menor número de credibilidade em primeiro): decisão do dono do
+		// produto para o ranking público. A busca de perfis continua por reputação descendente.
+		return repository.findByOrderByReputationAsc().stream()
 			.limit(limit)
 			.map(UserProfileJpaEntity::toDomain)
 			.toList();
