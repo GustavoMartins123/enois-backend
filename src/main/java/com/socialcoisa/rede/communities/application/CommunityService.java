@@ -165,8 +165,8 @@ public class CommunityService {
 		return repository.findFavorites(userId, limit);
 	}
 
-	public List<Community> list(String topic, java.time.Instant before, int limit) {
-		return repository.findAll(topic, before, limit);
+	public List<Community> list(String topic, String query, java.time.Instant before, int limit) {
+		return repository.findAll(topic, query, before, limit);
 	}
 
 	public Community getById(String id) {

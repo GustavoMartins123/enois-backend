@@ -59,11 +59,11 @@ class CommunityContractController {
 	@GetMapping
 	PageResponse<CommunityView> communities(@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
-			@RequestParam(required = false) String topic,
+			@RequestParam(required = false) String topic, @RequestParam(required = false) String q,
 			@RequestParam(required = false) String cursor, @RequestParam(defaultValue = "20") int limit) {
 		CurrentUser user = resolveSafely(userId, sessionToken);
 		Instant before = cursorCodec.decode(cursor).orElse(null);
-		List<Community> communities = communityService.list(topic, before, limit);
+		List<Community> communities = communityService.list(topic, q, before, limit);
 		var items = communities.stream()
 			.map(c -> new CommunityView(c.id(), c.name(), c.description(),
 				communityService.countMembers(c.id()), c.topic(), c.cover(), c.avatar(), c.bannerHtml(),

@@ -41,7 +41,11 @@ class PostJpaEntity {
 	@Column(nullable = false)
 	private PostType type;
 
-	@Column(nullable = false, length = 1200)
+	/**
+	 * Guarda o maior limite do PostContentLimits (TUTORIAL, 5.000). Ficou menor uma vez
+	 * (V32, 1200) e o MariaDB de produção recusava o INSERT que a validação tinha deixado passar.
+	 */
+	@Column(nullable = false, length = 5000)
 	private String content;
 
 	/**
