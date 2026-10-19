@@ -14,7 +14,7 @@ public interface CommunityRepository {
 
 	Optional<Community> findById(String id);
 
-	List<Community> findAll(String topic, Instant before, int limit);
+	List<Community> findAll(String topic, String query, Instant before, int limit);
 
 	/** Comunidades das quais o usuario participa (menu lateral). */
 	List<Community> findByMember(String userId, int limit);
