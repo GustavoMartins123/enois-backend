@@ -77,11 +77,14 @@ public class GroupService {
 		Group group = requireGroup(groupId);
 		require(roleOf(groupId, actorId), GroupCapability.EDIT_GROUP);
 		// Mesma régua da capa do perfil e da comunidade: nulo mantém, em branco limpa, com texto
-		// sanitiza. Um cabeçalho de espaços não é cabeçalho.
+		// sanitiza. Um cabeçalho de espaços não é cabeçalho. Avatar/banner seguem a mesma regra
+		// (antes o em branco virava nulo e era impossível REMOVER a imagem pela edição).
 		String finalBannerHtml = bannerHtml == null ? null
 			: (StringUtils.hasText(bannerHtml) ? SafeHtml.requireProfileHtml(bannerHtml) : "");
+		String finalAvatar = avatar == null ? null : avatar.trim();
+		String finalBanner = banner == null ? null : banner.trim();
 		Group updated = group.update(trimToNull(name), trimToNull(description), trimToNull(topic),
-			trimToNull(avatar), trimToNull(banner), finalBannerHtml, joinMode, clock.instant());
+			finalAvatar, finalBanner, finalBannerHtml, joinMode, clock.instant());
 		repository.save(updated);
 		return updated;
 	}
