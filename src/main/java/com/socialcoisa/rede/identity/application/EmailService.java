@@ -51,8 +51,11 @@ public class EmailService {
      */
     private void recordEmail(String toEmail, String subject, String kind, boolean sent, String error) {
         try {
+            // O código do 2FA NUNCA entra no log: o assunto é redigido por tipo, mesmo que um
+            // chamador futuro monte um assunto com o código dentro.
+            String safeSubject = "TWO_FACTOR".equals(kind) ? "Seu código de acesso (redigido)" : subject;
             emailLogs.save(EmailLog.create("email_" + UUID.randomUUID().toString().replace("-", ""),
-                truncate(toEmail, 180), truncate(subject, 200), kind,
+                truncate(toEmail, 180), truncate(safeSubject, 200), kind,
                 sent ? EmailLogStatus.SENT : EmailLogStatus.FAILED, truncate(error, 500), Instant.now()));
         } catch (RuntimeException logFailure) {
             LOG.warn("Nao foi possivel registrar o envio de e-mail para {}: {}", toEmail,
@@ -133,13 +136,13 @@ public class EmailService {
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
             helper.setFrom(fromEmail);
             helper.setTo(toEmail);
-            helper.setSubject("Seu código de acesso: " + code);
+            helper.setSubject("Seu código de acesso ao Énóis");
             helper.setText(templateEngine.process("two-factor-code", context), true);
             mailSender.send(message);
-            recordEmail(toEmail, "Seu código de acesso: " + code, "TWO_FACTOR", true, null);
+            recordEmail(toEmail, "Seu código de acesso ao Énóis", "TWO_FACTOR", true, null);
             return true;
         } catch (Exception e) {
-            recordEmail(toEmail, "Seu código de acesso: " + code, "TWO_FACTOR", false, e.getMessage());
+            recordEmail(toEmail, "Seu código de acesso ao Énóis", "TWO_FACTOR", false, e.getMessage());
             LOG.error("Falha ao enviar o codigo do segundo fator para {}: {}", toEmail, e.getMessage(), e);
             return false;
         }
