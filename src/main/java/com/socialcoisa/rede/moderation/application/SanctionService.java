@@ -143,6 +143,15 @@ public class SanctionService {
 			.orElseThrow(() -> new ApiException(404, "SANCTION_NOT_FOUND", "Sancao nao encontrada."));
 		appeals.save(appeal.approve(reviewerId, Instant.now(clock)));
 		UserSanction removed = sanctions.save(sanction.remove(reviewerId, Instant.now(clock)));
+		// O fato que motivou a sanção deixa de existir: a denúncia vira DISMISSED para a
+		// credibilidade voltar ao normal. A trilha fica no próprio report (revisor, data, nota).
+		// Referências que não são denúncias (ex.: decisão de contestação) não têm o que limpar.
+		if (sanction.reportId() != null && sanction.reportId().startsWith("report_")) {
+			reports.findById(sanction.reportId()).ifPresent(report -> {
+				report.dismiss(reviewerId, "Recurso aceito pela revisão humana");
+				reports.save(report);
+			});
+		}
 		notificationService.create(sanction.userId(), "RECURSO", reviewerId, "Recurso aceito",
 			"Uma pessoa do time revisou seu recurso e a restricao foi removida. Conta liberada.",
 			"/api/penalidades", "Ver");

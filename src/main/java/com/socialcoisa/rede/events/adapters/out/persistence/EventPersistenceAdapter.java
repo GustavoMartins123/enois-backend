@@ -17,12 +17,15 @@ class EventPersistenceAdapter implements EventRepository {
 
 	private final SpringDataEventJpaRepository springData;
 	private final SpringDataEventAttendeeJpaRepository attendeeRepo;
+	private final SpringDataUserEventAttendanceTotalJpaRepository totalsRepo;
 	private final Clock clock;
 
 	EventPersistenceAdapter(SpringDataEventJpaRepository springData,
-			SpringDataEventAttendeeJpaRepository attendeeRepo, Clock clock) {
+			SpringDataEventAttendeeJpaRepository attendeeRepo,
+			SpringDataUserEventAttendanceTotalJpaRepository totalsRepo, Clock clock) {
 		this.springData = springData;
 		this.attendeeRepo = attendeeRepo;
+		this.totalsRepo = totalsRepo;
 		this.clock = clock;
 	}
 
@@ -71,6 +74,23 @@ class EventPersistenceAdapter implements EventRepository {
 	@Override
 	public void deleteAttendees(String eventId) {
 		attendeeRepo.deleteByEventId(eventId);
+	}
+
+	@Override
+	public List<String> findAttendeeIds(String eventId) {
+		return attendeeRepo.findUserIdsByEventId(eventId);
+	}
+
+	@Override
+	public void addAttendanceToTotal(String userId) {
+		var existente = totalsRepo.findById(userId);
+		if (existente.isPresent()) {
+			var total = existente.get();
+			total.increment();
+			totalsRepo.save(total);
+			return;
+		}
+		totalsRepo.save(new UserEventAttendanceTotalJpaEntity(userId, 1));
 	}
 
 	@Override

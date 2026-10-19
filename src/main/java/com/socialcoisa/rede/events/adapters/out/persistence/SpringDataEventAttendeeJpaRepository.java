@@ -1,6 +1,9 @@
 package com.socialcoisa.rede.events.adapters.out.persistence;
 
+import java.util.List;
+
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
 interface SpringDataEventAttendeeJpaRepository extends JpaRepository<EventAttendeeJpaEntity, Long> {
 
@@ -13,4 +16,7 @@ interface SpringDataEventAttendeeJpaRepository extends JpaRepository<EventAttend
 
 	int countByEventId(String eventId);
 
+	/** Só os IDs (a sanitização não precisa de nada além disso). */
+	@Query("select a.userId from EventAttendeeJpaEntity a where a.eventId = :eventId")
+	List<String> findUserIdsByEventId(String eventId);
 }

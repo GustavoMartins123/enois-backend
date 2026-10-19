@@ -513,6 +513,34 @@ delete from flyway_schema_history where version = '<versao que falhou>';    # ou
   é enviada como push depois do commit (`PushNotificationListener` → `WebPushSender`); falha de push é logada e
   nunca quebra o fluxo que gerou a notificação. No app: menu da conta → "Ativar notificações no celular".
 
+## Credibilidade (reputação) — modelo e antifraude
+
+Fonte única: `profile/application/ReputationService.java` (recalculada na leitura; a coluna
+`users.reputation` é só a foto usada pelo ranking, atualizada periodicamente por
+`ReputationRefreshWorker`).
+
+**Componentes internos (a nota exibida continua 0–1000):**
+
+| Componente | Regra | Teto |
+|---|---|---|
+| T — trajetória | experiência/formação/certificação com retorno decrescente (√) | 195 |
+| R — relações | conexões (√) + recomendações **não recíprocas** (√) | 300 |
+| C — contribuição | **pessoas distintas** que interagiram (√), comunidades, eventos, mentoria concluída | 420 |
+| K — consistência | meses desde a criação (máx. 48) | 120 |
+| I — integridade | **só fato confirmado** (APPROVED/AUTO_PENALIZED), dedup por conteúdo, com teto | −600 |
+
+Conta verificada (e-mail **ou** 2FA) é requisito de identidade: sem ela, credibilidade = 0.
+
+**Regras antifraude (auditoria de 19/10/2026):** denúncia pendente não penaliza; N denúncias do
+mesmo conteúdo contam como um fato; recurso aceito marca a denúncia como DISMISSED (a nota
+volta); recomendações mútuas valem 0; autointeração não conta; comentário apagado devolve o
+contador; presenças de eventos são agregadas antes da purga de PII; tetos por categoria no
+currículo (10 por tipo); limite de frequência por conta em denúncias (10/h) e recomendações
+(20/dia) via `shared/security/ActionThrottle`.
+
+**Limiares:** publicar vaga exige **> 150** (JobService/JobPublishingPolicy/front alinhados);
+candidatar-se a moderador exige **> 500** (`rede.moderation.moderator-min-reputation`).
+
 ## Segurança — pendências que exigem ação manual
 
 - **`dump_rede.sql` está versionado** com dados pessoais reais (e-mails, hashes de senha) — foi commitado

@@ -119,6 +119,10 @@ public class Post {
 		counters = counters.incrementComments();
 	}
 
+	public void removeComment() {
+		counters = counters.decrementComments();
+	}
+
 	public void addSave() {
 		counters = counters.incrementSaves();
 	}

@@ -33,7 +33,8 @@ public class JobPublishingPolicy {
 
 	public Decision evaluate(String userId) {
 		int reputation = reputationService.reputationOf(userId);
-		boolean reputationOk = reputation >= REQUIRED_REPUTATION;
+		// "Mais de 150", igual ao JobService.create e ao front — exatamente 150 ainda não publica.
+		boolean reputationOk = reputation > REQUIRED_REPUTATION;
 		boolean identityVerified = identityService.isVerified(userId);
 		boolean allowed = reputationOk && (!identityEnforced || identityVerified);
 		String reason = !reputationOk ? "LOW_REPUTATION" : (!allowed ? "IDENTITY_REQUIRED" : null);

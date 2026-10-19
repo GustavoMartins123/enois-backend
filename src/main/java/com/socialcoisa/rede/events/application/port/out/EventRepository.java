@@ -28,6 +28,12 @@ public interface EventRepository {
 	/** Apaga as presencas de um evento (dado pessoal) sem apagar o evento. */
 	void deleteAttendees(String eventId);
 
+	/** Ids das pessoas presentes — lido ANTES da purga para preservar a contribuição. */
+	List<String> findAttendeeIds(String eventId);
+
+	/** Soma 1 na contribuição PERMANENTE de presenças (o que sobrevive à purga de PII). */
+	void addAttendanceToTotal(String userId);
+
 	/** Eventos sanitizados antes do instante informado (expurgo por retencao). */
 	List<Event> findSanitizedBefore(java.time.Instant threshold);
 

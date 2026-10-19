@@ -17,5 +17,11 @@ public interface RecommendationRepository {
 
 	boolean existsByRecommenderAndRecommended(String recommenderId, String recommendedId);
 
+	/**
+	 * Recomendações recebidas que são RECÍPROCAS (a pessoa também recomendou quem a recomendou).
+	 * Elas não contam para a credibilidade: par mútuo é troca, não confiança.
+	 */
+	int countReciprocal(String recommendedId);
+
 	void delete(String id);
 }
