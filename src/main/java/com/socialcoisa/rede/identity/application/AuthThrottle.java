@@ -78,9 +78,23 @@ public class AuthThrottle {
 		falhasLogin.remove(normaliza(email));
 	}
 
-	/** O IP pode criar conta? (10 por hora) */
+	/**
+	 * O IP pode criar conta? (10 por hora por IP).
+	 * Quando um fingerprint de dispositivo esta disponivel, tambem limita por fingerprint —
+	 * detecta o mesmo navegador criando contas atras de proxies diferentes.
+	 */
 	public void exigeSignupPermitido(String ip) {
-		String chave = "ip:" + normaliza(ip);
+		exigeSignupPermitido(ip, null);
+	}
+
+	public void exigeSignupPermitido(String ip, String deviceFingerprint) {
+		if (deviceFingerprint != null && !deviceFingerprint.isBlank()) {
+			verificaJanela("fp:" + normaliza(deviceFingerprint));
+		}
+		verificaJanela("ip:" + normaliza(ip));
+	}
+
+	private void verificaJanela(String chave) {
 		Janela janela = signupsPorIp.get(chave);
 		Instant agora = Instant.now();
 		if (janela != null) {

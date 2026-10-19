@@ -105,10 +105,17 @@ class AuthController {
 	@RateLimiter(name = "auth")
 	ResponseEntity<String> signup(@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@RequestHeader(value = "X-Forwarded-For", required = false) String forwardedFor,
+			@RequestHeader(value = "X-Device-Fingerprint", required = false) String deviceFingerprint,
 			@RequestBody SignupRequest request) {
+		// Honeypot: bots preenchem o campo "website" que humanos nunca veem.
+		// Resposta fake (201) para nao dar dica ao atacante.
+		if (request.website() != null && !request.website().isBlank()) {
+			return ResponseEntity.status(201)
+				.body("{\"email\":\"" + request.email() + "\",\"verificationRequired\":true,\"emailSent\":true}");
+		}
 		String ip = forwardedFor == null || forwardedFor.isBlank() ? "desconhecido"
 			: forwardedFor.split(",")[0].trim();
-		throttle.exigeSignupPermitido(ip);
+		throttle.exigeSignupPermitido(ip, deviceFingerprint);
 		String scope = authScope(request.email());
 		String hash = idempotency.hash(request);
 		return idempotency.execute(scope, "POST", "/api/auth/signup", idempotencyKey, hash, () -> new CommandResponse(201,
