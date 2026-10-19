@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -49,13 +50,15 @@ public class GroupFeedService {
 	private final GroupRepository groups;
 	private final GroupContentRepository content;
 	private final AuditLogRepository audit;
+	private final GroupNotifier notifier;
 	private final Clock clock;
 
 	public GroupFeedService(GroupRepository groups, GroupContentRepository content, AuditLogRepository audit,
-			Clock clock) {
+			GroupNotifier notifier, Clock clock) {
 		this.groups = groups;
 		this.content = content;
 		this.audit = audit;
+		this.notifier = notifier;
 		this.clock = clock;
 	}
 
@@ -194,8 +197,10 @@ public class GroupFeedService {
 		if (!post.authorId().equals(actorId)) {
 			require(roleOf(groupId, actorId), GroupCapability.MODERATE_CONTENT);
 		}
+		Group group = requireGroup(groupId);
 		content.savePost(post.remove(clock.instant()));
 		audit.record(new UserId(actorId), "GROUP_POST_REMOVED", postId, "{\"groupId\":\"" + groupId + "\"}");
+		notifier.contentRemoved(group, post.authorId(), actorId, "publicação");
 	}
 
 	/** Comentário: o autor apaga o próprio; quem modera apaga o dos outros. */
@@ -209,14 +214,55 @@ public class GroupFeedService {
 		if (!comment.authorId().equals(actorId)) {
 			require(roleOf(groupId, actorId), GroupCapability.MODERATE_CONTENT);
 		}
+		Group group = requireGroup(groupId);
 		content.saveComment(comment.remove(clock.instant()));
 		refreshCounters(post);
 		audit.record(new UserId(actorId), "GROUP_COMMENT_REMOVED", commentId,
 			"{\"groupId\":\"" + groupId + "\",\"postId\":\"" + postId + "\"}");
+		notifier.contentRemoved(group, comment.authorId(), actorId, "comentário");
+	}
+
+	/**
+	 * Fixa UMA publicação no topo do grupo. O `clearPinned` roda na mesma transação: nunca sobra
+	 * mais de uma fixada, e a anterior volta ao lugar cronológico dela.
+	 */
+	@Transactional
+	public GroupPost pinPost(String groupId, String postId, String actorId) {
+		GroupPost post = requirePost(groupId, postId);
+		if (!post.isPublished()) {
+			throw new ApiException(404, "POST_NOT_FOUND", "Publicacao nao encontrada neste grupo.");
+		}
+		require(roleOf(groupId, actorId), GroupCapability.PIN_CONTENT);
+		content.clearPinned(groupId);
+		GroupPost pinned = post.withPinned(true);
+		content.savePost(pinned);
+		audit.record(new UserId(actorId), "GROUP_POST_PINNED", postId, "{\"groupId\":\"" + groupId + "\"}");
+		return pinned;
+	}
+
+	@Transactional
+	public GroupPost unpinPost(String groupId, String postId, String actorId) {
+		GroupPost post = requirePost(groupId, postId);
+		require(roleOf(groupId, actorId), GroupCapability.PIN_CONTENT);
+		if (!post.pinned()) {
+			return post;
+		}
+		GroupPost unpinned = post.withPinned(false);
+		content.savePost(unpinned);
+		audit.record(new UserId(actorId), "GROUP_POST_UNPINNED", postId, "{\"groupId\":\"" + groupId + "\"}");
+		return unpinned;
+	}
+
+	@Transactional(readOnly = true)
+	public Optional<GroupPost> pinnedPost(String groupId, String actorId) {
+		requireReadable(groupId);
+		requireMember(groupId, actorId);
+		return content.findPinned(groupId).filter(GroupPost::isPublished);
 	}
 
 	@Transactional
 	public GroupComment comment(String groupId, String postId, String authorId, String text, String parentCommentId) {
+		Group group = requireGroup(groupId);
 		GroupPost post = requirePost(groupId, postId);
 		require(roleOf(groupId, authorId), GroupCapability.INTERACT);
 		if (!StringUtils.hasText(text)) {
@@ -226,17 +272,19 @@ public class GroupFeedService {
 		if (clean.length() > GroupComment.MAX_CONTENT) {
 			throw new ApiException(400, "CONTENT_TOO_LONG", "Comentario deve ter ate 1.200 caracteres.");
 		}
+		GroupComment parent = null;
 		if (StringUtils.hasText(parentCommentId)) {
 			// Resposta só aponta para comentário DESTA publicação (não de outro post nem de outro grupo).
-			content.findComment(parentCommentId)
-				.filter(parent -> parent.postId().equals(postId) && parent.isPublished())
+			parent = content.findComment(parentCommentId)
+				.filter(item -> item.postId().equals(postId) && item.isPublished())
 				.orElseThrow(() -> new ApiException(404, "COMMENT_NOT_FOUND",
 					"Comentario nao encontrado nesta publicacao."));
 		}
 		GroupComment comment = GroupComment.create(newId("group_comment"), postId, groupId, authorId,
-			StringUtils.hasText(parentCommentId) ? parentCommentId : null, clean, clock.instant());
+			parent != null ? parent.id() : null, clean, clock.instant());
 		content.saveComment(comment);
 		refreshCounters(post);
+		notifier.comment(group, post, authorId, parent != null ? parent.authorId() : null);
 		return comment;
 	}
 

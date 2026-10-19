@@ -2,11 +2,13 @@ package com.socialcoisa.rede.support.adapters.out.persistence;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
 
 import com.socialcoisa.rede.support.application.port.out.SupportRequestRepository;
+import com.socialcoisa.rede.support.domain.SupportCategory;
 import com.socialcoisa.rede.support.domain.SupportRequest;
 import com.socialcoisa.rede.support.domain.SupportStatus;
 
@@ -25,8 +27,14 @@ class SupportRequestPersistenceAdapter implements SupportRequestRepository {
 	}
 
 	@Override
-	public List<SupportRequest> findByStatus(SupportStatus status, int limit) {
-		return repository.findByStatusOrderByCreatedAtDesc(status, PageRequest.of(0, limit)).stream()
+	public Optional<SupportRequest> findById(String id) {
+		return repository.findById(id).map(SupportRequestJpaEntity::toDomain);
+	}
+
+	@Override
+	public List<SupportRequest> findFiltered(SupportCategory category, SupportStatus status, int limit) {
+		return repository.findFiltered(category, status, PageRequest.of(0, Math.max(1, Math.min(limit, 100))))
+			.stream()
 			.map(SupportRequestJpaEntity::toDomain)
 			.toList();
 	}

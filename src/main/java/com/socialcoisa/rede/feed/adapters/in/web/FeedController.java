@@ -84,6 +84,7 @@ class FeedController {
 	private final CurrentUserResolver currentUserResolver;
 	private final PostInteractionRepository postInteractionRepository;
 	private final CommentRepository commentRepository;
+	private final com.socialcoisa.rede.feed.application.port.out.PostRepository postRepository;
 	private final CursorCodec cursorCodec;
 	private final BlockedUsersReader blockedUsersReader;
 	private final Clock clock;
@@ -97,6 +98,7 @@ class FeedController {
 			SavePostUseCase savePostUseCase, SharePostUseCase sharePostUseCase,
 			IdempotencyApplicationService idempotency, CurrentUserResolver currentUserResolver,
 			PostInteractionRepository postInteractionRepository, CommentRepository commentRepository,
+			com.socialcoisa.rede.feed.application.port.out.PostRepository postRepository,
 			CursorCodec cursorCodec, BlockedUsersReader blockedUsersReader, Clock clock,
 			com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseCase mediaOwnershipValidator) {
 		this.publishPostUseCase = publishPostUseCase;
@@ -116,6 +118,7 @@ class FeedController {
 		this.currentUserResolver = currentUserResolver;
 		this.postInteractionRepository = postInteractionRepository;
 		this.commentRepository = commentRepository;
+		this.postRepository = postRepository;
 		this.cursorCodec = cursorCodec;
 		this.blockedUsersReader = blockedUsersReader;
 		this.clock = clock;
@@ -364,7 +367,16 @@ class FeedController {
 				if (!comment.authorId().equals(user.id())) {
 					throw new ApiException(403, "NOT_AUTHORIZED", "Voce nao pode deletar este comentario.");
 				}
+				boolean eraAtivo = comment.status() == com.socialcoisa.rede.feed.domain.CommentStatus.ACTIVE;
 				commentRepository.deleteById(commentId);
+				// O contador do post precisa DEVOLVER o comentário apagado — antes ele só crescia,
+				// e "comentar/apagar" inflava a interação recebida (e a credibilidade) sem limite.
+				if (eraAtivo) {
+					postRepository.findById(comment.postId()).ifPresent(post -> {
+						post.removeComment();
+						postRepository.save(post);
+					});
+				}
 				return new CommandResponse(200, Map.of("status", "COMMENT_DELETED"));
 			});
 	}

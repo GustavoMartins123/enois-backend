@@ -61,6 +61,22 @@ class MediaAssetJpaEntity {
 	@Column(name = "deleted_at")
 	private Instant deletedAt;
 
+	@Enumerated(EnumType.STRING)
+	@Column(name = "storage_provider", nullable = false)
+	private com.socialcoisa.rede.media.domain.MediaStorageProvider storageProvider;
+
+	@Column(name = "s3_cdn_url", length = 1024)
+	private String s3CdnUrl;
+
+	@Column(name = "s3_migrated_at")
+	private Instant s3MigratedAt;
+
+	@Column(name = "s3_migration_attempts", nullable = false)
+	private int s3MigrationAttempts;
+
+	@Column(name = "s3_last_error", length = 300)
+	private String s3LastError;
+
 	protected MediaAssetJpaEntity() {
 	}
 
@@ -79,11 +95,17 @@ class MediaAssetJpaEntity {
 		entity.createdAt = asset.createdAt();
 		entity.expiresAt = asset.expiresAt();
 		entity.deletedAt = asset.deletedAt();
+		entity.storageProvider = asset.storageProvider();
+		entity.s3CdnUrl = asset.s3CdnUrl();
+		entity.s3MigratedAt = asset.s3MigratedAt();
+		entity.s3MigrationAttempts = asset.s3MigrationAttempts();
+		entity.s3LastError = asset.s3LastError();
 		return entity;
 	}
 
 	MediaAsset toDomain() {
 		return MediaAsset.restore(id, new UserId(ownerId), fileName, mimeType, sizeBytes, purpose, objectKey, cdnUrl,
-			status, deleteStatus, createdAt, expiresAt, deletedAt);
+			status, deleteStatus, createdAt, expiresAt, deletedAt, storageProvider, s3CdnUrl, s3MigratedAt,
+			s3MigrationAttempts, s3LastError);
 	}
 }

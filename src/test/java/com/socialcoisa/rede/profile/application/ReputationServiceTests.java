@@ -4,9 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
-import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,12 +18,18 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.socialcoisa.rede.profile.application.port.out.ProfileExtensionRepository;
 import com.socialcoisa.rede.profile.application.port.out.RecommendationRepository;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
+import com.socialcoisa.rede.profile.domain.Recommendation;
 import com.socialcoisa.rede.profile.domain.UserProfile;
 
+/**
+ * Modelo de componentes (auditoria 19/10): retornos decrescentes, recíprocas fora, só fato
+ * confirmado penaliza e o gate de identidade continua valendo.
+ */
 @ExtendWith(MockitoExtension.class)
 class ReputationServiceTests {
 
 	private static final String USER = "user_reputation";
+	private static final Instant AGORA = Instant.parse("2026-01-01T12:00:00Z");
 
 	@Mock
 	private UserProfileRepository profileRepository;
@@ -37,79 +44,100 @@ class ReputationServiceTests {
 
 	@BeforeEach
 	void setUp() {
-		service = new ReputationService(profileRepository, extensionRepository, recommendationRepository);
+		service = new ReputationService(profileRepository, extensionRepository, recommendationRepository,
+			Clock.fixed(AGORA, ZoneOffset.UTC));
 	}
 
 	@Test
-	void verifiedAccountKeepsTheComputedReputation() {
-		UserProfile profile = profile();
-		profile.markEmailVerified(Instant.now());
-		when(profileRepository.findById(USER)).thenReturn(Optional.of(profile));
+	void verifiedAccountScoresByComponents() {
+		UserProfile profile = profile(AGORA.minusSeconds(184L * 24 * 3600)); // ~6 meses
+		profile.markEmailVerified(AGORA);
+		when(profileRepository.findById(USER)).thenReturn(java.util.Optional.of(profile));
 		stubActivity();
 
 		ReputationService.Counts counts = service.countsFor(USER);
 
 		assertThat(counts.identityVerified()).isTrue();
-		// 3 experiencias x10 + 5 conexoes + 4 seguidores/2 + 2 interacoes = 39
-		assertThat(counts.reputation()).isEqualTo(39);
+		// T=15·√3=25,98 | R=9·√5=20,12 | C=7,5·√2=10,61 | K=6·√(6·4)=29,39 → 86
+		assertThat(counts.reputation()).isEqualTo(86);
 	}
 
 	@Test
 	void secondFactorAlsoCountsAsVerification() {
-		UserProfile profile = profile();
-		profile.enableTotp(Instant.now());
-		when(profileRepository.findById(USER)).thenReturn(Optional.of(profile));
+		UserProfile profile = profile(AGORA.minusSeconds(184L * 24 * 3600));
+		profile.enableTotp(AGORA);
+		when(profileRepository.findById(USER)).thenReturn(java.util.Optional.of(profile));
 		stubActivity();
 
-		ReputationService.Counts counts = service.countsFor(USER);
-
-		assertThat(counts.identityVerified()).isTrue();
-		assertThat(counts.reputation()).isPositive();
+		assertThat(service.countsFor(USER).identityVerified()).isTrue();
+		assertThat(service.countsFor(USER).reputation()).isEqualTo(86);
 	}
 
 	@Test
-	void reputationIsMultipliedByZeroWithoutEmailVerificationOrSecondFactor() {
-		UserProfile profile = profile();
-		when(profileRepository.findById(USER)).thenReturn(Optional.of(profile));
+	void reputationIsZeroWithoutEmailVerificationOrSecondFactor() {
+		UserProfile profile = profile(AGORA.minusSeconds(184L * 24 * 3600));
+		when(profileRepository.findById(USER)).thenReturn(java.util.Optional.of(profile));
 		stubActivity();
 
 		ReputationService.Counts counts = service.countsFor(USER);
 
 		assertThat(counts.identityVerified()).isFalse();
 		assertThat(counts.reputation()).isZero();
-		// As conexoes continuam sendo contadas: o que zera e a credibilidade, nao o perfil.
+		// As conexões continuam sendo contadas: o que zera é a credibilidade, não o perfil.
 		assertThat(counts.connections()).isEqualTo(5);
 	}
 
 	@Test
-	void reportPenaltyStillAppliesOnTopOfTheRule() {
-		UserProfile profile = profile();
-		profile.markEmailVerified(Instant.now());
-		when(profileRepository.findById(USER)).thenReturn(Optional.of(profile));
+	void onlyConfirmedFactsPenalizeAndEachFactCostsOnce() {
+		UserProfile profile = profile(AGORA.minusSeconds(184L * 24 * 3600));
+		profile.markEmailVerified(AGORA);
+		when(profileRepository.findById(USER)).thenReturn(java.util.Optional.of(profile));
 		stubActivity();
-		when(profileRepository.countActiveReportsAgainst(USER)).thenReturn(1);
 
-		// 3 denuncias custam 50 * 3 * 4 / 2 = 300, mais que a atividade deste cenario.
-		when(profileRepository.countActiveReportsAgainst(USER)).thenReturn(3);
+		// Pendente NÃO entra: o service só olha fatos confirmados (countConfirmedReportFactsAgainst).
+		when(profileRepository.countConfirmedReportFactsAgainst(USER)).thenReturn(1);
+		assertThat(service.countsFor(USER).reputation()).isEqualTo(26); // 86 - 60
 
-		assertThat(service.countsFor(USER).reputation()).isZero();
+		when(profileRepository.countConfirmedReportFactsAgainst(USER)).thenReturn(3);
+		assertThat(service.countsFor(USER).reputation()).isZero(); // 86 - 360, piso 0
+	}
+
+	@Test
+	void reciprocalRecommendationsDoNotCount() {
+		UserProfile profile = profile(AGORA.minusSeconds(184L * 24 * 3600));
+		profile.markEmailVerified(AGORA);
+		when(profileRepository.findById(USER)).thenReturn(java.util.Optional.of(profile));
+		stubActivity();
+		List<Recommendation> recebidas = java.util.stream.IntStream.range(0, 10)
+			.mapToObj(i -> Recommendation.create("rec_" + i, "u_" + i, USER, "texto", AGORA))
+			.toList();
+		when(recommendationRepository.findByRecommendedId(USER)).thenReturn(recebidas);
+
+		// Todas recíprocas → componente de recomendações = 0.
+		when(recommendationRepository.countReciprocal(USER)).thenReturn(10);
+		assertThat(service.countsFor(USER).reputation()).isEqualTo(86);
+
+		// Nenhuma recíproca → as 10 valem (retorno decrescente: 30·√10 = 94,87).
+		when(recommendationRepository.countReciprocal(USER)).thenReturn(0);
+		assertThat(service.countsFor(USER).reputation()).isEqualTo(181);
 	}
 
 	private void stubActivity() {
 		when(profileRepository.countConnections(USER)).thenReturn(5);
 		when(profileRepository.countFollowers(USER)).thenReturn(4);
-		when(profileRepository.countPostInteractionsReceived(USER)).thenReturn(2);
+		when(profileRepository.countUniqueEngagers(USER)).thenReturn(2);
 		when(profileRepository.countCommunitiesJoined(USER)).thenReturn(0);
-		when(profileRepository.countEventsAttended(USER)).thenReturn(0);
+		when(profileRepository.countEventsAttendedTotal(USER)).thenReturn(0);
 		when(profileRepository.countMentoringSessionsAsMentee(USER)).thenReturn(0);
-		when(profileRepository.countActiveReportsAgainst(USER)).thenReturn(0);
+		when(profileRepository.countConfirmedReportFactsAgainst(USER)).thenReturn(0);
 		when(extensionRepository.countExperiencesByUserId(anyString())).thenReturn(3);
 		when(extensionRepository.countEducationsByUserId(anyString())).thenReturn(0);
 		when(extensionRepository.countCertificationsByUserId(anyString())).thenReturn(0);
 		when(recommendationRepository.findByRecommendedId(USER)).thenReturn(List.of());
+		when(recommendationRepository.countReciprocal(USER)).thenReturn(0);
 	}
 
-	private UserProfile profile() {
-		return UserProfile.create(USER, "pessoa", USER + "@test.com", "Pessoa", null, Instant.now());
+	private UserProfile profile(Instant createdAt) {
+		return UserProfile.create(USER, "pessoa", USER + "@test.com", "Pessoa", null, createdAt);
 	}
 }

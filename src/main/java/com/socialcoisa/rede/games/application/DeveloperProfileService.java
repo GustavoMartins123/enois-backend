@@ -63,13 +63,21 @@ public class DeveloperProfileService {
 		DeveloperProfile profile = profiles.findByUserId(user.id()).orElse(null);
 		List<Game> published = games.findByUserAndStatus(user.id(), GameStatus.PUBLISHED, 60);
 		boolean owner = viewerId != null && viewerId.equals(user.id());
-		if (published.isEmpty() && profile == null && !owner) {
+		// Página "vazia" não é página: um perfil de desenvolvedor criado sem nenhum campo
+		// preenchido (ex.: abriu o painel e salvou em branco) NÃO conta como presença de dev.
+		if (published.isEmpty() && !hasContent(profile) && !owner) {
 			// Sem jogo publicado e sem página preenchida não há o que mostrar (nem para indexar).
 			throw new ApiException(404, "DEVELOPER_NOT_FOUND", "Criador não encontrado.");
 		}
 		long followers = follows.countByDeveloper(user.id());
 		boolean following = viewerId != null && follows.exists(viewerId, user.id());
 		return new DeveloperPage(user, profile, published, followers, following, owner, followers);
+	}
+
+	private boolean hasContent(DeveloperProfile profile) {
+		return profile != null && (StringUtils.hasText(profile.displayName())
+			|| StringUtils.hasText(profile.headline()) || StringUtils.hasText(profile.bio())
+			|| StringUtils.hasText(profile.links()));
 	}
 
 	/** O dono edita a própria página. Vazio limpa o campo. */

@@ -4,10 +4,12 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
 
 import com.socialcoisa.rede.media.application.port.out.MediaAssetRepository;
 import com.socialcoisa.rede.media.domain.MediaAsset;
+import com.socialcoisa.rede.media.domain.MediaStorageProvider;
 
 @Repository
 class MediaAssetPersistenceAdapter implements MediaAssetRepository {
@@ -34,5 +36,55 @@ class MediaAssetPersistenceAdapter implements MediaAssetRepository {
 			return List.of();
 		}
 		return repository.findByIdIn(ids).stream().map(MediaAssetJpaEntity::toDomain).toList();
+	}
+
+	@Override
+	public List<MediaAsset> findForS3Copy(int limit, java.time.Instant before, int maxAttempts) {
+		return repository
+			.findForS3Copy(MediaStorageProvider.IMAGEKIT, com.socialcoisa.rede.media.domain.MediaDeleteStatus.NONE,
+				before, maxAttempts, PageRequest.of(0, Math.max(1, limit)))
+			.stream()
+			.map(MediaAssetJpaEntity::toDomain)
+			.toList();
+	}
+
+	@Override
+	public List<MediaAsset> findForS3Flip(int limit) {
+		return repository.findPendingFlip(MediaStorageProvider.S3,
+				com.socialcoisa.rede.media.domain.MediaDeleteStatus.NONE, PageRequest.of(0, Math.max(1, limit)))
+			.stream()
+			.map(MediaAssetJpaEntity::toDomain)
+			.toList();
+	}
+
+	@Override
+	public long countByStorageProvider(MediaStorageProvider provider) {
+		return repository.countByStorageProvider(provider);
+	}
+
+	@Override
+	public long countMigratedToS3() {
+		return repository.countByS3MigratedAtIsNotNull();
+	}
+
+	@Override
+	public long countWithMigrationError() {
+		return repository.countByS3LastErrorIsNotNull();
+	}
+
+	@Override
+	public Optional<String> lastMigrationError() {
+		return repository.findFirstByS3LastErrorIsNotNullOrderByCreatedAtDesc()
+			.map(entity -> entity.toDomain().s3LastError());
+	}
+
+	@Override
+	public long countActiveOnS3() {
+		return repository.countActiveOnProvider(MediaStorageProvider.S3);
+	}
+
+	@Override
+	public long countAll() {
+		return repository.count();
 	}
 }

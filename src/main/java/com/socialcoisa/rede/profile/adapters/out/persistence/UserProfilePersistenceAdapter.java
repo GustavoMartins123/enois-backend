@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.profile.domain.UserProfile;
@@ -124,6 +125,67 @@ class UserProfilePersistenceAdapter implements UserProfileRepository {
 			.setParameter("uid", userId)
 			.getSingleResult();
 		return ((Number) result).intValue();
+	}
+
+	@Override
+	public int countConfirmedReportFactsAgainst(String userId) {
+		// Fatos CONFIRMADOS e deduplicados por conteúdo: uma denúncia pendente não é fato, e N
+		// denúncias contra o MESMO post/comentário/vaga são um fato só. Recurso aceito volta o
+		// report para DISMISSED e o fato desaparece daqui.
+		var result = em.createNativeQuery(
+			"select count(distinct target_id) from reports where status in ('APPROVED', 'AUTO_PENALIZED') and ("
+				+ "target_id in (select id from posts where author_id = :uid) "
+				+ "or target_id in (select id from comments where author_id = :uid) "
+				+ "or target_id in (select id from jobs where posted_by = :uid))")
+			.setParameter("uid", userId)
+			.getSingleResult();
+		return ((Number) result).intValue();
+	}
+
+	@Override
+	public int countUniqueEngagers(String userId) {
+		// Pessoas DISTINTAS que reagiram ou comentaram posts do autor — o autor não conta.
+		// É isto que impede "comentar e apagar em loop" e autointeração de inflar a nota.
+		var result = em.createNativeQuery(
+			"select count(*) from ("
+				+ "select r.user_id as actor from reactions r join posts p on p.id = r.post_id "
+				+ "where p.author_id = :uid and p.status <> 'DELETED' "
+				+ "union "
+				+ "select c.author_id as actor from comments c join posts p2 on p2.id = c.post_id "
+				+ "where p2.author_id = :uid and p2.status <> 'DELETED' and c.status <> 'DELETED'"
+				+ ") engajadores where engajadores.actor <> :uid")
+			.setParameter("uid", userId)
+			.getSingleResult();
+		return ((Number) result).intValue();
+	}
+
+	@Override
+	public int countEventsAttendedTotal(String userId) {
+		var result = em.createNativeQuery(
+			"select (select count(*) from event_attendees where user_id = :uid) + "
+				+ "coalesce((select total from user_event_attendance_totals where user_id = :uid), 0)")
+			.setParameter("uid", userId)
+			.getSingleResult();
+		return ((Number) result).intValue();
+	}
+
+	@Override
+	@Transactional
+	public void updateReputation(String userId, int reputation) {
+		em.createNativeQuery("update users set reputation = :value where id = :uid")
+			.setParameter("value", reputation)
+			.setParameter("uid", userId)
+			.executeUpdate();
+	}
+
+	@Override
+	public List<String> findAllIds(int offset, int limit) {
+		@SuppressWarnings("unchecked")
+		List<String> ids = em.createNativeQuery("select id from users order by id limit :limit offset :offset")
+			.setParameter("limit", limit)
+			.setParameter("offset", offset)
+			.getResultList();
+		return ids;
 	}
 
 	@Override

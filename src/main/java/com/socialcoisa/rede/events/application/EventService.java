@@ -151,6 +151,11 @@ public class EventService {
 				continue;
 			}
 			int attendees = repository.countAttendees(event.id());
+			// A contribuição de quem foi não pode evaporar junto com a PII: antes de apagar o
+			// vínculo com cada pessoa, a CONTAGEM por usuário é preservada (sem dado pessoal).
+			for (String userId : repository.findAttendeeIds(event.id())) {
+				repository.addAttendanceToTotal(userId);
+			}
 			repository.deleteAttendees(event.id());
 			event.markSanitized(attendees, now);
 			repository.save(event);

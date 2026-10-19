@@ -10,6 +10,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 
+import com.socialcoisa.rede.support.domain.SupportCategory;
 import com.socialcoisa.rede.support.domain.SupportRequest;
 import com.socialcoisa.rede.support.domain.SupportStatus;
 
@@ -38,8 +39,21 @@ class SupportRequestJpaEntity {
 	private String imageUrl;
 
 	@Enumerated(EnumType.STRING)
+	@Column(nullable = false, length = 24)
+	private SupportCategory category;
+
+	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 32)
 	private SupportStatus status;
+
+	@Column(name = "admin_reply", length = 4000)
+	private String adminReply;
+
+	@Column(name = "replied_by")
+	private String repliedBy;
+
+	@Column(name = "replied_at")
+	private Instant repliedAt;
 
 	@Column(name = "created_at", nullable = false)
 	private Instant createdAt;
@@ -55,12 +69,17 @@ class SupportRequestJpaEntity {
 		entity.message = request.message();
 		entity.contactEmail = request.contactEmail();
 		entity.imageUrl = request.imageUrl();
+		entity.category = request.category();
 		entity.status = request.status();
+		entity.adminReply = request.adminReply();
+		entity.repliedBy = request.repliedBy();
+		entity.repliedAt = request.repliedAt();
 		entity.createdAt = request.createdAt();
 		return entity;
 	}
 
 	SupportRequest toDomain() {
-		return SupportRequest.restore(id, userId, subject, message, contactEmail, imageUrl, status, createdAt);
+		return SupportRequest.restore(id, userId, subject, message, contactEmail, imageUrl, category, status,
+			adminReply, repliedBy, repliedAt, createdAt);
 	}
 }

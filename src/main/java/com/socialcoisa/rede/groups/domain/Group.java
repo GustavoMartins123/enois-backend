@@ -74,8 +74,11 @@ public class Group {
 		String finalBannerHtml = bannerHtml == null ? this.bannerHtml : (bannerHtml.isBlank() ? "" : bannerHtml);
 		return new Group(id, slug, name != null ? name : this.name,
 			description != null ? description : this.description, topic != null ? topic : this.topic,
-			avatar != null ? avatar : this.avatar, banner != null ? banner : this.banner, finalBannerHtml,
-			joinMode != null ? joinMode : this.joinMode, status, ownerId, createdAt, now, suspendedAt);
+			// Em branco limpa a imagem; nulo (campo ausente no PATCH) mantém a que estava.
+			avatar == null ? this.avatar : (avatar.isBlank() ? null : avatar),
+			banner == null ? this.banner : (banner.isBlank() ? null : banner),
+			finalBannerHtml, joinMode != null ? joinMode : this.joinMode, status, ownerId, createdAt, now,
+			suspendedAt);
 	}
 
 	/** Troca o estado. Suspender marca quando; sair de suspenso limpa a marca. */

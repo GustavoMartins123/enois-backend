@@ -52,7 +52,8 @@ public class MediaService implements CreateMediaUploadUseCase, GetMediaAssetUseC
 		String objectKey = storageUrlFactory.objectKey(mediaId, command.fileName().trim());
 		MediaAsset asset = MediaAsset.pending(mediaId, command.ownerId(), command.fileName().trim(),
 			command.mimeType().trim(), command.size(), normalize(command.purpose()), objectKey,
-			storageUrlFactory.cdnUrl(objectKey), clock.instant(), clock.instant().plus(Duration.ofMinutes(15)));
+			storageUrlFactory.cdnUrl(objectKey), clock.instant(), clock.instant().plus(Duration.ofMinutes(15)),
+			storageUrlFactory.provider());
 		MediaAsset saved = mediaAssetRepository.save(asset);
 		// Com S3, quem sobe o arquivo e o browser com URL assinada; com ImageKit, o front segue o
 		// fluxo multipart de sempre — por isso o `provider` na resposta.

@@ -34,6 +34,8 @@ public class ModerationService {
 	private final ReportedContentReader contentReader;
 	private final SanctionService sanctionService;
 	private final NotificationService notifications;
+	private final com.socialcoisa.rede.shared.security.ActionThrottle actionThrottle;
+	private final int reportsPerHour;
 
 	public ModerationService(ReportRepository reportRepository,
 			ModerationRemovePostUseCase moderationRemovePostUseCase, EmailService emailService,
@@ -43,6 +45,8 @@ public class ModerationService {
 			ReportedContentAuthorReader contentAuthors, ReportedContentReader contentReader,
 			SanctionService sanctionService,
 			NotificationService notifications,
+			com.socialcoisa.rede.shared.security.ActionThrottle actionThrottle,
+			@org.springframework.beans.factory.annotation.Value("${rede.moderation.reports-per-hour:10}") int reportsPerHour,
 			Clock clock) {
 		this.reportRepository = reportRepository;
 		this.moderationRemovePostUseCase = moderationRemovePostUseCase;
@@ -55,6 +59,8 @@ public class ModerationService {
 		this.contentReader = contentReader;
 		this.sanctionService = sanctionService;
 		this.notifications = notifications;
+		this.actionThrottle = actionThrottle;
+		this.reportsPerHour = reportsPerHour;
 	}
 
 	/** Aviso ao suporte: best-effort. A denuncia JA ESTA salva; falha de e-mail nao perde nada. */
@@ -107,6 +113,9 @@ public class ModerationService {
 	@Transactional
 	public Report report(String reporterId, TargetType targetType, String targetId, ReportReason reason,
 			String description) {
+		// Teto por conta: denúncia em massa (coordenação) deixa de ser barata. O limite é de
+		// FREQUÊNCIA, não de conteúdo — quem denuncia de boa-fé não chega perto dele.
+		actionThrottle.exigePermitido("report", reporterId, reportsPerHour, java.time.Duration.ofHours(1));
 		if (targetType == null) {
 			throw new ApiException(400, "INVALID_TARGET_TYPE", "Tipo do alvo da denuncia e obrigatorio.");
 		}

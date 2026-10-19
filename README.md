@@ -243,7 +243,7 @@ e o endpoint exige sessão — anônimo não gasta a cota.
 | # | O que | Onde | Bloqueia |
 |---|-------|------|----------|
 | ~~0~~ | ~~Religar o GitHub Actions nos dois repositórios~~ — **feito em 18/10** | — | — |
-| **0** | **Trust policy: falta o sub do FRONT.** O backend já voltou (imagem `dc44362` no ar) com o papel NOVO `forest-dev-enois-ecr`; o front usa o mesmo papel e é recusado. O `StringLike` do `sub` precisa incluir `repo:Rede-ENois/enois-frontend:*` (o `forest-dev-github`, de antes da transferência, não vale mais). | IAM `arn:aws:iam::818928662779:role/forest-dev-enois-ecr` | deploy do FRONT |
+| ~~0~~ | ~~Trust policy do front~~ — **resolvido em 18/10 pelo raposo**: os dois repositórios deployam automaticamente no push da `main` | — | — |
 | 1 | Certificado (ACM) + DNS de `paginas.enois.ia.br` | ACM us-east-1 + DNS do `ia.br` | player dentro das páginas publicadas |
 | 2 | Rotacionar a senha do banco (a antiga está no histórico do Git) | MariaDB + `git filter-repo` | segurança |
 | 3 | `REDE_GIFS_TENOR_KEY` e `REDE_GIFS_GIPHY_KEY` | secrets do Deployment | busca externa de GIF (sem elas, só os GIFs da comunidade) |
@@ -268,32 +268,15 @@ kubectl -n <namespace> create secret generic enois-gifs \
   --from-literal=giphy-key='<chave nova do GIPHY>'
 ```
 
-### 0. O front ainda nao deploya: falta o repositorio dele na trust policy do papel
+### 0.2 — Itens de segurança da borda (pentest de 18/10)
 
-**Estado em 18/10:** o GitHub Actions foi religado nos dois repositorios e o **backend deploya
-normalmente** (o manifesto esta em `enois/backend:dc44362`). O **front** falha em todos os runs no
-passo `⚙️ Configurar Credenciais AWS via OIDC` com
-`Not authorized to perform sts:AssumeRoleWithWebIdentity` (12 retries, sempre igual).
-
-**Nao e build e nao e o workflow:** os dois arquivos de workflow ficaram identicos — mesmo papel
-(`arn:aws:iam::818928662779:role/forest-dev-enois-ecr`), mesmas permissoes (`id-token: write`),
-mesma versao da action. O backend assume o papel; o front nao. A diferenca esta na **trust policy
-do papel**, que aceita o repositorio do backend e nao o do front.
-
-**O que fazer (quem tem acesso a AWS):** incluir na trust policy do `forest-dev-enois-ecr`
-
-```
-repo:Rede-ENois/enois-frontend:*
-```
-
-ao lado do que ja existe (`repo:Rede-ENois/enois-backend:*`). Se preferirem um papel por
-repositorio, criar o equivalente para o front e trocar a linha `role-to-assume` no workflow do
-repositorio do front (o nome `forest-dev-github`, usado antes da transferencia, nao vale mais).
-
-**Depois disso:** sem commit novo — dispare o workflow ou espere o proximo push. O primeiro deploy
-que passar leva junto tudo o que esta no `main` desde 17/10, incluindo as migracoes V57 (o 409 ao
-publicar pagina grande), V58 (blogs), V60 (selos), V61 (projetos), V62 (capa de comunidade), V63
-(vulgo), V64 (curriculo) e V65 (e-mail de candidatura) — o Flyway aplica sozinho no boot.
+1. **TLS do ALB** — politica `ELBSecurityPolicy-TLS13-1-2-2021-06` (desliga TLS 1.0/1.1, liga 1.3,
+   remove suites RSA estáticas: F-03/F-07).
+2. **Ocultar `Server: awselb`** (F-08).
+3. **AWS WAF** — não há WAF hoje; rate-based + managed rulesets.
+4. **Rotacionar `LINKEDIN_CLIENT_SECRET`** — está em plaintext no manifest do GitOps; mover para
+   Secret k8s (padrão do `enois-llm-secret`) e rotacionar no LinkedIn.
+5. **DNS `developers.enois.ia.br`** — CNAME + TLS no ingress (hoje NXDOMAIN; o portal está pronto).
 
 ### 1. Content origin for post pages — `paginas.enois.ia.br`
 
@@ -529,6 +512,34 @@ delete from flyway_schema_history where version = '<versao que falhou>';    # ou
   e `DELETE /push/subscriptions?endpoint=...` remove. Toda notificação criada por `NotificationService` também
   é enviada como push depois do commit (`PushNotificationListener` → `WebPushSender`); falha de push é logada e
   nunca quebra o fluxo que gerou a notificação. No app: menu da conta → "Ativar notificações no celular".
+
+## Credibilidade (reputação) — modelo e antifraude
+
+Fonte única: `profile/application/ReputationService.java` (recalculada na leitura; a coluna
+`users.reputation` é só a foto usada pelo ranking, atualizada periodicamente por
+`ReputationRefreshWorker`).
+
+**Componentes internos (a nota exibida continua 0–1000):**
+
+| Componente | Regra | Teto |
+|---|---|---|
+| T — trajetória | experiência/formação/certificação com retorno decrescente (√) | 195 |
+| R — relações | conexões (√) + recomendações **não recíprocas** (√) | 300 |
+| C — contribuição | **pessoas distintas** que interagiram (√), comunidades, eventos, mentoria concluída | 420 |
+| K — consistência | meses desde a criação (máx. 48) | 120 |
+| I — integridade | **só fato confirmado** (APPROVED/AUTO_PENALIZED), dedup por conteúdo, com teto | −600 |
+
+Conta verificada (e-mail **ou** 2FA) é requisito de identidade: sem ela, credibilidade = 0.
+
+**Regras antifraude (auditoria de 19/10/2026):** denúncia pendente não penaliza; N denúncias do
+mesmo conteúdo contam como um fato; recurso aceito marca a denúncia como DISMISSED (a nota
+volta); recomendações mútuas valem 0; autointeração não conta; comentário apagado devolve o
+contador; presenças de eventos são agregadas antes da purga de PII; tetos por categoria no
+currículo (10 por tipo); limite de frequência por conta em denúncias (10/h) e recomendações
+(20/dia) via `shared/security/ActionThrottle`.
+
+**Limiares:** publicar vaga exige **> 150** (JobService/JobPublishingPolicy/front alinhados);
+candidatar-se a moderador exige **pelo menos 200** (`rede.moderation.moderator-min-reputation`, padrão 200 desde 19/10).
 
 ## Segurança — pendências que exigem ação manual
 

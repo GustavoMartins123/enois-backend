@@ -69,6 +69,12 @@ Enquanto houver pendência real, a automação fica viva.
 
 > Atualize esta seção a cada execução: `- [x] feito — <o que> — <onde> (commit <hash>)`.
 
+> **Plano CONCLUÍDO em 2026-10-19.** Não há mais nenhum item aberto. A automação de 30 minutos
+> (`automation-423f2e18-213d-4b4e-9698-1252869e9bd2`) **não pôde ser removida por esta sessão**:
+> a ferramenta `CronDelete` não está disponível (só `CronList`) e o Computer Use responde
+> "unavailable" neste ambiente. Remover pela página de Automações do app. Enquanto ela existir,
+> cada execução deve apenas confirmar este estado — nada a implementar.
+
 ### Etapa 1 — Auditoria
 - [x] Mapear a arquitetura real: feed, comunidades, autenticação, persistência, mídia,
       notificações, AutoMod, denúncias (backend `rede` + front `connect-grow`) — escrito em
@@ -137,6 +143,13 @@ Enquanto houver pendência real, a automação fica viva.
       (só o dono). Carregamento, vazio e sem-acesso tratados na descoberta, na página e no painel.
       A moderação LOCAL (remover publicação/comentário pela administração) fica para a Etapa 6,
       junto com o AutoMod e as denúncias (2026-10-18).
+- [x] **Logo e banner na criação e na edição** — a API já aceitava `avatar`/`banner`/`bannerHtml`,
+      mas nenhum diálogo oferecia os campos; pior, o em branco virava nulo (que significa "mantém"),
+      então era impossível REMOVER a imagem. Agora: a criação envia logo + banner; a edição tem as
+      abas Foto/HTML (HtmlEditor sanitizado no backend) com trocar/remover; a página mostra o logo
+      ao lado do nome; no backend, nulo mantém e em branco limpa. `GroupIdentityTests` (2) e a
+      suíte de grupos **49/49** verdes, build do front verificado (2026-10-19; backend `22ada06`,
+      front `7996b99`).
 
 ### Etapa 6 — Segurança e moderação
 - [x] Moderação local — o autor apaga o próprio post/comentário; quem modera (`MODERATE_CONTENT`)
@@ -164,6 +177,17 @@ Enquanto houver pendência real, a automação fica viva.
       conteúdo e autor (GroupReports) (2026-10-18). **Risco residual:** a corrida "suspensão no
       meio de uma publicação" não tem teste dedicado (as duas operações passam pela mesma
       transação, mas o cenário concorrente não está exercitado).
+- [x] Notificações do contexto de grupos (seção 16) — `GroupNotifier` (backend `0ffa1ee`):
+      pedido pendente e entrada aberta avisam dono/admin; decisão avisa o solicitante; remoção
+      avisa o removido; transferência avisa o novo dono; mudança de estado pela plataforma avisa
+      o dono; comentário avisa o autor da publicação e resposta avisa o autor do comentário pai;
+      remoção pela moderação avisa o autor. O corpo nunca leva o texto do conteúdo (só o nome
+      público do grupo) e o href `/grupos/{slug}` continua exigindo autorização; ação própria
+      nunca notifica o autor. `GroupNotificationsTests` (9) cobre os caminhos e o removido
+      perdendo a leitura do feed; **suíte de grupos 46/46 verde** (2026-10-19). O front ganhou
+      ícones e navegação para os kinds novos (`8ec0223`, build verificado). **Fora do escopo
+      real:** "tópico seguido" e menção dentro do grupo não existem como recurso, então não há
+      notificação para eles.
 
 ### Etapa 7 — Comunidades
 - [x] Descrição opcional nas Comunidades (edição e apresentação), sem afetar registros antigos —
@@ -174,7 +198,111 @@ Enquanto houver pendência real, a automação fica viva.
       depois e limpar de novo (2026-10-18).
 
 ### Etapa 8 — Validação final
-- [ ] Suíte de testes executada; regressões corrigidas; migrations validadas; entrega documentada.
+- [x] **Suíte completa do backend** executada num worktree isolado (commit `22ada06`):
+      **448 testes em 119 classes, 0 falhas, 0 erros, 1 skip** (2026-10-19). Inclui os 48 de
+      Grupos; com o teste dedicado de isolamento Grupos × Comunidades, a suíte de grupos fica
+      **49/49**.
+- [x] **Suíte do front** (`npx vitest run`): **85 testes verdes** em 10 arquivos. Os 2 arquivos
+      `eslint/rules/*.test.js` não são suítes do Vitest e já falhavam antes (config pré-existente;
+      não é regressão de Grupos).
+- [x] **Migrations validadas** — V81 (tabelas de Grupos) e V84 (descrição opcional) aplicadas e
+      reaplicadas na bancada MariaDB 11.4; em produção o Flyway está na 86, sem pendências
+      (`GET /api/version`). Nenhuma migração destrutiva ou que toque registros existentes.
+- [x] **Critérios da seção 21** verificados um a um — mapa abaixo.
+- [x] **Relatório de entrega da seção 23** — abaixo.
+
+#### Mapa dos critérios da seção 21
+
+1. **Criação de grupo** — `GroupFlowTests` (dono, slug único, descoberta pública) e o diálogo de
+   criação no front (`/grupos`).
+2. **Edição de identidade visual e descrição** — `GroupIdentityTests` (logo, banner foto/HTML,
+   trocar e remover) + `GroupFlowTests` (permissão de edição) + `EditGroupDialog`.
+3. **Ingresso aberto** — `GroupFlowTests.entradaAbertaViraMembroNaHora` (e a recusa de duplicado).
+4. **Ingresso mediante aprovação** — `GroupFlowTests.entradaPorAprovacaoFicaPendenteEAprovaUmaVezSo`.
+5. **Aprovação e rejeição de solicitações** — `GroupFlowTests` (decisão única e concorrente) +
+   `GroupNotificationsTests.aprovacaoErejeicaoAvisamOSolicitante`.
+6. **Saída e remoção de membros** — `GroupFlowTests` (dono não sai sem transferir; remoção) +
+   `GroupSecurityTests` (o removido perde o acesso na hora) + `GroupNotificationsTests`.
+7. **Criação e administração de tópicos** — `GroupFeedTests` (criar, editar, reordenar, arquivar).
+8. **Publicação em tópicos** — `GroupFeedTests` (publica, lista por tópico, tópico de outro grupo
+   → 404).
+9. **Comentários e interações** — `GroupDiscussionTests` (comentário, resposta da mesma publicação,
+   reação alternando/trocando/removendo com contadores).
+10. **Isolamento entre grupos** — `GroupSecurityTests` (ids de outro grupo → 403/404; interação
+    cruzada recusada).
+11. **Isolamento entre Grupos e Comunidades** — `GroupCommunityIsolationTests` (novo: feed da
+    comunidade não vê o post do grupo e vice-versa) + estrutural (tabelas `group_*` × `posts`).
+12. **Isolamento do feed principal** — `GroupFeedTests.feedPrincipalNaoConheceConteudoDoGrupo`.
+13. **Proteção de anexos e URLs** — decisão registrada em Riscos (opção c): `GET /media/{id}` é
+    público por id (UUID não enumerável) e nenhum endpoint de grupo entrega mídia a não-membro; a
+    URL direta alcançável por quem já a tem fica como risco residual aceito e documentado.
+14. **Descoberta e pesquisa públicas** — `GroupFlowTests` (GET /groups sem sessão; busca por
+    nome/descrição; conteúdo interno nunca aparece).
+15. **Denúncias e AutoMod** — `GroupReportsTests` (`GROUP_POST`/`GROUP_COMMENT` chegam à moderação
+    com conteúdo e autor; a triagem por IA recebe o texto).
+16. **Penalidades e restrições administrativas** — `GroupPlatformTests` (`AdminGuard`, RESTRICTED,
+    SUSPENDED, ACTIVE; efeito na entrada/conteúdo/descoberta; auditoria).
+17. **Proteção do HTML personalizado** — `GroupSecurityTests` (script não é guardado) +
+    `GroupIdentityTests` (bannerHtml sanitizado).
+18. **Notificações com autorização correta** — `GroupNotificationsTests` (9 casos; o corpo nunca
+    leva o texto do conteúdo; href continua exigindo autorização).
+19. **Mudanças concorrentes de estado e permissões** — `GroupFlowTests` (duas aprovações → 409) e
+    `GroupSecurityTests`; **residual:** a corrida "suspensão no meio de uma publicação" não tem
+    teste dedicado (registrada em Riscos).
+20. **Compatibilidade com dados antigos** — V81 só cria tabelas, V84 só afrouxa uma coluna; nenhum
+    backfill; `CommunityDescriptionTests` prova nascer sem, ganhar e limpar.
+21. **Descrição opcional nas Comunidades** — `CommunityDescriptionTests` (1).
+22. **Regressão das funcionalidades existentes** — suíte completa do backend (448 verdes) e frente
+    (85 verdes).
+
+#### Relatório de entrega (seção 23)
+
+**Arquitetura encontrada.** Backend Spring Boot, um pacote por feature
+(`domínio`/`application`/`adapters`), sem Spring Security — autorização por endpoint via
+`CurrentUserResolver` (sessão + identidade verificada) e `AdminGuard` para a plataforma. Testes
+com `@SpringBootTest`/MockMvc/H2 e `TestAuthHelper`. Front TanStack Start (rota por arquivo), API
+em `src/lib/api/*` com `X-Session-Token`, tipos por arquivo e textos centrais.
+
+**Estruturas de dados.** V81 cria `groups`, `group_members`, `group_join_requests`, `group_topics`,
+`group_posts`, `group_post_comments` e `group_post_reactions` — próprias, separadas de Comunidades.
+A V84 torna a descrição das Comunidades opcional (aditiva, sem tocar registros). Nenhuma tabela
+existente foi alterada para suportar Grupos.
+
+**Endpoints.** `/groups` (GET lista/descoberta, POST cria), `/groups/{id|slug}` (GET/PATCH),
+`/{id}/join`, `/{id}/members` e `/{id}/members/{memberId}`, `/{id}/requests` (+ approve/reject),
+`/{id}/transfer`, `/{id}/status` e `/{id}/close`, `/{id}/topics` (criar/editar/reordenar/arquivar),
+`/{id}/posts` (publicar/listar/remover), `/{id}/posts/{postId}/comments` (+ remover) e
+`/{id}/posts/{postId}/reactions`.
+
+**Frontend.** `/grupos` (descoberta pública e criação com logo/banner), `/grupos/$slug` (página
+pública, ingresso, edição com logo/banner foto ou HTML, tópicos, feed, comentários, reações,
+painel de administração), diálogos de solicitações/membros/remoção/transferência, denúncia e
+notificações com ícone/navegação próprios.
+
+**Autorização.** `GroupPermissions` (papel → capacidade) é a única tabela de decisão; o backend
+valida em toda operação (leitura privada exige associação, escrita exige capacidade, estado do
+grupo é conferido no serviço). A plataforma mantém `AdminGuard` para RESTRICTED/SUSPENDED/ACTIVE.
+
+**Moderação e denúncias.** `TargetType` ganhou `GROUP_POST`/`GROUP_COMMENT`; os leitores de
+conteúdo/autor do feed resolvem o conteúdo de grupo, então o painel de moderação e a triagem por IA
+recebem texto e autor reais. Remoções locais e mudanças de estado vão para `shared/audit`.
+
+**Testes executados.** Backend: 448 em 119 classes (0 falhas, 1 skip); Grupos 49/49. Front: 85
+testes (0 falhas; 2 arquivos de regra do ESLint não são Vitest — pré-existente). Migrações
+validadas na bancada MariaDB 11.4 e em produção (Flyway 86).
+
+**Vulnerabilidades encontradas e corrigidas.** As FKs da V81 derrubariam o boot em produção pela
+collation da `users` (errno 150) — foram removidas (outra sessão) e a amarração tópico↔grupo passou
+a ser conferida e testada no serviço; HTML do cabeçalho é sanitizado com a régua do perfil (script
+não é guardado); todo acesso privado é negado a visitante/removido no backend, com testes.
+
+**Riscos residuais.** Mídia por URL direta (aceito e documentado — opção c); corrida
+"suspensão no meio de uma publicação" sem teste dedicado; "tópico seguido" e menção dentro do grupo
+não existem como recurso (não há notificação para eles); o composer do feed ainda está duplicado
+entre feed/comunidade (dívida do front, sem impacto funcional).
+
+**Pendências externas.** Nenhuma para Grupos. (O produto "Share on LinkedIn" e a chave de
+criptografia são pendências do LinkedIn, fora deste plano.)
 
 ### Pendências, riscos e decisões
 
@@ -227,11 +355,13 @@ de publicação está duplicado em `routes/feed.tsx` e `routes/comunidades.$comm
 
 #### Riscos e pendências
 
-- **Mídia de grupo é alcançável por URL.** `GET /media/{id}` é público (precisou ser, senão o feed
-  não renderiza). Uma imagem publicada num grupo fica acessível a quem tiver o id. Decidir na Etapa 4
-  entre (a) leitura de mídia de grupo com autorização, (b) URL assinada/expirável, ou (c) aceitar e
-  documentar. O plano lista "anexo privado acessado diretamente por URL" como teste obrigatório da
-  seção 18 — não deixar passar em branco.
+- **Mídia de grupo é alcançável por URL — decisão de 2026-10-19: aceitar e documentar (opção c).**
+  `GET /media/{id}` continua público (precisou ser, senão o feed não renderiza), os ids são UUID
+  não enumeráveis e nenhum endpoint de grupo entrega mídia a não-membro — o feed exige associação
+  e a resposta de post/comentário só volta para membro. Quem já tem a URL direta continua
+  alcançando o arquivo; isso é o risco residual aceito, registrado aqui em vez de silenciado.
+  URL assinada/expirável fica para quando o serviço de mídia ganhar contexto de dono (o que
+  também resolve mídia do feed principal e de comunidades de uma vez).
 - **Contadores desnormalizados** (`member_count`, `post_count`, `reactions`, `comments`): existem
   para o feed não fazer `count` a cada leitura; precisam ser atualizados na mesma transação da escrita.
 - **Composer duplicado no front**: na Etapa 5, extrair um `PostComposer` em vez de copiar a terceira vez.

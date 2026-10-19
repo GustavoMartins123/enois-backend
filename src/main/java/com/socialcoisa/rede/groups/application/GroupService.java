@@ -41,11 +41,13 @@ public class GroupService {
 
 	private final GroupRepository repository;
 	private final AuditLogRepository audit;
+	private final GroupNotifier notifier;
 	private final Clock clock;
 
-	public GroupService(GroupRepository repository, AuditLogRepository audit, Clock clock) {
+	public GroupService(GroupRepository repository, AuditLogRepository audit, GroupNotifier notifier, Clock clock) {
 		this.repository = repository;
 		this.audit = audit;
+		this.notifier = notifier;
 		this.clock = clock;
 	}
 
@@ -75,11 +77,14 @@ public class GroupService {
 		Group group = requireGroup(groupId);
 		require(roleOf(groupId, actorId), GroupCapability.EDIT_GROUP);
 		// Mesma régua da capa do perfil e da comunidade: nulo mantém, em branco limpa, com texto
-		// sanitiza. Um cabeçalho de espaços não é cabeçalho.
+		// sanitiza. Um cabeçalho de espaços não é cabeçalho. Avatar/banner seguem a mesma regra
+		// (antes o em branco virava nulo e era impossível REMOVER a imagem pela edição).
 		String finalBannerHtml = bannerHtml == null ? null
 			: (StringUtils.hasText(bannerHtml) ? SafeHtml.requireProfileHtml(bannerHtml) : "");
+		String finalAvatar = avatar == null ? null : avatar.trim();
+		String finalBanner = banner == null ? null : banner.trim();
 		Group updated = group.update(trimToNull(name), trimToNull(description), trimToNull(topic),
-			trimToNull(avatar), trimToNull(banner), finalBannerHtml, joinMode, clock.instant());
+			finalAvatar, finalBanner, finalBannerHtml, joinMode, clock.instant());
 		repository.save(updated);
 		return updated;
 	}
@@ -133,6 +138,7 @@ public class GroupService {
 		if (group.joinMode() == GroupJoinMode.OPEN) {
 			repository.saveMember(GroupMember.join(groupId, userId, GroupRole.MEMBER, clock.instant()));
 			repository.adjustMemberCount(groupId, 1);
+			notifier.memberJoined(group, userId);
 			return JoinOutcome.MEMBER;
 		}
 		// Entrada por aprovação: um pendente por pessoa e grupo (o banco também garante).
@@ -141,6 +147,7 @@ public class GroupService {
 		}
 		repository.saveJoinRequest(
 			GroupJoinRequest.create(newId("group_request"), groupId, userId, null, clock.instant()));
+		notifier.joinRequested(group, userId);
 		return JoinOutcome.PENDING;
 	}
 
@@ -159,6 +166,7 @@ public class GroupService {
 	@Transactional
 	public void removeMember(String groupId, String actorId, String targetUserId) {
 		require(roleOf(groupId, actorId), GroupCapability.MANAGE_MEMBERS);
+		Group group = requireGroup(groupId);
 		GroupMember target = repository.findMember(groupId, targetUserId)
 			.orElseThrow(() -> new ApiException(404, "NOT_MEMBER", "Essa pessoa nao e membro do grupo."));
 		if (target.role() == GroupRole.OWNER) {
@@ -166,6 +174,7 @@ public class GroupService {
 		}
 		repository.removeMember(groupId, targetUserId);
 		repository.adjustMemberCount(groupId, -1);
+		notifier.memberRemoved(group, targetUserId, actorId);
 	}
 
 	/**
@@ -186,6 +195,7 @@ public class GroupService {
 		repository.save(updated);
 		audit.record(new UserId(actorId), "GROUP_STATUS_CHANGED", groupId,
 			"{\"from\":\"" + group.status() + "\",\"to\":\"" + status + "\",\"reason\":\"" + jsonSafe(reason) + "\"}");
+		notifier.statusChanged(updated, status.name(), reason, actorId);
 		return updated;
 	}
 
@@ -218,6 +228,7 @@ public class GroupService {
 		repository.save(group.withOwner(targetUserId, clock.instant()));
 		repository.saveMember(target.withRole(GroupRole.OWNER));
 		repository.saveMember(current.withRole(GroupRole.ADMIN));
+		notifier.ownershipTransferred(group, targetUserId, actorId);
 	}
 
 	@Transactional(readOnly = true)
@@ -254,6 +265,7 @@ public class GroupService {
 			repository.saveMember(GroupMember.join(groupId, request.userId(), GroupRole.MEMBER, now));
 			repository.adjustMemberCount(groupId, 1);
 		}
+		notifier.requestDecided(group, request.userId(), actorId, approve);
 		return repository.findRequestById(requestId).orElse(request);
 	}
 

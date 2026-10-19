@@ -17,6 +17,9 @@ import com.socialcoisa.rede.shared.web.ApiException;
 @Service
 public class ProfileExtensionService implements ManageProfileExtensionUseCase {
 
+	/** Teto por categoria: currículo artificial (dezenas de entradas) deixa de virar nota. */
+	private static final int MAX_ENTRIES_PER_KIND = 10;
+
 	private final ProfileExtensionRepository repository;
 	private final Clock clock;
 
@@ -37,7 +40,12 @@ public class ProfileExtensionService implements ManageProfileExtensionUseCase {
 	@Transactional
 	public ExperienceView addExperience(String userId, String title, String company, String location,
 			String description, LocalDate startDate, LocalDate endDate) {
-		int order = repository.countExperiencesByUserId(userId);
+		int ordemAtual = repository.countExperiencesByUserId(userId);
+		if (ordemAtual >= MAX_ENTRIES_PER_KIND) {
+			throw new ApiException(409, "EXPERIENCES_LIMIT",
+				"Você pode ter no máximo " + MAX_ENTRIES_PER_KIND + " experiências no perfil.");
+		}
+		int order = ordemAtual;
 		Experience experience = Experience.create(userId, title, company, location, description, startDate, endDate,
 			order, clock.instant());
 		return toExperienceView(repository.saveExperience(experience));
@@ -75,7 +83,12 @@ public class ProfileExtensionService implements ManageProfileExtensionUseCase {
 	@Transactional
 	public EducationView addEducation(String userId, String school, String degree, String field, String description,
 			LocalDate startDate, LocalDate endDate) {
-		int order = repository.countEducationsByUserId(userId);
+		int ordemAtual = repository.countEducationsByUserId(userId);
+		if (ordemAtual >= MAX_ENTRIES_PER_KIND) {
+			throw new ApiException(409, "EDUCATION_LIMIT",
+				"Você pode ter no máximo " + MAX_ENTRIES_PER_KIND + " formações no perfil.");
+		}
+		int order = ordemAtual;
 		Education education = Education.create(userId, school, degree, field, description, startDate, endDate, order,
 			clock.instant());
 		return toEducationView(repository.saveEducation(education));
@@ -113,6 +126,10 @@ public class ProfileExtensionService implements ManageProfileExtensionUseCase {
 	@Transactional
 	public CertificationView addCertification(String userId, String name, String issuer, String description,
 			LocalDate issueDate, LocalDate expirationDate, String credentialUrl) {
+		if (repository.countCertificationsByUserId(userId) >= MAX_ENTRIES_PER_KIND) {
+			throw new ApiException(409, "CERTIFICATIONS_LIMIT",
+				"Você pode ter no máximo " + MAX_ENTRIES_PER_KIND + " certificações no perfil.");
+		}
 		Certification certification = Certification.create(userId, name, issuer, description, issueDate, expirationDate,
 			credentialUrl, clock.instant());
 		return toCertificationView(repository.saveCertification(certification));

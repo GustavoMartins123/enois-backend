@@ -79,6 +79,17 @@ class GroupContentPersistenceAdapter implements GroupContentRepository {
 	}
 
 	@Override
+	public Optional<GroupPost> findPinned(String groupId) {
+		return posts.findFirstByGroupIdAndPinnedTrueAndStatus(groupId, GroupPostStatus.PUBLISHED)
+			.map(GroupPostJpaEntity::toDomain);
+	}
+
+	@Override
+	public void clearPinned(String groupId) {
+		posts.clearPinned(groupId);
+	}
+
+	@Override
 	public void saveComment(GroupComment comment) {
 		comments.save(GroupCommentJpaEntity.fromDomain(comment));
 	}

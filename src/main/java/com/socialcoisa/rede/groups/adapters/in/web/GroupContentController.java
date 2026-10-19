@@ -25,6 +25,7 @@ import com.socialcoisa.rede.idempotency.application.CommandResponse;
 import com.socialcoisa.rede.idempotency.application.IdempotencyApplicationService;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.profile.domain.UserProfile;
+import com.socialcoisa.rede.shared.web.ApiException;
 import com.socialcoisa.rede.shared.web.CurrentUser;
 import com.socialcoisa.rede.shared.web.CurrentUserResolver;
 import com.socialcoisa.rede.shared.web.CursorCodec;
@@ -144,6 +145,42 @@ class GroupContentController {
 		String nextCursor = posts.size() == limit
 			? cursorCodec.encode(posts.get(posts.size() - 1).createdAt()) : null;
 		return new PageResponse<>(items, nextCursor);
+	}
+
+	/** A única publicação fixada no topo do grupo; 404 quando não há. */
+	@GetMapping("/{groupId}/pinned")
+	GroupPostView pinned(@RequestHeader(value = "X-Session-Token", required = false) String token,
+			@PathVariable String groupId) {
+		CurrentUser user = currentUserResolver.resolve(null, token);
+		GroupPost post = feed.pinnedPost(groupId, user.id().value())
+			.orElseThrow(() -> new ApiException(404, "NO_PINNED_POST", "Nao ha publicacao fixada neste grupo."));
+		return postView(post, feed.myReactions(groupId, user.id().value(), List.of(post.id())).get(post.id()));
+	}
+
+	@PostMapping("/{groupId}/posts/{postId}/pin")
+	ResponseEntity<String> pin(@RequestHeader(value = "X-Session-Token", required = false) String token,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@PathVariable String groupId, @PathVariable String postId) {
+		CurrentUser user = currentUserResolver.resolve(null, token);
+		String hash = idempotency.hash(Map.of("groupId", groupId, "postId", postId, "action", "pin"));
+		return idempotency.execute(user.id(), "POST", "/api/groups/{groupId}/posts/{postId}/pin", idempotencyKey, hash,
+			() -> {
+				GroupPost post = feed.pinPost(groupId, postId, user.id().value());
+				return new CommandResponse(200, postView(post, null));
+			});
+	}
+
+	@DeleteMapping("/{groupId}/posts/{postId}/pin")
+	ResponseEntity<String> unpin(@RequestHeader(value = "X-Session-Token", required = false) String token,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@PathVariable String groupId, @PathVariable String postId) {
+		CurrentUser user = currentUserResolver.resolve(null, token);
+		String hash = idempotency.hash(Map.of("groupId", groupId, "postId", postId, "action", "unpin"));
+		return idempotency.execute(user.id(), "DELETE", "/api/groups/{groupId}/posts/{postId}/pin", idempotencyKey,
+			hash, () -> {
+				feed.unpinPost(groupId, postId, user.id().value());
+				return new CommandResponse(200, new StatusResponse(postId, "UNPINNED"));
+			});
 	}
 
 	@PostMapping("/{groupId}/posts/{postId}/comments")

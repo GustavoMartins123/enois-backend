@@ -9,6 +9,52 @@ depois da virada. É esse o "fallback": ele é estrutural, não um caminho espec
 > real** (o S3 só existe em produção). A primeira virada de ambiente é a estreia — vale ler a seção
 > "Primeira virada, com calma". A migração dos objetos antigos ainda **não** está implementada.
 
+## Estado verificado em 2026-10-19
+
+Verificação feita contra a produção e o código deste repo:
+
+- **A virada ainda não começou.** O manifesto roda com `REDE_MEDIA_STORAGE=imagekit`; upload novo
+  continua indo para o ImageKit e **nenhum asset foi migrado**. O "sem ninguém perceber" está
+  garantido só porque nada mudou — não porque a migração esteja em andamento.
+- **Bloqueio 1 — a CDN pública não serve HTTPS.** `cdn.enois.ia.br` aponta para o CloudFront
+  (`f2b96876…cloudfront.net`), mas o certificado apresentado é o padrão `*.cloudfront.net`: o
+  `subjectAltName` não cobre o domínio e o TLS falha na validação. Com `-k`, o CloudFront responde
+  **403**. Falta configurar o **alternate domain name** + certificado ACM (us-east-1) na
+  distribuição. Enquanto isso, `REDE_MEDIA_S3_PUBLIC_BASE_URL=https://cdn.enois.ia.br` não serve
+  nenhuma leitura — virar o storage agora deixaria toda mídia nova quebrada.
+- **Bloqueio 2 — exclusão no S3 não tem gateway.** `S3StorageConfig` cria URL factory, presigner e
+  signer; **não** cria `MediaStorageGateway`. O bean do ImageKit é incondicional, então em modo s3
+  o delete de mídia chamaria a API do ImageKit. Falta um `S3MediaStorageGateway` (`DeleteObject`)
+  e condicionar o gateway do ImageKit ao modo `imagekit`.
+- **Cópia executada em produção (2026-10-19): falhou por CREDENCIAL, não por código.**
+  `GET /api/media/migration` mostrou `total=1537, imagekit=1537, s3Copied=0, errors=5` e
+  `lastError="copia para o S3 falhou: Unable to load credentials from any of the providers in the
+  chain AwsCredentialsProviderChain(...)"`. O pod usa a ServiceAccount **`socialthing-sa`**, que
+  não tem uma role IRSA com acesso ao bucket. **Nada foi relinkado** (`cdn_url` intacto) — a
+  garantia de não perder mídia funcionou na prática. A cópia ficou **pausada** (env `false`) até
+  a role `s3:PutObject/GetObject/DeleteObject` ser anexada à SA (annotation
+  `eks.amazonaws.com/role-arn` ou role no node/IRSA).
+- **Bloqueio 3 — migração dos antigos: RESOLVIDO no código (V92, 2026-10-19).** A cópia para o S3
+  agora roda em segundo plano (`MediaMigrationWorker`) e a fase de flip está implementada, mas
+  **desligada por padrão** até o Bloqueio 1 (CDN) ser resolvido. O status público
+  `GET /media/migration` mostra `total`, `imagekit`, `s3Copied`, `s3Active`, `errors` e `lastError`.
+- **Upload assinado nunca rodou contra o bucket real** (não há credencial AWS nesta máquina); a
+  primeira virada é a estreia.
+- **Vídeo enviado como arquivo:** o player do Énóis pedia a URL crua do ImageKit e recebia
+  `403 ELIMIT` (cota de transformação de vídeo da conta) — o vídeo não tocava. O front passou a
+  pedir o **original** (`?tr=orig-true`) em todos os players e no `og:video` (commit `16152db`);
+  o vídeo de teste responde **206** com Range e `readyState=4` no Chrome. Em S3 a URL fica
+  intacta (sem transformação), mas o poster de vídeo continua sem derivada (limitação abaixo).
+
+**Ordem para destravar:** (1) **credencial S3 para o pod**: role IRSA com
+`s3:PutObject/GetObject/DeleteObject` no bucket/prefixo, anexada à `socialthing-sa` (é o que o
+worker já acusou em `lastError`) — depois religar `REDE_MEDIA_MIGRATION_ENABLED=true`; (2)
+CloudFront com alternate domain + ACM e conferir o `curl -I` com certificado válido; (3)
+`S3MediaStorageGateway` (delete) e condicionar o gateway do ImageKit ao modo `imagekit`; (4) ligar
+o flip (`REDE_MEDIA_MIGRATION_FLIP_ENABLED=true`) e conferir o `s3Active` subindo; (5) testar um
+upload real numa réplica e só então virar `REDE_MEDIA_STORAGE=s3`; (6) preservar os objetos no
+ImageKit (a migração nunca apaga).
+
 ## O que a AWS precisa ter
 
 | item | por quê |
@@ -49,12 +95,39 @@ cluster (IRSA no service account). As tarefas de permissão acima são no **role
 Se a subida falhar com **403**, quase sempre é uma das duas: CORS do bucket sem `PUT` para
 `https://enois.ia.br`, ou `Content-Type` diferente do assinado.
 
-## Migração dos objetos antigos (ainda não implementada)
+## Migração dos objetos antigos (implementada na V92)
 
-O desenho combinado, para quem for pegar: rodada incremental e idempotente — pega N assets cujo
-`cdn_url` ainda é do ImageKit, baixa, sobe para o S3 no mesmo `objectKey`, **confere** e só então
-atualiza o `cdn_url`; o objeto no ImageKit é preservado (é a segurança para voltar atrás). Rodadas
-pequenas, repetidas, é o "aos poucos" — sem janela de manutenção e sem apagar nada no ImageKit.
+Duas fases, ambas idempotentes e em rodadas pequenas (sem janela de manutenção):
+
+1. **Cópia** (`REDE_MEDIA_MIGRATION_ENABLED=true`): a cada rodada o worker pega um lote de assets
+   ainda no ImageKit, baixa o **original** (vídeo/áudio com `?tr=orig-true`, senão a cota de
+   transformação responde 403), sobe para o S3 com a chave em barras de verdade
+   (`uploads/media_<id>/media/<uuid>/<arquivo>`) e **confere pelo HeadObject** que o tamanho bate.
+   Só então grava `s3_cdn_url` e `s3_migrated_at`. O `cdn_url` **não muda** nesta fase e o objeto
+   no ImageKit é preservado — nenhum usuário perde mídia. Falha incrementa
+   `s3_migration_attempts`/`s3_last_error` e tenta de novo (até 10 tentativas).
+2. **Flip** (`REDE_MEDIA_MIGRATION_FLIP_ENABLED=true`): só troca o `cdn_url` para o endereço do S3
+   **depois de a URL pública responder** (HEAD 2xx com o content-type certo). Se o CDN estiver
+   fora, o asset continua no ImageKit. É o que impede a migração de quebrar a leitura.
+
+Variáveis (todas opcionais; o padrão é desligado):
+
+| variável | padrão | para quê |
+|---|---|---|
+| `REDE_MEDIA_MIGRATION_ENABLED` | `false` | liga a fase de cópia |
+| `REDE_MEDIA_MIGRATION_FLIP_ENABLED` | `false` | liga o flip (só com o CDN válido) |
+| `REDE_MEDIA_MIGRATION_BATCH_SIZE` | `10` | assets por rodada |
+| `REDE_MEDIA_MIGRATION_DELAY_MS` | `30000` | intervalo entre rodadas |
+| `REDE_MEDIA_MIGRATION_INITIAL_DELAY_MS` | `45000` | espera depois do boot |
+
+Progresso: `GET /api/media/migration` (contagens agregadas e o último erro; sem ids/URLs).
+O asset só conta em `s3Active` quando o `cdn_url` já aponta para o S3; `s3Copied` inclui a cópia
+verificada que ainda não foi relinkada.
+
+**Fora desta fase:** as URLs gravadas fora de `media_assets` (avatar/banner de perfil, capa de
+comunidade, banner de grupo, capa de evento etc.) continuam apontando para o ImageKit, que
+**preserva os objetos**. O relink dessas colunas é a etapa seguinte, com o mesmo mapa
+objeto→S3; nada quebra enquanto isso porque o ImageKit segue servindo.
 
 ## Limitações conhecidas
 
