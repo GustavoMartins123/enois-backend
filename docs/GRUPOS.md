@@ -164,6 +164,17 @@ Enquanto houver pendência real, a automação fica viva.
       conteúdo e autor (GroupReports) (2026-10-18). **Risco residual:** a corrida "suspensão no
       meio de uma publicação" não tem teste dedicado (as duas operações passam pela mesma
       transação, mas o cenário concorrente não está exercitado).
+- [x] Notificações do contexto de grupos (seção 16) — `GroupNotifier` (backend `0ffa1ee`):
+      pedido pendente e entrada aberta avisam dono/admin; decisão avisa o solicitante; remoção
+      avisa o removido; transferência avisa o novo dono; mudança de estado pela plataforma avisa
+      o dono; comentário avisa o autor da publicação e resposta avisa o autor do comentário pai;
+      remoção pela moderação avisa o autor. O corpo nunca leva o texto do conteúdo (só o nome
+      público do grupo) e o href `/grupos/{slug}` continua exigindo autorização; ação própria
+      nunca notifica o autor. `GroupNotificationsTests` (9) cobre os caminhos e o removido
+      perdendo a leitura do feed; **suíte de grupos 46/46 verde** (2026-10-19). O front ganhou
+      ícones e navegação para os kinds novos (`8ec0223`, build verificado). **Fora do escopo
+      real:** "tópico seguido" e menção dentro do grupo não existem como recurso, então não há
+      notificação para eles.
 
 ### Etapa 7 — Comunidades
 - [x] Descrição opcional nas Comunidades (edição e apresentação), sem afetar registros antigos —
@@ -227,11 +238,13 @@ de publicação está duplicado em `routes/feed.tsx` e `routes/comunidades.$comm
 
 #### Riscos e pendências
 
-- **Mídia de grupo é alcançável por URL.** `GET /media/{id}` é público (precisou ser, senão o feed
-  não renderiza). Uma imagem publicada num grupo fica acessível a quem tiver o id. Decidir na Etapa 4
-  entre (a) leitura de mídia de grupo com autorização, (b) URL assinada/expirável, ou (c) aceitar e
-  documentar. O plano lista "anexo privado acessado diretamente por URL" como teste obrigatório da
-  seção 18 — não deixar passar em branco.
+- **Mídia de grupo é alcançável por URL — decisão de 2026-10-19: aceitar e documentar (opção c).**
+  `GET /media/{id}` continua público (precisou ser, senão o feed não renderiza), os ids são UUID
+  não enumeráveis e nenhum endpoint de grupo entrega mídia a não-membro — o feed exige associação
+  e a resposta de post/comentário só volta para membro. Quem já tem a URL direta continua
+  alcançando o arquivo; isso é o risco residual aceito, registrado aqui em vez de silenciado.
+  URL assinada/expirável fica para quando o serviço de mídia ganhar contexto de dono (o que
+  também resolve mídia do feed principal e de comunidades de uma vez).
 - **Contadores desnormalizados** (`member_count`, `post_count`, `reactions`, `comments`): existem
   para o feed não fazer `count` a cada leitura; precisam ser atualizados na mesma transação da escrita.
 - **Composer duplicado no front**: na Etapa 5, extrair um `PostComposer` em vez de copiar a terceira vez.
