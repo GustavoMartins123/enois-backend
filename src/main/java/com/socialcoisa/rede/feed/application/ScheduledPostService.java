@@ -48,7 +48,8 @@ public class ScheduledPostService {
 	}
 
 	public record ScheduleCommand(PostType type, String content, String pageHtml, String articleBody,
-			List<String> tags, List<String> mediaIds, String communityId, Instant scheduledAt) {
+			List<String> tags, List<String> mediaIds, List<String> mentionedUserIds, String communityId,
+			Instant scheduledAt) {
 	}
 
 	@Transactional
@@ -84,8 +85,9 @@ public class ScheduledPostService {
 		}
 		ScheduledPost post = new ScheduledPost(newId(), userId, type, command.content(), command.pageHtml(),
 			command.articleBody(), command.tags() == null ? List.of() : command.tags(),
-			command.mediaIds() == null ? List.of() : command.mediaIds(), command.communityId(), scheduledAt, now,
-			null, 0);
+			command.mediaIds() == null ? List.of() : command.mediaIds(),
+			command.mentionedUserIds() == null ? List.of() : command.mentionedUserIds(), command.communityId(),
+			scheduledAt, now, null, 0);
 		return repository.save(post);
 	}
 
@@ -117,9 +119,11 @@ public class ScheduledPostService {
 		int published = 0;
 		for (ScheduledPost post : due) {
 			try {
+				// As menções valem no momento da PUBLICAÇÃO: quem foi marcado é avisado quando o
+				// post entra no ar, não quando ele foi agendado.
 				publishPost.publish(new PublishPostCommand(new UserId(post.userId()), post.type(), post.content(),
 					post.pageHtml(), post.articleBody(), post.tags(), post.mediaIds(), post.communityId(),
-					List.of()));
+					post.mentionedUserIds()));
 				repository.delete(post.id());
 				published++;
 			}

@@ -52,7 +52,7 @@ class ScheduledPostController {
 			() -> new CommandResponse(201, view(service.schedule(user.id().value(),
 				new ScheduledPostService.ScheduleCommand(tipo(request.type()), request.content(),
 					request.pageHtml(), request.articleBody(), request.tags(), request.mediaIds(),
-					request.communityId(), instante(request.scheduledAt()))))));
+					request.mentionedUserIds(), request.communityId(), instante(request.scheduledAt()))))));
 	}
 
 	@GetMapping("/feed/scheduled")
@@ -101,7 +101,7 @@ class ScheduledPostController {
 	}
 
 	record ScheduleRequest(String type, String content, String pageHtml, String articleBody, List<String> tags,
-			List<String> mediaIds, String communityId, String scheduledAt) {
+			List<String> mediaIds, List<String> mentionedUserIds, String communityId, String scheduledAt) {
 	}
 
 	record View(String id, String type, String content, String pageHtml, String communityId, String scheduledAt,

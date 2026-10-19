@@ -80,7 +80,8 @@ class ScheduledPostTests {
 		ScheduledPost agendado = scheduledPosts.findById(id).orElseThrow();
 		scheduledPosts.save(new ScheduledPost(agendado.id(), agendado.userId(), agendado.type(), agendado.content(),
 			agendado.pageHtml(), agendado.articleBody(), agendado.tags(), agendado.mediaIds(),
-			agendado.communityId(), Instant.now().minusSeconds(5), agendado.createdAt(), null, 0));
+			agendado.mentionedUserIds(), agendado.communityId(), Instant.now().minusSeconds(5),
+			agendado.createdAt(), null, 0));
 	}
 
 	@Test

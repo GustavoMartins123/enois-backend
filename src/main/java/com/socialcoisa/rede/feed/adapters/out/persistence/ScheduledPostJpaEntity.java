@@ -36,6 +36,9 @@ class ScheduledPostJpaEntity {
 	@Column(name = "media_ids", columnDefinition = "text")
 	String mediaIds;
 
+	@Column(name = "mentioned_ids", columnDefinition = "text")
+	String mentionedIds;
+
 	@Column(name = "community_id")
 	String communityId;
 
