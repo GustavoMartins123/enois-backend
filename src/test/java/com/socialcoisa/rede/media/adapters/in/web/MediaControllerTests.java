@@ -23,9 +23,16 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import com.socialcoisa.rede.shared.web.TestAuthHelper;
 
-@SpringBootTest
+@SpringBootTest(properties = {"rede.media.storage=s3", "rede.media.s3.bucket=bucket-de-teste",
+		"rede.media.s3.publicBaseUrl=https://cdn.exemplo.com"})
 @AutoConfigureMockMvc
 class MediaControllerTests {
+
+	static {
+		System.setProperty("aws.accessKeyId", "test");
+		System.setProperty("aws.secretAccessKey", "test");
+	}
+
 
 	@Autowired
 	private MockMvc mockMvc;

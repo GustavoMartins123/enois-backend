@@ -29,9 +29,16 @@ import com.socialcoisa.rede.shared.web.TestAuthHelper;
  * que aconteceu com "post com midia nao mostra a midia". O id e opaco (uuid) e so aparece em
  * conteudo que ja esta publico, entao a leitura nao expoe nada novo.
  */
-@SpringBootTest
+@SpringBootTest(properties = {"rede.media.storage=s3", "rede.media.s3.bucket=bucket-de-teste",
+		"rede.media.s3.publicBaseUrl=https://cdn.exemplo.com"})
 @AutoConfigureMockMvc
 class MediaPublicReadTests {
+
+	static {
+		System.setProperty("aws.accessKeyId", "test");
+		System.setProperty("aws.secretAccessKey", "test");
+	}
+
 
 	@Autowired
 	private MockMvc mockMvc;

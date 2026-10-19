@@ -17,9 +17,16 @@ import tools.jackson.databind.ObjectMapper;
 import com.socialcoisa.rede.shared.web.TestAuthHelper;
 
 /** Diagnostico: upload de midia com conta verificada deve funcionar; sem sessao, 401. */
-@SpringBootTest
+@SpringBootTest(properties = {"rede.media.storage=s3", "rede.media.s3.bucket=bucket-de-teste",
+		"rede.media.s3.publicBaseUrl=https://cdn.exemplo.com"})
 @AutoConfigureMockMvc
 class MediaUploadAuthTests {
+
+	static {
+		System.setProperty("aws.accessKeyId", "test");
+		System.setProperty("aws.secretAccessKey", "test");
+	}
+
 
 	@Autowired
 	private MockMvc mockMvc;

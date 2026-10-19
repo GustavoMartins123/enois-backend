@@ -48,6 +48,11 @@ public class MediaService implements CreateMediaUploadUseCase, GetMediaAssetUseC
 	@Transactional
 	public MediaUploadView createUpload(CreateMediaUploadCommand command) {
 		validate(command);
+		// URGENTE (19/10/2026): o ImageKit foi comprometido e NAO recebe mais arquivo novo.
+		// Upload so existe com o S3 configurado (REDE_MEDIA_STORAGE=s3 + bucket); sem isso a
+		// resposta e 503 — de proposito, nunca um caminho de escrita no provedor antigo.
+		MediaUploadSigner signer = uploadSigner.orElseThrow(() -> new ApiException(503, "UPLOADS_DISABLED",
+			"O envio de midia esta temporariamente desativado enquanto o armazenamento e migrado."));
 		String mediaId = newId("media");
 		String objectKey = storageUrlFactory.objectKey(mediaId, command.fileName().trim());
 		MediaAsset asset = MediaAsset.pending(mediaId, command.ownerId(), command.fileName().trim(),
@@ -55,11 +60,7 @@ public class MediaService implements CreateMediaUploadUseCase, GetMediaAssetUseC
 			storageUrlFactory.cdnUrl(objectKey), clock.instant(), clock.instant().plus(Duration.ofMinutes(15)),
 			storageUrlFactory.provider());
 		MediaAsset saved = mediaAssetRepository.save(asset);
-		// Com S3, quem sobe o arquivo e o browser com URL assinada; com ImageKit, o front segue o
-		// fluxo multipart de sempre — por isso o `provider` na resposta.
-		return uploadSigner
-			.map(signer -> MediaUploadView.fromSigned(saved, signer.sign(objectKey, saved.mimeType())))
-			.orElseGet(() -> MediaUploadView.from(saved, storageUrlFactory.uploadUrl(objectKey)));
+		return MediaUploadView.fromSigned(saved, signer.sign(objectKey, saved.mimeType()));
 	}
 
 	@Override
