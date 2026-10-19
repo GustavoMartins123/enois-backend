@@ -42,13 +42,14 @@ class CommunityPersistenceAdapter implements CommunityRepository {
 	}
 
 	@Override
-	public List<Community> findAll(String topic, Instant before, int limit) {
+	public List<Community> findAll(String topic, String query, Instant before, int limit) {
 		PageRequest page = PageRequest.of(0, limit);
+		String q = StringUtils.hasText(query) ? query.trim() : "";
 		List<CommunityJpaEntity> entities;
 		if (StringUtils.hasText(topic)) {
-			entities = springData.findByTopic(topic, before, page);
+			entities = springData.findByTopic(topic, q, before, page);
 		} else {
-			entities = springData.findAllBefore(before, page);
+			entities = springData.findAllBefore(q, before, page);
 		}
 		return entities.stream().map(CommunityJpaEntity::toDomain).toList();
 	}
