@@ -117,22 +117,17 @@ class BlogNewsletterTests {
 			.setParameter("id", assinanteNaoVerificado.userId())
 			.executeUpdate());
 
-		var resultado = mockMvc.perform(post("/blogs/me/posts")
-				.header("X-Session-Token", autor.token())
-				.header("Idempotency-Key", "blog-news-sync-1")
-				.contentType(MediaType.APPLICATION_JSON)
-				.content(objectMapper.writeValueAsString(Map.of("title", "Post que vai por e-mail",
-					"body", "Corpo do post da newsletter.", "format", "MARKDOWN", "notifySubscribers", true))))
-			.andExpect(status().isCreated())
-			.andReturn();
-		String postId = objectMapper.readTree(resultado.getResponse().getContentAsString()).get("id").asText();
-		// Chama o fan-out DIRETO (síncrono): o agendamento pós-commit tem o mesmo caminho, mas
-		// testar através do executor tornaria a asserção refém do relógio.
-		newsletter.sendToSubscribers(new com.socialcoisa.rede.blog.application.BlogPostPublishedEvent(blog.id(),
-			blog.slug(), blog.title(), autor.userId(), postId, "Post que vai por e-mail",
-			"Corpo do post da newsletter."));
+		publicar(autor, "Post que vai por e-mail", true);
 
-		assertThat(emailsEnviados("blognews_assinante_ok@test.com")).isEqualTo(1);
+		// Fluxo REAL: publish -> evento pós-commit -> executor -> e-mail. O poll cobre o async.
+		long enviados = 0;
+		for (int i = 0; i < 100 && enviados == 0; i++) {
+			enviados = emailsEnviados("blognews_assinante_ok@test.com");
+			if (enviados == 0) {
+				Thread.sleep(100);
+			}
+		}
+		assertThat(enviados).isEqualTo(1);
 		assertThat(emailsEnviados("blognews_assinante_nv@test.com")).isZero();
 		assertThat(emailsEnviados("blognews_autor@test.com")).isZero();
 	}
