@@ -64,8 +64,21 @@ public class Post {
 	 * porque o conteudo e imutavel; id, autor e contadores sao preservados (editar nao zera nada).
 	 */
 	public Post edited(String newContent, String newPageHtml, List<String> newTags, Instant editedAt) {
-		return new Post(id, authorId, type, newContent, newPageHtml, newTags, mediaIds, communityId, createdAt,
-			visibility, counters, status, deletedAt, editedAt, expiresAt);
+		return edited(type, newContent, newPageHtml, newTags, editedAt);
+	}
+
+	/**
+	 * Edicao com TROCA DE TIPO (a categoria e editavel, como o texto): as regras de conteudo de
+	 * cada tipo valem no service, e o prazo do MOMENT acompanha a virada — entrando em MOMENT
+	 * ganha as 24h da criacao (ou aproveita o prazo que ja existia); saindo, o prazo some.
+	 */
+	public Post edited(PostType newType, String newContent, String newPageHtml, List<String> newTags,
+			Instant editedAt) {
+		Instant newExpiresAt = newType == PostType.MOMENT
+			? (expiresAt != null ? expiresAt : editedAt.plus(Duration.ofHours(24)))
+			: null;
+		return new Post(id, authorId, newType, newContent, newPageHtml, newTags, mediaIds, communityId, createdAt,
+			visibility, counters, status, deletedAt, editedAt, newExpiresAt);
 	}
 
 	public boolean isActive() {

@@ -71,6 +71,9 @@ class ProfileController {
 		return getUserProfileUseCase.getByUsername(username);
 	}
 
+	record RankingPreferenceRequest(boolean show) {
+	}
+
 	@GetMapping("/users/by-id/{userId}")
 	Object userById(@PathVariable String userId) {
 		return getUserProfileUseCase.getById(userId);
@@ -92,6 +95,21 @@ class ProfileController {
 	@GetMapping("/profile/ranking")
 	Object profileRanking(@RequestParam(defaultValue = "20") int limit) {
 		return profileService.getRanking(limit);
+	}
+
+	/**
+	 * Ranking OPCIONAL (pedido via suporte): a secao de ranking do perfil some para quem nao
+	 * curte competicao. Preferencia da conta — vale para quem LE, nao para o perfil visitado.
+	 */
+	@PutMapping("/me/ranking")
+	ResponseEntity<String> ranking(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@RequestBody RankingPreferenceRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		String hash = idempotency.hash(request);
+		return idempotency.execute(user.id(), "PUT", "/api/me/ranking", idempotencyKey, hash,
+			() -> new CommandResponse(200, profileService.setShowRanking(user.id().value(), request.show())));
 	}
 
 	@PatchMapping("/me/profile")

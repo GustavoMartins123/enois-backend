@@ -60,6 +60,17 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 		return UserProfileView.from(profile).withBioHtml(profile.bioHtml()).withBannerHtml(profile.bannerHtml());
 	}
 
+	/** Liga/desliga a secao de ranking na tela de perfil (preferencia de quem le). */
+	@Transactional
+	public com.socialcoisa.rede.shared.web.StatusResponse setShowRanking(String userId, boolean showRanking) {
+		UserProfile profile = repository.findById(userId)
+			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
+		profile.setShowRanking(showRanking, clock.instant());
+		repository.save(profile);
+		return new com.socialcoisa.rede.shared.web.StatusResponse(userId,
+			showRanking ? "RANKING_VISIBLE" : "RANKING_HIDDEN");
+	}
+
 	@Override
 	@Transactional(readOnly = true)
 	public UserProfileView getById(String userId) {

@@ -107,6 +107,9 @@ class UserProfileJpaEntity {
 	@Column(name = "email_verified_at")
 	private Instant emailVerifiedAt;
 
+	@Column(name = "show_ranking", nullable = false)
+	private boolean showRanking = true;
+
 	@Column(name = "totp_enabled_at")
 	private Instant totpEnabledAt;
 
@@ -169,6 +172,7 @@ class UserProfileJpaEntity {
 		entity.updatedAt = profile.updatedAt();
 		entity.termsAcceptedAt = profile.termsAcceptedAt();
 		entity.emailVerifiedAt = profile.emailVerifiedAt();
+		entity.showRanking = profile.showRanking();
 		entity.totpEnabledAt = profile.totpEnabledAt();
 		entity.emailOtpEnabledAt = profile.emailOtpEnabledAt();
 		entity.federatedSecondFactorAt = profile.federatedSecondFactorAt();
@@ -186,7 +190,7 @@ class UserProfileJpaEntity {
 		UserProfile profile = UserProfile.restore(id, username, email, name, headline, company, location, avatar, banner,
 			badge,
 			bio, bioHtml, bannerHtml, skills, goals, availability, portfolio, externalLinks, openToWork, mentor,
-			createdAt, updatedAt);
+			createdAt, updatedAt, showRanking);
 		profile.setCounts(profile.connectionsCount(), profile.followersCount(), reputation);
 		profile.acceptTerms(termsAcceptedAt);
 		if (emailVerifiedAt != null) {

@@ -21,8 +21,10 @@ import com.socialcoisa.rede.shared.web.ApiException;
 
 /**
  * Edicao de publicacao propria. So o autor edita (validado no backend, nao no cliente) e o conteudo
- * segue as mesmas regras do post novo. Tipo, midias e comunidade ficam como estao; a pagina (posts
- * do tipo PAGE) e re-sanitizada a cada edicao, porque o HTML vem de fora de novo.
+ * segue as mesmas regras do post novo. A CATEGORIA (tipo) tambem e editavel desde 19/10 — trocar
+ * INSIGHT por QUESTION, por exemplo — e as regras de conteudo do tipo novo valem na hora; midias e
+ * comunidade ficam como estao. A pagina (posts do tipo PAGE) e re-sanitizada a cada edicao, porque
+ * o HTML vem de fora de novo.
  */
 @Service
 public class EditPostService implements EditPostUseCase {
@@ -59,15 +61,24 @@ public class EditPostService implements EditPostUseCase {
 		if (!post.isActive()) {
 			throw new ApiException(404, "POST_NOT_FOUND", "Post nao encontrado.");
 		}
-		String content = validateContent(command.content(), post.type());
+		// A CATEGORIA e editavel (pedido via suporte): nulo mantem, preenchido troca — e as regras
+		// de conteudo passam a ser as do tipo NOVO, iguais as da criacao.
+		PostType tipoNovo = command.type() == null ? post.type() : command.type();
+		String content = validateContent(command.content(), tipoNovo);
 		List<String> tags = normalizeTags(command.tags());
 
-		Post edited = post.edited(content, pageHtml(post, command), tags, clock.instant());
+		Post edited = post.edited(tipoNovo, content, pageHtml(tipoNovo, command), tags, clock.instant());
 		Post saved = postRepository.save(edited);
-		String articleBody = articleBody(post, command);
+		String articleBody = articleBody(tipoNovo, command);
 		if (articleBody != null) {
 			// Editar artigo sem mandar o texto apagaria o corpo: a regra e a mesma da pagina.
-			articleRepository.updateBody(saved.id(), articleBody, clock.instant());
+			// E um post que VIRA artigo ganha a linha agora (updateBody so mexe em linha existente).
+			if (articleRepository.findBody(saved.id()).isPresent()) {
+				articleRepository.updateBody(saved.id(), articleBody, clock.instant());
+			}
+			else {
+				articleRepository.save(saved.id(), articleBody, clock.instant());
+			}
 		}
 		feedCacheRepository.removeEverywhere(saved.id());
 		auditLogRepository.record(command.userId(), "POST_EDITED", saved.id().value(), null);
@@ -82,8 +93,8 @@ public class EditPostService implements EditPostUseCase {
 	 * A pagina acompanha o tipo do post (nao o que o cliente manda): num PAGE ela e obrigatoria,
 	 * nos outros o HTML recebido e descartado.
 	 */
-	private String pageHtml(Post post, EditPostCommand command) {
-		if (post.type() != PostType.PAGE) {
+	private String pageHtml(PostType tipo, EditPostCommand command) {
+		if (tipo != PostType.PAGE) {
 			return null;
 		}
 		return SafeHtml.requirePageHtml(command.pageHtml());
@@ -94,8 +105,8 @@ public class EditPostService implements EditPostUseCase {
 	 * o HTML e o conteudo), mas em qualquer outro tipo continua obrigatorio.
 	 */
 	/** Corpo do artigo acompanha o tipo do post (nao o que o cliente manda), como a pagina. */
-	private String articleBody(Post post, EditPostCommand command) {
-		if (post.type() != PostType.ARTICLE) {
+	private String articleBody(PostType tipo, EditPostCommand command) {
+		if (tipo != PostType.ARTICLE) {
 			return null;
 		}
 		return PublishPostService.validateArticleBody(command.articleBody());

@@ -66,6 +66,102 @@ class EditPostTests {
 	}
 
 	@Test
+	void trocaACategoriaDoPost() throws Exception {
+		var author = auth.authenticate("user_edit_tipo");
+		String postId = publish(author, "Postei como insight sem querer.");
+
+		// INSIGHT -> QUESTION: a categoria e editavel (pedido via suporte).
+		mockMvc.perform(patch("/feed/posts/" + postId)
+				.header("X-Session-Token", author.token())
+				.header("Idempotency-Key", "edit-tipo-1")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("content", "Postei como insight sem querer.",
+					"type", "QUESTION"))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.type").value("QUESTION"));
+
+		// Tipo desconhecido e 400 com codigo proprio, nunca 500.
+		mockMvc.perform(patch("/feed/posts/" + postId)
+				.header("X-Session-Token", author.token())
+				.header("Idempotency-Key", "edit-tipo-2")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("content", "x", "type", "XPTO"))))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("TIPO_INVALIDO"));
+	}
+
+	@Test
+	void virarPaginaExigeHtmlEVirarTextoDeNovoExigeConteudo() throws Exception {
+		var author = auth.authenticate("user_edit_pagina");
+		String postId = publish(author, "Texto que vai virar pagina.");
+
+		// Virar PAGE sem o HTML: recusado (mesma regra da criacao).
+		mockMvc.perform(patch("/feed/posts/" + postId)
+				.header("X-Session-Token", author.token())
+				.header("Idempotency-Key", "edit-pagina-1")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("content", "Texto que vai virar pagina.",
+					"type", "PAGE"))))
+			.andExpect(status().isBadRequest());
+
+		// Com o HTML: vira pagina.
+		mockMvc.perform(patch("/feed/posts/" + postId)
+				.header("X-Session-Token", author.token())
+				.header("Idempotency-Key", "edit-pagina-2")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("content", "", "type", "PAGE",
+					"pageHtml", "<h1>Minha página</h1>"))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.type").value("PAGE"));
+
+		// Voltar para INSIGHT sem texto: recusado — pagina pode nascer vazia, texto nao.
+		mockMvc.perform(patch("/feed/posts/" + postId)
+				.header("X-Session-Token", author.token())
+				.header("Idempotency-Key", "edit-pagina-3")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("content", "", "type", "INSIGHT"))))
+			.andExpect(status().isBadRequest());
+
+		mockMvc.perform(patch("/feed/posts/" + postId)
+				.header("X-Session-Token", author.token())
+				.header("Idempotency-Key", "edit-pagina-4")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("content", "De volta ao feed.",
+					"type", "INSIGHT"))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.type").value("INSIGHT"));
+	}
+
+	@Test
+	void virarArtigoGuardaOCorpo() throws Exception {
+		var author = auth.authenticate("user_edit_artigo");
+		String postId = publish(author, "Titulo do artigo novo.");
+
+		// ARTICLE sem corpo: recusado.
+		mockMvc.perform(patch("/feed/posts/" + postId)
+				.header("X-Session-Token", author.token())
+				.header("Idempotency-Key", "edit-artigo-1")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("content", "Titulo do artigo novo.",
+					"type", "ARTICLE"))))
+			.andExpect(status().isBadRequest());
+
+		mockMvc.perform(patch("/feed/posts/" + postId)
+				.header("X-Session-Token", author.token())
+				.header("Idempotency-Key", "edit-artigo-2")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("content", "Titulo do artigo novo.",
+					"type", "ARTICLE", "articleBody", "Corpo completo do artigo, agora com casa."))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.type").value("ARTICLE"));
+
+		// O corpo ficou gravado de verdade (a leitura do post unico o devolve).
+		mockMvc.perform(get("/feed/posts/" + postId).header("X-Session-Token", author.token()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.articleBody").value("Corpo completo do artigo, agora com casa."));
+	}
+
+	@Test
 	void anotherUserCannotEdit() throws Exception {
 		var author = auth.authenticate("user_edit_author2");
 		var intruder = auth.authenticate("user_edit_intruder");

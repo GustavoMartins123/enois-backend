@@ -211,10 +211,25 @@ class FeedController {
 		payload.put("pageHtml", request.pageHtml() == null ? "" : request.pageHtml());
 		payload.put("articleBody", request.articleBody() == null ? "" : request.articleBody());
 		payload.put("tags", request.tags() == null ? List.of() : request.tags());
+		payload.put("type", request.type() == null ? "" : request.type());
 		String hash = idempotency.hash(payload);
 		return idempotency.execute(user.id(), "PATCH", "/api/feed/posts/{postId}", idempotencyKey, hash,
 			() -> new CommandResponse(200, editPostUseCase.edit(new EditPostCommand(user.id(), new PostId(postId),
-				request.content(), request.pageHtml(), request.articleBody(), request.tags()))));
+				request.content(), request.pageHtml(), request.articleBody(), request.tags(),
+				tipoDoPost(request.type())))));
+	}
+
+	/** Tipo informado na edicao (nulo = mantem); string desconhecida e 400, nunca 500. */
+	private static com.socialcoisa.rede.feed.domain.PostType tipoDoPost(String tipo) {
+		if (tipo == null || tipo.isBlank()) {
+			return null;
+		}
+		try {
+			return com.socialcoisa.rede.feed.domain.PostType.valueOf(tipo.trim().toUpperCase());
+		}
+		catch (IllegalArgumentException error) {
+			throw new ApiException(400, "TIPO_INVALIDO", "Tipo de publicação desconhecido.");
+		}
 	}
 
 	/** Desfaz a exclusao do proprio post (o "desfazer" do aviso de exclusao). */

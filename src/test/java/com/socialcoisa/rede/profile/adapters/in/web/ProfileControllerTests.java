@@ -247,4 +247,34 @@ class ProfileControllerTests {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.username").isNotEmpty());
 	}
+
+	@Test
+	void rankingEOpcionalPorPreferenciaDaConta() throws Exception {
+		// Padrao: mostra (compatibilidade com quem ja usava).
+		mockMvc.perform(get("/me").header("X-Session-Token", sessionToken))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.showRanking").value(true));
+
+		mockMvc.perform(put("/me/ranking")
+				.header("X-Session-Token", sessionToken)
+				.header("Idempotency-Key", "ranking-off-" + userId)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("show", false))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.status").value("RANKING_HIDDEN"));
+
+		mockMvc.perform(get("/me").header("X-Session-Token", sessionToken))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.showRanking").value(false));
+
+		mockMvc.perform(put("/me/ranking")
+				.header("X-Session-Token", sessionToken)
+				.header("Idempotency-Key", "ranking-on-" + userId)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("show", true))))
+			.andExpect(status().isOk());
+
+		mockMvc.perform(get("/me").header("X-Session-Token", sessionToken))
+			.andExpect(jsonPath("$.showRanking").value(true));
+	}
 }
