@@ -158,4 +158,100 @@ class LinkedinImportServiceTests {
 		// "found" conta o que dá para importar (posição + skill×3 + publicação + perfil).
 		assertThat(preview.found()).isGreaterThanOrEqualTo(6);
 	}
+
+	@Test
+	void parsesPastedProfileText() {
+		String colado = """
+			Mel Santos
+			Desenvolvedora Java · Énóis
+
+			Sobre
+			Construo coisas na internet. Gosto de café e código.
+
+			Experiência
+			Desenvolvedora Backend
+			Énóis
+			mar de 2021 - o momento · 4 anos 2 meses
+			São Paulo, Brasil
+			Construí o feed, a carteira e a lojinha.
+			Ver mais
+
+			Desenvolvedora
+			Acme Ltda
+			jan de 2019 - fev de 2021 · 2 anos 2 meses
+			Remoto
+			APIs em Java.
+
+			Formação acadêmica
+			Universidade de São Paulo
+			Bacharelado, Ciência da Computação
+			2015 - 2019
+
+			Licenças e certificações
+			Oracle Certified Professional: Java SE
+			Oracle
+			Emitido em mar de 2022 · Sem validade
+			Credencial ID 123 | https://certs.example.com/ocp
+
+			Projetos
+			KofBot
+			jan de 2020 - dez de 2020
+			Um bot de doações.
+
+			Habilidades
+			Java, Spring Boot
+			PostgreSQL
+			""";
+
+		var preview = service.parseTexto(colado);
+
+		assertThat(preview.experiences()).hasSize(2);
+		var primeira = preview.experiences().get(0);
+		assertThat(primeira.title()).isEqualTo("Desenvolvedora Backend");
+		assertThat(primeira.company()).isEqualTo("Énóis");
+		assertThat(primeira.location()).isEqualTo("São Paulo, Brasil");
+		assertThat(primeira.startDate()).isEqualTo("2021-03");
+		assertThat(primeira.endDate()).isNull();
+		assertThat(primeira.currentlyHere()).isTrue();
+		assertThat(primeira.description()).isEqualTo("Construí o feed, a carteira e a lojinha.");
+
+		var segunda = preview.experiences().get(1);
+		assertThat(segunda.title()).isEqualTo("Desenvolvedora");
+		assertThat(segunda.company()).isEqualTo("Acme Ltda");
+		assertThat(segunda.startDate()).isEqualTo("2019-01");
+		assertThat(segunda.endDate()).isEqualTo("2021-02");
+		assertThat(segunda.currentlyHere()).isFalse();
+		// O "Ver mais" do LinkedIn não vira descrição e o título do próximo item não invade.
+		assertThat(segunda.description()).doesNotContain("Desenvolvedora").doesNotContain("Ver mais");
+
+		assertThat(preview.education()).hasSize(1);
+		assertThat(preview.education().get(0).school()).isEqualTo("Universidade de São Paulo");
+		assertThat(preview.education().get(0).degree()).isEqualTo("Bacharelado, Ciência da Computação");
+		assertThat(preview.education().get(0).startDate()).isEqualTo("2015-01");
+		assertThat(preview.education().get(0).endDate()).isEqualTo("2019-12");
+
+		assertThat(preview.certifications()).hasSize(1);
+		var cert = preview.certifications().get(0);
+		assertThat(cert.name()).isEqualTo("Oracle Certified Professional: Java SE");
+		assertThat(cert.issuer()).isEqualTo("Oracle");
+		assertThat(cert.issueDate()).isEqualTo("2022-03");
+		assertThat(cert.credentialUrl()).isEqualTo("https://certs.example.com/ocp");
+
+		assertThat(preview.projects()).hasSize(1);
+		assertThat(preview.projects().get(0).title()).isEqualTo("KofBot");
+		assertThat(preview.projects().get(0).startDate()).isEqualTo("2020-01");
+		assertThat(preview.projects().get(0).endDate()).isEqualTo("2020-12");
+
+		assertThat(preview.skills()).containsExactly("Java", "Spring Boot", "PostgreSQL");
+
+		assertThat(preview.profile()).isNotNull();
+		assertThat(preview.profile().name()).isEqualTo("Mel Santos");
+		assertThat(preview.profile().headline()).isEqualTo("Desenvolvedora Java · Énóis");
+		assertThat(preview.profile().summary()).contains("Gosto de café");
+	}
+
+	@Test
+	void rejectsEmptyPastedText() {
+		assertThatThrownBy(() -> service.parseTexto("   ")).isInstanceOf(ApiException.class);
+	}
 }

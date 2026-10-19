@@ -309,4 +309,322 @@ public class LinkedinImportService {
 	private String orNull(String value) {
 		return StringUtils.hasText(value) ? value.trim() : null;
 	}
+
+	// ===== TEXTO COLADO (o perfil copiado do LinkedIn, sem arquivo nenhum) =====
+	//
+	// A API do LinkedIn só entrega nome/e-mail/foto (histórico é programa de parceiros), e o
+	// ZIP da exportação é atrito demais. O caminho sem arquivo: a pessoa abre o perfil dela,
+	// copia e cola — o LinkedIn renderiza as seções num formato repetível (título, org, datas,
+	// descrição) e este parser extrai pelo MESMO retrato do import de arquivo. Heurístico de
+	// propósito: nada é salvo sem a pessoa conferir a prévia no front.
+
+	private static final int MAX_TEXTO_CHARS = 120_000;
+
+	private static final java.util.regex.Pattern FAIXA_MESES = java.util.regex.Pattern
+		.compile("(?i)^(\\p{L}{3,12}\\.?\\s*(?:de\\s*)?\\d{4})\\s*[-–—]\\s*(.+)$");
+	private static final java.util.regex.Pattern FAIXA_ANOS = java.util.regex.Pattern
+		.compile("^(\\d{4})\\s*[-–—]\\s*(\\d{4}|.+)$");
+	private static final java.util.regex.Pattern EMITIDO = java.util.regex.Pattern
+		.compile("(?i)^(?:emitido em|issued)\\s+(.+)$");
+
+	public LinkedinImportPreview parseTexto(String texto) {
+		if (!StringUtils.hasText(texto)) {
+			throw new ApiException(400, "TEXT_REQUIRED", "Cole o texto do seu perfil do LinkedIn.");
+		}
+		if (texto.length() > MAX_TEXTO_CHARS) {
+			throw new ApiException(400, "TEXT_TOO_LARGE", "O texto colado é grande demais (limite de 120 mil caracteres).");
+		}
+		List<String> linhas = java.util.Arrays.stream(texto.replace("\r\n", "\n").split("\n", -1))
+			.map(String::trim)
+			.toList();
+
+		// Fronteiras das seções: uma linha que (sem acento, minúscula) É um cabeçalho conhecido.
+		Map<String, List<Integer>> secoes = new LinkedHashMap<>();
+		String atual = "cabecalho";
+		for (int i = 0; i < linhas.size(); i++) {
+			String nome = secao(linhas.get(i));
+			if (nome != null) {
+				atual = nome;
+				continue;
+			}
+			secoes.computeIfAbsent(atual, k -> new ArrayList<>()).add(i);
+		}
+
+		List<ExperiencePreview> experiences = entradasComDatas(secoes.getOrDefault("experiencia", List.of()), linhas,
+			true).stream().map(e -> new ExperiencePreview(e.titulo(), e.org(), e.local(), e.descricao(),
+				e.inicio(), e.fim(), e.atual())).toList();
+		List<EducationPreview> education = entradasComDatas(secoes.getOrDefault("educacao", List.of()), linhas,
+			true).stream().map(e -> new EducationPreview(e.titulo(), e.org(), null, e.descricao(),
+				e.inicio(), e.fim(), e.atual())).toList();
+		List<ProjectPreview> projects = entradasComDatas(secoes.getOrDefault("projetos", List.of()), linhas,
+			false).stream()
+			.map(e -> new ProjectPreview(e.titulo(), e.descricao(), null, e.inicio(), e.fim()))
+			.toList();
+		List<CertificationPreview> certifications = certificacoes(secoes.getOrDefault("certificacoes", List.of()),
+			linhas);
+		List<String> skills = habilidades(secoes.getOrDefault("habilidades", List.of()), linhas);
+
+		// Perfil: nome/headline são as primeiras linhas do paste; o resumo vem da seção "Sobre".
+		String nome = null;
+		String headline = null;
+		for (int i : secoes.getOrDefault("cabecalho", List.of())) {
+			if (linhas.get(i).isBlank()) {
+				continue;
+			}
+			if (nome == null && linhas.get(i).length() <= 60) {
+				nome = linhas.get(i);
+			} else if (headline == null && linhas.get(i).length() <= 120) {
+				headline = linhas.get(i);
+			} else {
+				break;
+			}
+		}
+		String sobre = textoSecao(secoes.getOrDefault("sobre", List.of()), linhas);
+		ProfilePreview profile = nome != null || headline != null || sobre != null
+			? new ProfilePreview(nome, headline, sobre, null, null)
+			: null;
+
+		Map<String, Integer> semEstrutura = new LinkedHashMap<>();
+		contarSecao(semEstrutura, "Idiomas", secoes.getOrDefault("idiomas", List.of()), linhas);
+		contarSecao(semEstrutura, "Prêmios", secoes.getOrDefault("premios", List.of()), linhas);
+		contarSecao(semEstrutura, "Voluntariado", secoes.getOrDefault("voluntariado", List.of()), linhas);
+		contarSecao(semEstrutura, "Cursos", secoes.getOrDefault("cursos", List.of()), linhas);
+
+		int found = experiences.size() + education.size() + certifications.size() + projects.size()
+			+ skills.size() + (profile != null ? 1 : 0);
+		return new LinkedinImportPreview(experiences, education, certifications, projects, profile, skills,
+			semEstrutura, found);
+	}
+
+	/** Cabeçalhos de seção do perfil público do LinkedIn (pt e en), sem acento e minúsculo. */
+	private String secao(String linha) {
+		String s = java.text.Normalizer.normalize(linha.toLowerCase(), java.text.Normalizer.Form.NFD)
+			.replaceAll("\\p{M}", "")
+			.replaceAll("\\s+", " ")
+			.replaceAll(":$", "")
+			.trim();
+		return switch (s) {
+			case "experiencia", "experience", "experiencia profissional" -> "experiencia";
+			case "formacao academica", "formacao", "educacao", "education" -> "educacao";
+			case "licencas e certificacoes", "certificacoes", "licenses & certifications",
+					"licences & certifications", "certifications" -> "certificacoes";
+			case "projetos", "projects" -> "projetos";
+			case "sobre", "about" -> "sobre";
+			case "habilidades", "competencias", "skills" -> "habilidades";
+			case "idiomas", "languages" -> "idiomas";
+			case "premios", "premios e honras", "honors & awards", "honors and awards", "premios e premiacoes" ->
+				"premios";
+			case "voluntariado", "volunteering" -> "voluntariado";
+			case "cursos", "courses" -> "cursos";
+			default -> null;
+		};
+	}
+
+	private record EntradaDatas(String titulo, String org, String local, String descricao, String inicio,
+			String fim, boolean atual) {
+	}
+
+	/**
+	 * Entradas de uma seção cujo formato é "título, org, datas, descrição…" (experiência e
+	 * formação; para projetos `org=false` — lá vai direto "título, datas, descrição"). A linha
+	 * de datas é a âncora: o que vem 1–2 linhas antes é título/org, o que vem depois é o resto
+	 * até o começo da próxima entrada.
+	 */
+	private List<EntradaDatas> entradasComDatas(List<Integer> indices, List<String> linhas, boolean comOrg) {
+		List<EntradaDatas> entradas = new ArrayList<>();
+		if (indices.isEmpty()) {
+			return entradas;
+		}
+		// Âncoras: posição da linha de datas dentro da lista de ÍNDICES da seção.
+		record Ancora(int pos, String inicio, String fim, boolean atual) {
+		}
+		List<Ancora> ancoras = new ArrayList<>();
+		for (int p = 0; p < indices.size(); p++) {
+			var faixa = faixa(linhas.get(indices.get(p)));
+			if (faixa != null) {
+				ancoras.add(new Ancora(p, faixa[0], faixa[1], Boolean.parseBoolean(faixa[2])));
+			}
+		}
+		for (int a = 0; a < ancoras.size(); a++) {
+			int p = ancoras.get(a).pos();
+			// A entrada acaba no TÍTULO da próxima (não na linha de datas dela — senão as duas
+			// linhas de título/org do próximo item entrariam como descrição deste).
+			int fimProxima = a + 1 < ancoras.size()
+				? indices.get(Math.max(0, ancoras.get(a + 1).pos() - (comOrg ? 2 : 1)))
+				: Integer.MAX_VALUE;
+			String titulo = null;
+			String org = null;
+			if (p >= 1 && (p >= 2 || !comOrg)) {
+				// LinkedIn manda título e org nas linhas ANTES da data (2 para experiência e
+				// formação; 1 para projetos). Se falta uma, o que sobrou é só o título.
+				int idxTitulo = indices.get(p - (comOrg ? 2 : 1));
+				if (p - (comOrg ? 2 : 1) >= 0) {
+					titulo = linhaUtil(linhas.get(idxTitulo));
+				}
+				if (comOrg && p >= 1) {
+					org = linhaUtil(linhas.get(indices.get(p - 1)));
+				}
+			} else if (p >= 1) {
+				titulo = linhaUtil(linhas.get(indices.get(p - 1)));
+			}
+			if (!StringUtils.hasText(titulo)) {
+				titulo = p >= 1 ? linhaUtil(linhas.get(indices.get(p - 1))) : null;
+				org = null;
+			}
+			if (!StringUtils.hasText(titulo)) {
+				continue; // sem título não há entrada — o texto solto fica de fora (nada é perdido: está no perfil colado)
+			}
+			String local = null;
+			StringBuilder descricao = new StringBuilder();
+			for (int i = p + 1; i < indices.size() && indices.get(i) < fimProxima; i++) {
+				String linha = linhaUtil(linhas.get(indices.get(i)));
+				if (linha == null) {
+					continue;
+				}
+				if (local == null && pareceLocal(linha)) {
+					local = linha;
+					continue;
+				}
+				if (descricao.length() > 0) {
+					descricao.append("\n");
+				}
+				descricao.append(linha);
+				if (descricao.length() > 3000) {
+					break;
+				}
+			}
+			entradas.add(new EntradaDatas(titulo, org, local, StringUtils.hasText(descricao) ? descricao.toString() : null,
+				ancoras.get(a).inicio(), ancoras.get(a).fim(), ancoras.get(a).atual()));
+		}
+		return entradas;
+	}
+
+	/** Reconhece "mar de 2021 - o momento · 4 anos", "Jan 2020 - Jun 2022" e "2015 - 2019". */
+	private String[] faixa(String linha) {
+		if (!StringUtils.hasText(linha)) {
+			return null;
+		}
+		var m = FAIXA_MESES.matcher(linha);
+		if (!m.matches() && (m = FAIXA_ANOS.matcher(linha)) != null && !m.matches()) {
+			return null;
+		}
+		String inicio = parseDate(m.group(1).trim());
+		if (inicio == null) {
+			// Ano solto ("2015 - 2019", comum em formação): mês vira janeiro na entrada e
+			// dezembro na saída, para a faixa não encolher.
+			inicio = m.group(1).trim().matches("\\d{4}") ? m.group(1).trim() + "-01" : null;
+		}
+		if (inicio == null) {
+			return null;
+		}
+		// O fim vem antes do "· duração" ("mar de 2021 - o momento · 4 anos 2 meses").
+		String ladoFim = m.group(2).split("·")[0].trim();
+		boolean atual = ladoFim.matches("(?i)(o momento|presente|atualmente|present|now|current.*)");
+		String fim = atual ? null : parseDate(ladoFim);
+		if (!atual && fim == null && ladoFim.matches("\\d{4}")) {
+			fim = ladoFim + "-12";
+		}
+		if (!atual && fim == null && ladoFim.matches("(?i)(o momento|presente|present)")) {
+			atual = true;
+		}
+		return new String[] { inicio, fim, String.valueOf(atual) };
+	}
+
+	/** "Emitido em mar de 2022 · Sem validade": nome/emissor 1–2 linhas antes, link depois. */
+	private List<CertificationPreview> certificacoes(List<Integer> indices, List<String> linhas) {
+		List<CertificationPreview> certificados = new ArrayList<>();
+		for (int p = 0; p < indices.size(); p++) {
+			var m = EMITIDO.matcher(linhas.get(indices.get(p)));
+			if (!m.matches()) {
+				continue;
+			}
+			String quando = m.group(1).split("·")[0].trim();
+			String nome = p >= 2 ? linhaUtil(linhas.get(indices.get(p - 2))) : null;
+			String emissor = p >= 1 ? linhaUtil(linhas.get(indices.get(p - 1))) : null;
+			if (!StringUtils.hasText(nome)) {
+				nome = emissor;
+				emissor = null;
+			}
+			if (!StringUtils.hasText(nome)) {
+				continue;
+			}
+			String url = null;
+			for (int q = p + 1; q < indices.size(); q++) {
+				var link = java.util.regex.Pattern.compile("https?://\\S+")
+					.matcher(linhas.get(indices.get(q)));
+				if (link.find()) {
+					url = link.group();
+					break;
+				}
+				if (faixa(linhas.get(indices.get(q))) != null || EMITIDO.matcher(linhas.get(indices.get(q))).matches()) {
+					break;
+				}
+			}
+			certificados.add(new CertificationPreview(nome, emissor, null, parseDate(quando), null, url));
+		}
+		return certificados;
+	}
+
+	private List<String> habilidades(List<Integer> indices, List<String> linhas) {
+		List<String> skills = new ArrayList<>();
+		for (int i : indices) {
+			for (String pedaco : linhas.get(i).split("[,;·|]")) {
+				String skill = pedaco.trim();
+				if (skill.length() >= 2 && skill.length() <= 60 && !skills.contains(skill)) {
+					skills.add(skill);
+				}
+				if (skills.size() >= 50) {
+					return skills;
+				}
+			}
+		}
+		return skills;
+	}
+
+	private String textoSecao(List<Integer> indices, List<String> linhas) {
+		StringBuilder texto = new StringBuilder();
+		for (int i : indices) {
+			String linha = linhaUtil(linhas.get(i));
+			if (linha == null) {
+				continue;
+			}
+			if (texto.length() > 0) {
+				texto.append("\n");
+			}
+			texto.append(linha);
+			if (texto.length() > 2000) {
+				break;
+			}
+		}
+		return texto.length() > 0 ? texto.toString() : null;
+	}
+
+	private void contarSecao(Map<String, Integer> alvo, String rotulo, List<Integer> indices, List<String> linhas) {
+		int n = 0;
+		for (int i : indices) {
+			if (StringUtils.hasText(linhas.get(i))) {
+				n++;
+			}
+		}
+		if (n > 0) {
+			alvo.put(rotulo, n);
+		}
+	}
+
+	/** Descrições coladas terminam em "…ver mais"/"…more" e as linhas podem ser vazias. */
+	private String linhaUtil(String linha) {
+		if (!StringUtils.hasText(linha)) {
+			return null;
+		}
+		String s = linha.trim();
+		if (s.matches("(?i)(ver mais|ver menos|…more|…see more|see more|mostrar mais)")) {
+			return null;
+		}
+		return s;
+	}
+
+	/** "São Paulo, Brasil" e afins: poucas palavras, sem dígitos, com vírgula — nunca descrição. */
+	private boolean pareceLocal(String linha) {
+		return linha.matches("[\\p{L}\\p{M}' .,-]{2,60}") && !linha.matches(".*\\d.*") && linha.contains(", ");
+	}
 }
