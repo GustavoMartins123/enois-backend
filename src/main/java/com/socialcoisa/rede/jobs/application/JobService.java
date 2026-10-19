@@ -18,6 +18,7 @@ import com.socialcoisa.rede.jobs.domain.JobApplication;
 import com.socialcoisa.rede.jobs.domain.JobApplicationStatus;
 import com.socialcoisa.rede.jobs.domain.JobApplicationField;
 import com.socialcoisa.rede.profile.application.ReputationService;
+import com.socialcoisa.rede.shared.security.UserRateLimiter;
 import com.socialcoisa.rede.shared.web.ApiException;
 
 @Service
@@ -45,12 +46,14 @@ public class JobService {
 	private final JobApplicationStatusNotifier statusNotifier;
 	private final tools.jackson.databind.ObjectMapper objectMapper;
 	private final Clock clock;
+	private final UserRateLimiter userRateLimiter;
 
 	public JobService(JobRepository repository, ReputationService reputationService,
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository,
 			com.socialcoisa.rede.profile.application.port.out.ProfileExtensionRepository extensionRepository,
 			JobApplicationDelivery delivery, JobApplicationStatusNotifier statusNotifier,
-			tools.jackson.databind.ObjectMapper objectMapper, Clock clock) {
+			tools.jackson.databind.ObjectMapper objectMapper, Clock clock,
+			UserRateLimiter userRateLimiter) {
 		this.repository = repository;
 		this.reputationService = reputationService;
 		this.userProfileRepository = userProfileRepository;
@@ -59,6 +62,7 @@ public class JobService {
 		this.statusNotifier = statusNotifier;
 		this.objectMapper = objectMapper;
 		this.clock = clock;
+		this.userRateLimiter = userRateLimiter;
 	}
 
 	@Transactional
@@ -175,6 +179,7 @@ public class JobService {
 	 */
 	@Transactional
 	public JobApplication apply(String jobId, String userId, String message, List<JobAnswerInput> answers) {
+		userRateLimiter.require(userId, UserRateLimiter.APPLY_JOB);
 		// Trava a linha da vaga: a checagem de "esta aberta" e a gravacao da candidatura acontecem
 		// na mesma transacao, entao um encerramento concorrente espera em vez de passar por fora.
 		Job job = repository.findByIdForUpdate(jobId)

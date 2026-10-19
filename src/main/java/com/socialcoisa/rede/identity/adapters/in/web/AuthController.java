@@ -67,6 +67,7 @@ class AuthController {
 	private final IdempotencyApplicationService idempotency;
 	private final com.socialcoisa.rede.identity.application.AuthThrottle throttle;
 	private final OAuthProperties oAuthProperties;
+	private final com.socialcoisa.rede.identity.adapters.out.TurnstileValidator turnstile;
 
 	AuthController(SignupUseCase signupUseCase, VerifyEmailUseCase verifyEmailUseCase,
 			TwoFactorLoginUseCase twoFactorLoginUseCase, TwoFactorUseCase twoFactorUseCase,
@@ -81,7 +82,8 @@ class AuthController {
 			DeleteAccountUseCase deleteAccountUseCase,
 			IdempotencyApplicationService idempotency,
 			OAuthProperties oAuthProperties,
-			com.socialcoisa.rede.identity.application.AuthThrottle throttle) {
+			com.socialcoisa.rede.identity.application.AuthThrottle throttle,
+			com.socialcoisa.rede.identity.adapters.out.TurnstileValidator turnstile) {
 		this.signupUseCase = signupUseCase;
 		this.verifyEmailUseCase = verifyEmailUseCase;
 		this.twoFactorLoginUseCase = twoFactorLoginUseCase;
@@ -99,6 +101,7 @@ class AuthController {
 		this.idempotency = idempotency;
 		this.throttle = throttle;
 		this.oAuthProperties = oAuthProperties;
+		this.turnstile = turnstile;
 	}
 
 	@PostMapping("/signup")
@@ -106,6 +109,7 @@ class AuthController {
 	ResponseEntity<String> signup(@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@RequestHeader(value = "X-Forwarded-For", required = false) String forwardedFor,
 			@RequestBody SignupRequest request) {
+		turnstile.require(request.turnstileToken());
 		String ip = forwardedFor == null || forwardedFor.isBlank() ? "desconhecido"
 			: forwardedFor.split(",")[0].trim();
 		throttle.exigeSignupPermitido(ip);
@@ -146,6 +150,7 @@ class AuthController {
 	@RateLimiter(name = "auth")
 	ResponseEntity<String> login(@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@RequestBody LoginRequest request) {
+		turnstile.require(request.turnstileToken());
 		String scope = authScope(request.email());
 		String hash = idempotency.hash(request);
 		throttle.exigeLoginPermitido(request.email());

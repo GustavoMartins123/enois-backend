@@ -14,6 +14,7 @@ import com.socialcoisa.rede.messaging.domain.Conversation;
 import com.socialcoisa.rede.messaging.domain.ConversationParticipant;
 import com.socialcoisa.rede.messaging.domain.Message;
 import com.socialcoisa.rede.notifications.application.NotificationService;
+import com.socialcoisa.rede.shared.security.UserRateLimiter;
 import com.socialcoisa.rede.shared.web.ApiException;
 
 @Service
@@ -22,11 +23,14 @@ public class MessagingService {
 	private final MessagingRepository repository;
 	private final NotificationService notificationService;
 	private final Clock clock;
+	private final UserRateLimiter userRateLimiter;
 
-	public MessagingService(MessagingRepository repository, NotificationService notificationService, Clock clock) {
+	public MessagingService(MessagingRepository repository, NotificationService notificationService, Clock clock,
+			UserRateLimiter userRateLimiter) {
 		this.repository = repository;
 		this.notificationService = notificationService;
 		this.clock = clock;
+		this.userRateLimiter = userRateLimiter;
 	}
 
 	@Transactional
@@ -72,14 +76,17 @@ public class MessagingService {
 
 	@Transactional
 	public Message sendMessage(String conversationId, String senderId, String text) {
+		userRateLimiter.require(senderId, UserRateLimiter.SEND_MESSAGE);
 		Conversation conversation = repository.findConversationById(conversationId)
 			.orElseThrow(() -> new ApiException(404, "CONVERSATION_NOT_FOUND", "Conversa nao encontrada."));
 		if (!repository.isParticipant(conversationId, senderId)) {
 			throw new ApiException(403, "NOT_PARTICIPANT", "Voce nao participa desta conversa.");
 		}
 		String id = "message_" + UUID.randomUUID().toString().replace("-", "");
-		Message message = Message.create(id, conversationId, senderId, text, clock.instant());
+		var now = clock.instant();
+		Message message = Message.create(id, conversationId, senderId, text, now);
 		repository.saveMessage(message);
+		repository.markRead(conversationId, senderId, now);
 		String preview = text.length() > 80 ? text.substring(0, 77) + "..." : text;
 		List<ConversationParticipant> participants = repository.findParticipantsByConversation(conversationId);
 		for (ConversationParticipant p : participants) {

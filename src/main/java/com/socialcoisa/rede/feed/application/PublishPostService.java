@@ -20,6 +20,8 @@ import com.socialcoisa.rede.notifications.application.NotificationService;
 import com.socialcoisa.rede.profile.domain.UserProfile;
 import com.socialcoisa.rede.shared.html.SafeHtml;
 import com.socialcoisa.rede.shared.text.PlainText;
+import com.socialcoisa.rede.shared.security.ContentDuplicationGuard;
+import com.socialcoisa.rede.shared.security.UserRateLimiter;
 import com.socialcoisa.rede.shared.web.ApiException;
 
 @Service
@@ -39,6 +41,8 @@ public class PublishPostService implements PublishPostUseCase {
 	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository;
 	private final com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate;
 	private final PostCommunityReader postCommunityReader;
+	private final UserRateLimiter userRateLimiter;
+	private final ContentDuplicationGuard duplicationGuard;
 
 	public PublishPostService(PostRepository postRepository, ArticleRepository articleRepository,
 			IdGenerator idGenerator, Clock clock,
@@ -47,7 +51,9 @@ public class PublishPostService implements PublishPostUseCase {
 			NotificationService notificationService,
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository,
 			com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate,
-			PostCommunityReader postCommunityReader) {
+			PostCommunityReader postCommunityReader,
+			UserRateLimiter userRateLimiter,
+			ContentDuplicationGuard duplicationGuard) {
 		this.postRepository = postRepository;
 		this.articleRepository = articleRepository;
 		this.idGenerator = idGenerator;
@@ -59,6 +65,8 @@ public class PublishPostService implements PublishPostUseCase {
 		this.userProfileRepository = userProfileRepository;
 		this.sanctionGate = sanctionGate;
 		this.postCommunityReader = postCommunityReader;
+		this.userRateLimiter = userRateLimiter;
+		this.duplicationGuard = duplicationGuard;
 	}
 
 	@Override
@@ -68,6 +76,7 @@ public class PublishPostService implements PublishPostUseCase {
 			throw new ApiException(403, "ACCOUNT_RESTRICTED",
 				"Sua conta esta restrita por moderacao. Voce pode recorrer na pagina Penalidades.");
 		}
+		userRateLimiter.require(command.authorId().value(), UserRateLimiter.CREATE_POST);
 		validate(command);
 		List<String> tags = command.tags() == null ? List.of() : command.tags().stream()
 			.filter(StringUtils::hasText)
@@ -92,6 +101,9 @@ public class PublishPostService implements PublishPostUseCase {
 			if (!community.joined()) {
 				throw new ApiException(403, "NOT_A_MEMBER", "Entre na comunidade para publicar nela.");
 			}
+		}
+		if (StringUtils.hasText(command.content())) {
+			duplicationGuard.require(command.authorId().value(), command.content());
 		}
 		Post post = Post.publish(idGenerator.newPostId(), command.authorId(), command.type(), textOf(command),
 			pageHtml(command), tags, mediaIds, communityId, clock.instant());
