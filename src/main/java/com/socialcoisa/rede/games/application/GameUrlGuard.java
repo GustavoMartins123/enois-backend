@@ -45,7 +45,7 @@ public class GameUrlGuard {
 			uri = URI.create(value);
 		}
 		catch (IllegalArgumentException e) {
-			throw invalid("Endereço inválido.");
+			uri = tolerant(value);
 		}
 
 		String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
@@ -95,6 +95,29 @@ public class GameUrlGuard {
 			if (bytes.length == 16 && (bytes[0] & 0xfe) == 0xfc) {
 				throw invalid("Endereço de rede interna não é aceito."); // faixa fc00::/7 (IPv6 privada)
 			}
+		}
+	}
+
+	/**
+	 * O navegador aceita endereço com acento e caractere especial no caminho (o link copiado do
+	 * itch.io de alguém é assim); o parser RFC-2396 do {@code URI.create} não. Em vez de recusar o
+	 * link certo, codifica o que falta (…/café → …/caf%C3%A9) e segue a validação normal — as
+	 * regras de segurança (https, host público, sem credenciais) continuam valendo para o resultado.
+	 */
+	private URI tolerant(String value) {
+		var matcher = java.util.regex.Pattern
+			.compile("^(https?)://([^/?#]+)([^?#]*)(\\?[^#]*)?(#.*)?$")
+			.matcher(value);
+		if (!matcher.matches()) {
+			throw invalid("Endereço inválido.");
+		}
+		try {
+			return new URI(matcher.group(1), matcher.group(2), matcher.group(3),
+				matcher.group(4) == null ? null : matcher.group(4).substring(1),
+				matcher.group(5) == null ? null : matcher.group(5).substring(1));
+		}
+		catch (java.net.URISyntaxException e) {
+			throw invalid("Endereço inválido.");
 		}
 	}
 
