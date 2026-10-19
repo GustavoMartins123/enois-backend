@@ -21,6 +21,23 @@ import com.socialcoisa.rede.media.application.port.out.MediaSourceDownloader;
 @ConditionalOnProperty(name = "rede.media.migration.enabled", havingValue = "true")
 class MediaMigrationConfig {
 
+	/**
+	 * Executor da migração OPORTUNISTA (fila limitada, threads daemon): a leitura agenda e segue;
+	 * fila cheia simplesmente adia — a varredura em lote cobre depois. 2 threads bastam: o trabalho
+	 * é I/O de rede e o claim no banco já impede duplicação.
+	 */
+	@Bean(destroyMethod = "shutdown")
+	java.util.concurrent.ExecutorService mediaLazyMigrationExecutor() {
+		return new java.util.concurrent.ThreadPoolExecutor(2, 2, 0L, java.util.concurrent.TimeUnit.MILLISECONDS,
+			new java.util.concurrent.ArrayBlockingQueue<>(500),
+			runnable -> {
+				Thread thread = new Thread(runnable, "midia-migracao-oportunista");
+				thread.setDaemon(true);
+				return thread;
+			},
+			new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
+	}
+
 	@Bean
 	S3Client mediaMigrationS3Client(@Value("${rede.media.s3.region:us-east-1}") String region) {
 		return S3Client.builder().region(Region.of(region == null || region.isBlank() ? "us-east-1" : region.trim()))

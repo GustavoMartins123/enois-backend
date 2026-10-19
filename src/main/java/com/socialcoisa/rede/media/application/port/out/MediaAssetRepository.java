@@ -19,6 +19,12 @@ public interface MediaAssetRepository {
 	/** Proximo lote da fase 1 (copiar para o S3), priorizando quem errou menos vezes. */
 	List<MediaAsset> findForS3Copy(int limit, Instant before, int maxAttempts);
 
+	/**
+	 * Claim ATÔMICO da cópia (migração oportunista, segura entre réplicas): só devolve true para
+	 * quem gravou o claim — claims velhos expiram para o caso de o pod morrer no meio.
+	 */
+	boolean claimForS3Copy(String id, Instant now, Instant staleBefore, int maxAttempts);
+
 	/** Proximo lote da fase 2 (flip): copia pronta e cdn_url ainda no provedor antigo. */
 	List<MediaAsset> findForS3Flip(int limit);
 

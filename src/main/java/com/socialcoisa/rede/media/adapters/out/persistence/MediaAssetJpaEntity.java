@@ -77,6 +77,10 @@ class MediaAssetJpaEntity {
 	@Column(name = "s3_last_error", length = 300)
 	private String s3LastError;
 
+	/** Claim da migração oportunista; nao vai no fromDomain de proposito — salvar limpa o claim. */
+	@Column(name = "s3_claimed_at")
+	private java.time.Instant s3ClaimedAt;
+
 	protected MediaAssetJpaEntity() {
 	}
 

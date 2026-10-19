@@ -49,6 +49,15 @@ Verificação feita contra a produção e o código deste repo:
   `AWS_WEB_IDENTITY_TOKEN_FILE` (IRSA) ou `AWS_CONTAINER_CREDENTIALS_FULL_URI` (EKS Pod Identity)
   com `kubectl -n forest-apps describe pod`, e a role com `s3:PutObject/GetObject/DeleteObject` no
   bucket. Só depois disso religar a migração e ver `errors` parar de crescer com `s3Copied` subindo.
+- **CORS do bucket continua ausente (provado 19/10): o upload do NAVEGADOR falha.** O preflight
+  `OPTIONS` contra `forest-dev-socialthing-images` responde 403 sem nenhum header
+  `Access-Control-*`; o `PUT` assinado do browser é bloqueado e o composer mostra
+  "NetworkError when attempting to fetch resource". **Cuidado com o status:** `s3Copied` conta
+  linhas com `s3_migrated_at`, e todo upload novo em S3 NASCE com esse campo preenchido
+  (`MediaAsset.pending`, `onS3 ? createdAt : null`) — as 13 unidades vistas em 19/10 são linhas
+  órfãs de tentativas que falharam no PUT, não mídia no bucket. Corrigir no bucket
+  (Permissions → CORS configuration) liberando `PUT` para `https://enois.ia.br`; não precisa
+  deploy de código.
 - **Upload assinado nunca rodou contra o bucket real** (não há credencial AWS nesta máquina); a
   primeira virada é a estreia.
 - **Vídeo enviado como arquivo:** o player do Énóis pedia a URL crua do ImageKit e recebia
@@ -56,6 +65,26 @@ Verificação feita contra a produção e o código deste repo:
   pedir o **original** (`?tr=orig-true`) em todos os players e no `og:video` (commit `16152db`);
   o vídeo de teste responde **206** com Range e `readyState=4` no Chrome. Em S3 a URL fica
   intacta (sem transformação), mas o poster de vídeo continua sem derivada (limitação abaixo).
+
+## Migração OPORTUNISTA (uso normal converte o acervo)
+
+Além do lote, o acervo migra sozinho conforme é USADO — ligado pelo MESMO
+`REDE_MEDIA_MIGRATION_ENABLED` (desligado = nada migra, nem no acesso):
+
+- **Mídia de post/comentário**: a grade do post chama `GET /media/{id}`; essa leitura agenda a
+  cópia do asset para o S3 (claim ATÔMICO no banco — `media_assets.s3_claimed_at` — garante UMA
+  cópia por asset mesmo com várias réplicas; claim velho expira em 10 min).
+- **Fotos de perfil**: as respostas de perfil agendam a migração de `avatar`/`banner`.
+- **Demais referências** (capas de comunidade/grupo/empresa/evento/jogo, logo de vaga, página de
+  criador): a varredura em lote (`media_url_migrations` + registro de colunas no
+  `UrlReferencePersistenceAdapter`) agenda as que ninguém acessou.
+- **Troca de referência**: só depois de a URL pública do S3 responder (`verify`), por UPDATE
+  condicional (`where coluna = :antiga`) — mudança concorrente de foto nunca é sobrescrita e
+  referências compartilhadas são trocadas de uma vez.
+- **SSRF**: só https nos hosts do ImageKit (allowlist) ou caminho relativo `/uploads/`; nenhuma
+  outra origem é baixada.
+- **Falhas**: ficam registradas (`attempts`/`last_error`), referências intactas, até 5 tentativas;
+  a leitura NUNCA depende da migração.
 
 **Ordem para destravar:** (1) **credencial S3 para o pod**: role IRSA com
 `s3:PutObject/GetObject/DeleteObject` no bucket/prefixo, anexada à `socialthing-sa` (é o que o

@@ -33,14 +33,18 @@ public class MediaService implements CreateMediaUploadUseCase, GetMediaAssetUseC
 	private final StorageUrlFactory storageUrlFactory;
 	/** So existe com storage S3 (ver S3StorageConfig); sem ele, o fluxo do ImageKit segue igual. */
 	private final java.util.Optional<MediaUploadSigner> uploadSigner;
+	/** Só existe com a migração ligada; presente aqui para a leitura agendar a cópia oportunista. */
+	private final org.springframework.beans.factory.ObjectProvider<LazyMediaCopyTrigger> lazyCopy;
 	private final Clock clock;
 
 	public MediaService(MediaAssetRepository mediaAssetRepository, MediaDeletionJobRepository mediaDeletionJobRepository,
-			StorageUrlFactory storageUrlFactory, java.util.Optional<MediaUploadSigner> uploadSigner, Clock clock) {
+			StorageUrlFactory storageUrlFactory, java.util.Optional<MediaUploadSigner> uploadSigner,
+			org.springframework.beans.factory.ObjectProvider<LazyMediaCopyTrigger> lazyCopy, Clock clock) {
 		this.mediaAssetRepository = mediaAssetRepository;
 		this.mediaDeletionJobRepository = mediaDeletionJobRepository;
 		this.storageUrlFactory = storageUrlFactory;
 		this.uploadSigner = uploadSigner;
+		this.lazyCopy = lazyCopy;
 		this.clock = clock;
 	}
 
@@ -74,7 +78,11 @@ public class MediaService implements CreateMediaUploadUseCase, GetMediaAssetUseC
 	@Override
 	@Transactional(readOnly = true)
 	public MediaAssetView getMedia(String mediaId) {
-		return MediaAssetView.from(findMedia(mediaId));
+		MediaAsset asset = findMedia(mediaId);
+		// Leitura = oportunidade de migração: quem pede o asset (grade do post, preview) agenda a
+		// cópia para o S3 sem esperar. Resposta idêntica à de sempre; nada bloqueia.
+		lazyCopy.ifAvailable(trigger -> trigger.copySoon(asset));
+		return MediaAssetView.from(asset);
 	}
 
 	@Override
