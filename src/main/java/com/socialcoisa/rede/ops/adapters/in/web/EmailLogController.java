@@ -31,7 +31,12 @@ class EmailLogController {
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestParam(defaultValue = "50") int limit) {
 		adminGuard.requireAdmin(currentUserResolver.resolve(userId, sessionToken));
-		return logs.findRecent(limit).stream().map(EmailLogView::from).toList();
+		// 2FA fora do painel: nem destinatário, nem assunto, nem existência do envio. O log existe
+		// para acompanhar entrega de avisos; código de segundo fator não é metadado de operação.
+		return logs.findRecent(limit).stream()
+			.filter(log -> !"TWO_FACTOR".equals(log.kind()))
+			.map(EmailLogView::from)
+			.toList();
 	}
 
 	record EmailLogView(String id, String toEmail, String subject, String kind, String status, String error,
