@@ -24,10 +24,16 @@ class VersionController {
 	private final Instant startedAt = Instant.now();
 	private final ObjectProvider<BuildProperties> build;
 	private final ObjectProvider<Flyway> flyway;
+	private final String mediaStorage;
+	private final ObjectProvider<com.socialcoisa.rede.media.application.port.out.MediaUploadSigner> uploadSigner;
 
-	VersionController(ObjectProvider<BuildProperties> build, ObjectProvider<Flyway> flyway) {
+	VersionController(ObjectProvider<BuildProperties> build, ObjectProvider<Flyway> flyway,
+			@org.springframework.beans.factory.annotation.Value("${rede.media.storage:imagekit}") String mediaStorage,
+			ObjectProvider<com.socialcoisa.rede.media.application.port.out.MediaUploadSigner> uploadSigner) {
 		this.build = build;
 		this.flyway = flyway;
+		this.mediaStorage = mediaStorage;
+		this.uploadSigner = uploadSigner;
 	}
 
 	@GetMapping("/version")
@@ -38,6 +44,12 @@ class VersionController {
 		view.put("artefato", props != null && props.getTime() != null ? props.getTime().toString() : null);
 		view.put("bootEm", startedAt.toString());
 		view.put("uptimeSegundos", java.time.Duration.between(startedAt, Instant.now()).toSeconds());
+		// Sonda de operação: qual storage ESTE pod está usando e se o upload assinado existe.
+		// (Público e inofensivo — é o que mostra, pelo ar, se a env do S3 chegou ao pod.)
+		Map<String, Object> midia = new LinkedHashMap<>();
+		midia.put("storage", mediaStorage);
+		midia.put("uploads", uploadSigner.getIfAvailable() != null ? "s3-assinado" : "indisponivel");
+		view.put("midia", midia);
 
 		Flyway fw = flyway.getIfAvailable();
 		if (fw != null) {
