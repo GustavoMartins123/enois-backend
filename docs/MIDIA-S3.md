@@ -9,6 +9,38 @@ depois da virada. É esse o "fallback": ele é estrutural, não um caminho espec
 > real** (o S3 só existe em produção). A primeira virada de ambiente é a estreia — vale ler a seção
 > "Primeira virada, com calma". A migração dos objetos antigos ainda **não** está implementada.
 
+## Estado verificado em 2026-10-19
+
+Verificação feita contra a produção e o código deste repo:
+
+- **A virada ainda não começou.** O manifesto roda com `REDE_MEDIA_STORAGE=imagekit`; upload novo
+  continua indo para o ImageKit e **nenhum asset foi migrado**. O "sem ninguém perceber" está
+  garantido só porque nada mudou — não porque a migração esteja em andamento.
+- **Bloqueio 1 — a CDN pública não serve HTTPS.** `cdn.enois.ia.br` aponta para o CloudFront
+  (`f2b96876…cloudfront.net`), mas o certificado apresentado é o padrão `*.cloudfront.net`: o
+  `subjectAltName` não cobre o domínio e o TLS falha na validação. Com `-k`, o CloudFront responde
+  **403**. Falta configurar o **alternate domain name** + certificado ACM (us-east-1) na
+  distribuição. Enquanto isso, `REDE_MEDIA_S3_PUBLIC_BASE_URL=https://cdn.enois.ia.br` não serve
+  nenhuma leitura — virar o storage agora deixaria toda mídia nova quebrada.
+- **Bloqueio 2 — exclusão no S3 não tem gateway.** `S3StorageConfig` cria URL factory, presigner e
+  signer; **não** cria `MediaStorageGateway`. O bean do ImageKit é incondicional, então em modo s3
+  o delete de mídia chamaria a API do ImageKit. Falta um `S3MediaStorageGateway` (`DeleteObject`)
+  e condicionar o gateway do ImageKit ao modo `imagekit`.
+- **Bloqueio 3 — migração dos antigos não existe.** Não há coluna `storage_provider` nem gatilho
+  de migração por leitura (`GET /media/{id}`); o desenho abaixo segue válido.
+- **Upload assinado nunca rodou contra o bucket real** (não há credencial AWS nesta máquina); a
+  primeira virada é a estreia.
+- **Vídeo enviado como arquivo:** o player do Énóis pedia a URL crua do ImageKit e recebia
+  `403 ELIMIT` (cota de transformação de vídeo da conta) — o vídeo não tocava. O front passou a
+  pedir o **original** (`?tr=orig-true`) em todos os players e no `og:video` (commit `16152db`);
+  o vídeo de teste responde **206** com Range e `readyState=4` no Chrome. Em S3 a URL fica
+  intacta (sem transformação), mas o poster de vídeo continua sem derivada (limitação abaixo).
+
+**Ordem para destravar:** (1) CloudFront com alternate domain + ACM e conferir o `curl -I` com
+certificado válido; (2) `S3MediaStorageGateway` + coluna `storage_provider` + migração por leitura
+(desligada por padrão até o item 1); (3) testar um upload real numa réplica e só então virar
+`REDE_MEDIA_STORAGE=s3`; (4) rodar a migração em lotes, preservando os objetos no ImageKit.
+
 ## O que a AWS precisa ter
 
 | item | por quê |
