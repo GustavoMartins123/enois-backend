@@ -1,6 +1,7 @@
 package com.socialcoisa.rede.messaging.adapters.in.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -83,6 +84,29 @@ class DirectConversationTests {
 				.content(objectMapper.writeValueAsString(Map.of("userId", b.userId()))))
 			.andExpect(status().isForbidden())
 			.andExpect(jsonPath("$.code").value("USER_BLOCKED"));
+	}
+
+	@Test
+	void newMessageMovesConversationToTheTop() throws Exception {
+		var a = auth.authenticate("dm_top_a");
+		var b = auth.authenticate("dm_top_b");
+		var c = auth.authenticate("dm_top_c");
+
+		String ab = openDirect(a, b.userId(), "dm-top-ab");
+		String ac = openDirect(a, c.userId(), "dm-top-ac");
+		assertThat(ab).isNotEqualTo(ac);
+
+		mockMvc.perform(post("/conversations/" + ab + "/messages")
+				.header("X-Session-Token", a.token())
+				.header("Idempotency-Key", "dm-top-send")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("text", "mensagem nova"))))
+			.andExpect(status().isCreated());
+
+		MvcResult list = mockMvc.perform(get("/conversations").header("X-Session-Token", a.token()))
+			.andExpect(status().isOk()).andReturn();
+		var items = objectMapper.readTree(list.getResponse().getContentAsString()).get("items");
+		assertThat(items.get(0).get("id").asText()).isEqualTo(ab);
 	}
 
 	private String openDirect(TestAuthHelper.AuthSession session, String targetUserId, String idem) throws Exception {

@@ -80,6 +80,9 @@ public class MessagingService {
 		String id = "message_" + UUID.randomUUID().toString().replace("-", "");
 		Message message = Message.create(id, conversationId, senderId, text, clock.instant());
 		repository.saveMessage(message);
+		// A lista de conversas ordena por updatedAt; sem este toque a conversa antiga fica no lugar
+		// mesmo recebendo mensagem nova (#25 dos issues).
+		repository.saveConversation(conversation.touch(clock.instant()));
 		String preview = text.length() > 80 ? text.substring(0, 77) + "..." : text;
 		List<ConversationParticipant> participants = repository.findParticipantsByConversation(conversationId);
 		for (ConversationParticipant p : participants) {
