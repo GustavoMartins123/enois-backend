@@ -24,13 +24,17 @@ class GameUrlGuardTests {
 	}
 
 	@Test
-	void codificaAcentoNoCaminhoEmVezDeRecusar() {
-		assertThat(guard.validate("https://example.com/cafés-da-manhã")).contains("caf%C3%A9");
+	void aceitaAcentoNoCaminhoEmVezDeRecusar() {
+		// O URI do Java preserva os caracteres internacionais sem codificar; o navegador codifica
+		// na hora do pedido. O que importa aqui é ACEITAR o link que o browser aceita.
+		assertThat(guard.validate("https://example.com/cafés-da-manhã"))
+			.isEqualTo("https://example.com/cafés-da-manhã");
 	}
 
 	@Test
-	void codificaCaractereEspecialNaQuery() {
-		assertThat(guard.validate("https://example.com/j?nome=maçã")).contains("ma%C3%A3");
+	void aceitaCaractereEspecialNaQuery() {
+		assertThat(guard.validate("https://example.com/j?nome=maçã"))
+			.isEqualTo("https://example.com/j?nome=maçã");
 	}
 
 	@Test
