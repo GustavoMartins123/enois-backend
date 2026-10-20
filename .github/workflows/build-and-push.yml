@@ -46,7 +46,7 @@ jobs:
 
       - name: ⚙️ Configurar Credenciais AWS via OIDC
         if: github.event_name != 'pull_request'
-        uses: aws-actions/configure-aws-credentials@v6.2.4
+        uses: aws-actions/configure-aws-credentials@v6.3.0
         with:
           role-to-assume: arn:aws:iam::818928662779:role/forest-dev-enois-ecr
           aws-region: ${{ env.AWS_REGION }}
