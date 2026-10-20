@@ -49,8 +49,12 @@
 
 ## Fase 4 — Importação com consentimento
 
-- [ ] Helper "trazer do perfil social": prévia campo a campo + confirmação explícita;
-  teste provando que NADA é copiado sem confirmação.
+- [x] Helper "trazer do perfil social": prévia campo a campo + confirmação explícita;
+  teste provando que NADA é copiado sem confirmação. `GET
+  /me/business-profile/import-preview` só mostra (ajustado aos limites); `POST
+  /me/business-profile/import` aplica SOMENTE os campos escolhidos; lista vazia
+  recusada (nada em bloco); campo desconhecido recusado. 4 testes verdes.
+  (commit do ciclo)
 
 ## Fase 5 — Publicação BUSINESS
 

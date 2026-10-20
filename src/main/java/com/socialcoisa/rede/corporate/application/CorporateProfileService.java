@@ -1,13 +1,18 @@
 package com.socialcoisa.rede.corporate.application;
 
 import java.time.Clock;
+import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository;
 import com.socialcoisa.rede.corporate.domain.CorporateProfile;
+import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
+import com.socialcoisa.rede.profile.domain.UserProfile;
 import com.socialcoisa.rede.shared.web.ApiException;
 
 /**
@@ -25,11 +30,19 @@ import com.socialcoisa.rede.shared.web.ApiException;
 @Service
 public class CorporateProfileService {
 
+	/** Campos que podem vir do perfil social — por nome, nunca em bloco. */
+	public static final List<String> IMPORTABLE_FIELDS = List.of(
+		"name", "headline", "bio", "avatar", "banner", "location");
+	private static final Set<String> IMPORTABLE_SET = Set.copyOf(IMPORTABLE_FIELDS);
+
 	private final CorporateProfileRepository repository;
+	private final UserProfileRepository profiles;
 	private final Clock clock;
 
-	public CorporateProfileService(CorporateProfileRepository repository, Clock clock) {
+	public CorporateProfileService(CorporateProfileRepository repository, UserProfileRepository profiles,
+			Clock clock) {
 		this.repository = repository;
+		this.profiles = profiles;
 		this.clock = clock;
 	}
 
@@ -61,6 +74,69 @@ public class CorporateProfileService {
 			trimOrNull(headline, 200), trimOrNull(bio, 2000), trimOrNull(avatar, 500), trimOrNull(banner, 500),
 			trimOrNull(location, 200), trimOrNull(industry, 200), trimOrNull(externalLinks, 1000),
 			clock.instant()));
+	}
+
+	/**
+	 * Prévia da importação: o que o perfil social oferece, já ajustado aos limites do perfil
+	 * profissional. NADA é escrito aqui — é só a lista para a pessoa revisar.
+	 */
+	public ImportPreview importPreview(String userId) {
+		UserProfile social = profiles.findById(userId)
+			.orElseThrow(() -> new ApiException(404, "PROFILE_NOT_FOUND", "Perfil social não encontrado."));
+		return new ImportPreview(
+			fit(social.name(), 160), fit(social.headline(), 200), fit(social.bio(), 2000),
+			fit(social.avatar(), 500), fit(social.banner(), 500), fit(social.location(), 200));
+	}
+
+	public record ImportPreview(String name, String headline, String bio, String avatar, String banner,
+			String location) {
+	}
+
+	/**
+	 * Traz do perfil social SOMENTE os campos escolhidos explicitamente (consentimento campo a
+	 * campo). Lista vazia é recusada — nada é copiado em bloco nem por padrão; o que não foi
+	 * escolhido continua como estava no perfil profissional.
+	 */
+	public CorporateProfile importFromSocial(String userId, List<String> fields) {
+		if (fields == null || fields.isEmpty()) {
+			throw new ApiException(400, "NO_FIELDS_SELECTED",
+				"Escolha pelo menos um campo para trazer do perfil social.");
+		}
+		CorporateProfile current = byUserIdOrThrow(userId);
+		UserProfile social = profiles.findById(userId)
+			.orElseThrow(() -> new ApiException(404, "PROFILE_NOT_FOUND", "Perfil social não encontrado."));
+		Set<String> selected = new java.util.HashSet<>();
+		for (String field : fields) {
+			String key = field == null ? "" : field.trim().toLowerCase(Locale.ROOT);
+			if (!IMPORTABLE_SET.contains(key)) {
+				throw new ApiException(400, "INVALID_IMPORT_FIELD",
+					"Campo desconhecido para importação: " + key);
+			}
+			selected.add(key);
+		}
+		String headline = selected.contains("headline") ? fit(social.headline(), 200) : current.headline();
+		String bio = selected.contains("bio") ? fit(social.bio(), 2000) : current.bio();
+		String avatar = selected.contains("avatar") ? fit(social.avatar(), 500) : current.avatar();
+		String banner = selected.contains("banner") ? fit(social.banner(), 500) : current.banner();
+		String location = selected.contains("location") ? fit(social.location(), 200) : current.location();
+		CorporateProfile updated = current.withDetails(headline, bio, avatar, banner, location,
+			current.industry(), current.externalLinks(), clock.instant());
+		if (selected.contains("name") && StringUtils.hasText(social.name())) {
+			updated = updated.withName(social.name(), clock.instant());
+		}
+		return repository.save(updated);
+	}
+
+	/** Ajusta ao limite do campo profissional sem quebrar o texto (o preview mostra o resultado). */
+	private String fit(String value, int max) {
+		if (!StringUtils.hasText(value)) {
+			return null;
+		}
+		String trimmed = value.trim();
+		if (trimmed.length() <= max) {
+			return trimmed;
+		}
+		return trimmed.substring(0, Math.max(0, max - 1)).trim() + "…";
 	}
 
 	public CorporateProfile rename(String userId, String name) {

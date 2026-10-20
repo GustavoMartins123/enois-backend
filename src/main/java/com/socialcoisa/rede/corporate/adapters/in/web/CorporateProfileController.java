@@ -1,5 +1,6 @@
 package com.socialcoisa.rede.corporate.adapters.in.web;
 
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.web.bind.annotation.GetMapping;
@@ -45,6 +46,9 @@ class CorporateProfileController {
 	record NameRequest(String name) {
 	}
 
+	record ImportRequest(List<String> fields) {
+	}
+
 	@GetMapping("/me/business-profile")
 	Map<String, Object> me(@RequestHeader(value = USER_HEADER, required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken) {
@@ -83,6 +87,23 @@ class CorporateProfileController {
 			@RequestHeader("X-Session-Token") String sessionToken, @RequestBody NameRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		return view(service.rename(user.id().value(), request.name()));
+	}
+
+	/** Prévia da importação do perfil social — nada é gravado. */
+	@GetMapping("/me/business-profile/import-preview")
+	CorporateProfileService.ImportPreview importPreview(
+			@RequestHeader(value = USER_HEADER, required = false) String userId,
+			@RequestHeader("X-Session-Token") String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		return service.importPreview(user.id().value());
+	}
+
+	/** Aplica só os campos escolhidos (consentimento campo a campo). */
+	@PostMapping("/me/business-profile/import")
+	Map<String, Object> importFromSocial(@RequestHeader(value = USER_HEADER, required = false) String userId,
+			@RequestHeader("X-Session-Token") String sessionToken, @RequestBody ImportRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		return view(service.importFromSocial(user.id().value(), request == null ? null : request.fields()));
 	}
 
 	@PostMapping("/me/business-profile/activate")

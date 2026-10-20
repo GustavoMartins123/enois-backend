@@ -76,3 +76,13 @@
   autor (sem bloqueio) continua vendo → desbloquear traz de volta.
 - Correções: V108 dividida em instruções únicas (H2); tema da conta virou
   nullable; grafia TECNOLOGIA (a taxonomia é em português).
+
+
+## 2026-10-20 — Fase 4 (importação com consentimento)
+
+- `CorporateImportConsentTests` (4 verdes): a prévia mostra headline/bio do social SEM
+  gravar nada; importar só "headline" traz só ela (bio continua vazia, nome
+  profissional preservado); seleção vazia → 400 NO_FIELDS_SELECTED; campo desconhecido
+  → 400 INVALID_IMPORT_FIELD.
+- Correção durante a validação: usernames únicos por teste (o H2 da classe é o mesmo —
+  username repetido entre testes dava 409).
