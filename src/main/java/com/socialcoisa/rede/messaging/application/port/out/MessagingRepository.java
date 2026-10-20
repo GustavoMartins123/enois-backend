@@ -63,4 +63,7 @@ public interface MessagingRepository {
 	List<ReactionSummary> findReactionsByMessageId(String messageId);
 
 	record ReactionSummary(String userId, com.socialcoisa.rede.feed.domain.ReactionType type, java.time.Instant createdAt) {}
+
+	/** Todas as mensagens enviadas por um usuario — usado pelo ban cleanup. */
+	List<Message> findAllBySender(String senderId);
 }

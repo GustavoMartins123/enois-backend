@@ -48,10 +48,10 @@ class LinkedInIntegrationController {
 	}
 
 	record StatusView(boolean connected, boolean postSync, boolean canPost, Instant tokenExpiresAt,
-			String reason) {
+			String reason, String lastShareStatus, Instant lastShareAt) {
 		static StatusView from(LinkedInIntegrationService.Status status) {
 			return new StatusView(status.connected(), status.postSync(), status.canPost(),
-				status.tokenExpiresAt(), status.reason());
+				status.tokenExpiresAt(), status.reason(), status.lastShareStatus(), status.lastShareAt());
 		}
 	}
 }

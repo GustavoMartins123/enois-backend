@@ -14,6 +14,7 @@ import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import io.github.resilience4j.bulkhead.BulkheadFullException;
@@ -57,6 +58,18 @@ public class GlobalExceptionHandler {
 			cause = cause.getCause();
 		}
 		return cause.getMessage();
+	}
+
+	/**
+	 * O arquivo estourou o limite do Servlet (ver `spring.servlet.multipart.max-file-size`). Sem
+	 * este tratamento, um ZIP grande virava "Erro interno inesperado" — foi assim que o import do
+	 * LinkedIn (5 MB no servico, 1 MB no Servlet) ficou sem resposta util para quem tentava.
+	 */
+	@ExceptionHandler(MaxUploadSizeExceededException.class)
+	ResponseEntity<ErrorResponse> handleUploadTooLarge(MaxUploadSizeExceededException exception) {
+		return ResponseEntity.status(413)
+			.body(new ErrorResponse("FILE_TOO_LARGE", "O arquivo enviado passa do limite permitido.",
+				Instant.now()));
 	}
 
 	@ExceptionHandler(RequestNotPermitted.class)

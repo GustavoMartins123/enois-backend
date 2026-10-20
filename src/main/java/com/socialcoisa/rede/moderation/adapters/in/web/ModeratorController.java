@@ -19,6 +19,8 @@ import com.socialcoisa.rede.moderation.domain.ModerationVoteType;
 import com.socialcoisa.rede.moderation.domain.ModeratorApplicationStatus;
 import com.socialcoisa.rede.moderation.domain.SanctionType;
 import com.socialcoisa.rede.moderation.domain.SanctionVoteType;
+import com.socialcoisa.rede.services.application.ServiceOfferService;
+import com.socialcoisa.rede.services.application.ServiceView;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.shared.web.AdminGuard;
 import com.socialcoisa.rede.shared.web.ApiException;
@@ -38,17 +40,22 @@ class ModeratorController {
 
 	private final ModeratorService moderators;
 	private final SanctionProposalService sanctionProposals;
+	private final com.socialcoisa.rede.moderation.application.IpBlockService ipBlocks;
 	private final GameService games;
+	private final ServiceOfferService serviceOffers;
 	private final UserProfileRepository profiles;
 	private final CurrentUserResolver currentUserResolver;
 	private final AdminGuard adminGuard;
 
 	ModeratorController(ModeratorService moderators, SanctionProposalService sanctionProposals,
-			GameService games, UserProfileRepository profiles, CurrentUserResolver currentUserResolver,
-			AdminGuard adminGuard) {
+			com.socialcoisa.rede.moderation.application.IpBlockService ipBlocks,
+			GameService games, ServiceOfferService serviceOffers, UserProfileRepository profiles,
+			CurrentUserResolver currentUserResolver, AdminGuard adminGuard) {
 		this.moderators = moderators;
 		this.sanctionProposals = sanctionProposals;
+		this.ipBlocks = ipBlocks;
 		this.games = games;
+		this.serviceOffers = serviceOffers;
 		this.profiles = profiles;
 		this.currentUserResolver = currentUserResolver;
 		this.adminGuard = adminGuard;
@@ -165,6 +172,61 @@ class ModeratorController {
 		return moderators.sanctionUser(user.id().value(), username, request.type(), request.reason());
 	}
 
+	/** Limpeza por spam: APAGA DO BANCO todos os posts e comentários do usuário. */
+	@PostMapping("/admin/users/{username}/sanitize")
+	ModeratorService.SanitizeResult sanitize(
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String username,
+			@RequestBody(required = false) DecisionRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		adminGuard.requireAdmin(user);
+		return moderators.sanitizeUser(user.id().value(), username,
+			request == null ? "Limpeza por spam (motivo não informado)" : request.note());
+	}
+
+	/** IPs recentes de onde o usuário entrou — fonte para o bloqueio de IP. */
+	@GetMapping("/admin/users/{username}/ips")
+	List<com.socialcoisa.rede.moderation.application.IpBlockService.UserIpView> userIps(
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String username) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		adminGuard.requireAdmin(user);
+		return ipBlocks.ipsOfUser(username);
+	}
+
+	@PostMapping("/admin/blocked-ips")
+	com.socialcoisa.rede.moderation.application.IpBlockService.BlockedIpView blockIp(
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader("X-Session-Token") String sessionToken,
+			@RequestBody BlockIpRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		adminGuard.requireAdmin(user);
+		return ipBlocks.block(user.id().value(), request.ip(), request.reason());
+	}
+
+	@GetMapping("/admin/blocked-ips")
+	List<com.socialcoisa.rede.moderation.application.IpBlockService.BlockedIpView> blockedIps(
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader("X-Session-Token") String sessionToken,
+			@RequestParam(defaultValue = "100") int limit) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		adminGuard.requireAdmin(user);
+		return ipBlocks.list(limit);
+	}
+
+	@PostMapping("/admin/blocked-ips/{ip}/unblock")
+	Map<String, String> unblockIp(
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String ip) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		adminGuard.requireAdmin(user);
+		ipBlocks.unblock(ip);
+		return Map.of("ip", ip, "blocked", "false");
+	}
+
+	public record BlockIpRequest(String ip, String reason) {
+	}
+
 	@GetMapping("/moderation/sanction-proposals")
 	List<SanctionProposalService.ProposalView> sanctionProposals(
 			@RequestHeader(value = "X-User-Id", required = false) String userId,
@@ -233,6 +295,8 @@ class ModeratorController {
 		return Map.of("id", rejected.id(), "status", rejected.status().name());
 	}
 
+	// ---- Serviços da comunidade: mesma fila e mesmas regras dos jogos ----
+
 	private GameReviewView gameView(Game game) {
 		String username = profiles.findById(game.userId()).map(profile -> profile.username()).orElse(null);
 		return new GameReviewView(game.id(), game.userId(), username, game.title(), game.description(),
@@ -252,6 +316,54 @@ class ModeratorController {
 	}
 
 	record ApplicationRequest(String motivation, String experience, String availability) {
+	}
+
+	// ---- Serviços da comunidade: mesma fila e mesmas regras dos jogos ----
+
+	@GetMapping("/moderation/services")
+	List<ServiceView> pendingServices(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader("X-Session-Token") String sessionToken,
+			@RequestParam(defaultValue = "30") int limit) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		requireModerator(user);
+		return serviceOffers.pending(limit).stream()
+			.map(offer -> ServiceView.of(offer, serviceOffers.usernameOf(offer), user.id().value()))
+			.toList();
+	}
+
+	@PostMapping("/moderation/services/{serviceId}/approve")
+	Map<String, Object> approveService(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String serviceId,
+			@RequestBody(required = false) DecisionRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		requireModerator(user);
+		var approved = serviceOffers.approve(serviceId, user.id().value(),
+			request == null ? null : request.note());
+		return Map.of("id", approved.id(), "status", approved.status().name());
+	}
+
+	@PostMapping("/moderation/services/{serviceId}/reject")
+	Map<String, Object> rejectService(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String serviceId,
+			@RequestBody DecisionRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		requireModerator(user);
+		var rejected = serviceOffers.reject(serviceId, user.id().value(),
+			request == null ? null : request.note());
+		// O motivo vai junto na resposta: é o que o painel mostra e o prestador vai ler.
+		return Map.of("id", rejected.id(), "status", rejected.status().name(), "reviewNote",
+			rejected.reviewNote() == null ? "" : rejected.reviewNote());
+	}
+
+	@PostMapping("/moderation/services/{serviceId}/suspend")
+	Map<String, Object> suspendService(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String serviceId,
+			@RequestBody(required = false) DecisionRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		requireModerator(user);
+		var suspended = serviceOffers.suspend(serviceId, user.id().value(),
+			request == null ? null : request.note());
+		return Map.of("id", suspended.id(), "status", suspended.status().name());
 	}
 
 	record DecisionRequest(String note) {

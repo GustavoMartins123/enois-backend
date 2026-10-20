@@ -67,6 +67,10 @@ class AuthController {
 	private final IdempotencyApplicationService idempotency;
 	private final com.socialcoisa.rede.identity.application.AuthThrottle throttle;
 	private final OAuthProperties oAuthProperties;
+	private final com.socialcoisa.rede.identity.adapters.out.TurnstileValidator turnstile;
+	private final com.socialcoisa.rede.identity.application.NewDeviceNotifier newDeviceNotifier;
+	private final com.socialcoisa.rede.shared.security.IpBlockReader ipBlockReader;
+	private final com.socialcoisa.rede.shared.security.ClientIpResolver ipResolver;
 
 	AuthController(SignupUseCase signupUseCase, VerifyEmailUseCase verifyEmailUseCase,
 			TwoFactorLoginUseCase twoFactorLoginUseCase, TwoFactorUseCase twoFactorUseCase,
@@ -81,7 +85,11 @@ class AuthController {
 			DeleteAccountUseCase deleteAccountUseCase,
 			IdempotencyApplicationService idempotency,
 			OAuthProperties oAuthProperties,
-			com.socialcoisa.rede.identity.application.AuthThrottle throttle) {
+			com.socialcoisa.rede.identity.application.AuthThrottle throttle,
+			com.socialcoisa.rede.identity.adapters.out.TurnstileValidator turnstile,
+			com.socialcoisa.rede.identity.application.NewDeviceNotifier newDeviceNotifier,
+			com.socialcoisa.rede.shared.security.IpBlockReader ipBlockReader,
+			com.socialcoisa.rede.shared.security.ClientIpResolver ipResolver) {
 		this.signupUseCase = signupUseCase;
 		this.verifyEmailUseCase = verifyEmailUseCase;
 		this.twoFactorLoginUseCase = twoFactorLoginUseCase;
@@ -99,21 +107,42 @@ class AuthController {
 		this.idempotency = idempotency;
 		this.throttle = throttle;
 		this.oAuthProperties = oAuthProperties;
+		this.turnstile = turnstile;
+		this.newDeviceNotifier = newDeviceNotifier;
+		this.ipBlockReader = ipBlockReader;
+		this.ipResolver = ipResolver;
+	}
+
+	/** Bloqueio de IP pela moderacao (V115): nenhum fluxo de autenticacao emite sessao de IP banido. */
+	private void exigeIpNaoBloqueado(String ip) {
+		if (ipBlockReader.blocked(ip)) {
+			throw new ApiException(403, "IP_BLOCKED",
+				"Este endereco de rede esta bloqueado pela moderacao. Fale com o suporte se for um erro.");
+		}
 	}
 
 	@PostMapping("/signup")
 	@RateLimiter(name = "auth")
 	ResponseEntity<String> signup(@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@RequestHeader(value = "X-Forwarded-For", required = false) String forwardedFor,
-			@RequestBody SignupRequest request) {
-		String ip = forwardedFor == null || forwardedFor.isBlank() ? "desconhecido"
-			: forwardedFor.split(",")[0].trim();
-		throttle.exigeSignupPermitido(ip);
-		String scope = authScope(request.email());
-		String hash = idempotency.hash(request);
+			@RequestHeader(value = "X-Device-Fingerprint", required = false) String deviceFingerprint,
+			@RequestBody SignupRequest body,
+			jakarta.servlet.http.HttpServletRequest request) {
+		String ip = ipResolver.resolve(request);
+		exigeIpNaoBloqueado(ip);
+		// Honeypot: bots preenchem o campo "website" que humanos nunca veem.
+		// Resposta fake (201) para nao dar dica ao atacante.
+		if (body.website() != null && !body.website().isBlank()) {
+			return ResponseEntity.status(201)
+				.body("{\"email\":\"" + body.email() + "\",\"verificationRequired\":true,\"emailSent\":true}");
+		}
+		turnstile.require(body.turnstileToken());
+		throttle.exigeSignupPermitido(ip, deviceFingerprint);
+		String scope = authScope(body.email());
+		String hash = idempotency.hash(body);
 		return idempotency.execute(scope, "POST", "/api/auth/signup", idempotencyKey, hash, () -> new CommandResponse(201,
-			signupUseCase.signup(new SignupCommand(request.name(), "USER", request.email(), request.password(),
-				request.acceptedTerms()))));
+			signupUseCase.signup(new SignupCommand(body.name(), "USER", body.email(), body.password(),
+				body.acceptedTerms()))));
 	}
 
 	/**
@@ -145,23 +174,30 @@ class AuthController {
 	@PostMapping("/login")
 	@RateLimiter(name = "auth")
 	ResponseEntity<String> login(@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
-			@RequestBody LoginRequest request) {
-		String scope = authScope(request.email());
-		String hash = idempotency.hash(request);
-		throttle.exigeLoginPermitido(request.email());
+			@RequestHeader(value = "X-Device-Fingerprint", required = false) String deviceFingerprint,
+			@RequestBody LoginRequest body,
+			jakarta.servlet.http.HttpServletRequest httpRequest) {
+		String ip = ipResolver.resolve(httpRequest);
+		exigeIpNaoBloqueado(ip);
+		turnstile.require(body.turnstileToken());
+		String scope = authScope(body.email());
+		String hash = idempotency.hash(body);
+		throttle.exigeLoginPermitido(body.email());
 		return idempotency.execute(scope, "POST", "/api/auth/login", idempotencyKey, hash, () -> {
 			try {
-				LoginResult result = loginUseCase.login(new LoginCommand(request.email(), request.password()));
-				throttle.limpaLogin(request.email());
-				return result.requiresTwoFactor()
-					? new CommandResponse(202, Map.of("twoFactorRequired", true,
-						"challengeId", result.challenge().challengeId(),
-						"method", result.challenge().method(),
-						"expiresAt", result.challenge().expiresAt().toString()))
-					: new CommandResponse(200, result.session());
+				LoginResult result = loginUseCase.login(new LoginCommand(body.email(), body.password(), ip));
+				throttle.limpaLogin(body.email());
+				if (!result.requiresTwoFactor()) {
+					newDeviceNotifier.check(result.session().user().id(), deviceFingerprint);
+					return new CommandResponse(200, result.session());
+				}
+				return new CommandResponse(202, Map.of("twoFactorRequired", true,
+					"challengeId", result.challenge().challengeId(),
+					"method", result.challenge().method(),
+					"expiresAt", result.challenge().expiresAt().toString()));
 			} catch (ApiException falha) {
 				if (falha.status() == 401) {
-					throttle.registraFalhaLogin(request.email());
+					throttle.registraFalhaLogin(body.email());
 				}
 				throw falha;
 			}
@@ -171,8 +207,14 @@ class AuthController {
 	/** Conclui o login com o codigo do segundo fator (ou com um codigo de recuperacao). */
 	@PostMapping("/2fa/verify")
 	@RateLimiter(name = "auth")
-	ResponseEntity<AuthResponse> verifyTwoFactor(@RequestBody VerifyTwoFactorRequest request) {
-		return ResponseEntity.ok(twoFactorLoginUseCase.verifyTwoFactor(request.challengeId(), request.code()));
+	ResponseEntity<AuthResponse> verifyTwoFactor(
+			@RequestHeader(value = "X-Device-Fingerprint", required = false) String deviceFingerprint,
+			@RequestBody VerifyTwoFactorRequest body,
+			jakarta.servlet.http.HttpServletRequest httpRequest) {
+		exigeIpNaoBloqueado(ipResolver.resolve(httpRequest));
+		AuthResponse auth = twoFactorLoginUseCase.verifyTwoFactor(body.challengeId(), body.code());
+		newDeviceNotifier.check(auth.user().id(), deviceFingerprint);
+		return ResponseEntity.ok(auth);
 	}
 
 	/** Reenvia o codigo por e-mail do desafio em andamento. */
@@ -301,11 +343,20 @@ class AuthController {
 	@RateLimiter(name = "auth")
 	Object oauthCallback(@PathVariable String provider, @RequestParam(required = false) String code,
 			@RequestParam(required = false) String state, @RequestParam(required = false) String error) {
-		OAuthProvider oauthProvider = parseProvider(provider);
-		if (StringUtils.hasText(error) || !StringUtils.hasText(code)) {
-			return finishOAuthError(oauthProvider, error);
+		// Este callback e uma NAVIGACAO do browser (o provedor redireciona para ca). Qualquer
+		// falha vira redirect para a tela de callback do app com mensagem legivel — JSON cru
+		// aqui deixa a pessoa olhando um erro sem saida (relato de suporte: "Requisicao
+		// invalida" ao importar o perfil do LinkedIn).
+		try {
+			OAuthProvider oauthProvider = parseProvider(provider);
+			if (StringUtils.hasText(error) || !StringUtils.hasText(code)) {
+				return finishOAuthError(oauthProvider, error);
+			}
+			return finishOAuth(oAuthUseCase.callback(oauthProvider, code, state, null));
 		}
-		return finishOAuth(oAuthUseCase.callback(oauthProvider, code, state, null));
+		catch (ApiException e) {
+			return finishOAuthError(parseProvider(provider), e.code());
+		}
 	}
 
 	/**

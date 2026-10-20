@@ -9,7 +9,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.transaction.annotation.Transactional;
 
 import tools.jackson.databind.ObjectMapper;
 
@@ -31,7 +30,10 @@ import jakarta.persistence.EntityManager;
  */
 @SpringBootTest
 @AutoConfigureMockMvc
-@Transactional
+// Sem @Transactional de propósito: o helper de autenticação cria a conta por uma requisição
+// MockMvc e o TestDatabase a lê por outro JdbcTemplate. Numa transação de teste a conta fica
+// não-commitada e a leitura (conexão diferente quando o contexto é trocado) não a vê — era o
+// "usuario nao criado" que só aparecia na suíte completa.
 class LazyMigrationPersistenceTests {
 
 	@Autowired
@@ -45,6 +47,10 @@ class LazyMigrationPersistenceTests {
 
 	@Autowired
 	private EntityManager em;
+
+	/** Só o update direto precisa de transação; a autenticação precisa COMMITAR (ver nota acima). */
+	@Autowired
+	private org.springframework.transaction.support.TransactionTemplate transactionTemplate;
 
 	@Autowired
 	private MockMvc mockMvc;
@@ -91,10 +97,11 @@ class LazyMigrationPersistenceTests {
 		var user = new TestAuthHelper(mockMvc, objectMapper).authenticate("media_ref_cas");
 		String antiga = "https://ik.imagekit.io/socialcoisa/uploads/ref/velha.png";
 		String nova = "https://cdn.exemplo.com/uploads/ref/velha.png";
-		em.createNativeQuery("update users set avatar = :a where id = :id")
-			.setParameter("a", antiga)
-			.setParameter("id", user.userId())
-			.executeUpdate();
+		transactionTemplate.executeWithoutResult(status ->
+			em.createNativeQuery("update users set avatar = :a where id = :id")
+				.setParameter("a", antiga)
+				.setParameter("id", user.userId())
+				.executeUpdate());
 
 		assertThat(references.findLegacyUrls(500)).contains(antiga);
 		assertThat(references.updateReferences(antiga, nova)).isEqualTo(1);
@@ -104,10 +111,11 @@ class LazyMigrationPersistenceTests {
 		// Mudança CONCORRENTE (a pessoa trocou a foto no meio da migração): a referência nova
 		// nunca é sobrescrita pela migração do objeto antigo.
 		String concorrente = "https://ik.imagekit.io/socialcoisa/uploads/ref/outra.png";
-		em.createNativeQuery("update users set avatar = :a where id = :id")
-			.setParameter("a", concorrente)
-			.setParameter("id", user.userId())
-			.executeUpdate();
+		transactionTemplate.executeWithoutResult(status ->
+			em.createNativeQuery("update users set avatar = :a where id = :id")
+				.setParameter("a", concorrente)
+				.setParameter("id", user.userId())
+				.executeUpdate());
 		assertThat(references.updateReferences(antiga, nova)).isZero();
 	}
 }

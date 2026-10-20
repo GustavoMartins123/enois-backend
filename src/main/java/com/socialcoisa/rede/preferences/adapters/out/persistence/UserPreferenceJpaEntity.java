@@ -17,8 +17,17 @@ class UserPreferenceJpaEntity {
 	@Column(name = "user_id", nullable = false)
 	private String userId;
 
-	@Column(name = "theme_id", nullable = false, length = 32)
+	@Column(name = "theme_id", length = 32)
 	private String themeId;
+
+	@Column(name = "liked_topics", length = 400)
+	private String likedTopics;
+
+	@Column(name = "blocked_topics", length = 400)
+	private String blockedTopics;
+
+	@Column(name = "disabled_modules", length = 400)
+	private String disabledModules;
 
 	@Column(name = "updated_at", nullable = false)
 	private Instant updatedAt;
@@ -33,10 +42,15 @@ class UserPreferenceJpaEntity {
 	}
 
 	static UserPreferenceJpaEntity fromDomain(UserPreference preference) {
-		return new UserPreferenceJpaEntity(preference.userId(), preference.themeId(), preference.updatedAt());
+		UserPreferenceJpaEntity entity = new UserPreferenceJpaEntity(preference.userId(), preference.themeId(),
+			preference.updatedAt());
+		entity.likedTopics = preference.likedTopics();
+		entity.blockedTopics = preference.blockedTopics();
+		entity.disabledModules = preference.disabledModules();
+		return entity;
 	}
 
 	UserPreference toDomain() {
-		return new UserPreference(userId, themeId, updatedAt);
+		return new UserPreference(userId, themeId, likedTopics, blockedTopics, disabledModules, updatedAt);
 	}
 }

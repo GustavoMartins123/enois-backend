@@ -13,6 +13,7 @@ import org.springframework.util.StringUtils;
 
 import com.socialcoisa.rede.linkedin.application.port.out.LinkedInConnectionRepository;
 import com.socialcoisa.rede.linkedin.application.port.out.LinkedInShareClient;
+import com.socialcoisa.rede.linkedin.application.port.out.LinkedInShareClient.ShareOutcome;
 import com.socialcoisa.rede.linkedin.domain.LinkedInConnection;
 import com.socialcoisa.rede.shared.security.SecretCipher;
 import com.socialcoisa.rede.shared.web.ApiException;
@@ -56,7 +57,7 @@ public class LinkedInIntegrationService {
 	}
 
 	public record Status(boolean connected, boolean postSync, boolean canPost, Instant tokenExpiresAt,
-			String reason) {
+			String reason, String lastShareStatus, Instant lastShareAt) {
 	}
 
 	/**
@@ -79,19 +80,20 @@ public class LinkedInIntegrationService {
 		boolean postSync = existing != null && existing.postSync();
 		Instant expiresAt = tokenExpiresAt != null ? tokenExpiresAt : now.plus(Duration.ofDays(1));
 		connections.save(new LinkedInConnection(userId, memberSub, cipher.encrypt(accessToken), expiresAt,
-			postSync, createdAt, now));
+			postSync, createdAt, now, null, null));
 	}
 
 	@Transactional(readOnly = true)
 	public Status status(String userId) {
 		LinkedInConnection connection = connections.findByUserId(userId).orElse(null);
 		if (connection == null) {
-			return new Status(false, false, false, null, REASON_NOT_CONNECTED);
+			return new Status(false, false, false, null, REASON_NOT_CONNECTED, null, null);
 		}
 		boolean canPost = cipher.isEnabled() && connection.tokenValid(clock.instant());
 		String reason = canPost ? null
 			: (!cipher.isEnabled() ? REASON_SERVER_KEY_MISSING : REASON_TOKEN_EXPIRED);
-		return new Status(true, connection.postSync(), canPost, connection.tokenExpiresAt(), reason);
+		return new Status(true, connection.postSync(), canPost, connection.tokenExpiresAt(), reason,
+			connection.lastShareStatus(), connection.lastShareAt());
 	}
 
 	@Transactional
@@ -132,7 +134,11 @@ public class LinkedInIntegrationService {
 			return;
 		}
 		String url = baseUrl.replaceAll("/+$", "") + "/post/" + postId;
-		shareClient.share(accessToken, connection.memberSub(), commentary(content, url), url, title);
+		ShareOutcome outcome = shareClient.share(accessToken, connection.memberSub(), commentary(content, url), url,
+			title);
+		// O resultado fica na linha da pessoa: o painel mostra o que aconteceu sem depender do
+		// log do pod (a falha em si continua silenciosa — nunca derruba a publicacao).
+		connections.save(connection.withShareOutcome(outcome.accepted() ? "OK" : outcome.detail(), clock.instant()));
 	}
 
 	/** Texto do share: o conteudo do post e o link publico, cabendo no limite do LinkedIn. */

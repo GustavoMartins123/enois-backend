@@ -76,7 +76,7 @@ class LinkedInIntegrationServiceTests {
 
 		// Linha existente mas servidor sem chave: conectado, porem nao pode publicar.
 		InMemoryRepository outro = new InMemoryRepository();
-		outro.save(new LinkedInConnection("u2", "sub-2", "qualquer", NOW.plusSeconds(3600), false, NOW, NOW));
+		outro.save(new LinkedInConnection("u2", "sub-2", "qualquer", NOW.plusSeconds(3600), false, NOW, NOW, null, null));
 		LinkedInIntegrationService semChave = new LinkedInIntegrationService(outro, client, new SecretCipher(""),
 			Clock.fixed(NOW, ZoneOffset.UTC), BASE);
 		assertThat(semChave.status("u2").connected()).isTrue();
@@ -166,9 +166,10 @@ class LinkedInIntegrationServiceTests {
 		private final java.util.List<Call> calls = new java.util.ArrayList<>();
 
 		@Override
-		public boolean share(String accessToken, String memberSub, String commentary, String url, String title) {
+		public com.socialcoisa.rede.linkedin.application.port.out.LinkedInShareClient.ShareOutcome share(
+				String accessToken, String memberSub, String commentary, String url, String title) {
 			calls.add(new Call(accessToken, memberSub, commentary, url, title));
-			return true;
+			return com.socialcoisa.rede.linkedin.application.port.out.LinkedInShareClient.ShareOutcome.ok();
 		}
 	}
 }

@@ -23,8 +23,18 @@ public record UserSanction(String id, String userId, String reportId, SanctionTy
 		return status == SanctionStatus.ACTIVE;
 	}
 
+	/** Banimento (BAN ou PERMABAN): sem sessao nova e sem recurso. */
 	public boolean isBan() {
-		return type == SanctionType.BAN;
+		return type == SanctionType.BAN || type == SanctionType.PERMABAN;
+	}
+
+	/**
+	 * PERMABAN direto do painel admin: mesmo efeito do BAN (sessoes revogadas, sem login) e
+	 * marcado como decisao definitiva — o painel nao oferece recurso.
+	 */
+	public static UserSanction permaBan(String id, String userId, String reportId, String reason, Instant now) {
+		return new UserSanction(id, userId, reportId, SanctionType.PERMABAN, reason, SanctionStatus.ACTIVE,
+			now, null, null);
 	}
 
 	/** Recurso aceito: restricao sai e a conta volta ao normal. */

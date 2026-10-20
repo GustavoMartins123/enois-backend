@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.socialcoisa.rede.feed.domain.AuthorIdentity;
 import com.socialcoisa.rede.feed.domain.Counters;
 import com.socialcoisa.rede.feed.domain.Post;
 import com.socialcoisa.rede.feed.domain.PostId;
@@ -102,6 +103,13 @@ class PostJpaEntity {
 	@Column(name = "expires_at")
 	private Instant expiresAt;
 
+	@Enumerated(EnumType.STRING)
+	@Column(name = "author_identity", nullable = false)
+	private AuthorIdentity authorIdentity;
+
+	@Column(name = "topic")
+	private String topic;
+
 	protected PostJpaEntity() {
 	}
 
@@ -125,12 +133,14 @@ class PostJpaEntity {
 		entity.deletedAt = post.deletedAt();
 		entity.editedAt = post.editedAt();
 		entity.expiresAt = post.expiresAt();
+		entity.authorIdentity = post.authorIdentity();
+		entity.topic = post.topic();
 		return entity;
 	}
 
 	Post toDomain() {
 		return Post.restore(new PostId(id), new UserId(authorId), type, content, pageHtml, tags, mediaIds, communityId,
-			createdAt, visibility, new Counters(reactions, comments, saves, shares), status, deletedAt, editedAt,
-			expiresAt);
+			topic, createdAt, visibility, new Counters(reactions, comments, saves, shares), status, deletedAt,
+			editedAt, expiresAt, authorIdentity);
 	}
 }

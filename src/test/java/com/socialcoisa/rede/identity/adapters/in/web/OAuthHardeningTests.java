@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.Instant;
@@ -70,27 +71,29 @@ class OAuthHardeningTests {
 
 	@Test
 	void requiresAStateIssuedByUs() throws Exception {
+		// O callback e navegacao de browser: a falha volta como redirect para a tela do app
+		// com o codigo legivel (?error=...), nunca JSON cru.
 		// Sem state: nao da para saber se o pedido comecou aqui.
 		mockMvc.perform(get("/auth/oauth/google/callback").param("code", "codigo-qualquer"))
-			.andExpect(status().isBadRequest())
-			.andExpect(jsonPath("$.code").value("INVALID_OAUTH_STATE"));
+			.andExpect(status().is3xxRedirection())
+			.andExpect(redirectedUrl("http://localhost:5173/auth/callback?error=INVALID_OAUTH_STATE&provider=GOOGLE"));
 
 		// State inventado.
 		mockMvc.perform(get("/auth/oauth/google/callback").param("code", "codigo-qualquer").param("state", "state_inventado"))
-			.andExpect(status().isBadRequest())
-			.andExpect(jsonPath("$.code").value("INVALID_OAUTH_STATE"));
+			.andExpect(status().is3xxRedirection())
+			.andExpect(redirectedUrl("http://localhost:5173/auth/callback?error=INVALID_OAUTH_STATE&provider=GOOGLE"));
 
 		// State expirado (a linha existe, mas fora da validade).
 		TestDatabase.insertOAuthRequest("state_vencido", "GOOGLE", "nonce_1", Instant.now().minusSeconds(60));
 		mockMvc.perform(get("/auth/oauth/google/callback").param("code", "codigo-qualquer").param("state", "state_vencido"))
-			.andExpect(status().isGone())
-			.andExpect(jsonPath("$.code").value("OAUTH_STATE_EXPIRED"));
+			.andExpect(status().is3xxRedirection())
+			.andExpect(redirectedUrl("http://localhost:5173/auth/callback?error=OAUTH_STATE_EXPIRED&provider=GOOGLE"));
 
 		// State de outro provedor nao vale aqui.
 		TestDatabase.insertOAuthRequest("state_apple", "APPLE", "nonce_2", Instant.now().plusSeconds(600));
 		mockMvc.perform(get("/auth/oauth/google/callback").param("code", "codigo-qualquer").param("state", "state_apple"))
-			.andExpect(status().isBadRequest())
-			.andExpect(jsonPath("$.code").value("INVALID_OAUTH_STATE"));
+			.andExpect(status().is3xxRedirection())
+			.andExpect(redirectedUrl("http://localhost:5173/auth/callback?error=INVALID_OAUTH_STATE&provider=GOOGLE"));
 	}
 
 	@Test
@@ -103,10 +106,12 @@ class OAuthHardeningTests {
 		String authorizationUrl = body.get("authorizationUrl").asText();
 
 		assertThat(authorizationUrl).contains("state=").contains("nonce=");
-		// O state devolvido ja esta registrado: um callback com ele nao e recusado por state invalido.
+		// O state devolvido ja esta registrado: um callback com ele nao e recusado por state
+		// invalido — passa do state e falha na validacao do codigo (redirect com o codigo novo).
 		mockMvc.perform(get("/auth/oauth/google/callback").param("code", "codigo-qualquer")
 				.param("state", body.get("state").asText()))
-			.andExpect(status().isUnauthorized());
+			.andExpect(status().is3xxRedirection())
+			.andExpect(redirectedUrl("http://localhost:5173/auth/callback?error=INVALID_OAUTH_TOKEN&provider=GOOGLE"));
 	}
 
 	@Test
@@ -151,10 +156,13 @@ class OAuthHardeningTests {
 			.thenReturn(Optional.of(new TokenValidationResult("google-sub-nao-confirmado", "nao.confirmado@test.com",
 				"Nao Confirmado", false)));
 
+		// No navegador a falha e redirect com o codigo (e o e-mail declarado nao entrega a conta
+		// para ninguem — a regra continua de pe).
 		mockMvc.perform(get("/auth/oauth/google/callback")
 				.param("code", "codigo-valido").param("state", startState()))
-			.andExpect(status().isConflict())
-			.andExpect(jsonPath("$.code").value("ACCOUNT_EXISTS_UNVERIFIED_EMAIL"));
+			.andExpect(status().is3xxRedirection())
+			.andExpect(redirectedUrl(
+				"http://localhost:5173/auth/callback?error=ACCOUNT_EXISTS_UNVERIFIED_EMAIL&provider=GOOGLE"));
 
 		mockMvc.perform(get("/auth/oauth/providers").header("X-Session-Token", existing.token()))
 			.andExpect(status().isOk())

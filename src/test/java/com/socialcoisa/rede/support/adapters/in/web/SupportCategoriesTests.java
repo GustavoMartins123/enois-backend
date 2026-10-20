@@ -108,10 +108,11 @@ class SupportCategoriesTests {
 			.andExpect(jsonPath("$.status").value("CLOSED"))
 			.andExpect(jsonPath("$.adminReply").value(reply));
 
-		// O cadastro tenta confirmar e-mail (SMTP ausente no teste) e isso fica no log de metadados.
+		// O envio da resposta falha (SMTP ausente no teste) e fica no log de metadados. O
+		// destinatário é mascarado pelo painel ("***"), então a asserção é pelo tipo do envio.
 		mockMvc.perform(get("/admin/emails").header("X-Session-Token", admin.token()))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$[?(@.toEmail == 'sc_user@test.com')].status",
+			.andExpect(jsonPath("$[?(@.kind == 'SUPPORT_REPLY')].status",
 				org.hamcrest.Matchers.hasItem("FAILED")));
 	}
 }

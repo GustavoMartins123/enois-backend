@@ -16,6 +16,19 @@ interface SpringDataExternalJobJpaRepository extends JpaRepository<ExternalJobJp
 
 	List<ExternalJobJpaEntity> findAllByOrderByLastCheckedAtDesc(Pageable pageable);
 
+	/** A listagem geral das externas EXCLUI a plataforma das cadastradas no Énóis. */
+	List<ExternalJobJpaEntity> findByPlatformNotOrderByLastCheckedAtDesc(String platform, Pageable pageable);
+
+	@Query("""
+			SELECT e FROM ExternalJobJpaEntity e
+			WHERE e.platform <> :platform
+			  AND (LOWER(e.title) LIKE :pattern ESCAPE '\\'
+			   OR LOWER(e.company) LIKE :pattern ESCAPE '\\'
+			   OR LOWER(e.location) LIKE :pattern ESCAPE '\\')
+			ORDER BY e.lastCheckedAt DESC""")
+	List<ExternalJobJpaEntity> searchExcludingPlatform(@Param("platform") String platform,
+		@Param("pattern") String pattern, Pageable pageable);
+
 	List<ExternalJobJpaEntity> findByPlatformOrderByLastCheckedAtDesc(String platform, Pageable pageable);
 
 	@Query("SELECT e FROM ExternalJobJpaEntity e WHERE e.platform = :platform "
@@ -27,6 +40,9 @@ interface SpringDataExternalJobJpaRepository extends JpaRepository<ExternalJobJp
 	List<String> distinctPlatforms();
 
 	List<ExternalJobJpaEntity> findByIdIn(java.util.Collection<String> ids);
+
+	/** Vagas cadastradas pela propria pessoa (as importadas nao tem autor). */
+	List<ExternalJobJpaEntity> findBySubmittedByOrderByImportedAtDesc(String submittedBy);
 
 	// Mesmo agregado para as vagas externas (Remotive/Jobicy/...): empresa e total (a origem
 	// nao guarda logo — o diretorio mostra a inicial quando nao ha logo de vaga interna).

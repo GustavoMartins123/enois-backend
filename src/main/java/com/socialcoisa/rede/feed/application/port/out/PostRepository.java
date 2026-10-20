@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import com.socialcoisa.rede.feed.domain.AuthorIdentity;
 import com.socialcoisa.rede.feed.domain.Post;
 import com.socialcoisa.rede.feed.domain.PostId;
 import com.socialcoisa.rede.feed.domain.PostType;
@@ -22,13 +23,33 @@ public interface PostRepository {
 
 	List<Post> findByIds(Collection<PostId> ids);
 
+	/** TODOS os posts do autor, em qualquer status — uso da purga (sanitização por spam). */
+	List<Post> findAllByAuthor(UserId authorId);
+
+	/** "Para você"/Seguindo: o que as identidades sociais assinaram (BUSINESS nunca entra). */
 	List<Post> findActiveByAuthors(Set<UserId> authorIds, Instant before, int limit);
 
+	/** Perfil SOCIAL do autor: sem BLOG (ponteiro) e sem o que a identidade profissional assinou. */
 	List<Post> findActiveByAuthor(UserId authorId, Instant before, int limit);
 
 	List<Post> findActiveByCommunity(String communityId, Instant before, int limit);
 
+	/** Feed "Tudo": exclui BLOG (conteúdo no blog) e BUSINESS (assina o feed corporativo). */
 	List<Post> findActiveAll(Instant before, int limit);
 
 	List<Post> findActiveByType(PostType type, Instant before, int limit);
+
+	/** Feed "Tudo" respeitando os assuntos bloqueados do leitor (posts sem tópico passam). */
+	List<Post> findActiveAllExcludingTopics(Collection<String> blockedTopics, Instant before, int limit);
+
+	/** "Para você"/Seguindo respeitando os assuntos bloqueados do leitor. */
+	List<Post> findActiveByAuthorsExcludingTopics(Set<UserId> authorIds, Collection<String> blockedTopics,
+			Instant before, int limit);
+
+	/** Feed corporativo: só o que a identidade profissional assinou. */
+	List<Post> findActiveCorporate(Instant before, int limit);
+
+	/** Página do perfil profissional: só o que o dono assinou como CORPORATE. */
+	List<Post> findActiveCorporateByAuthor(UserId authorId, Instant before, int limit);
+
 }

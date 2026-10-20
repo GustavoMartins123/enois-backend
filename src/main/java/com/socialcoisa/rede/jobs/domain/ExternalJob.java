@@ -3,16 +3,41 @@ package com.socialcoisa.rede.jobs.domain;
 import java.time.Instant;
 
 /**
- * Vaga de plataforma externa (ex.: JobRadar). Nao e uma vaga criada na plataforma: fica em tabela
- * propria e so e LISTADA no enois, com a candidatura na origem. O que a fonte nao fornece fica nulo
- * (empresa/local/salario) — nada e inventado.
+ * Vaga de plataforma externa (ex.: JobRadar) ou cadastrada por alguem da comunidade. Nao e uma vaga
+ * criada na plataforma: fica em tabela propria e so e LISTADA no enois, com a candidatura na origem.
+ * O que a fonte nao fornece fica nulo (empresa/local/salario) — nada e inventado.
+ *
+ * `submittedBy` distingue as duas origens: nulo = importada de agregador; preenchido = cadastrada
+ * a mao por essa pessoa (que pode excluir, e cuja linha a importacao nunca sobrescreve).
  */
 public record ExternalJob(String id, String platform, String externalId, String title, String company,
 		String location, String salary, String currency, String url, Instant importedAt, Instant lastCheckedAt,
-		String status, String canonicalUrl, String applyEmail) {
+		String status, String canonicalUrl, String applyEmail, String submittedBy, String description,
+		String salaryMin, String salaryMax, String salaryPeriod) {
 
 	public static final String FOUND = "FOUND";
 	public static final String POSSIBLY_CLOSED = "POSSIBLY_CLOSED";
+
+	/** Compatibilidade com os cadastros/queries que ainda nao informam os detalhes. */
+	public ExternalJob(String id, String platform, String externalId, String title, String company, String location,
+			String salary, String currency, String url, Instant importedAt, Instant lastCheckedAt, String status,
+			String canonicalUrl, String applyEmail, String submittedBy) {
+		this(id, platform, externalId, title, company, location, salary, currency, url, importedAt, lastCheckedAt,
+			status, canonicalUrl, applyEmail, submittedBy, null, null, null, null);
+	}
+
+	/** Construtor das importadas: so as da comunidade tem autor. */
+	public ExternalJob(String id, String platform, String externalId, String title, String company, String location,
+			String salary, String currency, String url, Instant importedAt, Instant lastCheckedAt, String status,
+			String canonicalUrl, String applyEmail) {
+		this(id, platform, externalId, title, company, location, salary, currency, url, importedAt, lastCheckedAt,
+			status, canonicalUrl, applyEmail, null, null, null, null, null);
+	}
+
+	/** Vaga cadastrada por alguem da comunidade (e nao importada de agregador). */
+	public boolean isCommunitySubmission() {
+		return submittedBy != null && !submittedBy.isBlank();
+	}
 
 	private static final java.util.regex.Pattern EMAIL = java.util.regex.Pattern
 		.compile("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}");

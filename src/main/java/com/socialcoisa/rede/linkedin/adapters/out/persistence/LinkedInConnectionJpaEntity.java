@@ -35,6 +35,12 @@ class LinkedInConnectionJpaEntity {
 	@Column(name = "updated_at", nullable = false)
 	private Instant updatedAt;
 
+	@Column(name = "last_share_status")
+	private String lastShareStatus;
+
+	@Column(name = "last_share_at")
+	private Instant lastShareAt;
+
 	protected LinkedInConnectionJpaEntity() {
 	}
 
@@ -47,11 +53,13 @@ class LinkedInConnectionJpaEntity {
 		entity.postSync = connection.postSync();
 		entity.createdAt = connection.createdAt();
 		entity.updatedAt = connection.updatedAt();
+		entity.lastShareStatus = connection.lastShareStatus();
+		entity.lastShareAt = connection.lastShareAt();
 		return entity;
 	}
 
 	LinkedInConnection toDomain() {
 		return new LinkedInConnection(userId, memberSub, accessTokenEnc, tokenExpiresAt, postSync, createdAt,
-			updatedAt);
+			updatedAt, lastShareStatus, lastShareAt);
 	}
 }

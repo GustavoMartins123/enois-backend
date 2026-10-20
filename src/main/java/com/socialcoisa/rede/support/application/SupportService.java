@@ -33,15 +33,18 @@ public class SupportService {
 	private final SupportRequestRepository repository;
 	private final EmailService emailService;
 	private final NotificationService notifications;
+	private final com.socialcoisa.rede.shared.security.OutboundUrlGuard outboundUrlGuard;
 	private final Clock clock;
 	private final String supportEmail;
 
 	public SupportService(SupportRequestRepository repository, EmailService emailService,
-			NotificationService notifications, Clock clock,
+			NotificationService notifications, com.socialcoisa.rede.shared.security.OutboundUrlGuard outboundUrlGuard,
+			Clock clock,
 			@Value("${rede.support.email:}") String supportEmail) {
 		this.repository = repository;
 		this.emailService = emailService;
 		this.notifications = notifications;
+		this.outboundUrlGuard = outboundUrlGuard;
 		this.clock = clock;
 		this.supportEmail = supportEmail;
 	}
@@ -142,7 +145,7 @@ public class SupportService {
 
 	/** Baixa a imagem do anexo (https, ate 5 MB); falha de download NAO bloqueia o pedido. */
 	private byte[] fetchImage(String url) {
-		if (url == null) {
+		if (url == null || !outboundUrlGuard.safe(url)) {
 			return null;
 		}
 		try {

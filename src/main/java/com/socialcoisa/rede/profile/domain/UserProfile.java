@@ -51,6 +51,9 @@ public class UserProfile {
 	private Instant updatedAt;
 	private Instant termsAcceptedAt;
 	private Instant emailVerifiedAt;
+
+	/** Mostrar a secao de ranking no perfil? Preferencia de quem LE (pedido via suporte, 19/10). */
+	private boolean showRanking = true;
 	private Instant totpEnabledAt;
 	private Instant emailOtpEnabledAt;
 	private Instant federatedSecondFactorAt;
@@ -93,10 +96,24 @@ public class UserProfile {
 	public static UserProfile restore(String id, String username, String email, String name, String headline,
 			String company, String location, String avatar, String banner, String badge, String bio, String bioHtml, String bannerHtml,
 			List<String> skills, List<String> goals, String availability, String portfolio, List<String> externalLinks,
-			boolean openToWork, boolean mentor, Instant createdAt, Instant updatedAt) {
-		return new UserProfile(id, username, email, name, headline, company, location, avatar, banner, badge, bio,
-			bioHtml, bannerHtml, skills, goals, availability, portfolio, externalLinks, openToWork, mentor, createdAt,
-			updatedAt);
+			boolean openToWork, boolean mentor, Instant createdAt, Instant updatedAt, boolean showRanking) {
+		UserProfile profile = new UserProfile(id, username, email, name, headline, company, location, avatar, banner,
+			badge, bio, bioHtml, bannerHtml, skills, goals, availability, portfolio, externalLinks, openToWork, mentor,
+			createdAt, updatedAt);
+		profile.showRanking = showRanking;
+		return profile;
+	}
+
+	/** Preferencia da CONTA: esconder a secao de ranking do proprio perfil (quem le decide). */
+	public void setShowRanking(boolean showRanking, Instant now) {
+		if (this.showRanking != showRanking) {
+			this.showRanking = showRanking;
+			this.updatedAt = now;
+		}
+	}
+
+	public boolean showRanking() {
+		return showRanking;
 	}
 
 	public void update(String name, String headline, String company, String location, String avatar, String banner,

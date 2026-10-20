@@ -24,7 +24,7 @@ class ScheduledPostJpaEntity {
 	@Column(columnDefinition = "text")
 	String content;
 
-	@Column(name = "page_html", columnDefinition = "text")
+	@Column(name = "page_html", columnDefinition = "longtext")
 	String pageHtml;
 
 	@Column(name = "article_body", columnDefinition = "text")
@@ -41,6 +41,10 @@ class ScheduledPostJpaEntity {
 
 	@Column(name = "community_id")
 	String communityId;
+
+	/** Assunto declarado do post avulso (o de comunidade herda o dela na publicação). */
+	@Column(name = "topic", length = 40)
+	String topic;
 
 	@Column(name = "scheduled_at", nullable = false)
 	Instant scheduledAt;

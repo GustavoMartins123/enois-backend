@@ -55,8 +55,45 @@ class JobServiceTests {
 
 	@BeforeEach
 	void setUp() {
-		service = new JobService(repository, reputationService, userProfileRepository, extensionRepository, delivery,
-			statusNotifier, new tools.jackson.databind.ObjectMapper(), Clock.systemUTC());
+		var noopPublisher = new org.springframework.context.ApplicationEventPublisher() {
+			@Override public void publishEvent(Object event) { }
+		};
+		service = new JobService(repository, reputationService, userProfileRepository,
+			new com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository() {
+				@Override
+				public com.socialcoisa.rede.corporate.domain.CorporateProfile save(
+						com.socialcoisa.rede.corporate.domain.CorporateProfile profile) {
+					return profile;
+				}
+
+				@Override
+				public java.util.Optional<com.socialcoisa.rede.corporate.domain.CorporateProfile> findByUserId(
+						String userId) {
+					return java.util.Optional.empty();
+				}
+
+				@Override
+				public java.util.Optional<com.socialcoisa.rede.corporate.domain.CorporateProfile> findByUsername(
+						String username) {
+					return java.util.Optional.empty();
+				}
+
+				@Override
+				public java.util.List<com.socialcoisa.rede.corporate.domain.CorporateProfile> findByUserIds(
+						java.util.Collection<String> userIds) {
+					return java.util.List.of();
+				}
+
+				@Override
+				public boolean existsByUsername(String username) {
+					return false;
+				}
+			},
+			extensionRepository, delivery,
+			statusNotifier, new tools.jackson.databind.ObjectMapper(), Clock.systemUTC(),
+			new com.socialcoisa.rede.shared.security.UserRateLimiter(Clock.systemUTC(), noopPublisher,
+				10, 60, 30, 60, 100, 30, 60, 1),
+			new com.socialcoisa.rede.shared.security.BehavioralTimingGuard(Clock.systemUTC(), noopPublisher));
 	}
 
 	@Test

@@ -10,4 +10,8 @@ interface SpringDataGameUpdateJpaRepository extends JpaRepository<GameUpdateJpaE
 	List<GameUpdateJpaEntity> findByGameIdOrderByCreatedAtDesc(String gameId, Pageable pageable);
 
 	long countByGameId(String gameId);
+
+	@org.springframework.data.jpa.repository.Modifying
+	@org.springframework.data.jpa.repository.Query("DELETE FROM GameUpdateJpaEntity u WHERE u.gameId = :gameId")
+	int deleteByGameId(@org.springframework.data.repository.query.Param("gameId") String gameId);
 }

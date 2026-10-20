@@ -27,7 +27,7 @@ class PostCommunityReaderAdapter implements PostCommunityReader {
 		}
 		for (String communityId : communityIds) {
 			communityRepository.findById(communityId).ifPresent(community -> result.put(communityId,
-				new CommunityRef(community.id(), community.name(),
+				new CommunityRef(community.id(), community.name(), community.topic(),
 					viewerId != null && communityRepository.isMember(communityId, viewerId))));
 		}
 		return result;

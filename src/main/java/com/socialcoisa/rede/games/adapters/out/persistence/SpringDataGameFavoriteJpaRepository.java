@@ -19,4 +19,8 @@ interface SpringDataGameFavoriteJpaRepository extends JpaRepository<GameFavorite
 	long countByGameId(String gameId);
 
 	List<GameFavoriteJpaEntity> findByUserIdOrderByCreatedAtDesc(String userId, Pageable pageable);
+
+	@Modifying
+	@Query("DELETE FROM GameFavoriteJpaEntity f WHERE f.gameId = :gameId")
+	int deleteByGameId(@Param("gameId") String gameId);
 }

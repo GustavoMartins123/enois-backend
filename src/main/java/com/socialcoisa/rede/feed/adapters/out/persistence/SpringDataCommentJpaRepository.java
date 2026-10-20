@@ -1,6 +1,7 @@
 package com.socialcoisa.rede.feed.adapters.out.persistence;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 
 import org.springframework.data.domain.Pageable;
@@ -14,6 +15,8 @@ interface SpringDataCommentJpaRepository extends JpaRepository<CommentJpaEntity,
 			CommentStatus status, Instant before, Pageable pageable);
 
 	List<CommentJpaEntity> findByAuthorId(String authorId);
+
+	List<CommentJpaEntity> findByPostIdIn(Collection<String> postIds);
 
 	/**
 	 * Comentários que citam o termo E trazem URL de GIF — a busca de GIF da comunidade

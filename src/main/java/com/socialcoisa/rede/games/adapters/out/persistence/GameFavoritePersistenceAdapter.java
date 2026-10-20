@@ -42,4 +42,9 @@ class GameFavoritePersistenceAdapter implements GameFavoriteRepository {
 		return favorites.findByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(0, Math.max(1, limit))).stream()
 			.map(GameFavoriteJpaEntity::toDomain).toList();
 	}
+
+	@Override
+	public void deleteByGame(String gameId) {
+		favorites.deleteByGameId(gameId);
+	}
 }

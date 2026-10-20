@@ -60,6 +60,17 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 		return UserProfileView.from(profile).withBioHtml(profile.bioHtml()).withBannerHtml(profile.bannerHtml());
 	}
 
+	/** Liga/desliga a secao de ranking na tela de perfil (preferencia de quem le). */
+	@Transactional
+	public com.socialcoisa.rede.shared.web.StatusResponse setShowRanking(String userId, boolean showRanking) {
+		UserProfile profile = repository.findById(userId)
+			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
+		profile.setShowRanking(showRanking, clock.instant());
+		repository.save(profile);
+		return new com.socialcoisa.rede.shared.web.StatusResponse(userId,
+			showRanking ? "RANKING_VISIBLE" : "RANKING_HIDDEN");
+	}
+
 	@Override
 	@Transactional(readOnly = true)
 	public UserProfileView getById(String userId) {
@@ -123,8 +134,13 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 			.toList();
 	}
 
+	/**
+	 * O "ranking" público é a vitrine de QUEM ACABOU DE CHEGAR (mudança de 2026-10-20): os perfis
+	 * mais recentes primeiro, e o rótulo na tela diz isso. A credibilidade continua sendo o número
+	 * do perfil e o critério da busca — ela não ordena mais esta lista.
+	 */
 	public List<UserProfileView> getRanking(int limit) {
-		return repository.findTopByReputation(limit).stream()
+		return repository.findNewestProfiles(limit).stream()
 			.map(UserProfileView::from)
 			.toList();
 	}

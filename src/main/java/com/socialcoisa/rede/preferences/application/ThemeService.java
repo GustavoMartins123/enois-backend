@@ -44,14 +44,26 @@ public class ThemeService {
 	}
 
 	public void setTheme(String userId, String themeId) {
+		// A linha agora carrega outras preferências (personalização): limpar o tema não pode
+		// destruí-las — grava a linha com o tema nulo e mantém o resto.
+		UserPreference existing = repository.find(userId).orElse(null);
 		if (themeId == null || themeId.isBlank()) {
-			repository.delete(userId);
+			if (existing == null) {
+				repository.delete(userId);
+				return;
+			}
+			repository.save(new UserPreference(userId, null, existing.likedTopics(), existing.blockedTopics(),
+				existing.disabledModules(), clock.instant()));
 			return;
 		}
 		String normalized = themeId.trim();
 		if (!ThemeIds.ALL.contains(normalized)) {
 			throw new ApiException(400, "INVALID_THEME", "Tema desconhecido: escolha um dos temas disponiveis.");
 		}
-		repository.save(new UserPreference(userId, normalized, clock.instant()));
+		repository.save(new UserPreference(userId, normalized,
+			existing == null ? null : existing.likedTopics(),
+			existing == null ? null : existing.blockedTopics(),
+			existing == null ? null : existing.disabledModules(),
+			clock.instant()));
 	}
 }

@@ -1,6 +1,7 @@
 package com.socialcoisa.rede.groups;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -112,5 +113,12 @@ class GroupCommunityIsolationTests {
 			.andExpect(status().isOk())
 			.andReturn().getResponse().getContentAsString();
 		assertThat(groupFeed).contains(marcadorGrupo).doesNotContain(marcadorComunidade);
+
+		// O H2 dos testes é compartilhado entre classes: sem apagar, esta comunidade aparecia
+		// na listagem global e quebrava o contrato de página vazia (ContractControllerTests).
+		mockMvc.perform(delete("/communities/" + communityId)
+				.header("X-Session-Token", dono.token())
+				.header("Idempotency-Key", "gci-cleanup"))
+			.andExpect(status().isOk());
 	}
 }

@@ -2,6 +2,7 @@ package com.socialcoisa.rede.feed.application;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -25,6 +26,8 @@ import com.socialcoisa.rede.feed.application.port.out.PostInteractionRepository;
 import com.socialcoisa.rede.feed.application.port.out.ArticleRepository;
 import com.socialcoisa.rede.feed.application.port.out.PostRepository;
 import com.socialcoisa.rede.feed.application.port.out.SubscribedBlogAuthorsReader;
+import com.socialcoisa.rede.corporate.domain.CorporateProfile;
+import com.socialcoisa.rede.feed.domain.AuthorIdentity;
 import com.socialcoisa.rede.feed.domain.FeedItem;
 import com.socialcoisa.rede.feed.domain.FeedTab;
 import com.socialcoisa.rede.feed.domain.Post;
@@ -53,6 +56,8 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 	private final BlockedUsersReader blockedUsersReader;
 	private final PostCommunityReader postCommunityReader;
 	private final SubscribedBlogAuthorsReader subscribedBlogAuthors;
+	private final com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles;
+	private final com.socialcoisa.rede.feed.application.port.out.ReaderPreferencesReader readerPreferences;
 	private static final Instant DEFAULT_BEFORE = Instant.parse("9999-12-31T23:59:59Z");
 
 	public GetFeedService(PostRepository postRepository, ArticleRepository articleRepository,
@@ -60,7 +65,9 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 			ConnectionGraphRepository connectionGraphRepository, UserProfileRepository userProfileRepository,
 			PostInteractionRepository postInteractionRepository, CommentRepository commentRepository,
 			CursorCodec cursorCodec, BlockedUsersReader blockedUsersReader, PostCommunityReader postCommunityReader,
-			SubscribedBlogAuthorsReader subscribedBlogAuthors) {
+			SubscribedBlogAuthorsReader subscribedBlogAuthors,
+			com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles,
+			com.socialcoisa.rede.feed.application.port.out.ReaderPreferencesReader readerPreferences) {
 		this.postRepository = postRepository;
 		this.articleRepository = articleRepository;
 		this.feedCacheRepository = feedCacheRepository;
@@ -72,6 +79,8 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 		this.blockedUsersReader = blockedUsersReader;
 		this.postCommunityReader = postCommunityReader;
 		this.subscribedBlogAuthors = subscribedBlogAuthors;
+		this.corporateProfiles = corporateProfiles;
+		this.readerPreferences = readerPreferences;
 	}
 
 	@Override
@@ -90,7 +99,11 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 				authors.addAll(connectionGraphRepository.findFriends(query.userId()));
 				yield postRepository.findActiveByAuthors(authors, before, limit);
 			}
-			case ALL -> postRepository.findActiveAll(before, limit);
+			case ALL -> {
+				Collection<String> blocked = readerPreferences.blockedTopics(query.userId().value());
+				yield blocked.isEmpty() ? postRepository.findActiveAll(before, limit)
+					: postRepository.findActiveAllExcludingTopics(blocked, before, limit);
+			}
 			case DISCUSSIONS, RECENT -> {
 				List<String> postIds = commentRepository.findPostIdsByAuthor(query.userId().value());
 				yield postRepository.findByIds(postIds.stream().map(PostId::new).toList()).stream()
@@ -100,6 +113,11 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 					.toList();
 			}
 			case PROJECTS -> postRepository.findActiveByType(PostType.PROJECT, before, limit);
+			case NEWS -> postRepository.findActiveByType(PostType.NEWS, before, limit);
+			case TUTORIALS -> postRepository.findActiveByType(PostType.TUTORIAL, before, limit);
+			case OPPORTUNITIES -> postRepository.findActiveByType(PostType.OPPORTUNITY, before, limit);
+			case REVIEWS -> postRepository.findActiveByType(PostType.REVIEW, before, limit);
+			case FUN -> postRepository.findActiveByType(PostType.DIVERTIDO, before, limit);
 		};
 		return page(enrich(posts, query.userId()), posts, limit);
 	}
@@ -158,6 +176,36 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 		return page(enrich(posts, currentUserId), posts, limit);
 	}
 
+	/**
+	 * Feed corporativo: somente o que as identidades profissionais assinam (BUSINESS). Consulta
+	 * própria, no banco — nada de buscar o feed social e filtrar fora.
+	 */
+	@Transactional(readOnly = true)
+	public FeedPage getCorporateFeed(com.socialcoisa.rede.feed.domain.UserId viewer, Instant before, int limit) {
+		limit = normalizeLimit(limit);
+		before = before == null ? DEFAULT_BEFORE : before;
+		List<Post> posts = postRepository.findActiveCorporate(before, limit);
+		return page(enrich(posts, viewer), posts, limit);
+	}
+
+	/**
+	 * Página do perfil profissional (endereço do perfil): somente o que o dono assinou como
+	 * CORPORATE. Perfil desativado ou inexistente não tem página pública (404).
+	 */
+	@Transactional(readOnly = true)
+	public FeedPage getCorporateProfilePosts(String profileUsername, Instant before, int limit,
+			com.socialcoisa.rede.feed.domain.UserId viewer) {
+		limit = normalizeLimit(limit);
+		before = before == null ? DEFAULT_BEFORE : before;
+		CorporateProfile profile = corporateProfiles
+			.findByUsername(profileUsername == null ? "" : profileUsername.trim().toLowerCase())
+			.filter(p -> p.active())
+			.orElseThrow(() -> new ApiException(404, "PROFILE_NOT_FOUND", "Perfil profissional não encontrado."));
+		List<Post> posts = postRepository.findActiveCorporateByAuthor(
+			new com.socialcoisa.rede.feed.domain.UserId(profile.userId()), before, limit);
+		return page(enrich(posts, viewer), posts, limit);
+	}
+
 	private List<PostView> enrich(List<Post> posts, UserId currentUserId) {
 		if (posts.isEmpty()) {
 			return List.of();
@@ -173,6 +221,17 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 			.collect(Collectors.toSet());
 		Map<String, UserProfile> profiles = userProfileRepository.findAllByIds(authorIds).stream()
 			.collect(Collectors.toMap(UserProfile::id, Function.identity()));
+		// A apresentação de quem assinou: post CORPORATE mostra o perfil profissional (nome, @,
+		// avatar), nunca a identidade pessoal. Uma consulta em lote para a página inteira.
+		Set<String> corporateAuthorIds = visible.stream()
+			.filter(p -> p.authorIdentity() == AuthorIdentity.CORPORATE)
+			.map(p -> p.authorId().value())
+			.collect(Collectors.toSet());
+		Map<String, CorporateProfile> corporate = corporateAuthorIds
+			.isEmpty() ? Map.of()
+			: corporateProfiles.findByUserIds(corporateAuthorIds).stream()
+				.collect(Collectors.toMap(CorporateProfile::userId,
+					Function.identity()));
 		// Comunidade dos posts da pagina: nome para o "publicou em ..." e se o leitor ja participa
 		// (a consulta e em lote, uma para a pagina inteira).
 		java.util.Set<String> communityIds = visible.stream()
@@ -190,11 +249,16 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 		return visible.stream()
 			.map(post -> {
 				UserProfile profile = profiles.get(post.authorId().value());
+				var corporateProfile = corporate.get(post.authorId().value());
 				PostView view = PostView.from(post,
-					profile != null ? profile.username() : null,
-					profile != null ? profile.displayWithNickname() : post.authorId().value(),
-					profile != null ? profile.avatar() : null,
-					profile != null ? profile.allBadges() : List.of());
+					corporateProfile != null ? corporateProfile.username()
+						: profile != null ? profile.username() : null,
+					corporateProfile != null ? corporateProfile.name()
+						: profile != null ? profile.displayWithNickname() : post.authorId().value(),
+					corporateProfile != null ? corporateProfile.avatar()
+						: profile != null ? profile.avatar() : null,
+					profile != null ? profile.allBadges() : List.of())
+					.withAvatarFrame(profile != null ? profile.avatarFrame() : null);
 				ReactionType reaction = currentUserReactions.get(post.id());
 				PostView withReaction = reaction != null ? view.withCurrentUserReaction(reaction) : view;
 				PostCommunityReader.CommunityRef community = post.communityId() == null ? null
@@ -220,6 +284,11 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 			case FOR_YOU, FOLLOWING, ALL -> true;
 			case DISCUSSIONS, RECENT -> post.type() == PostType.QUESTION;
 			case PROJECTS -> post.type() == PostType.PROJECT;
+			case NEWS -> post.type() == PostType.NEWS;
+			case TUTORIALS -> post.type() == PostType.TUTORIAL;
+			case OPPORTUNITIES -> post.type() == PostType.OPPORTUNITY;
+			case REVIEWS -> post.type() == PostType.REVIEW;
+			case FUN -> post.type() == PostType.DIVERTIDO;
 		};
 	}
 
@@ -268,12 +337,24 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 			.map(UserId::new)
 			.forEach(authors::add);
 		// Busca mais que o limite porque a filtragem por comunidade pode encolher a pagina.
-		List<Post> fetched = postRepository.findActiveByAuthors(authors, before, limit * 3);
+		Collection<String> blocked = readerPreferences.blockedTopics(query.userId().value());
+		List<Post> fetched = blocked.isEmpty()
+			? postRepository.findActiveByAuthors(authors, before, limit * 3)
+			: postRepository.findActiveByAuthorsExcludingTopics(authors, blocked, before, limit * 3);
 		Set<String> hiddenCommunities = communityIdsWithoutMembership(fetched, query.userId());
 		List<Post> visible = fetched.stream()
 			.filter(post -> post.communityId() == null || !hiddenCommunities.contains(post.communityId()))
-			.limit(limit)
 			.toList();
+		// "O que quero ver" es AUMENTO DE PRIORIDAD, no filtro: los posts de los asuntos
+		// elegidos van primero, el resto sigue cronológico. Nada se elimina del feed.
+		Collection<String> liked = readerPreferences.likedTopics(query.userId().value());
+		if (!liked.isEmpty() && visible.size() > 1) {
+			visible = visible.stream()
+				.sorted(java.util.Comparator.comparing((Post post) -> liked.contains(post.topic()) ? 0 : 1)
+					.thenComparing(Post::createdAt).reversed())
+				.toList();
+		}
+		visible = visible.stream().limit(limit).toList();
 		// Cursor pela pagina EXIBIDA (nao pela bruta): repetir post ou pular pedaco seria pior do que
 		// uma pagina mais curta. So ha "proxima pagina" quando a busca bruta veio saturada.
 		String nextCursor = fetched.size() == limit * 3 && !visible.isEmpty()

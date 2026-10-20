@@ -4,6 +4,10 @@ import java.util.List;
 
 import com.socialcoisa.rede.feed.domain.PostType;
 
+/**
+ * Assunto (`topic`) só vale para post AVULSO: o de comunidade herda o da comunidade, e mandar
+ * os dois é recusado no serviço.
+ */
 public record PublishPostRequest(PostType type, String content, String pageHtml, String articleBody, List<String> tags,
-		List<String> mediaIds, String communityId, List<String> mentionedUserIds) {
+		List<String> mediaIds, String communityId, List<String> mentionedUserIds, String topic) {
 }

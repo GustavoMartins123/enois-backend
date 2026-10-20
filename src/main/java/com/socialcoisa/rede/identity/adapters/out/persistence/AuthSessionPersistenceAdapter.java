@@ -18,8 +18,9 @@ class AuthSessionPersistenceAdapter implements AuthSessionRepository {
 
 	@Override
 	public void save(String token, String refreshToken, String userId, Instant createdAt, Instant expiresAt,
-			Instant refreshExpiresAt) {
-		repository.save(new AuthSessionJpaEntity(token, refreshToken, userId, createdAt, expiresAt, refreshExpiresAt));
+			Instant refreshExpiresAt, String ip) {
+		repository.save(new AuthSessionJpaEntity(token, refreshToken, userId, createdAt, expiresAt, refreshExpiresAt,
+			ip));
 	}
 
 	@Override
@@ -55,5 +56,11 @@ class AuthSessionPersistenceAdapter implements AuthSessionRepository {
 	@Override
 	public void revokeAllByUser(String userId, Instant revokedAt) {
 		repository.revokeAllByUser(userId, revokedAt);
+	}
+
+	@Override
+	public java.util.List<String> findRecentIpsByUser(String userId, int limit) {
+		return repository.findRecentIpsByUser(userId, org.springframework.data.domain.PageRequest.of(0,
+			Math.max(1, limit)));
 	}
 }

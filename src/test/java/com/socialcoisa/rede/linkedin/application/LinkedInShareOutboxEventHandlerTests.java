@@ -45,7 +45,7 @@ class LinkedInShareOutboxEventHandlerTests {
 	@Test
 	void postPublicadoViraShare() {
 		connections.save(new LinkedInConnection("u1", "sub-1", cipher.encrypt("token"), NOW.plusSeconds(3600),
-			true, NOW, NOW));
+			true, NOW, NOW, null, null));
 		posts.post = Post.publish(new PostId("post_1"), new UserId("u1"), PostType.INSIGHT, "meu texto", null,
 			List.of(), List.of(), null, NOW);
 
@@ -58,7 +58,7 @@ class LinkedInShareOutboxEventHandlerTests {
 	@Test
 	void momentoNaoVaiParaOLinkedIn() {
 		connections.save(new LinkedInConnection("u1", "sub-1", cipher.encrypt("token"), NOW.plusSeconds(3600),
-			true, NOW, NOW));
+			true, NOW, NOW, null, null));
 		posts.post = Post.publish(new PostId("post_2"), new UserId("u1"), PostType.MOMENT, "some em 24h", null,
 			List.of(), List.of(), null, NOW);
 
@@ -81,9 +81,10 @@ class LinkedInShareOutboxEventHandlerTests {
 		private final List<String> calls = new ArrayList<>();
 
 		@Override
-		public boolean share(String accessToken, String memberSub, String commentary, String url, String title) {
+		public com.socialcoisa.rede.linkedin.application.port.out.LinkedInShareClient.ShareOutcome share(
+				String accessToken, String memberSub, String commentary, String url, String title) {
 			calls.add(accessToken + "|" + memberSub + "|" + commentary);
-			return true;
+			return com.socialcoisa.rede.linkedin.application.port.out.LinkedInShareClient.ShareOutcome.ok();
 		}
 	}
 
@@ -108,6 +109,11 @@ class LinkedInShareOutboxEventHandlerTests {
 
 	private static final class FakePosts implements PostRepository {
 		private Post post;
+
+		@Override
+		public List<Post> findAllByAuthor(com.socialcoisa.rede.feed.domain.UserId authorId) {
+			return List.of();
+		}
 
 		@Override
 		public Optional<Post> findById(PostId id) {
@@ -145,6 +151,23 @@ class LinkedInShareOutboxEventHandlerTests {
 		}
 
 		@Override
+		public List<Post> findActiveCorporateByAuthor(UserId authorId, Instant before, int limit) {
+			return List.of();
+		}
+
+		public List<Post> findActiveCorporate(Instant before, int limit) {
+			return List.of();
+		}
+
+		public List<Post> findActiveAllExcludingTopics(Collection<String> blockedTopics, Instant before, int limit) {
+			return List.of();
+		}
+
+		public List<Post> findActiveByAuthorsExcludingTopics(Set<UserId> authorIds, Collection<String> blockedTopics,
+				Instant before, int limit) {
+			return List.of();
+		}
+
 		public List<Post> findActiveAll(Instant before, int limit) {
 			throw new UnsupportedOperationException();
 		}

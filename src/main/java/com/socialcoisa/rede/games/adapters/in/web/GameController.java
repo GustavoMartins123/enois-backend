@@ -60,16 +60,24 @@ class GameController {
 	GamePageView catalog(@RequestParam(required = false) String query, @RequestParam(required = false) String genre,
 			@RequestParam(required = false) String tag, @RequestParam(required = false) String stage,
 			@RequestParam(required = false) String distribution, @RequestParam(required = false) String order,
-			@RequestParam(required = false) Integer limit, @RequestParam(required = false) String cursor) {
+			@RequestParam(required = false) Integer limit, @RequestParam(required = false) String cursor,
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		var criteria = GameSearchCriteria.of(query, genre, tag, GameSearchCriteria.stageOrNull(stage),
 			GameSearchCriteria.distributionOrNull(distribution), order);
 		var page = catalog.search(criteria, limit, cursor);
-		return new GamePageView(page.items().stream().map(game -> view(game, null)).toList(), page.nextCursor());
+		// Com sessão o catálogo marca o que é MEU (`owned`): é o que faz o card na loja oferecer
+		// "Editar" para quem publicou — sem isso, o dono só editava se achasse o painel.
+		String viewerId = viewerIdOrNull(userId, sessionToken);
+		return new GamePageView(page.items().stream().map(game -> view(game, viewerId)).toList(),
+			page.nextCursor());
 	}
 
 	@GetMapping("/games/{username}")
-	List<GameView> byUser(@PathVariable String username) {
-		return withUsernames(games.publishedByUser(username));
+	List<GameView> byUser(@PathVariable String username,
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		return withUsernames(games.publishedByUser(username), viewerIdOrNull(userId, sessionToken));
 	}
 
 	@GetMapping("/games/{username}/{gameSlug}")
@@ -78,15 +86,24 @@ class GameController {
 			@PathVariable String username, @PathVariable String gameSlug) {
 		// Com sessão, o dono abre o próprio jogo em qualquer estado (rascunho, recusado, suspenso).
 		String viewerId = viewerIdOrNull(userId, sessionToken);
-		Game game = games.byUserAndSlug(username, gameSlug, viewerId);
-		String owner = profiles.findById(game.userId()).map(p -> p.username()).orElse(null);
-		return GameView.of(game, owner, (int) library.count(game.id()), library.has(viewerId, game.id()), viewerId);
+		return viewWithFavorites(games.byUserAndSlug(username, gameSlug, viewerId), viewerId);
 	}
 
 	/** A view de um jogo, com o @ do criador resolvido (o endereço público usa ele). */
 	private GameView view(Game game, String viewerId) {
 		String username = profiles.findById(game.userId()).map(p -> p.username()).orElse(null);
 		return GameView.of(game, username, 0, false, viewerId);
+	}
+
+	/**
+	 * A view do DETALHE: é a única tela que mostra favoritos, então só aqui vale a consulta extra.
+	 * Sem isto o coração da página abria sempre vazio, mesmo com o jogo já favoritado.
+	 */
+	private GameView viewWithFavorites(Game game, String viewerId) {
+		String username = profiles.findById(game.userId()).map(p -> p.username()).orElse(null);
+		int favorites = (int) library.count(game.id());
+		boolean favorited = viewerId != null && library.has(viewerId, game.id());
+		return GameView.of(game, username, favorites, favorited, viewerId);
 	}
 
 	private String viewerIdOrNull(String userId, String sessionToken) {
@@ -99,12 +116,12 @@ class GameController {
 	}
 
 	/** O endereço público do jogo é /games/{username}/{slug} — o username sai do perfil. */
-	private List<GameView> withUsernames(List<Game> list) {
+	private List<GameView> withUsernames(List<Game> list, String viewerId) {
 		Map<String, String> names = new java.util.HashMap<>();
 		profiles.findAllByIds(list.stream().map(Game::userId).distinct().toList())
 			.forEach(p -> names.put(p.id(), p.username()));
 		return list.stream()
-			.map(g -> GameView.of(g, names.get(g.userId()), 0, false, null))
+			.map(g -> GameView.of(g, names.get(g.userId()), 0, false, viewerId))
 			.toList();
 	}
 
@@ -114,7 +131,8 @@ class GameController {
 	List<GameView> myGames(@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		return withUsernames(games.ownedBy(user.id().value()));
+		// `owned = true` em todos: é a lista dos MEUS jogos (o front usa isso para o "Editar").
+		return withUsernames(games.ownedBy(user.id().value()), user.id().value());
 	}
 
 	@PostMapping("/games")
@@ -243,7 +261,8 @@ class GameController {
 			@RequestParam(defaultValue = "30") int limit) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		adminGuard.requireAdmin(user);
-		return withUsernames(games.pending(limit));
+		// Fila de revisão: quem decide não é o dono, então `owned` fica de fora de propósito.
+		return withUsernames(games.pending(limit), null);
 	}
 
 	@PostMapping("/admin/games/{gameId}/approve")

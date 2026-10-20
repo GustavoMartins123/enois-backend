@@ -16,7 +16,12 @@ public record GameView(String id, String userId, String username, String slug, S
 		String shortDescription, List<String> genres, List<String> languages, String controls, String requirements,
 		String contentWarnings, String stage, String distribution, int priceCoins, String aspect, String version,
 		String websiteUrl, String supportUrl, List<String> mediaIds, int plays, int favorites, String publishedAt,
-		boolean owned, boolean favorited, boolean boosted) {
+		boolean owned, boolean favorited, boolean boosted,
+		/** Foto de perfil do jogo (alternativa ao favicon do site de origem). */
+		String icon,
+		/** Banner da página do jogo: foto e/ou HTML editável (a foto vence). */
+		String banner,
+		String bannerHtml) {
 
 	/** Monta a view do jogo. `favorites` e `favorited` só são preenchidos onde fazem sentido. */
 	public static GameView of(Game game, String username, int favorites, boolean favorited, String viewerId) {
@@ -28,7 +33,8 @@ public record GameView(String id, String userId, String username, String slug, S
 			details.stage().name(), details.distribution().name(), details.priceCoins(), details.aspect().name(),
 			details.version(), details.websiteUrl(), details.supportUrl(), details.mediaIdList(), game.plays(),
 			favorites, game.publishedAt() == null ? null : game.publishedAt().toString(),
-			viewerId != null && game.ownedBy(viewerId), favorited, game.boosted(java.time.Instant.now()));
+			viewerId != null && game.ownedBy(viewerId), favorited, game.boosted(java.time.Instant.now()),
+			details.icon(), details.banner(), details.bannerHtml());
 	}
 
 	public static GameView of(Game game, String username) {

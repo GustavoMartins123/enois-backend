@@ -45,7 +45,7 @@ class UserProjectJpaEntity {
 	private String status;
 
 	/** Diário de evolução: JSON [{date, text}]. */
-	@Column(name = "diary", columnDefinition = "text")
+	@Column(name = "diary", columnDefinition = "longtext")
 	private String diary;
 
 	@Column(name = "html", columnDefinition = "longtext")

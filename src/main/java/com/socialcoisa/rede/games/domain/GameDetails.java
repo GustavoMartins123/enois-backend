@@ -11,11 +11,17 @@ import java.util.List;
  */
 public record GameDetails(String shortDescription, String genres, String languages, String controls,
 		String requirements, String contentWarnings, GameStage stage, GameDistribution distribution, int priceCoins,
-		GameAspect aspect, String version, String websiteUrl, String supportUrl, String mediaIds) {
+		GameAspect aspect, String version, String websiteUrl, String supportUrl, String mediaIds,
+		/** Foto de perfil do jogo: é a alternativa ao favicon do site de origem na loja. */
+		String icon,
+		/** Faixa do topo da página do jogo, em foto. */
+		String banner,
+		/** Faixa do topo em HTML editável, usada quando não há foto. */
+		String bannerHtml) {
 
 	public static GameDetails empty() {
 		return new GameDetails(null, null, null, null, null, null, GameStage.RELEASED, GameDistribution.FREE, 0,
-			GameAspect.WIDESCREEN, null, null, null, null);
+			GameAspect.WIDESCREEN, null, null, null, null, null, null, null);
 	}
 
 	public static GameDetails of(String shortDescription, String genres, String languages, String controls,
@@ -25,7 +31,18 @@ public record GameDetails(String shortDescription, String genres, String languag
 			stage == null ? GameStage.RELEASED : stage,
 			distribution == null ? GameDistribution.FREE : distribution,
 			Math.max(0, priceCoins), aspect == null ? GameAspect.WIDESCREEN : aspect, version, websiteUrl,
-			supportUrl, mediaIds);
+			supportUrl, mediaIds, null, null, null);
+	}
+
+	/** A mesma ficha com a identidade visual trocada (ícone e banner: foto ou HTML). */
+	public GameDetails withBranding(String icon, String banner, String bannerHtml) {
+		return new GameDetails(shortDescription, genres, languages, controls, requirements, contentWarnings, stage,
+			distribution, priceCoins, aspect, version, websiteUrl, supportUrl, mediaIds,
+			blankToNull(icon), blankToNull(banner), blankToNull(bannerHtml));
+	}
+
+	private static String blankToNull(String value) {
+		return value == null || value.isBlank() ? null : value.trim();
 	}
 
 	/** As capturas de tela, na ordem em que o criador as colocou. */

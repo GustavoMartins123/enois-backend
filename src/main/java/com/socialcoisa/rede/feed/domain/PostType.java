@@ -26,5 +26,11 @@ public enum PostType {
 	 * Ponteiro de um post de blog: o conteudo mora no blog do autor, nao no feed. Entra so no "Para
 	 * voce" de quem se inscreveu no blog (nunca no "Tudo") e leva a tag "blog".
 	 */
-	BLOG
+	BLOG,
+	/**
+	 * Publicação corporativa/profissional: assinada pela identidade profissional da conta
+	 * (AuthorIdentity.CORPORATE) e exibida apenas no feed corporativo e no perfil profissional —
+	 * nunca no feed Tudo nem nos feeds sociais. A regra vive no backend (ver GetFeedService).
+	 */
+	BUSINESS
 }

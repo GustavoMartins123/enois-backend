@@ -1,12 +1,13 @@
 package com.socialcoisa.rede.identity.application.port.out;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 public interface AuthSessionRepository {
 
 	void save(String token, String refreshToken, String userId, Instant createdAt, Instant expiresAt,
-			Instant refreshExpiresAt);
+			Instant refreshExpiresAt, String ip);
 
 	Optional<String> findActiveUserId(String token, Instant now);
 
@@ -17,4 +18,7 @@ public interface AuthSessionRepository {
 	void revokeByRefreshToken(String refreshToken, Instant revokedAt);
 
 	void revokeAllByUser(String userId, Instant revokedAt);
+
+	/** IPs recentes de onde o usuario entrou (V115), mais recentes primeiro. Nulos filtrados fora. */
+	List<String> findRecentIpsByUser(String userId, int limit);
 }

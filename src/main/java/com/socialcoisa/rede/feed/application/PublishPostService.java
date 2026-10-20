@@ -13,6 +13,7 @@ import com.socialcoisa.rede.feed.application.port.out.IdGenerator;
 import com.socialcoisa.rede.feed.application.port.out.PostCommunityReader;
 import com.socialcoisa.rede.feed.application.port.out.OutboxEventRepository;
 import com.socialcoisa.rede.feed.application.port.out.PostRepository;
+import com.socialcoisa.rede.feed.domain.AuthorIdentity;
 import com.socialcoisa.rede.feed.domain.Post;
 import com.socialcoisa.rede.feed.domain.PostType;
 import com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseCase;
@@ -20,6 +21,11 @@ import com.socialcoisa.rede.notifications.application.NotificationService;
 import com.socialcoisa.rede.profile.domain.UserProfile;
 import com.socialcoisa.rede.shared.html.SafeHtml;
 import com.socialcoisa.rede.shared.text.PlainText;
+import com.socialcoisa.rede.shared.security.BehavioralTimingGuard;
+import com.socialcoisa.rede.shared.security.ContentDuplicationGuard;
+import com.socialcoisa.rede.shared.security.NewAccountCooldown;
+import com.socialcoisa.rede.shared.security.UserRateLimiter;
+import com.socialcoisa.rede.shared.security.UserRateLimiter;
 import com.socialcoisa.rede.shared.web.ApiException;
 
 @Service
@@ -39,6 +45,16 @@ public class PublishPostService implements PublishPostUseCase {
 	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository;
 	private final com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate;
 	private final PostCommunityReader postCommunityReader;
+	private final com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles;
+	/** Avisa quem escuta fora daqui (automod de spam), DEPOIS do commit. */
+	private final org.springframework.context.ApplicationEventPublisher events;
+	/** Cooldown de conta nova (PR #29): segura o flood inicial sem punir quem já tem história. */
+	private final NewAccountCooldown newAccountCooldown;
+	/** Rate limit por usuário e dedup de conteúdo (PR #28). */
+	private final UserRateLimiter userRateLimiter;
+	private final ContentDuplicationGuard duplicationGuard;
+	/** Detecção comportamental de automação (PR #36). */
+	private final BehavioralTimingGuard behavioralTimingGuard;
 
 	public PublishPostService(PostRepository postRepository, ArticleRepository articleRepository,
 			IdGenerator idGenerator, Clock clock,
@@ -47,7 +63,13 @@ public class PublishPostService implements PublishPostUseCase {
 			NotificationService notificationService,
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository,
 			com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate,
-			PostCommunityReader postCommunityReader) {
+			PostCommunityReader postCommunityReader,
+			com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles,
+			org.springframework.context.ApplicationEventPublisher events,
+			NewAccountCooldown newAccountCooldown,
+			UserRateLimiter userRateLimiter,
+			ContentDuplicationGuard duplicationGuard,
+			BehavioralTimingGuard behavioralTimingGuard) {
 		this.postRepository = postRepository;
 		this.articleRepository = articleRepository;
 		this.idGenerator = idGenerator;
@@ -59,6 +81,12 @@ public class PublishPostService implements PublishPostUseCase {
 		this.userProfileRepository = userProfileRepository;
 		this.sanctionGate = sanctionGate;
 		this.postCommunityReader = postCommunityReader;
+		this.corporateProfiles = corporateProfiles;
+		this.events = events;
+		this.newAccountCooldown = newAccountCooldown;
+		this.userRateLimiter = userRateLimiter;
+		this.duplicationGuard = duplicationGuard;
+		this.behavioralTimingGuard = behavioralTimingGuard;
 	}
 
 	@Override
@@ -68,6 +96,9 @@ public class PublishPostService implements PublishPostUseCase {
 			throw new ApiException(403, "ACCOUNT_RESTRICTED",
 				"Sua conta esta restrita por moderacao. Voce pode recorrer na pagina Penalidades.");
 		}
+		newAccountCooldown.require(command.authorId().value());
+		userRateLimiter.require(command.authorId().value(), UserRateLimiter.CREATE_POST);
+		behavioralTimingGuard.record(command.authorId().value());
 		validate(command);
 		List<String> tags = command.tags() == null ? List.of() : command.tags().stream()
 			.filter(StringUtils::hasText)
@@ -81,20 +112,51 @@ public class PublishPostService implements PublishPostUseCase {
 			.toList();
 		validateMediaOwnershipUseCase.validateOwnedBy(command.authorId(), mediaIds);
 		String communityId = StringUtils.hasText(command.communityId()) ? command.communityId().trim() : null;
+		// Regra do plano: BUSINESS assina o feed corporativo — não nasce dentro de comunidade
+		// (a tabela de separação de feeds vale no backend, não só na tela).
+		AuthorIdentity authorIdentity = command.type() == PostType.BUSINESS
+			? requireActiveCorporateProfile(command.authorId().value())
+			: AuthorIdentity.SOCIAL;
+		if (command.type() == PostType.BUSINESS && communityId != null) {
+			throw new ApiException(400, "BUSINESS_NOT_IN_COMMUNITY",
+				"Publicação corporativa não vai para comunidades. Publique no seu feed corporativo.");
+		}
+		String topic;
+		PostCommunityReader.CommunityRef community = null;
 		if (communityId != null) {
 			// Publicar numa comunidade e escrever no feed dela: sem ser membro, qualquer pessoa
 			// logada colocaria post na vitrine dos outros (e o post nao aparece para quem participa).
-			PostCommunityReader.CommunityRef community = postCommunityReader
-				.byIds(List.of(communityId), command.authorId().value()).get(communityId);
+			community = postCommunityReader.byIds(List.of(communityId), command.authorId().value()).get(communityId);
 			if (community == null) {
 				throw new ApiException(404, "COMMUNITY_NOT_FOUND", "Comunidade nao encontrada.");
 			}
 			if (!community.joined()) {
 				throw new ApiException(403, "NOT_A_MEMBER", "Entre na comunidade para publicar nela.");
 			}
+			if (StringUtils.hasText(command.topic())) {
+				throw new ApiException(400, "TOPIC_FROM_COMMUNITY",
+					"Post em comunidade herda o assunto dela — o compositor não escolhe assunto aqui.");
+			}
+		}
+		// Classificação REAL do assunto: em comunidade, o tópico é o DELA (declarado por ela).
+		// Post avulso nasce com o assunto que o AUTOR declarou no compositor (opcional, validado
+		// contra a taxonomia). Sem assunto, sem classificação — nunca é bloqueado por preferência.
+		if (community != null) {
+			topic = community.topic();
+		} else if (StringUtils.hasText(command.topic())) {
+			String declared = command.topic().trim().toUpperCase(java.util.Locale.ROOT);
+			if (!com.socialcoisa.rede.preferences.domain.ContentTaxonomy.TOPIC_SET.contains(declared)) {
+				throw new ApiException(400, "INVALID_TOPIC", "Assunto inválido: escolha um da lista.");
+			}
+			topic = declared;
+		} else {
+			topic = null;
+		}
+		if (StringUtils.hasText(command.content())) {
+			duplicationGuard.require(command.authorId().value(), command.content());
 		}
 		Post post = Post.publish(idGenerator.newPostId(), command.authorId(), command.type(), textOf(command),
-			pageHtml(command), tags, mediaIds, communityId, clock.instant());
+			pageHtml(command), tags, mediaIds, communityId, topic, clock.instant(), authorIdentity);
 		Post saved = postRepository.save(post);
 		String articleBody = articleBody(command);
 		if (articleBody != null) {
@@ -104,16 +166,31 @@ public class PublishPostService implements PublishPostUseCase {
 		}
 		feedDistributionService.distribute(saved);
 		outboxEventRepository.append("PostPublished", saved.id().value(), "{\"postId\":\"" + saved.id().value() + "\"}");
+		// O automod de spam roda fora desta transação (listener AFTER_COMMIT + executor): flood,
+		// repetição e posts muito curtos passam pela IA sem depender de denúncia.
+		events.publishEvent(new PostPublishedEvent(saved.id().value(), saved.authorId().value()));
 		notifyMentions(command.mentionedUserIds(), command.authorId().value(), saved.id().value(), "post");
 		UserProfile author = userProfileRepository.findById(command.authorId().value()).orElse(null);
 		if (author != null) {
-			return PostView.from(saved, author.username(), author.name(), author.avatar(), author.allBadges());
+			return PostView.from(saved, author.username(), author.name(), author.avatar(), author.allBadges()).withAvatarFrame(author.avatarFrame());
 		}
 		return PostView.from(saved);
 	}
 
-	private void notifyMentions(List<String> mentionedUserIds, String actorId, String postId, String kind) {
-		if (mentionedUserIds == null) return;
+	/**
+	 * Uma publicação BUSINESS exige um perfil profissional ATIVO pertencente à mesma conta que
+	 * está publicando — o perfil é resolvido pelo backend a partir da sessão, nunca aceito do
+	 * payload do navegador.
+	 */
+	private AuthorIdentity requireActiveCorporateProfile(String authorId) {
+		return corporateProfiles.findByUserId(authorId)
+			.filter(com.socialcoisa.rede.corporate.domain.CorporateProfile::active)
+			.map(p -> AuthorIdentity.CORPORATE)
+			.orElseThrow(() -> new ApiException(403, "NO_ACTIVE_CORPORATE_PROFILE",
+				"Você precisa de um perfil profissional ativo para publicar no feed corporativo."));
+	}
+
+	private void notifyMentions(List<String> mentionedUserIds, String actorId, String postId, String kind) {		if (mentionedUserIds == null) return;
 		for (String mentionedId : mentionedUserIds.stream().filter(StringUtils::hasText).map(String::trim).distinct().toList()) {
 			if (mentionedId.equals(actorId)) continue;
 			if (userProfileRepository.findById(mentionedId).isEmpty()) continue;

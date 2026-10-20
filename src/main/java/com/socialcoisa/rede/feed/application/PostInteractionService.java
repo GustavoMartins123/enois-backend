@@ -26,7 +26,11 @@ import com.socialcoisa.rede.feed.domain.Post;
 import com.socialcoisa.rede.feed.domain.PostId;
 import com.socialcoisa.rede.notifications.application.NotificationService;
 import com.socialcoisa.rede.shared.blocks.BlockedUsersReader;
+import com.socialcoisa.rede.shared.security.BehavioralTimingGuard;
+import com.socialcoisa.rede.shared.security.NewAccountCooldown;
 import com.socialcoisa.rede.shared.text.PlainText;
+import com.socialcoisa.rede.shared.security.ContentDuplicationGuard;
+import com.socialcoisa.rede.shared.security.UserRateLimiter;
 import com.socialcoisa.rede.shared.web.ApiException;
 import com.socialcoisa.rede.shared.web.CursorCodec;
 
@@ -48,6 +52,12 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 	private final com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseCase validateMediaOwnership;
 	private final com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate;
 	private final com.socialcoisa.rede.coin.application.CoinService coins;
+	private final NewAccountCooldown newAccountCooldown;
+	/** Rate limit por usuário e dedup de conteúdo (PR #28). */
+	private final UserRateLimiter userRateLimiter;
+	private final ContentDuplicationGuard duplicationGuard;
+	/** Detecção comportamental de automação (PR #36). */
+	private final BehavioralTimingGuard behavioralTimingGuard;
 
 	public PostInteractionService(PostRepository postRepository, CommentRepository commentRepository,
 			PostInteractionRepository postInteractionRepository, OutboxEventRepository outboxEventRepository,
@@ -57,7 +67,11 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 			BlockedUsersReader blockedUsersReader,
 			com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseCase validateMediaOwnership,
 			com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate,
-			com.socialcoisa.rede.coin.application.CoinService coins) {
+			com.socialcoisa.rede.coin.application.CoinService coins,
+			NewAccountCooldown newAccountCooldown,
+			UserRateLimiter userRateLimiter,
+			ContentDuplicationGuard duplicationGuard,
+			BehavioralTimingGuard behavioralTimingGuard) {
 		this.postRepository = postRepository;
 		this.commentRepository = commentRepository;
 		this.postInteractionRepository = postInteractionRepository;
@@ -70,6 +84,10 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 		this.validateMediaOwnership = validateMediaOwnership;
 		this.sanctionGate = sanctionGate;
 		this.coins = coins;
+		this.newAccountCooldown = newAccountCooldown;
+		this.userRateLimiter = userRateLimiter;
+		this.duplicationGuard = duplicationGuard;
+		this.behavioralTimingGuard = behavioralTimingGuard;
 	}
 
 	@Override
@@ -79,6 +97,10 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 			throw new ApiException(403, "ACCOUNT_RESTRICTED",
 				"Sua conta esta restrita por moderacao. Voce pode recorrer na pagina Penalidades.");
 		}
+		newAccountCooldown.require(command.authorId().value());
+		userRateLimiter.require(command.authorId().value(), UserRateLimiter.CREATE_COMMENT);
+		behavioralTimingGuard.record(command.authorId().value());
+		duplicationGuard.require(command.authorId().value(), command.content());
 		Post post = activePost(command.postId());
 		List<String> mediaIds = normalizeCommentMedia(command.mediaIds(), command.authorId());
 		String content = normalizeContent(command.content(), !mediaIds.isEmpty());
@@ -97,7 +119,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 			profile != null ? profile.displayWithNickname() : null,
 			profile != null ? profile.username() : null,
 			profile != null ? profile.avatar() : null,
-			profile != null ? profile.allBadges() : java.util.List.of());
+			profile != null ? profile.allBadges() : java.util.List.of()).withAvatarFrame(profile != null ? profile.avatarFrame() : null);
 	}
 
 	/**
@@ -149,7 +171,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 					p != null ? p.displayWithNickname() : null,
 					p != null ? p.username() : null,
 					p != null ? p.avatar() : null,
-					p != null ? p.allBadges() : java.util.List.of());
+					p != null ? p.allBadges() : java.util.List.of()).withAvatarFrame(p != null ? p.avatarFrame() : null);
 			})
 			.toList();
 		// Reacao do proprio leitor: sem isso o front nao sabe que ele ja reagiu e a reacao

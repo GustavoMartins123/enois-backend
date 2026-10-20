@@ -49,7 +49,7 @@ public class ScheduledPostService {
 
 	public record ScheduleCommand(PostType type, String content, String pageHtml, String articleBody,
 			List<String> tags, List<String> mediaIds, List<String> mentionedUserIds, String communityId,
-			Instant scheduledAt) {
+			String topic, Instant scheduledAt) {
 	}
 
 	@Transactional
@@ -83,11 +83,26 @@ public class ScheduledPostService {
 			throw new ApiException(409, "TOO_MANY_SCHEDULED",
 				"Você já tem " + MAX_PENDING + " posts agendados. Cancele algum para criar outro.");
 		}
+		// Mesma regra da publicação direta, aplicada cedo para o erro aparecer no agendamento:
+		// post de comunidade herda o assunto dela; post avulso declara um da taxonomia (ou nenhum).
+		String topic;
+		if (StringUtils.hasText(command.communityId()) && StringUtils.hasText(command.topic())) {
+			throw throwInvalid("TOPIC_FROM_COMMUNITY", "Post em comunidade herda o assunto dela.");
+		}
+		if (StringUtils.hasText(command.topic())) {
+			String declared = command.topic().trim().toUpperCase(java.util.Locale.ROOT);
+			if (!com.socialcoisa.rede.preferences.domain.ContentTaxonomy.TOPIC_SET.contains(declared)) {
+				throw throwInvalid("INVALID_TOPIC", "Assunto inválido: escolha um da lista.");
+			}
+			topic = declared;
+		} else {
+			topic = null;
+		}
 		ScheduledPost post = new ScheduledPost(newId(), userId, type, command.content(), command.pageHtml(),
 			command.articleBody(), command.tags() == null ? List.of() : command.tags(),
 			command.mediaIds() == null ? List.of() : command.mediaIds(),
 			command.mentionedUserIds() == null ? List.of() : command.mentionedUserIds(), command.communityId(),
-			scheduledAt, now, null, 0);
+			topic, scheduledAt, now, null, 0);
 		return repository.save(post);
 	}
 
@@ -123,7 +138,7 @@ public class ScheduledPostService {
 				// post entra no ar, não quando ele foi agendado.
 				publishPost.publish(new PublishPostCommand(new UserId(post.userId()), post.type(), post.content(),
 					post.pageHtml(), post.articleBody(), post.tags(), post.mediaIds(), post.communityId(),
-					post.mentionedUserIds()));
+					post.mentionedUserIds(), post.topic()));
 				repository.delete(post.id());
 				published++;
 			}

@@ -38,7 +38,7 @@ class GroupJpaEntity {
 	@Column(length = 500)
 	private String banner;
 
-	@Column(name = "banner_html")
+	@Column(name = "banner_html", columnDefinition = "longtext")
 	private String bannerHtml;
 
 	@Enumerated(EnumType.STRING)

@@ -1,4 +1,4 @@
 package com.socialcoisa.rede.identity.application;
 
-public record LoginCommand(String email, String password) {
+public record LoginCommand(String email, String password, String ip) {
 }
