@@ -48,6 +48,24 @@ class CorporateImportConsentTests {
 	}
 
 	@Test
+	void bannerHtmlRoundTripsThroughTheProfessionalProfile() throws Exception {
+		var session = auth.authenticate("corporate_banner_html");
+		createProfile(session, "capa.html");
+
+		mockMvc.perform(patch("/me/business-profile")
+				.header("X-Session-Token", session.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(java.util.Map.of(
+					"headline", "Headline", "bannerHtml", "<div style=\"color:red\">capa</div>"))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.bannerHtml").value("<div style=\"color:red\">capa</div>"));
+
+		mockMvc.perform(get("/me/business-profile").header("X-Session-Token", session.token()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.bannerHtml").value("<div style=\"color:red\">capa</div>"));
+	}
+
+	@Test
 	void previewShowsSocialFieldsWithoutWritingAnything() throws Exception {
 		var session = auth.authenticate("import_preview");
 		mockMvc.perform(patch("/me/profile")

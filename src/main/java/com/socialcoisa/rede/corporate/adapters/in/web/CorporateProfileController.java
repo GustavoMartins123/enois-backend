@@ -39,7 +39,7 @@ class CorporateProfileController {
 	record CreateRequest(String username, String name) {
 	}
 
-	record DetailsRequest(String headline, String bio, String avatar, String banner, String location,
+	record DetailsRequest(String headline, String bio, String avatar, String banner, String bannerHtml, String location,
 			String industry, String externalLinks) {
 	}
 
@@ -78,7 +78,8 @@ class CorporateProfileController {
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken, @RequestBody DetailsRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		CorporateProfile updated = service.updateDetails(user.id().value(), request.headline(), request.bio(),
-			request.avatar(), request.banner(), request.location(), request.industry(), request.externalLinks());
+			request.avatar(), request.banner(), request.bannerHtml(), request.location(), request.industry(),
+			request.externalLinks());
 		return view(updated);
 	}
 
@@ -132,6 +133,7 @@ class CorporateProfileController {
 			Map.entry("bio", profile.bio() == null ? "" : profile.bio()),
 			Map.entry("avatar", profile.avatar() == null ? "" : profile.avatar()),
 			Map.entry("banner", profile.banner() == null ? "" : profile.banner()),
+			Map.entry("bannerHtml", profile.bannerHtml() == null ? "" : profile.bannerHtml()),
 			Map.entry("location", profile.location() == null ? "" : profile.location()),
 			Map.entry("industry", profile.industry() == null ? "" : profile.industry()),
 			Map.entry("externalLinks", profile.externalLinks() == null ? "" : profile.externalLinks()),

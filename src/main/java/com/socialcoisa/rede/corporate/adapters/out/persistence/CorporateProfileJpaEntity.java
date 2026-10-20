@@ -36,6 +36,9 @@ class CorporateProfileJpaEntity {
 	@Column(name = "banner")
 	private String banner;
 
+	@Column(name = "banner_html", columnDefinition = "longtext")
+	private String bannerHtml;
+
 	@Column(name = "location")
 	private String location;
 
@@ -66,6 +69,7 @@ class CorporateProfileJpaEntity {
 		entity.bio = profile.bio();
 		entity.avatar = profile.avatar();
 		entity.banner = profile.banner();
+		entity.bannerHtml = profile.bannerHtml();
 		entity.location = profile.location();
 		entity.industry = profile.industry();
 		entity.externalLinks = profile.externalLinks();
@@ -76,7 +80,7 @@ class CorporateProfileJpaEntity {
 	}
 
 	CorporateProfile toDomain() {
-		return new CorporateProfile(userId, username, name, headline, bio, avatar, banner, location, industry,
+		return new CorporateProfile(userId, username, name, headline, bio, avatar, banner, bannerHtml, location, industry,
 			externalLinks, CorporateProfileStatus.valueOf(status), createdAt, updatedAt);
 	}
 }

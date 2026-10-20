@@ -32,7 +32,7 @@ public class CorporateProfileService {
 
 	/** Campos que podem vir do perfil social — por nome, nunca em bloco. */
 	public static final List<String> IMPORTABLE_FIELDS = List.of(
-		"name", "headline", "bio", "avatar", "banner", "location");
+		"name", "headline", "bio", "avatar", "banner", "bannerHtml", "location");
 	private static final Set<String> IMPORTABLE_SET = Set.copyOf(IMPORTABLE_FIELDS);
 
 	private final CorporateProfileRepository repository;
@@ -68,12 +68,12 @@ public class CorporateProfileService {
 	}
 
 	public CorporateProfile updateDetails(String userId, String headline, String bio, String avatar,
-			String banner, String location, String industry, String externalLinks) {
+			String banner, String bannerHtml, String location, String industry, String externalLinks) {
 		CorporateProfile current = byUserIdOrThrow(userId);
 		return repository.save(current.withDetails(
 			trimOrNull(headline, 200), trimOrNull(bio, 2000), trimOrNull(avatar, 500), trimOrNull(banner, 500),
-			trimOrNull(location, 200), trimOrNull(industry, 200), trimOrNull(externalLinks, 1000),
-			clock.instant()));
+			trimOrNull(bannerHtml, 20000), trimOrNull(location, 200), trimOrNull(industry, 200),
+			trimOrNull(externalLinks, 1000), clock.instant()));
 	}
 
 	/**
@@ -85,11 +85,12 @@ public class CorporateProfileService {
 			.orElseThrow(() -> new ApiException(404, "PROFILE_NOT_FOUND", "Perfil social não encontrado."));
 		return new ImportPreview(
 			fit(social.name(), 160), fit(social.headline(), 200), fit(social.bio(), 2000),
-			fit(social.avatar(), 500), fit(social.banner(), 500), fit(social.location(), 200));
+			fit(social.avatar(), 500), fit(social.banner(), 500), fit(social.bannerHtml(), 20000),
+			fit(social.location(), 200));
 	}
 
 	public record ImportPreview(String name, String headline, String bio, String avatar, String banner,
-			String location) {
+			String bannerHtml, String location) {
 	}
 
 	/**
@@ -118,8 +119,9 @@ public class CorporateProfileService {
 		String bio = selected.contains("bio") ? fit(social.bio(), 2000) : current.bio();
 		String avatar = selected.contains("avatar") ? fit(social.avatar(), 500) : current.avatar();
 		String banner = selected.contains("banner") ? fit(social.banner(), 500) : current.banner();
+		String bannerHtml = selected.contains("bannerhtml") ? fit(social.bannerHtml(), 20000) : current.bannerHtml();
 		String location = selected.contains("location") ? fit(social.location(), 200) : current.location();
-		CorporateProfile updated = current.withDetails(headline, bio, avatar, banner, location,
+		CorporateProfile updated = current.withDetails(headline, bio, avatar, banner, bannerHtml, location,
 			current.industry(), current.externalLinks(), clock.instant());
 		if (selected.contains("name") && StringUtils.hasText(social.name())) {
 			updated = updated.withName(social.name(), clock.instant());
