@@ -176,7 +176,8 @@ class JobContractController {
 					base.type(), base.level(), base.salary(), base.currency(), base.skills(), base.postedAt(),
 					base.applicationsCount(), base.applied(), true, false, 0, null, base.applicationFields(),
 					base.status(), base.closedAt(), base.sourceType(), base.sourceUrl(), base.sourcePlatform(),
-					base.applyEmail()));
+					base.applyEmail(), base.description(), base.salaryMin(), base.salaryMax(),
+					base.salaryPeriod(), base.salaryLabel()));
 			}
 		}
 		return new PageResponse<>(views, null);
@@ -185,7 +186,12 @@ class JobContractController {
 	/** Os agregadores das externas (o filtro da aba). Cache do adapter ja cobre. */
 	@GetMapping("/platforms")
 	List<String> platforms() {
-		return externalJobRepository.distinctPlatforms();
+		// "Comunidade" é a origem das cadastradas no Énóis: tem filtro próprio e não entra na
+		// lista de agregadores.
+		return externalJobRepository.distinctPlatforms().stream()
+			.filter(name -> !com.socialcoisa.rede.jobs.application.ExternalJobSubmissionService.COMMUNITY_PLATFORM
+				.equals(name))
+			.toList();
 	}
 
 	/**
@@ -205,7 +211,8 @@ class JobContractController {
 			"url", body.url() == null ? "" : body.url()));
 		return idempotency.execute(user.id(), "POST", "/api/jobs/external", idempotencyKey, hash, () -> {
 			ExternalJob job = externalJobSubmission.submit(user.id().value(), body.title(), body.company(),
-				body.location(), body.url(), body.communityAgreement());
+				body.location(), body.url(), body.description(), body.salaryMin(), body.salaryMax(),
+				body.salaryPeriod(), body.applyEmail(), body.communityAgreement());
 			return new CommandResponse(201, toExternalView(job, true));
 		});
 	}
@@ -455,7 +462,7 @@ class JobContractController {
 					!owner && appliedIds.contains(job.id()), savedIds.contains(job.id()), owner,
 					owner ? counts.getOrDefault(job.id(), 0) : 0, authorOf(job), fieldViews(job),
 					job.status().name(), job.closedAt() != null ? job.closedAt().toString() : null,
-					"INTERNAL", null, null, null);
+					"INTERNAL", null, null, null, null, null, null, null, null);
 			})
 			.toList();
 		String nextCursor = jobs.size() == limit
@@ -476,9 +483,15 @@ class JobContractController {
 	 */
 	private List<JobView> externalJobViews(String query) {
 		List<JobView> external = new java.util.ArrayList<>();
+		// A listagem de "externas" (agregadores) NAO mistura as criadas pela comunidade: elas têm
+		// filtro próprio ("Vaga externa criada no Énóis" = plataforma Comunidade).
 		var found = org.springframework.util.StringUtils.hasText(query)
-			? externalJobRepository.search(query.trim(), externalListingLimit)
-			: externalJobRepository.findRecent(externalListingLimit);
+			? externalJobRepository.searchExcludingPlatform(
+				com.socialcoisa.rede.jobs.application.ExternalJobSubmissionService.COMMUNITY_PLATFORM,
+				query.trim(), externalListingLimit)
+			: externalJobRepository.findRecentExcludingPlatform(
+				com.socialcoisa.rede.jobs.application.ExternalJobSubmissionService.COMMUNITY_PLATFORM,
+				externalListingLimit);
 		for (ExternalJob job : found) {
 			external.add(toExternalView(job));
 		}
@@ -494,7 +507,8 @@ class JobContractController {
 		return new JobView(job.id(), job.title(), job.company(), null, job.location(), null, null,
 			job.salary(), job.currency(), List.of(),
 			job.importedAt() != null ? job.importedAt().toString() : null, 0, false, false, owner, 0, null,
-			List.of(), "OPEN", null, "EXTERNAL", job.url(), job.platform(), job.applyEmail());
+			List.of(), "OPEN", null, "EXTERNAL", job.url(), job.platform(), job.applyEmail(),
+			job.description(), job.salaryMin(), job.salaryMax(), job.salaryPeriod(), externalSalaryLabel(job));
 	}
 
 	private JobView toView(Job job, String viewer, boolean applied, boolean saved, int applicationsCount) {
@@ -502,7 +516,52 @@ class JobContractController {
 			job.salary(), job.currency(), job.skills(), job.postedAt() != null ? job.postedAt().toString() : null, 0,
 			applied, saved, viewer != null && viewer.equals(job.postedBy()), applicationsCount, authorOf(job),
 			fieldViews(job), job.status().name(), job.closedAt() != null ? job.closedAt().toString() : null,
-			"INTERNAL", null, null, null);
+			"INTERNAL", null, null, null, null, null, null, null, null);
+	}
+
+	/** Faixa da vaga externa cadastrada à mão ("de R$ 1.500 até R$ 2.000 / mês"). */
+	private static String externalSalaryLabel(ExternalJob job) {
+		if (!org.springframework.util.StringUtils.hasText(job.salaryMin())) {
+			return null;
+		}
+		String symbol = extSymbol(job.currency());
+		String min = symbol + " " + extAmount(job.salaryMin());
+		if (org.springframework.util.StringUtils.hasText(job.salaryMax())) {
+			return "de " + min + " até " + symbol + " " + extAmount(job.salaryMax()) + " / "
+				+ extPeriod(job.salaryPeriod());
+		}
+		return min + " / " + extPeriod(job.salaryPeriod());
+	}
+
+	private static String extAmount(String value) {
+		try {
+			java.text.NumberFormat nf = java.text.NumberFormat
+				.getNumberInstance(new java.util.Locale("pt", "BR"));
+			java.math.BigDecimal amount = new java.math.BigDecimal(value.trim().replace(",", "."));
+			nf.setMaximumFractionDigits(amount.stripTrailingZeros().scale() <= 0 ? 0 : 2);
+			nf.setMinimumFractionDigits(amount.stripTrailingZeros().scale() <= 0 ? 0 : 2);
+			return nf.format(amount);
+		}
+		catch (RuntimeException invalid) {
+			return value.trim();
+		}
+	}
+
+	private static String extSymbol(String currency) {
+		return switch (currency == null ? "BRL" : currency.toUpperCase(java.util.Locale.ROOT)) {
+			case "USD" -> "US$";
+			case "EUR" -> "€";
+			default -> "R$";
+		};
+	}
+
+	private static String extPeriod(String period) {
+		return switch (period == null ? "MONTH" : period) {
+			case "HOUR" -> "hora";
+			case "DAY" -> "dia";
+			case "YEAR" -> "ano";
+			default -> "mês";
+		};
 	}
 
 	/** Quem criou a vaga (com reputacao e verificacao): o candidato precisa saber com quem fala. */
@@ -535,7 +594,8 @@ class JobContractController {
 			String salary, String currency, List<String> skills, String postedAt, int matchScore, boolean applied,
 			boolean saved, boolean owner, int applicationsCount, AuthorView author, List<ApplicationFieldView>
 			applicationFields, String status, String closedAt, String sourceType, String sourceUrl,
-			String sourcePlatform, String applyEmail) {
+			String sourcePlatform, String applyEmail, String description, String salaryMin, String salaryMax,
+			String salaryPeriod, String salaryLabel) {
 	}
 
 	/** Quem publicou a vaga, com o que sustenta a credibilidade dele. */
@@ -553,6 +613,7 @@ class JobContractController {
 
 	/** Cadastro de vaga EXTERNA: so o que a listagem mostra e o link para onde a candidatura vai. */
 	record CreateExternalJobRequest(String title, String company, String location, String url,
+			String description, String salaryMin, String salaryMax, String salaryPeriod, String applyEmail,
 			boolean communityAgreement) {
 	}
 

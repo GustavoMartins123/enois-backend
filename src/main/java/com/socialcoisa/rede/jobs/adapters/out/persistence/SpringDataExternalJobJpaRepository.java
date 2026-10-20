@@ -16,6 +16,19 @@ interface SpringDataExternalJobJpaRepository extends JpaRepository<ExternalJobJp
 
 	List<ExternalJobJpaEntity> findAllByOrderByLastCheckedAtDesc(Pageable pageable);
 
+	/** A listagem geral das externas EXCLUI a plataforma das cadastradas no Énóis. */
+	List<ExternalJobJpaEntity> findByPlatformNotOrderByLastCheckedAtDesc(String platform, Pageable pageable);
+
+	@Query("""
+			SELECT e FROM ExternalJobJpaEntity e
+			WHERE e.platform <> :platform
+			  AND (LOWER(e.title) LIKE :pattern ESCAPE '\\'
+			   OR LOWER(e.company) LIKE :pattern ESCAPE '\\'
+			   OR LOWER(e.location) LIKE :pattern ESCAPE '\\')
+			ORDER BY e.lastCheckedAt DESC""")
+	List<ExternalJobJpaEntity> searchExcludingPlatform(@Param("platform") String platform,
+		@Param("pattern") String pattern, Pageable pageable);
+
 	List<ExternalJobJpaEntity> findByPlatformOrderByLastCheckedAtDesc(String platform, Pageable pageable);
 
 	@Query("SELECT e FROM ExternalJobJpaEntity e WHERE e.platform = :platform "

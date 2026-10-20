@@ -23,6 +23,12 @@ public interface ExternalJobRepository {
 	/** Busca por TITULO (as externas nao tem tipo/nivel/local/salario para filtrar). */
 	List<ExternalJob> search(String query, int limit);
 
+	/** As recentes EXCLUINDO uma plataforma (a listagem geral nao mistura as criadas no Énóis). */
+	List<ExternalJob> findRecentExcludingPlatform(String platform, int limit);
+
+	/** Busca excluindo uma plataforma (idem, para o filtro de agregadores). */
+	List<ExternalJob> searchExcludingPlatform(String platform, String query, int limit);
+
 	/** Mesma busca, mas restrita a UM agregador (a aba externa filtra por plataforma). */
 	List<ExternalJob> findByPlatform(String platform, String query, int limit);
 

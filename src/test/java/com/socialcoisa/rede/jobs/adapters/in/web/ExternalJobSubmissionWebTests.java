@@ -143,6 +143,56 @@ class ExternalJobSubmissionWebTests {
 			.andExpect(jsonPath("$.code").value("NOT_OWNER"));
 	}
 
+	@Test
+	void submittedJobCarriesActivitiesSalaryAndApplyEmailAndStaysOutOfAggregators() throws Exception {
+		var author = auth.authenticate("ext_job_details");
+		String title = "Vaga com detalhes " + System.nanoTime();
+		String url = "https://vagas.exemplo.test/detalhes/" + System.nanoTime();
+		String payload = objectMapper.writeValueAsString(Map.of(
+			"title", title,
+			"company", "Empresa Detalhes",
+			"location", "Remoto",
+			"url", url,
+			"description", "Atuar com Java e Spring no time de plataforma.",
+			"salaryMin", "8000",
+			"salaryMax", "12000",
+			"salaryPeriod", "MONTH",
+			"applyEmail", "vagas@empresa.test",
+			"communityAgreement", true));
+
+		MvcResult created = mockMvc.perform(post("/jobs/external")
+				.header("X-Session-Token", author.token())
+				.header("Idempotency-Key", "ext-details-1")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(payload))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.description").value("Atuar com Java e Spring no time de plataforma."))
+			.andExpect(jsonPath("$.salaryMin").value("8000"))
+			.andExpect(jsonPath("$.salaryMax").value("12000"))
+			.andExpect(jsonPath("$.salaryPeriod").value("MONTH"))
+			.andExpect(jsonPath("$.salaryLabel").value("de R$ 8.000 até R$ 12.000 / mês"))
+			.andExpect(jsonPath("$.applyEmail").value("vagas@empresa.test"))
+			.andReturn();
+		String id = objectMapper.readTree(created.getResponse().getContentAsString()).path("id").asString();
+
+		// A listagem geral de agregadores NAO devolve a vaga da comunidade.
+		MvcResult aggregators = mockMvc.perform(get("/jobs")
+				.param("source", "EXTERNAL").param("query", title))
+			.andExpect(status().isOk())
+			.andReturn();
+		JsonNode aggregatorItems = objectMapper.readTree(aggregators.getResponse().getContentAsString())
+			.get("items");
+		java.util.List<String> aggregatorIds = new java.util.ArrayList<>();
+		aggregatorItems.forEach(item -> aggregatorIds.add(item.path("id").asString()));
+		assertThat(aggregatorIds).doesNotContain(id);
+
+		// O filtro próprio ("Criadas no Énóis" = plataforma Comunidade) devolve.
+		mockMvc.perform(get("/jobs")
+				.param("source", "EXTERNAL").param("platform", "Comunidade").param("query", title))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.items[0].id").value(id));
+	}
+
 	private org.springframework.test.web.servlet.ResultActions submit(
 			TestAuthHelper.AuthSession session, String title, String company, String location, String url,
 			String idempotencyKey) throws Exception {
