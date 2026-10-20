@@ -128,7 +128,7 @@ class MessagingContractController {
 		Instant before = cursorCodec.decode(cursor).orElse(null);
 		List<Message> msgs = messagingService.getMessages(conversationId, user.id().value(), before, limit);
 		var items = msgs.stream()
-			.map(m -> new MessageView(m.id(), m.conversationId(), m.senderId(), m.text(),
+			.map(m -> new MessageView(m.id(), m.conversationId(), m.senderId(), m.text(), m.mediaIds(),
 				m.createdAt() != null ? m.createdAt().toString() : null))
 			.toList();
 		// Pagina cheia => ainda ha mensagens mais antigas: o cursor aponta para a mais antiga desta pagina.
@@ -171,12 +171,16 @@ class MessagingContractController {
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String conversationId, @RequestBody SendMessageRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		String hash = idempotency.hash(Map.of("conversationId", conversationId, "text", request.text()));
+		String hash = idempotency.hash(Map.of("conversationId", conversationId, "text",
+			request.text() == null ? "" : request.text(), "mediaIds",
+			request.mediaIds() == null ? List.of() : request.mediaIds()));
 		return idempotency.execute(user.id(), "POST", "/api/conversations/{conversationId}/messages", idempotencyKey,
 			hash, () -> {
-				Message msg = messagingService.sendMessage(conversationId, user.id().value(), request.text());
+				Message msg = messagingService.sendMessage(conversationId, user.id().value(), request.text(),
+					request.mediaIds());
 				return new CommandResponse(201, new MessageView(msg.id(), msg.conversationId(), msg.senderId(),
-					msg.text(), msg.createdAt() != null ? msg.createdAt().toString() : null));
+					msg.text(), msg.mediaIds(),
+					msg.createdAt() != null ? msg.createdAt().toString() : null));
 			});
 	}
 
@@ -368,7 +372,8 @@ class MessagingContractController {
 			int unread) {
 	}
 
-	record MessageView(String id, String conversationId, String from, String text, String time) {
+	record MessageView(String id, String conversationId, String from, String text, List<String> mediaIds,
+			String time) {
 	}
 
 	record CreateConversationRequest(String kind, String title, List<String> participantIds) {
@@ -380,7 +385,7 @@ class MessagingContractController {
 	record HideConversationsRequest(List<String> ids) {
 	}
 
-	record SendMessageRequest(String text) {
+	record SendMessageRequest(String text, List<String> mediaIds) {
 	}
 
 }
