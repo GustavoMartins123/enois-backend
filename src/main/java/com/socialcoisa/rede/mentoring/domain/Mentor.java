@@ -11,32 +11,48 @@ public class Mentor {
 	private final double rating;
 	private final int sessionsCount;
 	private final String price;
+	private final String banner;
 	private final Instant createdAt;
 	private final Instant updatedAt;
 
 	private Mentor(String id, String userId, List<String> expertise, double rating, int sessionsCount, String price,
-			Instant createdAt, Instant updatedAt) {
+			String banner, Instant createdAt, Instant updatedAt) {
 		this.id = id;
 		this.userId = userId;
 		this.expertise = expertise;
 		this.rating = rating;
 		this.sessionsCount = sessionsCount;
 		this.price = price;
+		this.banner = banner;
 		this.createdAt = createdAt;
 		this.updatedAt = updatedAt;
 	}
 
 	public static Mentor create(String id, String userId, List<String> expertise, String price, Instant now) {
-		return new Mentor(id, userId, List.copyOf(expertise), 0.0, 0, price, now, now);
+		return create(id, userId, expertise, price, null, now);
+	}
+
+	public static Mentor create(String id, String userId, List<String> expertise, String price, String banner,
+			Instant now) {
+		return new Mentor(id, userId, List.copyOf(expertise), 0.0, 0, price, banner, now, now);
 	}
 
 	public static Mentor restore(String id, String userId, List<String> expertise, double rating, int sessionsCount,
 			String price, Instant createdAt, Instant updatedAt) {
-		return new Mentor(id, userId, expertise, rating, sessionsCount, price, createdAt, updatedAt);
+		return restore(id, userId, expertise, rating, sessionsCount, price, null, createdAt, updatedAt);
+	}
+
+	public static Mentor restore(String id, String userId, List<String> expertise, double rating, int sessionsCount,
+			String price, String banner, Instant createdAt, Instant updatedAt) {
+		return new Mentor(id, userId, expertise, rating, sessionsCount, price, banner, createdAt, updatedAt);
 	}
 
 	public Mentor update(List<String> expertise, String price, Instant now) {
-		return new Mentor(id, userId, expertise, rating, sessionsCount, price, createdAt, now);
+		return update(expertise, price, banner, now);
+	}
+
+	public Mentor update(List<String> expertise, String price, String banner, Instant now) {
+		return new Mentor(id, userId, expertise, rating, sessionsCount, price, banner, createdAt, now);
 	}
 
 	public String id() { return id; }
@@ -50,6 +66,8 @@ public class Mentor {
 	public int sessionsCount() { return sessionsCount; }
 
 	public String price() { return price; }
+
+	public String banner() { return banner; }
 
 	public Instant createdAt() { return createdAt; }
 
