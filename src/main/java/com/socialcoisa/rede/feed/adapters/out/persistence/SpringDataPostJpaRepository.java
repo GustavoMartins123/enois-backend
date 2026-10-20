@@ -31,4 +31,6 @@ interface SpringDataPostJpaRepository extends JpaRepository<PostJpaEntity, Strin
 
 	/** Momentos vencidos e ainda ativos — o worker aplica o soft-delete do fluxo normal. */
 	List<PostJpaEntity> findByTypeAndStatusAndExpiresAtBefore(PostType type, PostStatus status, Instant now);
+
+	List<PostJpaEntity> findByAuthorId(String authorId);
 }

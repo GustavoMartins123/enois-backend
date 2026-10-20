@@ -37,17 +37,19 @@ public class SanctionService {
 	private final ReportedContentAuthorReader contentAuthors;
 	private final ModerationRemovePostUseCase moderationRemovePostUseCase;
 	private final NotificationService notificationService;
+	private final BanCleanupService banCleanup;
 	private final Clock clock;
 
 	public SanctionService(SanctionRepository sanctions, AppealRepository appeals, ReportRepository reports,
 			ReportedContentAuthorReader contentAuthors, ModerationRemovePostUseCase moderationRemovePostUseCase,
-			NotificationService notificationService, Clock clock) {
+			NotificationService notificationService, BanCleanupService banCleanup, Clock clock) {
 		this.sanctions = sanctions;
 		this.appeals = appeals;
 		this.reports = reports;
 		this.contentAuthors = contentAuthors;
 		this.moderationRemovePostUseCase = moderationRemovePostUseCase;
 		this.notificationService = notificationService;
+		this.banCleanup = banCleanup;
 		this.clock = clock;
 	}
 
@@ -110,6 +112,7 @@ public class SanctionService {
 		UserSanction saved = sanctions.save(sanction);
 		UserSanction banned = sanctions.save(saved.escalateToBan());
 		sessions.revokeAllByUser(authorId, Instant.now(clock));
+		banCleanup.cleanup(banned.id(), authorId);
 		return banned;
 	}
 
@@ -159,6 +162,7 @@ public class SanctionService {
 		appeals.save(appeal.deny(reviewerId, Instant.now(clock)));
 		UserSanction banned = sanctions.save(sanction.escalateToBan());
 		sessions.revokeAllByUser(sanction.userId(), Instant.now(clock));
+		banCleanup.cleanup(banned.id(), sanction.userId());
 		notificationService.create(sanction.userId(), "RECURSO", reviewerId, "Recurso negado",
 			"Uma pessoa do time revisou seu recurso e manteve a penalidade. A conta agora esta banida.",
 			"/api/penalidades", "Ver");

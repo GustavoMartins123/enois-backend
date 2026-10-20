@@ -31,4 +31,7 @@ public interface PostRepository {
 	List<Post> findActiveAll(Instant before, int limit);
 
 	List<Post> findActiveByType(PostType type, Instant before, int limit);
+
+	/** Todos os posts do autor, independente de status — usado pelo ban cleanup. */
+	List<Post> findAllByAuthor(UserId authorId);
 }
