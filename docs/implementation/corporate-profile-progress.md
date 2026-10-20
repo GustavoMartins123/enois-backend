@@ -12,17 +12,30 @@
 
 ## Fase 1 — Modelo de domínio
 
-- [ ] `PostType.BUSINESS` no enum do feed.
-- [ ] `CorporateProfile` (domain): campos, estados NOT_CREATED/DRAFT/ACTIVE/DISABLED,
+- [x] `PostType.BUSINESS` no enum do feed.
+- [x] `CorporateProfile` (domain): campos, estados NOT_CREATED/DRAFT/ACTIVE/DISABLED,
   repositório (port) e casos (criar/editar/desativar/buscar por user e por username).
-- [ ] Identidade de autoria em `Post` (domain): `authorIdentity` SOCIAL|CORPORATE,
+- [x] Identidade de autoria em `Post` (domain): `authorIdentity` SOCIAL|CORPORATE,
   default SOCIAL; invariante testada (nunca nula; edição preserva).
+
+- [x] Concluída (commit `fa3c193`): 12 testes verdes — CorporateProfileTests (5),
+  PostAuthorIdentityTests (4: identidade nunca nula no create/restore, edição e
+  mudança de tipo preservam), mais a integração da cadeia de identidade.
+- [x] Sobrecarga do `Post.restore` sem identidade (commit `0b4db2c`): toda chamada
+  antiga (15 argumentos, ex. MomentExpiryTests) volta como SOCIAL — compila e
+  preserva o comportamento.
 
 ## Fase 2 — Persistência e migração (V107+)
 
-- [ ] Migração idempotente: tabela `corporate_profiles` (1:1 opcional, user_id único),
-  coluna `author_identity` em `posts` (default SOCIAL, not null), índices.
-- [ ] Validação na bancada MariaDB + compatibilidade (posts antigos = SOCIAL).
+- [x] Migração idempotente: tabela `corporate_profiles` (1:1 opcional, user_id único),
+  coluna `author_identity` em `posts` (default SOCIAL, not null), índices (V107).
+- [x] Validação na bancada MariaDB (aplicada 2x sem erro; insert legado → SOCIAL,
+  update → CORPORATE; ver `validation.md`). Compatibilidade comprovada: nenhum
+  registro existente muda de mãos.
+- [x] Adaptador JPA real (Spring Data + mapeamento entidade↔domínio) implementado;
+  `CorporateProfilePersistenceTests` (3 cenários) verdes contra H2 com a migração
+  V107 aplicada: guardar, buscar por user, e unicidade do @ profissional tratada
+  no adaptador (409 USERNAME_TAKEN).
 
 ## Fase 3 — Serviço do perfil profissional
 
