@@ -252,7 +252,8 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 						: profile != null ? profile.displayWithNickname() : post.authorId().value(),
 					corporateProfile != null ? corporateProfile.avatar()
 						: profile != null ? profile.avatar() : null,
-					profile != null ? profile.allBadges() : List.of());
+					profile != null ? profile.allBadges() : List.of())
+					.withAvatarFrame(profile != null ? profile.avatarFrame() : null);
 				ReactionType reaction = currentUserReactions.get(post.id());
 				PostView withReaction = reaction != null ? view.withCurrentUserReaction(reaction) : view;
 				PostCommunityReader.CommunityRef community = post.communityId() == null ? null

@@ -211,6 +211,13 @@ class MessagingPersistenceAdapter implements MessagingRepository {
 	}
 
 	@Override
+	public List<Message> findAllBySender(String senderId) {
+		return messageRepo.findBySenderId(senderId).stream()
+			.map(MessageJpaEntity::toDomain)
+			.toList();
+	}
+
+	@Override
 	public List<MessagingRepository.ReactionSummary> findReactionsByMessageId(String messageId) {
 		return messageReactionRepo.findByMessageIdOrderByCreatedAtDesc(messageId).stream()
 			.map(r -> new MessagingRepository.ReactionSummary(r.getUserId(), r.getReactionType(), r.getCreatedAt()))

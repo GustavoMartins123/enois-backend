@@ -46,4 +46,5 @@ interface SpringDataMessageJpaRepository extends JpaRepository<MessageJpaEntity,
 
 	int countByConversationId(String conversationId);
 
+	List<MessageJpaEntity> findBySenderId(String senderId);
 }

@@ -57,6 +57,11 @@ class GameSocialTests {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.rating").value(5));
 
+		mockMvc.perform(get("/games/ratings").param("ids", id))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$['" + id + "'].average").value(5.0))
+			.andExpect(jsonPath("$['" + id + "'].reviews").value(1));
+
 		mockMvc.perform(get("/games/" + id + "/reviews"))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.count").value(1))

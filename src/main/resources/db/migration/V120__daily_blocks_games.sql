@@ -17,7 +17,7 @@ create table if not exists daily_blocks_sessions (
   completed_at timestamp(3) null,
   status varchar(16) not null,
   score int not null,
-  lines int not null,
+  `lines` int not null,
   primary key (challenge_date,user_id)
 );
 create table if not exists daily_blocks_actions (

@@ -104,6 +104,9 @@ public class MessagingService {
 		String id = "message_" + UUID.randomUUID().toString().replace("-", "");
 		Message message = Message.create(id, conversationId, senderId, corpo, midias, clock.instant());
 		repository.saveMessage(message);
+		// Ao enviar, a conversa fica lida para QUEM ENVIOU (PR #15) — antes o contador continuava
+		// aceso mesmo com a conversa aberta.
+		repository.markRead(conversationId, senderId, clock.instant());
 		// A lista de conversas ordena por updatedAt; sem este toque a conversa antiga fica no lugar
 		// mesmo recebendo mensagem nova (#25 dos issues).
 		repository.saveConversation(conversation.touch(clock.instant()));

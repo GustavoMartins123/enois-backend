@@ -167,6 +167,25 @@ class UserProjectsTests {
 	}
 
 	@Test
+	void projectHtmlKeepsUnicodeOutsideLatin1() throws Exception {
+		var session = auth.authenticate("user_proj_unicode_html");
+		String html = "<p>Conhecer a Flecha →</p>";
+
+		var payload = objectMapper.createObjectNode()
+			.put("title", "Flecha")
+			.put("html", html);
+		payload.putArray("stack");
+		payload.putArray("diary");
+
+		var response = mockMvc.perform(withSession(post("/me/projects"), session).contentType(MediaType.APPLICATION_JSON)
+			.content(objectMapper.writeValueAsString(payload)))
+			.andExpect(status().isCreated())
+			.andReturn().getResponse().getContentAsString();
+
+		assertThat(response).contains("→");
+	}
+
+	@Test
 	void requiresSessionForWrites() throws Exception {
 		mockMvc.perform(post("/me/projects").contentType(MediaType.APPLICATION_JSON).content(body("X")))
 			.andExpect(status().isUnauthorized());

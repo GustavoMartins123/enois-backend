@@ -51,4 +51,7 @@ public interface PostRepository {
 
 	/** Página do perfil profissional: só o que o dono assinou como CORPORATE. */
 	List<Post> findActiveCorporateByAuthor(UserId authorId, Instant before, int limit);
+
+	/** Todos os posts do autor, independente de status — usado pelo ban cleanup (PR #37). */
+	List<Post> findAllByAuthor(UserId authorId);
 }

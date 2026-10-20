@@ -40,6 +40,14 @@ class GameReviewPersistenceAdapter implements GameReviewRepository {
 	}
 
 	@Override
+	public List<Object[]> statsByGameIds(List<String> gameIds) {
+		if (gameIds == null || gameIds.isEmpty()) {
+			return List.of();
+		}
+		return repository.statsByGameIds(gameIds);
+	}
+
+	@Override
 	public void delete(String id) {
 		repository.deleteById(id);
 	}

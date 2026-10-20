@@ -1,5 +1,3 @@
--- (renumerada: colidia com outra migracao de mesmo numero; idempotente, entao
---  reexecutar em producao nao recria nada)
 -- Avaliações (nota + texto) e comentários dos jogos da comunidade.
 -- Sem FK para users/games pelo mesmo motivo de sempre (collation de users difere do default).
 create table if not exists game_reviews (

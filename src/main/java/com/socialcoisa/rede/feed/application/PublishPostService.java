@@ -22,8 +22,9 @@ import com.socialcoisa.rede.profile.domain.UserProfile;
 import com.socialcoisa.rede.shared.html.SafeHtml;
 import com.socialcoisa.rede.shared.text.PlainText;
 import com.socialcoisa.rede.shared.security.BehavioralTimingGuard;
-import com.socialcoisa.rede.shared.security.NewAccountCooldown;
 import com.socialcoisa.rede.shared.security.ContentDuplicationGuard;
+import com.socialcoisa.rede.shared.security.NewAccountCooldown;
+import com.socialcoisa.rede.shared.security.UserRateLimiter;
 import com.socialcoisa.rede.shared.security.UserRateLimiter;
 import com.socialcoisa.rede.shared.web.ApiException;
 
@@ -45,12 +46,15 @@ public class PublishPostService implements PublishPostUseCase {
 	private final com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate;
 	private final PostCommunityReader postCommunityReader;
 	private final com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles;
-	private final NewAccountCooldown newAccountCooldown;
-	private final UserRateLimiter userRateLimiter;
-	private final ContentDuplicationGuard duplicationGuard;
-	private final BehavioralTimingGuard behavioralTimingGuard;
 	/** Avisa quem escuta fora daqui (automod de spam), DEPOIS do commit. */
 	private final org.springframework.context.ApplicationEventPublisher events;
+	/** Cooldown de conta nova (PR #29): segura o flood inicial sem punir quem já tem história. */
+	private final NewAccountCooldown newAccountCooldown;
+	/** Rate limit por usuário e dedup de conteúdo (PR #28). */
+	private final UserRateLimiter userRateLimiter;
+	private final ContentDuplicationGuard duplicationGuard;
+	/** Detecção comportamental de automação (PR #36). */
+	private final BehavioralTimingGuard behavioralTimingGuard;
 
 	public PublishPostService(PostRepository postRepository, ArticleRepository articleRepository,
 			IdGenerator idGenerator, Clock clock,
@@ -61,11 +65,11 @@ public class PublishPostService implements PublishPostUseCase {
 			com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate,
 			PostCommunityReader postCommunityReader,
 			com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles,
+			org.springframework.context.ApplicationEventPublisher events,
 			NewAccountCooldown newAccountCooldown,
 			UserRateLimiter userRateLimiter,
 			ContentDuplicationGuard duplicationGuard,
-			BehavioralTimingGuard behavioralTimingGuard,
-			org.springframework.context.ApplicationEventPublisher events) {
+			BehavioralTimingGuard behavioralTimingGuard) {
 		this.postRepository = postRepository;
 		this.articleRepository = articleRepository;
 		this.idGenerator = idGenerator;
@@ -78,11 +82,11 @@ public class PublishPostService implements PublishPostUseCase {
 		this.sanctionGate = sanctionGate;
 		this.postCommunityReader = postCommunityReader;
 		this.corporateProfiles = corporateProfiles;
+		this.events = events;
 		this.newAccountCooldown = newAccountCooldown;
 		this.userRateLimiter = userRateLimiter;
 		this.duplicationGuard = duplicationGuard;
 		this.behavioralTimingGuard = behavioralTimingGuard;
-		this.events = events;
 	}
 
 	@Override
@@ -129,14 +133,14 @@ public class PublishPostService implements PublishPostUseCase {
 				throw new ApiException(403, "NOT_A_MEMBER", "Entre na comunidade para publicar nela.");
 			}
 		}
-		if (StringUtils.hasText(command.content())) {
-			duplicationGuard.require(command.authorId().value(), command.content());
-		}
 		// Classificação REAL do assunto: o tópico da comunidade em que o post nasce. Post solto
 		// nasce sem classificação (nunca é bloqueado por preferência).
 		String topic = communityId != null ? postCommunityReader
 			.byIds(java.util.List.of(communityId), command.authorId().value())
 			.get(communityId).topic() : null;
+		if (StringUtils.hasText(command.content())) {
+			duplicationGuard.require(command.authorId().value(), command.content());
+		}
 		Post post = Post.publish(idGenerator.newPostId(), command.authorId(), command.type(), textOf(command),
 			pageHtml(command), tags, mediaIds, communityId, topic, clock.instant(), authorIdentity);
 		Post saved = postRepository.save(post);
@@ -154,7 +158,7 @@ public class PublishPostService implements PublishPostUseCase {
 		notifyMentions(command.mentionedUserIds(), command.authorId().value(), saved.id().value(), "post");
 		UserProfile author = userProfileRepository.findById(command.authorId().value()).orElse(null);
 		if (author != null) {
-			return PostView.from(saved, author.username(), author.name(), author.avatar(), author.allBadges());
+			return PostView.from(saved, author.username(), author.name(), author.avatar(), author.allBadges()).withAvatarFrame(author.avatarFrame());
 		}
 		return PostView.from(saved);
 	}

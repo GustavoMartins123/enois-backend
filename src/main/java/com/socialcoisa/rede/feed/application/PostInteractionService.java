@@ -53,8 +53,10 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 	private final com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate;
 	private final com.socialcoisa.rede.coin.application.CoinService coins;
 	private final NewAccountCooldown newAccountCooldown;
+	/** Rate limit por usuário e dedup de conteúdo (PR #28). */
 	private final UserRateLimiter userRateLimiter;
 	private final ContentDuplicationGuard duplicationGuard;
+	/** Detecção comportamental de automação (PR #36). */
 	private final BehavioralTimingGuard behavioralTimingGuard;
 
 	public PostInteractionService(PostRepository postRepository, CommentRepository commentRepository,
@@ -117,7 +119,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 			profile != null ? profile.displayWithNickname() : null,
 			profile != null ? profile.username() : null,
 			profile != null ? profile.avatar() : null,
-			profile != null ? profile.allBadges() : java.util.List.of());
+			profile != null ? profile.allBadges() : java.util.List.of()).withAvatarFrame(profile != null ? profile.avatarFrame() : null);
 	}
 
 	/**
@@ -169,7 +171,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 					p != null ? p.displayWithNickname() : null,
 					p != null ? p.username() : null,
 					p != null ? p.avatar() : null,
-					p != null ? p.allBadges() : java.util.List.of());
+					p != null ? p.allBadges() : java.util.List.of()).withAvatarFrame(p != null ? p.avatarFrame() : null);
 			})
 			.toList();
 		// Reacao do proprio leitor: sem isso o front nao sabe que ele ja reagiu e a reacao
