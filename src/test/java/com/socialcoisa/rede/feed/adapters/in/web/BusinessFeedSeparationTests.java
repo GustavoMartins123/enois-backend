@@ -112,10 +112,12 @@ class BusinessFeedSeparationTests {
 		String socialId = publish(author, "INSIGHT", "Post social da mesma pessoa.");
 		String businessId = publish(author, "BUSINESS", "Post corporativo da mesma pessoa.");
 
-		// Feed "Tudo": o social entra, o BUSINESS nunca.
+		// Feed "Tudo": o social entra, o BUSINESS nunca. E o social é assinado pela identidade
+		// pessoal (apresentação social), não pelo perfil profissional.
 		mockMvc.perform(get("/feed").param("tab", "ALL").header("X-Session-Token", author.token()))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.items[?(@.id == '" + socialId + "')]").isNotEmpty())
+			.andExpect(jsonPath("$.items[?(@.id == '" + socialId + "')].authorIdentity").value("SOCIAL"))
 			.andExpect(jsonPath("$.items[?(@.id == '" + businessId + "')]").isEmpty());
 
 		// Abas sociais por tipo (Discussões = QUESTION, Projetos = PROJECT): o BUSINESS
@@ -126,10 +128,15 @@ class BusinessFeedSeparationTests {
 				.andExpect(jsonPath("$.items[?(@.id == '" + businessId + "')]").isEmpty());
 		}
 
-		// Feed corporativo: o BUSINESS entra, o social nunca.
+		// Feed corporativo: o BUSINESS entra, o social nunca. A assinatura é a profissional —
+		// nome, @ e identidade do alterego, não a apresentação pessoal.
 		mockMvc.perform(get("/feed/corporate").header("X-Session-Token", author.token()))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.items[?(@.id == '" + businessId + "')]").isNotEmpty())
+			.andExpect(jsonPath("$.items[?(@.id == '" + businessId + "')].authorIdentity").value("CORPORATE"))
+			.andExpect(jsonPath("$.items[?(@.id == '" + businessId + "')].authorName")
+				.value("Autor Profissional"))
+			.andExpect(jsonPath("$.items[?(@.id == '" + businessId + "')].authorUsername").value("bizsep.pro"))
 			.andExpect(jsonPath("$.items[?(@.id == '" + socialId + "')]").isEmpty());
 
 		// Perfil social (página pública do autor): só o social.
@@ -138,10 +145,13 @@ class BusinessFeedSeparationTests {
 			.andExpect(jsonPath("$.items[?(@.id == '" + socialId + "')]").isNotEmpty())
 			.andExpect(jsonPath("$.items[?(@.id == '" + businessId + "')]").isEmpty());
 
-		// Página do perfil profissional: só o BUSINESS.
+		// Página do perfil profissional: só o BUSINESS, com a assinatura profissional.
 		mockMvc.perform(get("/corporate/bizsep.pro/posts"))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.items[?(@.id == '" + businessId + "')]").isNotEmpty())
+			.andExpect(jsonPath("$.items[?(@.id == '" + businessId + "')].authorName")
+				.value("Autor Profissional"))
+			.andExpect(jsonPath("$.items[?(@.id == '" + businessId + "')].authorIdentity").value("CORPORATE"))
 			.andExpect(jsonPath("$.items[?(@.id == '" + socialId + "')]").isEmpty());
 	}
 

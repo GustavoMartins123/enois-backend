@@ -126,9 +126,15 @@
 - [x] Página /profissional: criar (@ + nome), editar (headline, bio, local, indústria,
   links), ativar/desativar, e importação do perfil social com checkbox por campo
   (só os marcados viajam; a prévia não grava nada).
-- [ ] Pendente: upload de avatar/banner próprios do perfil profissional (a API já
-  aceita; falta o seletor de mídia na página) e a rota pública do perfil profissional
-  (decisão de URL em decisions.md).
+- [x] 2026-10-20 — Upload de avatar/banner próprios do perfil profissional: dois botões
+  (Trocar foto / Trocar capa) com `useMediaUpload` (mesmo caminho S3 do resto do app);
+  o PATCH manda o perfil inteiro porque ele substitui todos os campos (evita apagar a
+  outra imagem ou os textos ao trocar uma foto).
+- [x] 2026-10-20 — Rota pública do perfil profissional em `/profissional/{username}`
+  (arquivo `profissional_.$username.tsx`, irmã do editor — decisão 6 em decisions.md):
+  capa, avatar, headline, bio, local, indústria, links e SÓ as publicações BUSINESS
+  daquele @, com paginação por cursor; perfil DRAFT/DISABLED/inexistente mostra estado
+  vazio (o backend responde 404).
 
 ## Fase 11 — Frontend: compositor e feeds
 
@@ -136,6 +142,13 @@
   "Publicando como {nome} — esta publicação vai para o feed corporativo"); feed
   corporativo como aba "Corporativo" (só com perfil ATIVO) e troca automática de
   identidade ativa no compositor. (commit no front)
+- [x] 2026-10-20 — Assinatura por identidade (corrige vazamento de apresentação): o
+  backend agora manda `authorIdentity` no PostView e enriquece posts CORPORATE com
+  nome, @ e avatar do PERFIL PROFISSIONAL (uma consulta em lote por página); posts
+  SOCIAL mantêm a pessoa. No front, o nome do autor leva a `/profissional/{username}`
+  quando CORPORATE e a `/perfil/{username}` quando SOCIAL. Teste: o post BUSINESS da
+  mesma conta aparece no feed corporativo com "Autor Profissional"/"bizsep.pro" e no
+  feed social o post social continua SOCIAL.
 
 ## Fase 12 — Segurança
 

@@ -214,6 +214,17 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 			.collect(Collectors.toSet());
 		Map<String, UserProfile> profiles = userProfileRepository.findAllByIds(authorIds).stream()
 			.collect(Collectors.toMap(UserProfile::id, Function.identity()));
+		// A apresentação de quem assinou: post CORPORATE mostra o perfil profissional (nome, @,
+		// avatar), nunca a identidade pessoal. Uma consulta em lote para a página inteira.
+		Set<String> corporateAuthorIds = visible.stream()
+			.filter(p -> p.authorIdentity() == com.socialcoisa.rede.feed.domain.AuthorIdentity.CORPORATE)
+			.map(p -> p.authorId().value())
+			.collect(Collectors.toSet());
+		Map<String, com.socialcoisa.rede.corporate.domain.CorporateProfile> corporate = corporateAuthorIds
+			.isEmpty() ? Map.of()
+			: corporateProfiles.findByUserIds(corporateAuthorIds).stream()
+				.collect(Collectors.toMap(com.socialcoisa.rede.corporate.domain.CorporateProfile::userId,
+					Function.identity()));
 		// Comunidade dos posts da pagina: nome para o "publicou em ..." e se o leitor ja participa
 		// (a consulta e em lote, uma para a pagina inteira).
 		java.util.Set<String> communityIds = visible.stream()
@@ -231,10 +242,14 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 		return visible.stream()
 			.map(post -> {
 				UserProfile profile = profiles.get(post.authorId().value());
+				var corporateProfile = corporate.get(post.authorId().value());
 				PostView view = PostView.from(post,
-					profile != null ? profile.username() : null,
-					profile != null ? profile.displayWithNickname() : post.authorId().value(),
-					profile != null ? profile.avatar() : null,
+					corporateProfile != null ? corporateProfile.username()
+						: profile != null ? profile.username() : null,
+					corporateProfile != null ? corporateProfile.name()
+						: profile != null ? profile.displayWithNickname() : post.authorId().value(),
+					corporateProfile != null ? corporateProfile.avatar()
+						: profile != null ? profile.avatar() : null,
 					profile != null ? profile.allBadges() : List.of());
 				ReactionType reaction = currentUserReactions.get(post.id());
 				PostView withReaction = reaction != null ? view.withCurrentUserReaction(reaction) : view;

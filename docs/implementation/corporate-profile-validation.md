@@ -206,3 +206,20 @@
   perfil profissional; `GET /corporate/{username}` não expõe `reputation`, `followersCount`,
   `connectionsCount` nem `email` (esses valores vivem na conta, não na apresentação).
   Reexecução da classe: **6/6 verdes** (118,8 s, V109 aplicada no H2).
+
+
+## 2026-10-20 — Assinatura por identidade (correção de apresentação)
+
+- `BusinessFeedSeparationTests` ampliado: **3/3 verdes**. O post BUSINESS aparece no feed
+  corporativo e em `/corporate/{username}/posts` com `authorName = "Autor Profissional"`,
+  `authorUsername = "bizsep.pro"` e `authorIdentity = "CORPORATE"`; o post SOCIAL da MESMA
+  conta continua `SOCIAL` no feed Tudo (nome pessoal).
+- `PostView` ganhou `authorIdentity`; o enriquecimento resolve a apresentação CORPORATE com
+  UMA consulta em lote por página (`CorporateProfileRepository.findByUserIds`) — o fake do
+  port em `JobServiceTests` ganhou o método (20/20 verdes).
+- Higiene do H2 compartilhado entre classes: `PersonalizationFeedTests`,
+  `PersonalizationSecurityTests` e `PersonalizationSurfaceAuditTests` apagam as comunidades
+  que criam (`@AfterEach`) e `GroupCommunityIsolationTests` apaga a sua no fim. Sem isso as
+  comunidades vazavam para `ContractControllerTests`, que exige a listagem global vazia
+  (era exatamente o que a execução completa pegou). Rodada conjunta das classes de
+  personalização + feed BUSINESS: **16/16 verdes**.

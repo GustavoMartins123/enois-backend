@@ -1,11 +1,13 @@
 package com.socialcoisa.rede.feed.adapters.in.web;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,10 +36,22 @@ class PersonalizationFeedTests {
 	private ObjectMapper objectMapper;
 
 	private TestAuthHelper auth;
+	/** O H2 dos testes é compartilhado entre classes: comunidade criada aqui é apagada aqui. */
+	private final java.util.List<String[]> createdCommunities = new java.util.ArrayList<>();
 
 	@BeforeEach
 	void setUp() {
 		auth = new TestAuthHelper(mockMvc, objectMapper);
+	}
+
+	@AfterEach
+	void cleanUp() throws Exception {
+		for (String[] created : createdCommunities) {
+			mockMvc.perform(delete("/communities/" + created[0])
+					.header("X-Session-Token", created[1])
+					.header("Idempotency-Key", "cleanup-" + created[0]));
+		}
+		createdCommunities.clear();
 	}
 
 	private String createCommunity(TestAuthHelper.AuthSession session, String name, String topic)
@@ -50,7 +64,9 @@ class PersonalizationFeedTests {
 					"name", name, "description", "Comunidade de teste", "topic", topic))))
 			.andExpect(status().isCreated())
 			.andReturn();
-		return objectMapper.readTree(result.getResponse().getContentAsString()).get("id").asText();
+		String id = objectMapper.readTree(result.getResponse().getContentAsString()).get("id").asText();
+		createdCommunities.add(new String[] { id, session.token() });
+		return id;
 	}
 
 	private String publishInCommunity(TestAuthHelper.AuthSession session, String communityId, String content)

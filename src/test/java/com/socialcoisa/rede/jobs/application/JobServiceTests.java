@@ -76,6 +76,12 @@ class JobServiceTests {
 				}
 
 				@Override
+				public java.util.List<com.socialcoisa.rede.corporate.domain.CorporateProfile> findByUserIds(
+						java.util.Collection<String> userIds) {
+					return java.util.List.of();
+				}
+
+				@Override
 				public boolean existsByUsername(String username) {
 					return false;
 				}

@@ -1,6 +1,7 @@
 package com.socialcoisa.rede.preferences.adapters.in.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -11,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.util.List;
 import java.util.Map;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,10 +43,22 @@ class PersonalizationSurfaceAuditTests {
 	private ObjectMapper objectMapper;
 
 	private TestAuthHelper auth;
+	/** O H2 dos testes é compartilhado entre classes: comunidade criada aqui é apagada aqui. */
+	private final java.util.List<String[]> createdCommunities = new java.util.ArrayList<>();
 
 	@BeforeEach
 	void setUp() {
 		auth = new TestAuthHelper(mockMvc, objectMapper);
+	}
+
+	@AfterEach
+	void cleanUp() throws Exception {
+		for (String[] created : createdCommunities) {
+			mockMvc.perform(delete("/communities/" + created[0])
+					.header("X-Session-Token", created[1])
+					.header("Idempotency-Key", "cleanup-" + created[0]));
+		}
+		createdCommunities.clear();
 	}
 
 	private String createTechnologyCommunity(TestAuthHelper.AuthSession owner) throws Exception {
@@ -56,7 +70,9 @@ class PersonalizationSurfaceAuditTests {
 					"name", "Audit Tech", "description", "Comunidade de teste", "topic", "TECNOLOGIA"))))
 			.andExpect(status().isCreated())
 			.andReturn();
-		return objectMapper.readTree(result.getResponse().getContentAsString()).get("id").asText();
+		String id = objectMapper.readTree(result.getResponse().getContentAsString()).get("id").asText();
+		createdCommunities.add(new String[] { id, owner.token() });
+		return id;
 	}
 
 	private String publish(TestAuthHelper.AuthSession author, String type, String communityId) throws Exception {

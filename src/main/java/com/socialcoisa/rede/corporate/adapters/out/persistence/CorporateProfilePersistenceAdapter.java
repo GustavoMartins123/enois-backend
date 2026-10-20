@@ -1,5 +1,7 @@
 package com.socialcoisa.rede.corporate.adapters.out.persistence;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.dao.DataIntegrityViolationException;
@@ -39,6 +41,16 @@ public class CorporateProfilePersistenceAdapter implements CorporateProfileRepos
 	@Override
 	public Optional<CorporateProfile> findByUsername(String username) {
 		return repository.findByUsername(username).map(CorporateProfileJpaEntity::toDomain);
+	}
+
+	@Override
+	public List<CorporateProfile> findByUserIds(Collection<String> userIds) {
+		if (userIds == null || userIds.isEmpty()) {
+			return List.of();
+		}
+		return repository.findAllById(userIds).stream()
+			.map(CorporateProfileJpaEntity::toDomain)
+			.toList();
 	}
 
 	@Override

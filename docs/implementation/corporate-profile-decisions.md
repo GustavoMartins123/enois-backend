@@ -20,13 +20,25 @@
    publicação; o perfil corporativo é resolvido a partir do dono da publicação. Evita
    publicações "sem perfil" quando o perfil é desativado depois.
 3. **2026-10-20 — Username do perfil profissional em namespace próprio** (não colide com o
-   do social; unicidade garantida por índice único na própria tabela). Aberto para a dona:
-   formato sugerido — aceitar pontos e hífens (ex.: `empresa.rr`), decidir na Fase 3.
+   do social; unicidade garantida por índice único na própria tabela). Formato decidido na
+   Fase 3 e implementado: `^[a-z0-9](?:[a-z0-9._-]{1,28})[a-z0-9]$` (pontos, hífens e
+   underline, 3–30 caracteres).
 4. **2026-10-20 — Tipo de publicação BUSINESS em vez de novo sistema de posts.** Racional:
    a infraestrutura existente (agendamento, anexos, moderação, outbox) é reaproveitada; a
    separação de feeds é por consulta, conforme tabela do plan.
 5. **2026-10-20 — Agendamento real**: automação de 40 minutos criada de fato (CronCreate)
    e apontada para este diretório de documentos. Sem mecanismo real, nunca fingir.
+6. **2026-10-20 — Rota pública do perfil profissional: `/profissional/{username}`.** No
+   roteamento real (TanStack Start) o arquivo é `profissional_.$username.tsx`: o `_` faz a
+   rota ser IRMÃ de `/profissional` (o editor), em vez de filha — filha exigiria `<Outlet/>`
+   no editor e abriria a página pública dentro de um layout autenticado. O nome leva à
+   identidade que assinou: `authorIdentity = CORPORATE` linka para cá; SOCIAL continua em
+   `/perfil/{username}`.
+7. **2026-10-20 — A apresentação do post vem da identidade de autoria.** `PostView` carrega
+   `authorIdentity` e o enriquecimento resolve nome/@/avatar do perfil profissional para
+   posts CORPORATE (uma consulta em lote por página), do social para os SOCIAL. Emblemas
+   continuam sendo da conta (diretriz 0). Sem isso, um post BUSINESS apareceria com o nome e
+   a foto pessoais.
 
 ## Riscos e impedimentos
 
@@ -39,7 +51,7 @@
 
 ## Perguntas abertas para a dona
 
-1. Formato do username profissional (pontos/hífens) e rota pública no frontend
-   (`/profissional/@username` vs. `/p/@username`) — decidir na Fase 10 com o roteamento real.
+1. ~~Formato do username profissional e rota pública~~ — resolvido na Fase 10 (decisões 3 e 6);
+   fica só a confirmação de gosto, não bloqueia nada.
 2. Visibilidade do feed corporativo: público para todos ou apenas para seguidores? Padrão
    atual do plano: público (mesma visibilidade do perfil).
