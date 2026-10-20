@@ -17,8 +17,11 @@ interface SpringDataUserProfileJpaRepository extends JpaRepository<UserProfileJp
 
 	List<UserProfileJpaEntity> findByOrderByReputationDesc();
 
-	/** O ranking público é CRESCENTE por decisão do dono do produto: o menor número em primeiro. */
-	List<UserProfileJpaEntity> findByOrderByReputationAsc();
+	/**
+	 * O ranking público é a vitrine de QUEM ACABOU DE CHEGAR: os perfis mais recentes primeiro
+	 * (decisão do dono do produto em 2026-10-20). A ordenação é no banco, e não em memória.
+	 */
+	List<UserProfileJpaEntity> findByOrderByCreatedAtDesc(org.springframework.data.domain.Pageable pageable);
 
 	List<UserProfileJpaEntity> findTop20ByNameContainingIgnoreCaseOrUsernameContainingIgnoreCaseOrderByReputationDesc(String name, String username);
 }
