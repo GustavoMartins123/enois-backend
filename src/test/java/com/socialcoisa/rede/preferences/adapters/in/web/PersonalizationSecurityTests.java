@@ -41,6 +41,21 @@ class PersonalizationSecurityTests {
 	}
 
 	@Test
+	void preferencesRequireASession() throws Exception {
+		// Sem sessão é 401 UNAUTHENTICATED (não "400 cabeçalho ausente"): o contrato de
+		// autorização é o mesmo de todo o resto da API.
+		mockMvc.perform(get("/me/preferences"))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
+		mockMvc.perform(put("/me/preferences")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(java.util.Map.of(
+					"likedTopics", java.util.List.of("TECNOLOGIA")))))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
+	}
+
+	@Test
 	void cannotChangeAnotherAccountsPreferences() throws Exception {
 		var victim = auth.authenticate("persec_victim");
 		var attacker = auth.authenticate("persec_attacker");

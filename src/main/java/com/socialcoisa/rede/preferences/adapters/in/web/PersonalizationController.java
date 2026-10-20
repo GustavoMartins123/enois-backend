@@ -41,7 +41,7 @@ class PersonalizationController {
 
 	@GetMapping("/me/preferences")
 	PersonalizationResponse me(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader("X-Session-Token") String sessionToken) {
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		var personalization = service.of(user.id().value());
 		return new PersonalizationResponse(personalization.likedTopics(), personalization.blockedTopics(),
@@ -50,7 +50,8 @@ class PersonalizationController {
 
 	@PutMapping("/me/preferences")
 	PersonalizationResponse update(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader("X-Session-Token") String sessionToken, @RequestBody UpdateRequest request) {
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestBody UpdateRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		var updated = service.update(user.id().value(),
 			request == null ? null : request.likedTopics(),

@@ -51,7 +51,7 @@ class CorporateProfileController {
 
 	@GetMapping("/me/business-profile")
 	Map<String, Object> me(@RequestHeader(value = USER_HEADER, required = false) String userId,
-			@RequestHeader("X-Session-Token") String sessionToken) {
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		return view(service.byUser(user.id().value()).orElse(null));
 	}
@@ -67,7 +67,7 @@ class CorporateProfileController {
 
 	@PostMapping("/me/business-profile")
 	Map<String, Object> create(@RequestHeader(value = USER_HEADER, required = false) String userId,
-			@RequestHeader("X-Session-Token") String sessionToken, @RequestBody CreateRequest request) {
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken, @RequestBody CreateRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		CorporateProfile created = service.create(user.id().value(), request.username(), request.name());
 		return view(created);
@@ -75,7 +75,7 @@ class CorporateProfileController {
 
 	@PatchMapping("/me/business-profile")
 	Map<String, Object> updateDetails(@RequestHeader(value = USER_HEADER, required = false) String userId,
-			@RequestHeader("X-Session-Token") String sessionToken, @RequestBody DetailsRequest request) {
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken, @RequestBody DetailsRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		CorporateProfile updated = service.updateDetails(user.id().value(), request.headline(), request.bio(),
 			request.avatar(), request.banner(), request.location(), request.industry(), request.externalLinks());
@@ -84,7 +84,7 @@ class CorporateProfileController {
 
 	@PostMapping("/me/business-profile/name")
 	Map<String, Object> rename(@RequestHeader(value = USER_HEADER, required = false) String userId,
-			@RequestHeader("X-Session-Token") String sessionToken, @RequestBody NameRequest request) {
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken, @RequestBody NameRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		return view(service.rename(user.id().value(), request.name()));
 	}
@@ -93,7 +93,7 @@ class CorporateProfileController {
 	@GetMapping("/me/business-profile/import-preview")
 	CorporateProfileService.ImportPreview importPreview(
 			@RequestHeader(value = USER_HEADER, required = false) String userId,
-			@RequestHeader("X-Session-Token") String sessionToken) {
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		return service.importPreview(user.id().value());
 	}
@@ -101,21 +101,21 @@ class CorporateProfileController {
 	/** Aplica só os campos escolhidos (consentimento campo a campo). */
 	@PostMapping("/me/business-profile/import")
 	Map<String, Object> importFromSocial(@RequestHeader(value = USER_HEADER, required = false) String userId,
-			@RequestHeader("X-Session-Token") String sessionToken, @RequestBody ImportRequest request) {
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken, @RequestBody ImportRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		return view(service.importFromSocial(user.id().value(), request == null ? null : request.fields()));
 	}
 
 	@PostMapping("/me/business-profile/activate")
 	Map<String, Object> activate(@RequestHeader(value = USER_HEADER, required = false) String userId,
-			@RequestHeader("X-Session-Token") String sessionToken) {
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		return view(service.activate(user.id().value()));
 	}
 
 	@PostMapping("/me/business-profile/deactivate")
 	Map<String, Object> deactivate(@RequestHeader(value = USER_HEADER, required = false) String userId,
-			@RequestHeader("X-Session-Token") String sessionToken) {
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		return view(service.deactivate(user.id().value()));
 	}

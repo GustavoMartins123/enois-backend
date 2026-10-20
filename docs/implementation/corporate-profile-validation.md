@@ -160,3 +160,44 @@
   ativar o perfil (403 `NO_ACTIVE_CORPORATE_PROFILE`). Corrigido no teste (patch de
   headline + activate, o fluxo real) e reexecutado: 3/3. Nenhuma mudança de produção
   foi necessária: as três superfícies já cumpriam a tabela de separação.
+
+
+## 2026-10-20 — Fase 12 (segurança da identidade profissional)
+
+- `mvn -q test -Dtest='CorporateIdentitySecurityTests'`: **5/5 verdes**
+  1. /me/business-profile (GET/POST/activate) sem sessão → 401 `UNAUTHENTICATED`;
+  2. perfil ATIVO de outra conta não publica pela minha sessão → 403
+     `NO_ACTIVE_CORPORATE_PROFILE` (mesmo mandando `username`/`authorUsername` no payload);
+     registrar o @ alheio → 409 `USERNAME_TAKEN`;
+  3. terceiros não editam nem apagam post BUSINESS → 403 `POST_OWNER_MISMATCH` (e o post
+     segue no ar para a dona);
+  4. perfil DRAFT não tem página pública (404 `PROFILE_NOT_FOUND`) nem publica BUSINESS;
+  5. desativar para de publicar (403) mas não apaga os posts existentes (200 por link).
+- Correção de contrato encontrada por esses testes: `CorporateProfileController` e
+  `PersonalizationController` usavam `@RequestHeader("X-Session-Token")` obrigatório, então
+  requisição sem sessão devolvia 400 "cabeçalho ausente" em vez de 401 `UNAUTHENTICATED`.
+  Ambos passaram a `required=false` + `currentUserResolver.resolve` (o padrão do resto da
+  API). `PersonalizationSecurityTests` ganhou o caso sem sessão: **4/4 verdes** na
+  reexecução conjunta (também aplicou a V109 no H2 sem quebra).
+
+
+## 2026-10-20 — Fase 13 (compatibilidade com dados existentes)
+
+- Bancada MariaDB (`enois-bench66`, banco scratch `enois_mig13`): tabela `posts` no formato
+  antigo (sem `author_identity`), 3 posts legados inseridos; V107 aplicada → os 3 ficaram
+  `SOCIAL`; insert legado depois da migração continua funcionando e nasce `SOCIAL`
+  (`select count(*) = sum(author_identity='SOCIAL')` → 4/4). Nenhuma migração de usuários é
+  obrigatória: o perfil profissional é opt-in.
+
+
+## 2026-10-20 — Fase 14 (desempenho dos feeds novos)
+
+- Bancada MariaDB (`enois_perf14`): 50.000 posts simulados (15.000 CORPORATE, 1/4 com tópico).
+- **Antes da V109**: `EXPLAIN` do feed corporativo (`status='ACTIVE' AND
+  author_identity='CORPORATE' ORDER BY created_at DESC LIMIT 20`) → `key=idx_posts_created`,
+  `rows≈50001`, `Using where` (varre a tabela inteira e descarta 70%).
+- **Depois da V109** (`idx_posts_identity_status_created`): `key=idx_posts_identity_status_created`,
+  `rows≈26478`, sem filesort. Perfil profissional: `key=idx_posts_author_status_created`,
+  `rows≈100`. Feed social (exclui BLOG/BUSINESS): `key=idx_posts_created`, como antes.
+- Migração V109 aplicada no H2 de teste na rodada conjunta (9/9 verdes) e no MariaDB da
+  bancada sem erro (`create index if not exists`).

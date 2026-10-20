@@ -43,9 +43,13 @@
   editar detalhes, renomear, ativar (exige headline), desativar. Username em
   namespace próprio com unicidade no banco (409 amigável). (commit 1a10133)
 
-- [ ] Username próprio com unicidade real no banco (índice único; corrida coberta; sem
-  colisão com o namespace social).
-- [ ] Criar/editar/desativar + regras de estados; testes (H2) do serviço.
+- [x] 2026-10-20 — Username próprio com unicidade real no banco: `uk_corporate_profiles_username`
+  (V107) + adaptador que traduz a violação em 409 `USERNAME_TAKEN` (corrida coberta por
+  `saveAndFlush`); namespace independente do social. Provado por
+  `CorporateProfilePersistenceTests` e `CorporateIdentitySecurityTests` (tentativa de
+  registrar o @ de outra conta → 409).
+- [x] 2026-10-20 — Criar/editar/desativar + regras de estados com testes H2 do serviço
+  (ativação exige headline; DRAFT não publica nem tem página; desativar preserva posts).
 
 ## Fase 4 — Importação com consentimento
 
@@ -63,8 +67,10 @@
   identidade (IDENDITY_TYPE_MISMATCH → corrigido para IDENTITY_TYPE_MISMATCH).
   (commit 1a10133)
 
-- [ ] Validar no backend: só com perfil ACTIVE e autoria corporativa da própria conta;
-  edição preserva tipo/autoria; testes de negação (perfil DRAFT, perfil alheio).
+- [x] 2026-10-20 — Validação no backend: só com perfil ACTIVE e autoria da própria conta;
+  edição preserva tipo/autoria; testes de negação em `BusinessFeedSeparationTests`
+  (DRAFT/alheio → 403 `NO_ACTIVE_CORPORATE_PROFILE`) e `CorporateIdentitySecurityTests`
+  (payload não aponta para perfil alheio; 403 também sem perfil).
 
 ## Fase 6 — Feeds no backend
 
@@ -72,9 +78,12 @@
   do perfil profissional (novas rotas) trazem apenas BUSINESS; cache social sem
   posts corporativos (distribuição filtrada). (commit 1a10133)
 
-- [ ] `getFeed` exclui BUSINESS (teste com post BUSINESS + social na mesma conta).
-- [ ] Feed corporativo novo + perfil profissional novo (só BUSINESS; paginação preservada).
-- [ ] Perfil social não mostra BUSINESS; cumprir a tabela de separação (plan).
+- [x] 2026-10-20 — `getFeed` exclui BUSINESS (teste com post BUSINESS + social na mesma
+  conta: `BusinessFeedSeparationTests`).
+- [x] 2026-10-20 — Feed corporativo novo + perfil profissional novo (só BUSINESS;
+  paginação keyset preservada por `created_at < before`).
+- [x] 2026-10-20 — Perfil social não mostra BUSINESS; tabela de separação cumprida e
+  auditada superfície por superfície (Fase 8 + Fase F da extensão).
 
 ## Fase 7 — Vagas e candidaturas
 
@@ -123,22 +132,40 @@
 
 ## Fase 11 — Frontend: compositor e feeds
 
-- [ ] Opção BUSINESS no compositor com indicação clara de destino; feed corporativo
-  e aba no perfil profissional.
+- [x] 2026-10-20 — Opção BUSINESS no compositor com indicação clara de destino (banner
+  "Publicando como {nome} — esta publicação vai para o feed corporativo"); feed
+  corporativo como aba "Corporativo" (só com perfil ATIVO) e troca automática de
+  identidade ativa no compositor. (commit no front)
 
 ## Fase 12 — Segurança
 
-- [ ] Revisão de autorização (criar/editar/ver por identidade; tentativa de BUSINESS
-  com perfil alheio → negado; feeds sem vazamento) + testes de negação.
+- [x] 2026-10-20 — Revisão de autorização + testes de negação
+  (`CorporateIdentitySecurityTests`, 5 verdes): endpoints /me/business-profile exigem
+  sessão; perfil ativo de OUTRA conta não publica pela minha sessão (403) e o @ de
+  outra conta não pode ser registrado (409 `USERNAME_TAKEN`); terceiros não editam nem
+  apagam post BUSINESS (403 `POST_OWNER_MISMATCH`); DRAFT não tem página pública (404)
+  nem publica; desativar para de publicar mas não apaga. Contrato corrigido:
+  `CorporateProfileController` e `PersonalizationController` declaravam
+  `@RequestHeader("X-Session-Token")` obrigatório e devolviam 400 "cabeçalho ausente"
+  sem sessão; agora `required=false` + resolver → 401 `UNAUTHENTICATED`, como o resto
+  da API (teste próprio em `PersonalizationSecurityTests`, 4 verdes).
 
 ## Fase 13 — Migração de usuários existentes
 
-- [ ] Verificar compatibilidade (posts antigos = SOCIAL; nenhuma quebra de feed/perfil;
-  opt-in para o perfil profissional).
+- [x] 2026-10-20 — Compatibilidade comprovada na bancada MariaDB (`enois_mig13`):
+  3 posts legados inseridos sem a coluna; ao aplicar a V107 os 3 ficaram SOCIAL; um
+  insert legado pós-migração continua funcionando e nasce SOCIAL. Nada é migrado
+  obrigatoriamente: quem nunca criar perfil continua com `GET /me/business-profile` =
+  `exists:false` e o feed/perfil social funcionando (testes de feed verdes).
 
 ## Fase 14 — Desempenho
 
-- [ ] Índices para os feeds novos; paginação preservada; verificação em dados simulados.
+- [x] 2026-10-20 — V109 `idx_posts_identity_status_created (author_identity, status,
+  created_at)`. Bancada `enois_perf14` com 50.000 posts simulados (15.000 CORPORATE):
+  antes da V109 o feed corporativo varria `idx_posts_created` (rows≈50001, Using
+  where); depois usa o composto (rows≈26478, sem filesort). Perfil profissional usa
+  `idx_posts_author_status_created` (rows≈100); feed social segue em
+  `idx_posts_created`. Paginação keyset preservada (`created_at < before`).
 
 ## Fase 15 — Testes e critérios de aceite
 
