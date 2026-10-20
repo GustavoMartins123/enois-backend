@@ -50,14 +50,17 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
    candidatura; link no snapshot que o empregador recebe. *Aceite:* PDF válido anexa; inválido recusa.
 
 ## Médio-grande (pedido 2026-10-17, Game Dev community)
-9. **Imagem no meio do texto** — post/comentário com imagem INSERIDA no ponto exato da
-   explicação (ex.: ideia de jogo + screenshot no parágrafo correspondente), não só anexada
-   no fim. *Design sugerido:* conteúdo passa a aceitar marcadores `{{media:<id>}}` inline no
-   texto (PlainText/defuse preservando o marcador); upload via Mídia (3 passos já existentes);
-   o botão de inserir copia o marcador na posição do cursor; o render (RichText) troca o
-   marcador por `<figure><img></figure>` com a grade já existente; contador continua no teto
-   de 4 mídias; comentário e post usam o mesmo caminho. *Aceite:* imagem aparece exatamente
-   entre os parágrafos onde o autor colocou; sem marcador = anexo no fim (comportamento atual).
+9. **[x] ENTREGUE 2026-10-20 — Imagem no meio do texto.** O conteúdo aceita o marcador
+   `{{media:<id>}}` e o render troca cada um pela mídia real no ponto exato (imagem com zoom,
+   vídeo e áudio com player sem autoplay). Backend: `shared/text/InlineMedia` valida que TODO
+   marcador referencia anexo da MESMA publicação (400 `INVALID_MEDIA` para marcador órfão —
+   mídia alheia disfarçada de anexo não passa), aplicado em publicar, editar e comentar no
+   `FeedController` (a edição valida contra as mídias que o post JÁ tem, pois ela não mexe em
+   anexos). Front: `RichText` recebe `mediaIds` e divide o texto nos marcadores; a grade do fim
+   só mostra o que NÃO foi inserido inline (sem repetição); no composer, cada anexo ganha o
+   botão "Inserir no texto" — o marcador nasce `pendente-N` e vira o id real no upload.
+   `InlineMediaTests` 4/4 (marcador próprio aceito e preservado; alheio recusado; comentário
+   idem; sem marcador não valida nada). Sem marcador = anexo no fim, como sempre.
 
 ## Grande
 9. **Importador de vagas plugável** — porta `JobImportSource` + `imported_jobs` (unique `(source,
