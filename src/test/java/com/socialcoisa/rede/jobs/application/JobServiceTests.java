@@ -56,7 +56,9 @@ class JobServiceTests {
 	@BeforeEach
 	void setUp() {
 		service = new JobService(repository, reputationService, userProfileRepository, extensionRepository, delivery,
-			statusNotifier, new tools.jackson.databind.ObjectMapper(), Clock.systemUTC());
+			statusNotifier, new tools.jackson.databind.ObjectMapper(), Clock.systemUTC(),
+			new com.socialcoisa.rede.shared.security.UserRateLimiter(Clock.systemUTC(),
+				10, 60, 30, 60, 100, 30, 60, 1));
 	}
 
 	@Test
