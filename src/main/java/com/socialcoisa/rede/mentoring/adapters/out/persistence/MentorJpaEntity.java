@@ -33,6 +33,9 @@ class MentorJpaEntity {
 
 	private String price;
 
+	@Column(length = 1000)
+	private String banner;
+
 	@Column(name = "created_at", nullable = false)
 	private Instant createdAt;
 
@@ -50,6 +53,7 @@ class MentorJpaEntity {
 		e.rating = mentor.rating();
 		e.sessionsCount = mentor.sessionsCount();
 		e.price = mentor.price();
+		e.banner = mentor.banner();
 		e.createdAt = mentor.createdAt();
 		e.updatedAt = mentor.updatedAt();
 		return e;
@@ -59,7 +63,7 @@ class MentorJpaEntity {
 		List<String> expertiseList = expertise != null && !expertise.isBlank()
 			? Arrays.asList(expertise.split(","))
 			: Collections.emptyList();
-		return Mentor.restore(id, userId, expertiseList, rating, sessionsCount, price, createdAt, updatedAt);
+		return Mentor.restore(id, userId, expertiseList, rating, sessionsCount, price, banner, createdAt, updatedAt);
 	}
 
 }
