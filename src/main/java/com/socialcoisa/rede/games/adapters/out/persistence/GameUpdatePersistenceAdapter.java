@@ -32,4 +32,9 @@ class GameUpdatePersistenceAdapter implements GameUpdateRepository {
 	public long countByGame(String gameId) {
 		return updates.countByGameId(gameId);
 	}
+
+	@Override
+	public void deleteByGame(String gameId) {
+		updates.deleteByGameId(gameId);
+	}
 }

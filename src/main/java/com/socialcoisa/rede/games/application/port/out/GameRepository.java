@@ -36,4 +36,7 @@ public interface GameRepository {
 
 	/** Jogos publicados de uma lista de criadores (a página de quem a pessoa acompanha). */
 	List<Game> findPublishedByUsers(List<String> userIds, int limit);
+
+	/** Remoção definitiva (o serviço já cuidou dos registros que dependem do jogo). */
+	void delete(String id);
 }

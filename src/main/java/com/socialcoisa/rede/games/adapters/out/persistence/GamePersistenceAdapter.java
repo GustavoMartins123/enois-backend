@@ -110,4 +110,9 @@ class GamePersistenceAdapter implements GameRepository {
 		return games.findByUserIdInAndStatusOrderByPublishedAtDesc(userIds, GameStatus.PUBLISHED,
 			PageRequest.of(0, Math.max(1, limit))).stream().map(GameJpaEntity::toDomain).toList();
 	}
+
+	@Override
+	public void delete(String id) {
+		games.deleteById(id);
+	}
 }

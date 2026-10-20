@@ -34,17 +34,20 @@ class GameController {
 	private final AdminGuard adminGuard;
 	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles;
 	private final com.socialcoisa.rede.games.application.GameIdentityService identities;
+	private final com.socialcoisa.rede.games.application.GameLibraryService library;
 
 	GameController(GameService games, GameCatalogService catalog, CurrentUserResolver currentUserResolver,
 			AdminGuard adminGuard,
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles,
-			com.socialcoisa.rede.games.application.GameIdentityService identities) {
+			com.socialcoisa.rede.games.application.GameIdentityService identities,
+			com.socialcoisa.rede.games.application.GameLibraryService library) {
 		this.games = games;
 		this.catalog = catalog;
 		this.currentUserResolver = currentUserResolver;
 		this.adminGuard = adminGuard;
 		this.profiles = profiles;
 		this.identities = identities;
+		this.library = library;
 	}
 
 	// --- leitura pública ---
@@ -74,13 +77,25 @@ class GameController {
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String username, @PathVariable String gameSlug) {
 		// Com sessão, o dono abre o próprio jogo em qualquer estado (rascunho, recusado, suspenso).
-		return view(games.byUserAndSlug(username, gameSlug, viewerIdOrNull(userId, sessionToken)), null);
+		String viewerId = viewerIdOrNull(userId, sessionToken);
+		return viewWithFavorites(games.byUserAndSlug(username, gameSlug, viewerId), viewerId);
 	}
 
 	/** A view de um jogo, com o @ do criador resolvido (o endereço público usa ele). */
 	private GameView view(Game game, String viewerId) {
 		String username = profiles.findById(game.userId()).map(p -> p.username()).orElse(null);
 		return GameView.of(game, username, 0, false, viewerId);
+	}
+
+	/**
+	 * A view do DETALHE: é a única tela que mostra favoritos, então só aqui vale a consulta extra.
+	 * Sem isto o coração da página abria sempre vazio, mesmo com o jogo já favoritado.
+	 */
+	private GameView viewWithFavorites(Game game, String viewerId) {
+		String username = profiles.findById(game.userId()).map(p -> p.username()).orElse(null);
+		int favorites = (int) ((Number) catalog.stats(game.id()).getOrDefault("favorites", 0)).longValue();
+		boolean favorited = viewerId != null && library.has(viewerId, game.id());
+		return GameView.of(game, username, favorites, favorited, viewerId);
 	}
 
 	private String viewerIdOrNull(String userId, String sessionToken) {

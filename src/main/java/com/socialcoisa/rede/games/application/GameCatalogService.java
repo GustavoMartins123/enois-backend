@@ -111,6 +111,69 @@ public class GameCatalogService {
 		return games.findPublishedByUsers(new ArrayList<>(developerIds), limit);
 	}
 
+	// --- painel do criador: gráfico de uso ---
+
+	/** Teto de eventos lidos para a série: acima disso a leitura vira varredura caríssima. */
+	private static final int MAX_SERIES_EVENTS = 50_000;
+
+	/** Janela máxima do gráfico: um trimestre já é passado suficiente. */
+	private static final int MAX_DAYS = 90;
+
+	/**
+	 * Um dia da série. TODOS os dias da janela aparecem, mesmo sem nenhum evento: o gráfico precisa
+	 * do eixo fixo — dia vazio é informação (ninguém aparece), ausência de dia não é.
+	 */
+	public record DayUsage(String date, long pageViews, long plays, long shares, long players) {
+	}
+
+	/** Números do jogo no painel: totais + série diária. Só o criador vê os próprios números. */
+	public record GameAnalytics(String from, String to, int days, long plays, long players, long favorites,
+			long updates, List<DayUsage> series) {
+	}
+
+	@Transactional(readOnly = true)
+	public GameAnalytics analytics(String gameId, String viewerId, Integer requestedDays) {
+		Game game = games.findById(gameId)
+			.orElseThrow(() -> new ApiException(404, "GAME_NOT_FOUND", "Jogo não encontrado."));
+		if (viewerId == null || !game.ownedBy(viewerId)) {
+			throw new ApiException(403, "NOT_AUTHORIZED", "Os números do jogo são só do criador.");
+		}
+		int days = requestedDays == null ? 30 : Math.clamp(requestedDays, 1, MAX_DAYS);
+		java.time.LocalDate today = java.time.LocalDate.now(clock);
+		java.time.LocalDate start = today.minusDays(days - 1L);
+		java.time.Instant from = start.atStartOfDay(clock.getZone()).toInstant();
+
+		Map<java.time.LocalDate, long[]> counters = new LinkedHashMap<>();
+		Map<java.time.LocalDate, java.util.Set<String>> playersByDay = new LinkedHashMap<>();
+		for (com.socialcoisa.rede.games.domain.GameEvent event : events.findSince(gameId, from, MAX_SERIES_EVENTS)) {
+			java.time.LocalDate day = event.createdAt().atZone(clock.getZone()).toLocalDate();
+			if (day.isBefore(start) || day.isAfter(today)) {
+				continue;
+			}
+			long[] counter = counters.computeIfAbsent(day, key -> new long[3]);
+			switch (event.kind()) {
+				case PAGE_VIEW -> counter[0]++;
+				// Jogador distinto POR DIA: quem joga em dois dias conta nos dois (é uso, não total).
+				case PLAY_START -> {
+					counter[1]++;
+					playersByDay.computeIfAbsent(day, key -> new java.util.HashSet<>())
+						.add(event.userId() == null ? event.id() : event.userId());
+				}
+				case SHARE -> counter[2]++;
+			}
+		}
+
+		List<DayUsage> series = new ArrayList<>();
+		for (java.time.LocalDate day = start; !day.isAfter(today); day = day.plusDays(1)) {
+			long[] counter = counters.getOrDefault(day, new long[3]);
+			series.add(new DayUsage(day.toString(), counter[0], counter[1], counter[2],
+				playersByDay.getOrDefault(day, java.util.Set.of()).size()));
+		}
+		return new GameAnalytics(start.toString(), today.toString(), days,
+			games.findById(gameId).map(Game::plays).orElse(0), events.distinctPlayers(gameId),
+			favorites.countByGame(gameId), updates.countByGame(gameId), series);
+	}
+
 	private int parseCursor(String cursor) {
 		if (cursor == null || cursor.isBlank()) {
 			return 0;

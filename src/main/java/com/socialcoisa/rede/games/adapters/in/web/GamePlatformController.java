@@ -72,6 +72,19 @@ class GamePlatformController {
 		return DeveloperPageView.from(page, badges);
 	}
 
+	/**
+	 * A própria página de criador, sem depender do @: o painel preenche o formulário por aqui
+	 * (antes pedia `/games/me/profile`, um @ que não existe, e a tela abria vazia).
+	 */
+	@GetMapping("/games/profile/mine")
+	DeveloperPageView myDeveloperPage(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		var page = developers.page(usernameOf(user.id().value()), user.id().value());
+		List<String> badges = profiles.findById(user.id().value()).map(p -> p.allBadges()).orElse(List.of());
+		return DeveloperPageView.from(page, badges);
+	}
+
 	/** O dono edita a própria página de criador (vazio limpa o campo). */
 	@PutMapping("/games/profile")
 	DeveloperPageView saveProfile(@RequestHeader(value = "X-User-Id", required = false) String userId,
@@ -156,6 +169,18 @@ class GamePlatformController {
 		return catalog.stats(gameId);
 	}
 
+	/**
+	 * O GRÁFICO DE USO (só o criador): totais + série diária de visualizações, partidas, jogadores
+	 * distintos e compartilhamentos. `days` é a janela (1 a 90; padrão 30).
+	 */
+	@GetMapping("/games/{gameId}/analytics")
+	GameCatalogService.GameAnalytics analytics(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@PathVariable String gameId, @RequestParam(defaultValue = "30") int days) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		return catalog.analytics(gameId, user.id().value(), days);
+	}
+
 	@GetMapping("/games/{gameId}/updates")
 	List<GameUpdateView> updates(@PathVariable String gameId, @RequestParam(defaultValue = "20") int limit) {
 		return games.updatesOf(gameId, Math.clamp(limit, 1, 50)).stream().map(GameUpdateView::from).toList();
@@ -171,15 +196,28 @@ class GamePlatformController {
 			request.version()));
 	}
 
-	/** Edição pelo dono (a ficha inteira; o endereço passa pelo mesmo guarda do envio). */
+	/**
+	 * Edição pelo dono: a ficha inteira, o endereço público (slug) e a identidade visual (ícone e
+	 * banner por foto ou HTML). O link passa pelo mesmo guarda do envio.
+	 */
 	@PatchMapping("/games/{gameId}")
 	Map<String, Object> edit(@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String gameId, @RequestBody EditGameRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		var edited = games.edit(gameId, user.id().value(), request.title(), request.description(), request.cover(),
-			request.url(), request.tags(), detailsOf(request));
+			request.url(), request.tags(), detailsOf(request), request.slug());
 		return Map.of("id", edited.id(), "slug", edited.slug(), "status", edited.status().name());
+	}
+
+	/** O jogo sai da loja (só o dono): registro, novidades, favoritos e histórico vão junto. */
+	@DeleteMapping("/games/{gameId}")
+	Map<String, Object> remove(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@PathVariable String gameId) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		games.remove(gameId, user.id().value());
+		return Map.of("id", gameId, "status", "DELETED");
 	}
 
 	// --- moderação ---
@@ -234,7 +272,8 @@ class GamePlatformController {
 			request.requirements(), request.contentWarnings(), parseStage(request.stage()),
 			parseDistribution(request.distribution()), request.priceCoins() == null ? 0 : request.priceCoins(),
 			parseAspect(request.aspect()), request.version(), request.websiteUrl(), request.supportUrl(),
-			request.mediaIds() == null ? null : String.join(",", request.mediaIds()));
+			request.mediaIds() == null ? null : String.join(",", request.mediaIds()))
+			.withBranding(request.icon(), request.banner(), request.bannerHtml());
 	}
 
 	private GameStage parseStage(String value) {
@@ -278,6 +317,10 @@ class GamePlatformController {
 	record EditGameRequest(String title, String description, String cover, String url, String tags,
 			String shortDescription, String genres, String languages, String controls, String requirements,
 			String contentWarnings, String stage, String distribution, Integer priceCoins, String aspect,
-			String version, String websiteUrl, String supportUrl, List<String> mediaIds) {
+			String version, String websiteUrl, String supportUrl, List<String> mediaIds,
+			/** Endereço público novo do jogo (vazio mantém o atual). */
+			String slug,
+			/** Identidade visual: foto de perfil do jogo e banner (foto ou HTML). */
+			String icon, String banner, String bannerHtml) {
 	}
 }

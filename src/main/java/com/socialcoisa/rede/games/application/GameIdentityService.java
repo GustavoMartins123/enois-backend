@@ -113,11 +113,18 @@ public class GameIdentityService {
 		return tokens.findByHash(hash);
 	}
 
+	/** O jogo foi excluído: nenhum token pendente dele continua válido. */
+	public void revokeForGame(String gameId) {
+		tokens.deleteByGame(gameId);
+	}
+
 	public interface GameTokenRepository {
 
 		void save(GameToken token);
 
 		Optional<GameToken> findByHash(String hash);
+
+		void deleteByGame(String gameId);
 	}
 
 	public record GameToken(String id, String gameId, String userId, String tokenHash, String playerRef,
