@@ -18,7 +18,9 @@ public record PostView(String id, String authorId, String authorUsername, String
 		/** Prazo do Momento (null = post normal). O front mostra "some em Xh". */
 		Instant expiresAt,
 		/** Quem assinou: a apresentação (nome/@/avatar) acima vem da identidade dona do post. */
-		AuthorIdentity authorIdentity) {
+		AuthorIdentity authorIdentity,
+		/** Moldura do avatar do autor (cosmético); nulo = sem moldura. */
+		String authorAvatarFrame) {
 
 	/** Comunidade onde o post foi publicado (nome para o texto "publicou em ...") + se quem le participa. */
 	public record CommunityView(String id, String name, boolean joined) {
@@ -37,7 +39,7 @@ public record PostView(String id, String authorId, String authorUsername, String
 	public static PostView from(Post post) {
 		return new PostView(post.id().value(), post.authorId().value(), null, null, null, null, List.of(),
 			post.type(), post.content(), null, null, post.tags(), post.mediaIds(), post.createdAt(), post.counters(),
-			null, post.communityId(), null, post.editedAt(), post.expiresAt(), post.authorIdentity());
+			null, post.communityId(), null, post.editedAt(), post.expiresAt(), post.authorIdentity(), null);
 	}
 
 	public static PostView from(Post post, String authorUsername, String authorName, String authorAvatar) {
@@ -62,33 +64,40 @@ public record PostView(String id, String authorId, String authorUsername, String
 		return new PostView(post.id().value(), post.authorId().value(), authorUsername, authorName, authorAvatar,
 			badges.isEmpty() ? null : badges.get(0), badges, post.type(), post.content(), null, null, post.tags(),
 			post.mediaIds(), post.createdAt(), post.counters(), null, post.communityId(), null, post.editedAt(),
-			post.expiresAt(), authorIdentity);
+			post.expiresAt(), authorIdentity, null);
+	}
+
+	/** Anexa a moldura do avatar do autor (cosmético) depois do enriquecimento do perfil. */
+	public PostView withAvatarFrame(String frame) {
+		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
+			content, pageHtml, articleBody, tags, mediaIds, createdAt, counters, currentUserReaction, communityId,
+			community, editedAt, expiresAt, authorIdentity, frame);
 	}
 
 	public PostView withCurrentUserReaction(ReactionType reaction) {
 		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
 			content, pageHtml, articleBody, tags, mediaIds, createdAt, counters, reaction, communityId, community,
-			editedAt, expiresAt, authorIdentity);
+			editedAt, expiresAt, authorIdentity, authorAvatarFrame);
 	}
 
 	/** Anexa o HTML da pagina; so o post unico faz isso (ver {@link #from(Post)}). */
 	public PostView withPageHtml(String pageHtml) {
 		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
 			content, pageHtml, articleBody, tags, mediaIds, createdAt, counters, currentUserReaction, communityId,
-			community, editedAt, expiresAt, authorIdentity);
+			community, editedAt, expiresAt, authorIdentity, authorAvatarFrame);
 	}
 
 	/** Anexa a comunidade (nome + participacao do leitor) depois do enriquecimento. */
 	public PostView withCommunity(String communityId, CommunityView community) {
 		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
 			content, pageHtml, articleBody, tags, mediaIds, createdAt, counters, currentUserReaction, communityId,
-			community, editedAt, expiresAt, authorIdentity);
+			community, editedAt, expiresAt, authorIdentity, authorAvatarFrame);
 	}
 
 	/** Anexa o corpo do artigo; so a leitura do post unico faz isso (mesma regra da pagina). */
 	public PostView withArticleBody(String body) {
 		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
 			content, pageHtml, body, tags, mediaIds, createdAt, counters, currentUserReaction, communityId, community,
-			editedAt, expiresAt, authorIdentity);
+			editedAt, expiresAt, authorIdentity, authorAvatarFrame);
 	}
 }
