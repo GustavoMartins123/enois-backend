@@ -32,7 +32,7 @@ class CommunityJpaEntity {
 	private String avatar;
 
 	/** Capa em HTML/CSS sanitizado; nulo = usa a foto da `cover`. */
-	@Column(name = "banner_html")
+	@Column(name = "banner_html", columnDefinition = "longtext")
 	private String bannerHtml;
 
 	@Column(name = "created_by", nullable = false)
