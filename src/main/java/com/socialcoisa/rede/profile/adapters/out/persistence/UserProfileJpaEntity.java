@@ -141,6 +141,10 @@ class UserProfileJpaEntity {
 	@Column(name = "federated_second_factor_at")
 	private Instant federatedSecondFactorAt;
 
+	/** ECA Digital: data de nascimento declarada (null = ainda nao regularizou). */
+	@Column(name = "birth_date")
+	private java.time.LocalDate birthDate;
+
 	protected UserProfileJpaEntity() {
 	}
 
@@ -183,6 +187,7 @@ class UserProfileJpaEntity {
 		entity.resumeUrl = profile.resumeUrl();
 		entity.resumeName = profile.resumeName();
 		entity.badges = String.join("\n", profile.badges());
+		entity.birthDate = profile.birthDate();
 		return entity;
 	}
 
@@ -207,6 +212,7 @@ class UserProfileJpaEntity {
 		}
 		profile.hydrateIdentityDisplay(nickname, socialName, pronouns);
 		profile.hydrateAka(aka);
+		profile.hydrateBirthDate(birthDate);
 		profile.hydrateResume(resumeUrl, resumeName);
 		profile.hydrateAvatarFrame(avatarFrame);
 		profile.hydrateBadges(badges == null || badges.isBlank() ? List.of() : List.of(badges.split("\n")));

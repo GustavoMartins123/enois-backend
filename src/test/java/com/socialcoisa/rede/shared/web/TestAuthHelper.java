@@ -38,7 +38,8 @@ public class TestAuthHelper {
 			"role", "USER",
 			"email", email,
 			"password", "Test1234!",
-			"acceptedTerms", true
+			"acceptedTerms", true,
+			"birthDate", "1990-05-10"
 		));
 
 		mockMvc.perform(post("/auth/signup")

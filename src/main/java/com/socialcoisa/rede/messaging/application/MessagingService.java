@@ -26,14 +26,22 @@ public class MessagingService {
 	private final Clock clock;
 	private final UserRateLimiter userRateLimiter;
 	private final BehavioralTimingGuard behavioralTimingGuard;
+	private final com.socialcoisa.rede.shared.age.AgePolicyReader agePolicy;
+	private final com.socialcoisa.rede.shared.age.AgeGate ageGate;
+	private final com.socialcoisa.rede.network.application.port.out.ConnectionRepository connections;
 
 	public MessagingService(MessagingRepository repository, NotificationService notificationService, Clock clock,
-			UserRateLimiter userRateLimiter, BehavioralTimingGuard behavioralTimingGuard) {
+			UserRateLimiter userRateLimiter, BehavioralTimingGuard behavioralTimingGuard,
+			com.socialcoisa.rede.shared.age.AgePolicyReader agePolicy, com.socialcoisa.rede.shared.age.AgeGate ageGate,
+			com.socialcoisa.rede.network.application.port.out.ConnectionRepository connections) {
 		this.repository = repository;
 		this.notificationService = notificationService;
 		this.clock = clock;
 		this.userRateLimiter = userRateLimiter;
 		this.behavioralTimingGuard = behavioralTimingGuard;
+		this.agePolicy = agePolicy;
+		this.ageGate = ageGate;
+		this.connections = connections;
 	}
 
 	@Transactional
@@ -85,6 +93,8 @@ public class MessagingService {
 	@Transactional
 	public Message sendMessage(String conversationId, String senderId, String text,
 			java.util.List<String> mediaIds) {
+		// ECA Digital: sem data de nascimento declarada, nao envia mensagem (tela de regularizacao).
+		ageGate.requireDeclared(senderId);
 		userRateLimiter.require(senderId, UserRateLimiter.SEND_MESSAGE);
 		behavioralTimingGuard.record(senderId);
 		Conversation conversation = repository.findConversationById(conversationId)
@@ -92,6 +102,7 @@ public class MessagingService {
 		if (!repository.isParticipant(conversationId, senderId)) {
 			throw new ApiException(403, "NOT_PARTICIPANT", "Voce nao participa desta conversa.");
 		}
+		protegeMenorDestinatario(conversationId, senderId);
 		java.util.List<String> midias = mediaIds == null ? java.util.List.of()
 			: mediaIds.stream().filter(v -> v != null && !v.isBlank()).map(String::trim).distinct().toList();
 		String corpo = text == null ? "" : text.trim();
@@ -121,6 +132,36 @@ public class MessagingService {
 				"/api/conversations/" + conversationId, "Responder");
 		}
 		return message;
+	}
+
+	/**
+	 * ECA Digital: destinatario menor de 18 so recebe mensagem de quem tem conexao ACEITA com ele.
+	 * Desconhecidos nao abrem conversa com menor — o primeiro vetor de contato abusivo fica fechado.
+	 */
+	private void protegeMenorDestinatario(String conversationId, String senderId) {
+		// A restrição vale para conversa DIRETA entre pessoas: em grupos e canais, o menor escolheu
+		// participar (e a moderação cobre o conteúdo).
+		String kind = repository.findConversationById(conversationId)
+			.map(conversation -> conversation.kind())
+			.orElse("DIRECT");
+		if (!"DIRECT".equalsIgnoreCase(kind)) {
+			return;
+		}
+		List<com.socialcoisa.rede.messaging.domain.ConversationParticipant> participants = repository
+			.findParticipantsByConversation(conversationId);
+		for (com.socialcoisa.rede.messaging.domain.ConversationParticipant participant : participants) {
+			String recipientId = participant.userId();
+			if (recipientId.equals(senderId)) {
+				continue;
+			}
+			if (!agePolicy.isMinor(recipientId)) {
+				continue;
+			}
+			if (!connections.existsActiveConnection(senderId, recipientId)) {
+				throw new ApiException(403, "MINOR_DM_RESTRICTED",
+					"Para proteger usuarios menores de idade, so e possivel conversar com eles apos uma conexao aceita.");
+			}
+		}
 	}
 
 	@Transactional

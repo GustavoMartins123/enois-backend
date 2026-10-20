@@ -58,6 +58,13 @@ public class UserProfile {
 	private Instant emailOtpEnabledAt;
 	private Instant federatedSecondFactorAt;
 
+	/**
+	 * ECA Digital (Lei 15.211/2025): data de nascimento declarada. O backend calcula a idade e
+	 * decide as protecoes; a data NUNCA sai em leitura publica (nem para o proprio dono a UI
+	 * mostra sem pedir). Null = ainda nao regularizou (escritas bloqueadas com BIRTH_DATE_REQUIRED).
+	 */
+	private java.time.LocalDate birthDate;
+
 	private UserProfile(String id, String username, String email, String name, String headline, String company,
 			String location, String avatar, String banner, String badge, String bio, String bioHtml, String bannerHtml,
 			List<String> skills, List<String> goals,
@@ -432,6 +439,39 @@ public class UserProfile {
 	/** Hidrata a moldura (vem da coluna, nao do fluxo de compra). */
 	public void hydrateAvatarFrame(String frameId) {
 		this.avatarFrame = frameId;
+	}
+
+	/** Declara (ou regulariza) a data de nascimento. Validacao de plausibilidade fica no service. */
+	public void declareBirthDate(java.time.LocalDate birthDate, Instant now) {
+		this.birthDate = birthDate;
+		this.updatedAt = now;
+	}
+
+	/** Hidrata a data de nascimento (vem da coluna, nao do fluxo de edicao). */
+	public void hydrateBirthDate(java.time.LocalDate birthDate) {
+		this.birthDate = birthDate;
+	}
+
+	public java.time.LocalDate birthDate() {
+		return birthDate;
+	}
+
+	/** A data de nascimento foi declarada? Contas antigas regularizam pelo fluxo proprio. */
+	public boolean birthDateDeclared() {
+		return birthDate != null;
+	}
+
+	/** Idade calculada no backend na data de referencia (nunca a declarada pelo cliente). */
+	public int ageOn(java.time.LocalDate today) {
+		if (birthDate == null) {
+			return -1;
+		}
+		return java.time.Period.between(birthDate, today).getYears();
+	}
+
+	/** Menor de 18 na data de referencia — dispara as protecoes da faixa etaria. */
+	public boolean isMinorOn(java.time.LocalDate today) {
+		return birthDate != null && ageOn(today) < 18;
 	}
 
 	public String headline() {

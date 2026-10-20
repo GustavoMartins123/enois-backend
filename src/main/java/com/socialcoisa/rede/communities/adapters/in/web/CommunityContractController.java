@@ -40,6 +40,8 @@ class CommunityContractController {
 
 	private final IdempotencyApplicationService idempotency;
 	private final CurrentUserResolver currentUserResolver;
+
+	private final com.socialcoisa.rede.shared.web.AdminGuard adminGuard;
 	private final CommunityService communityService;
 	private final UserProfileRepository userProfileRepository;
 	private final GetFeedService getFeedService;
@@ -47,13 +49,15 @@ class CommunityContractController {
 
 	CommunityContractController(IdempotencyApplicationService idempotency, CurrentUserResolver currentUserResolver,
 			CommunityService communityService, UserProfileRepository userProfileRepository,
-			GetFeedService getFeedService, CursorCodec cursorCodec) {
+			GetFeedService getFeedService, CursorCodec cursorCodec,
+			com.socialcoisa.rede.shared.web.AdminGuard adminGuard) {
 		this.idempotency = idempotency;
 		this.currentUserResolver = currentUserResolver;
 		this.communityService = communityService;
 		this.userProfileRepository = userProfileRepository;
 		this.getFeedService = getFeedService;
 		this.cursorCodec = cursorCodec;
+		this.adminGuard = adminGuard;
 	}
 
 	@GetMapping
@@ -237,7 +241,7 @@ class CommunityContractController {
 		String hash = idempotency.hash(Map.of("communityId", communityId));
 		return idempotency.execute(user.id(), "DELETE", "/api/communities/{communityId}", idempotencyKey, hash,
 			() -> {
-				communityService.deleteCommunity(communityId, user.id().value());
+				communityService.deleteCommunity(communityId, user.id().value(), adminGuard.isAdmin(user));
 				return new CommandResponse(200, new StatusResponse(communityId, "DELETED"));
 			});
 	}

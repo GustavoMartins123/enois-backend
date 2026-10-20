@@ -1,6 +1,7 @@
 package com.socialcoisa.rede.profile.application;
 
 import java.time.Clock;
+import java.time.LocalDate;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
@@ -143,6 +144,54 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 		return repository.findNewestProfiles(limit).stream()
 			.map(UserProfileView::from)
 			.toList();
+	}
+
+	/**
+	 * ECA Digital: regularizacao da base. O usuario declara (ou corrige) a data de nascimento; a
+	 * validacao de plausibilidade e o calculo de idade sao do BACKEND. A data nunca volta em
+	 * resposta — so o estado resultante.
+	 */
+	@Transactional
+	public AgeStateView declareBirthDate(String userId, String birthDateIso) {
+		LocalDate date;
+		try {
+			date = birthDateIso == null || birthDateIso.isBlank() ? null : LocalDate.parse(birthDateIso.trim());
+		}
+		catch (Exception e) {
+			throw new ApiException(400, "INVALID_BIRTH_DATE", "Data de nascimento invalida (use aaaa-mm-dd).");
+		}
+		if (date == null) {
+			throw new ApiException(400, "BIRTH_DATE_REQUIRED", "Informe a data de nascimento.");
+		}
+		LocalDate today = LocalDate.now(clock.withZone(java.time.ZoneId.of("America/Sao_Paulo")));
+		if (date.isAfter(today)) {
+			throw new ApiException(400, "INVALID_BIRTH_DATE", "A data de nascimento nao pode ser no futuro.");
+		}
+		int age = java.time.Period.between(date, today).getYears();
+		if (age < 0 || age > 120) {
+			throw new ApiException(400, "INVALID_BIRTH_DATE", "A data de nascimento nao parece real.");
+		}
+		UserProfile profile = repository.findById(userId)
+			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
+		profile.declareBirthDate(date, java.time.Instant.now(clock));
+		repository.save(profile);
+		return new AgeStateView(age < 18 ? "MINOR_DECLARED" : "ADULT_DECLARED", age < 18, true);
+	}
+
+	/** Estado de idade para o front decidir se mostra a tela de regularizacao (sem expor a data). */
+	@Transactional(readOnly = true)
+	public AgeStateView ageState(String userId) {
+		UserProfile profile = repository.findById(userId)
+			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
+		if (!profile.birthDateDeclared()) {
+			return new AgeStateView("BIRTH_DATE_REQUIRED", false, false);
+		}
+		LocalDate today = LocalDate.now(clock.withZone(java.time.ZoneId.of("America/Sao_Paulo")));
+		boolean minor = profile.isMinorOn(today);
+		return new AgeStateView(minor ? "MINOR_DECLARED" : "ADULT_DECLARED", minor, true);
+	}
+
+	public record AgeStateView(String state, boolean minor, boolean declared) {
 	}
 
 	@Override

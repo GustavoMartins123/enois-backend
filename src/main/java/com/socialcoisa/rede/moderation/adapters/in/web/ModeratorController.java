@@ -184,6 +184,29 @@ class ModeratorController {
 			request == null ? "Limpeza por spam (motivo não informado)" : request.note());
 	}
 
+	/**
+	 * Faixa etária declarada (ECA/Lei 15.211): o admin vê o ESTADO e a faixa, nunca a data exata —
+	 * data de nascimento é dado sensível e não pertence a painéis de moderação.
+	 */
+	@GetMapping("/admin/users/{username}/age")
+	java.util.Map<String, String> declaredAge(
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String username) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		adminGuard.requireAdmin(user);
+		var profile = profiles.findByUsername(username.trim())
+			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuário não encontrado."));
+		java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("America/Sao_Paulo"));
+		if (!profile.birthDateDeclared()) {
+			return java.util.Map.of("state", "BIRTH_DATE_REQUIRED");
+		}
+		int age = profile.ageOn(today);
+		boolean minor = profile.isMinorOn(today);
+		return java.util.Map.of(
+			"state", minor ? "MINOR_DECLARED" : "ADULT_DECLARED",
+			"ageBand", minor ? (age <= 13 ? "ATE_13" : "14_17") : "ADULTO");
+	}
+
 	/** IPs recentes de onde o usuário entrou — fonte para o bloqueio de IP. */
 	@GetMapping("/admin/users/{username}/ips")
 	List<com.socialcoisa.rede.moderation.application.IpBlockService.UserIpView> userIps(
