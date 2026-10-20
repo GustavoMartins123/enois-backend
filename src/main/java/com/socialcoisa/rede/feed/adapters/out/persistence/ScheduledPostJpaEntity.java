@@ -42,6 +42,10 @@ class ScheduledPostJpaEntity {
 	@Column(name = "community_id")
 	String communityId;
 
+	/** Assunto declarado do post avulso (o de comunidade herda o dela na publicação). */
+	@Column(name = "topic", length = 40)
+	String topic;
+
 	@Column(name = "scheduled_at", nullable = false)
 	Instant scheduledAt;
 

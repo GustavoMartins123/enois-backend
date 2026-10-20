@@ -135,7 +135,7 @@ class FeedController {
 		return idempotency.execute(user.id(), "POST", "/api/feed/posts", idempotencyKey, hash, () -> new CommandResponse(201,
 			publishPostUseCase.publish(new PublishPostCommand(user.id(), request.type(), request.content(),
 				request.pageHtml(), request.articleBody(), request.tags(), request.mediaIds(), request.communityId(),
-				request.mentionedUserIds()))));
+				request.mentionedUserIds(), request.topic()))));
 	}
 
 	@GetMapping("/feed")
@@ -212,11 +212,12 @@ class FeedController {
 		payload.put("articleBody", request.articleBody() == null ? "" : request.articleBody());
 		payload.put("tags", request.tags() == null ? List.of() : request.tags());
 		payload.put("type", request.type() == null ? "" : request.type());
+		payload.put("topic", request.topic() == null ? "" : request.topic());
 		String hash = idempotency.hash(payload);
 		return idempotency.execute(user.id(), "PATCH", "/api/feed/posts/{postId}", idempotencyKey, hash,
 			() -> new CommandResponse(200, editPostUseCase.edit(new EditPostCommand(user.id(), new PostId(postId),
 				request.content(), request.pageHtml(), request.articleBody(), request.tags(),
-				tipoDoPost(request.type())))));
+				tipoDoPost(request.type()), request.topic()))));
 	}
 
 	/** Tipo informado na edicao (nulo = mantem); string desconhecida e 400, nunca 500. */

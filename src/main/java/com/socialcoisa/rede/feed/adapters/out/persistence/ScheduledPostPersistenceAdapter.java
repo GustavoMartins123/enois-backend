@@ -34,6 +34,7 @@ class ScheduledPostPersistenceAdapter implements ScheduledPostRepository {
 		entity.mediaIds = join(post.mediaIds());
 		entity.mentionedIds = join(post.mentionedUserIds());
 		entity.communityId = post.communityId();
+		entity.topic = post.topic();
 		entity.scheduledAt = post.scheduledAt();
 		entity.createdAt = post.createdAt();
 		entity.lastError = post.lastError();
@@ -69,8 +70,8 @@ class ScheduledPostPersistenceAdapter implements ScheduledPostRepository {
 	private ScheduledPost toDomain(ScheduledPostJpaEntity entity) {
 		return new ScheduledPost(entity.id, entity.userId, PostType.valueOf(entity.postType), entity.content,
 			entity.pageHtml, entity.articleBody, split(entity.tags), split(entity.mediaIds),
-			split(entity.mentionedIds), entity.communityId, entity.scheduledAt, entity.createdAt, entity.lastError,
-			entity.attempts);
+			split(entity.mentionedIds), entity.communityId, entity.topic, entity.scheduledAt, entity.createdAt,
+			entity.lastError, entity.attempts);
 	}
 
 	private String join(List<String> values) {

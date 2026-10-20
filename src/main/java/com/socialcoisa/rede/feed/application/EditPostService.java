@@ -76,8 +76,11 @@ public class EditPostService implements EditPostUseCase {
 		}
 		String content = validateContent(command.content(), tipoNovo);
 		List<String> tags = normalizeTags(command.tags());
+		// O assunto acompanha a mesma regra da criacao: post de COMUNIDADE herda o dela (o
+		// compositor nao escolhe); post avulso pode trocar o assunto declarado pelo autor.
+		String topic = normalizeTopic(post, command.topic());
 
-		Post edited = post.edited(tipoNovo, content, pageHtml(tipoNovo, command), tags, clock.instant());
+		Post edited = post.edited(tipoNovo, content, pageHtml(tipoNovo, command), tags, topic, clock.instant());
 		Post saved = postRepository.save(edited);
 		String articleBody = articleBody(tipoNovo, command);
 		if (articleBody != null) {
@@ -148,5 +151,24 @@ public class EditPostService implements EditPostUseCase {
 			throw new ApiException(400, "TOO_MANY_TAGS", "Post deve ter no maximo 5 tags.");
 		}
 		return normalized;
+	}
+
+	/**
+	 * Assunto na edicao: nulo/vazio MANTÉM o atual; preenchido troca, validado contra a taxonomia.
+	 * Post de comunidade não aceita: o assunto é o dela, sempre.
+	 */
+	private String normalizeTopic(Post post, String topic) {
+		if (!StringUtils.hasText(topic)) {
+			return post.topic();
+		}
+		if (post.communityId() != null) {
+			throw new ApiException(400, "TOPIC_FROM_COMMUNITY",
+				"Post em comunidade herda o assunto dela — o compositor não escolhe assunto aqui.");
+		}
+		String declared = topic.trim().toUpperCase(java.util.Locale.ROOT);
+		if (!com.socialcoisa.rede.preferences.domain.ContentTaxonomy.TOPIC_SET.contains(declared)) {
+			throw new ApiException(400, "INVALID_TOPIC", "Assunto inválido: escolha um da lista.");
+		}
+		return declared;
 	}
 }

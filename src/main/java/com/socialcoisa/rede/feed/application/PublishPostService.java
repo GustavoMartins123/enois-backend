@@ -121,23 +121,37 @@ public class PublishPostService implements PublishPostUseCase {
 			throw new ApiException(400, "BUSINESS_NOT_IN_COMMUNITY",
 				"Publicação corporativa não vai para comunidades. Publique no seu feed corporativo.");
 		}
+		String topic;
+		PostCommunityReader.CommunityRef community = null;
 		if (communityId != null) {
 			// Publicar numa comunidade e escrever no feed dela: sem ser membro, qualquer pessoa
 			// logada colocaria post na vitrine dos outros (e o post nao aparece para quem participa).
-			PostCommunityReader.CommunityRef community = postCommunityReader
-				.byIds(List.of(communityId), command.authorId().value()).get(communityId);
+			community = postCommunityReader.byIds(List.of(communityId), command.authorId().value()).get(communityId);
 			if (community == null) {
 				throw new ApiException(404, "COMMUNITY_NOT_FOUND", "Comunidade nao encontrada.");
 			}
 			if (!community.joined()) {
 				throw new ApiException(403, "NOT_A_MEMBER", "Entre na comunidade para publicar nela.");
 			}
+			if (StringUtils.hasText(command.topic())) {
+				throw new ApiException(400, "TOPIC_FROM_COMMUNITY",
+					"Post em comunidade herda o assunto dela — o compositor não escolhe assunto aqui.");
+			}
 		}
-		// Classificação REAL do assunto: o tópico da comunidade em que o post nasce. Post solto
-		// nasce sem classificação (nunca é bloqueado por preferência).
-		String topic = communityId != null ? postCommunityReader
-			.byIds(java.util.List.of(communityId), command.authorId().value())
-			.get(communityId).topic() : null;
+		// Classificação REAL do assunto: em comunidade, o tópico é o DELA (declarado por ela).
+		// Post avulso nasce com o assunto que o AUTOR declarou no compositor (opcional, validado
+		// contra a taxonomia). Sem assunto, sem classificação — nunca é bloqueado por preferência.
+		if (community != null) {
+			topic = community.topic();
+		} else if (StringUtils.hasText(command.topic())) {
+			String declared = command.topic().trim().toUpperCase(java.util.Locale.ROOT);
+			if (!com.socialcoisa.rede.preferences.domain.ContentTaxonomy.TOPIC_SET.contains(declared)) {
+				throw new ApiException(400, "INVALID_TOPIC", "Assunto inválido: escolha um da lista.");
+			}
+			topic = declared;
+		} else {
+			topic = null;
+		}
 		if (StringUtils.hasText(command.content())) {
 			duplicationGuard.require(command.authorId().value(), command.content());
 		}

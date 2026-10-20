@@ -113,6 +113,11 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 					.toList();
 			}
 			case PROJECTS -> postRepository.findActiveByType(PostType.PROJECT, before, limit);
+			case NEWS -> postRepository.findActiveByType(PostType.NEWS, before, limit);
+			case TUTORIALS -> postRepository.findActiveByType(PostType.TUTORIAL, before, limit);
+			case OPPORTUNITIES -> postRepository.findActiveByType(PostType.OPPORTUNITY, before, limit);
+			case REVIEWS -> postRepository.findActiveByType(PostType.REVIEW, before, limit);
+			case FUN -> postRepository.findActiveByType(PostType.DIVERTIDO, before, limit);
 		};
 		return page(enrich(posts, query.userId()), posts, limit);
 	}
@@ -279,6 +284,11 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 			case FOR_YOU, FOLLOWING, ALL -> true;
 			case DISCUSSIONS, RECENT -> post.type() == PostType.QUESTION;
 			case PROJECTS -> post.type() == PostType.PROJECT;
+			case NEWS -> post.type() == PostType.NEWS;
+			case TUTORIALS -> post.type() == PostType.TUTORIAL;
+			case OPPORTUNITIES -> post.type() == PostType.OPPORTUNITY;
+			case REVIEWS -> post.type() == PostType.REVIEW;
+			case FUN -> post.type() == PostType.DIVERTIDO;
 		};
 	}
 
