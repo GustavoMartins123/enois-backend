@@ -1,6 +1,8 @@
 package com.socialcoisa.rede.messaging.adapters.out.persistence;
 
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.List;
 
 import com.socialcoisa.rede.messaging.domain.Message;
 
@@ -26,6 +28,9 @@ class MessageJpaEntity {
 	@Column(nullable = false, length = 5000)
 	private String text;
 
+	@Column(name = "media_ids", length = 1000)
+	private String mediaIds;
+
 	@Column(name = "created_at", nullable = false)
 	private Instant createdAt;
 
@@ -38,12 +43,16 @@ class MessageJpaEntity {
 		e.conversationId = message.conversationId();
 		e.senderId = message.senderId();
 		e.text = message.text();
+		e.mediaIds = message.mediaIds().isEmpty() ? null : String.join(",", message.mediaIds());
 		e.createdAt = message.createdAt();
 		return e;
 	}
 
 	Message toDomain() {
-		return Message.restore(id, conversationId, senderId, text, createdAt);
+		List<String> media = mediaIds == null || mediaIds.isBlank()
+			? List.of()
+			: Arrays.stream(mediaIds.split(",")).map(String::trim).filter(v -> !v.isEmpty()).toList();
+		return Message.restore(id, conversationId, senderId, text, media, createdAt);
 	}
 
 }

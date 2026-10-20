@@ -72,18 +72,35 @@ public class MessagingService {
 
 	@Transactional
 	public Message sendMessage(String conversationId, String senderId, String text) {
+		return sendMessage(conversationId, senderId, text, java.util.List.of());
+	}
+
+	@Transactional
+	public Message sendMessage(String conversationId, String senderId, String text,
+			java.util.List<String> mediaIds) {
 		Conversation conversation = repository.findConversationById(conversationId)
 			.orElseThrow(() -> new ApiException(404, "CONVERSATION_NOT_FOUND", "Conversa nao encontrada."));
 		if (!repository.isParticipant(conversationId, senderId)) {
 			throw new ApiException(403, "NOT_PARTICIPANT", "Voce nao participa desta conversa.");
 		}
+		java.util.List<String> midias = mediaIds == null ? java.util.List.of()
+			: mediaIds.stream().filter(v -> v != null && !v.isBlank()).map(String::trim).distinct().toList();
+		String corpo = text == null ? "" : text.trim();
+		if (corpo.isEmpty() && midias.isEmpty()) {
+			throw new ApiException(400, "EMPTY_MESSAGE", "Escreva uma mensagem ou anexe uma midia.");
+		}
+		if (midias.size() > 4) {
+			throw new ApiException(400, "TOO_MANY_MEDIA", "Anexe no maximo 4 midias por mensagem.");
+		}
 		String id = "message_" + UUID.randomUUID().toString().replace("-", "");
-		Message message = Message.create(id, conversationId, senderId, text, clock.instant());
+		Message message = Message.create(id, conversationId, senderId, corpo, midias, clock.instant());
 		repository.saveMessage(message);
 		// A lista de conversas ordena por updatedAt; sem este toque a conversa antiga fica no lugar
 		// mesmo recebendo mensagem nova (#25 dos issues).
 		repository.saveConversation(conversation.touch(clock.instant()));
-		String preview = text.length() > 80 ? text.substring(0, 77) + "..." : text;
+		String preview = corpo.isEmpty()
+			? (midias.isEmpty() ? "Nova mensagem" : "Enviou uma midia")
+			: (corpo.length() > 80 ? corpo.substring(0, 77) + "..." : corpo);
 		List<ConversationParticipant> participants = repository.findParticipantsByConversation(conversationId);
 		for (ConversationParticipant p : participants) {
 			if (p.userId().equals(senderId)) continue;
