@@ -130,3 +130,10 @@
 - `module-paths.test.ts` (3 verdes): mapa área→módulo, incluindo /acontecendo→EVENTS;
   rotas fora de módulos desativáveis ficam livres (/feed, /perfil).
 - `npx vitest run`: 101 verdes; eslint 0 nos arquivos tocados; tsc no baseline.
+
+
+## 2026-10-20 — Extensão Fase E (interface das três seções)
+
+- Diálogo de Uso saudável com as três seções; eslint 0; `tsc` no baseline;
+  `npx vitest run`: 101 verdes. O conflito liked×blocked é impedido na própria tela
+  (o backend continua validando e recusando com 409).

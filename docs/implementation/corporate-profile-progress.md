@@ -174,6 +174,10 @@
 - [ ] Faltam na Fase D: atalhos/cards contextuais (ex.: card de comunidade em
   notificação) e evitar chamadas desnecessárias aos endpoints do módulo — a
   navegação e o gate já cobrem os caminhos principais.
-- [ ] Fase E — Interface das três seções na área Uso saudável.
+- [x] Fase E — Interface das três seções em Uso saudável: "O que quero ver" e
+  "Assuntos que não gosto" como chips da taxonomia real (marcar num lado tira do
+  outro — o backend recusa o conflito), "O que não quero ver" como switches com a
+  nota da dependência Eventos→Acontecendo agora; salvar grava a fonte única no
+  backend e o lembrete local. (commit no front)
 - [ ] Fase F — Testes da seção 10.5 (segurança/regressão) + auditoria de busca/
   notificações/salvos com as novas preferências.
