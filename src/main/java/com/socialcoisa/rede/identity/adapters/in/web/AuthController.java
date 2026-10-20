@@ -69,6 +69,8 @@ class AuthController {
 	private final OAuthProperties oAuthProperties;
 	private final com.socialcoisa.rede.identity.adapters.out.TurnstileValidator turnstile;
 	private final com.socialcoisa.rede.identity.application.NewDeviceNotifier newDeviceNotifier;
+	private final com.socialcoisa.rede.shared.security.IpBlockReader ipBlockReader;
+	private final com.socialcoisa.rede.shared.security.ClientIpResolver ipResolver;
 
 	AuthController(SignupUseCase signupUseCase, VerifyEmailUseCase verifyEmailUseCase,
 			TwoFactorLoginUseCase twoFactorLoginUseCase, TwoFactorUseCase twoFactorUseCase,
@@ -85,7 +87,9 @@ class AuthController {
 			OAuthProperties oAuthProperties,
 			com.socialcoisa.rede.identity.application.AuthThrottle throttle,
 			com.socialcoisa.rede.identity.adapters.out.TurnstileValidator turnstile,
-			com.socialcoisa.rede.identity.application.NewDeviceNotifier newDeviceNotifier) {
+			com.socialcoisa.rede.identity.application.NewDeviceNotifier newDeviceNotifier,
+			com.socialcoisa.rede.shared.security.IpBlockReader ipBlockReader,
+			com.socialcoisa.rede.shared.security.ClientIpResolver ipResolver) {
 		this.signupUseCase = signupUseCase;
 		this.verifyEmailUseCase = verifyEmailUseCase;
 		this.twoFactorLoginUseCase = twoFactorLoginUseCase;
@@ -105,6 +109,16 @@ class AuthController {
 		this.oAuthProperties = oAuthProperties;
 		this.turnstile = turnstile;
 		this.newDeviceNotifier = newDeviceNotifier;
+		this.ipBlockReader = ipBlockReader;
+		this.ipResolver = ipResolver;
+	}
+
+	/** Bloqueio de IP pela moderacao (V115): nenhum fluxo de autenticacao emite sessao de IP banido. */
+	private void exigeIpNaoBloqueado(String ip) {
+		if (ipBlockReader.blocked(ip)) {
+			throw new ApiException(403, "IP_BLOCKED",
+				"Este endereco de rede esta bloqueado pela moderacao. Fale com o suporte se for um erro.");
+		}
 	}
 
 	@PostMapping("/signup")
@@ -112,22 +126,23 @@ class AuthController {
 	ResponseEntity<String> signup(@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@RequestHeader(value = "X-Forwarded-For", required = false) String forwardedFor,
 			@RequestHeader(value = "X-Device-Fingerprint", required = false) String deviceFingerprint,
-			@RequestBody SignupRequest request) {
+			@RequestBody SignupRequest body,
+			jakarta.servlet.http.HttpServletRequest request) {
+		String ip = ipResolver.resolve(request);
+		exigeIpNaoBloqueado(ip);
 		// Honeypot: bots preenchem o campo "website" que humanos nunca veem.
 		// Resposta fake (201) para nao dar dica ao atacante.
-		if (request.website() != null && !request.website().isBlank()) {
+		if (body.website() != null && !body.website().isBlank()) {
 			return ResponseEntity.status(201)
-				.body("{\"email\":\"" + request.email() + "\",\"verificationRequired\":true,\"emailSent\":true}");
+				.body("{\"email\":\"" + body.email() + "\",\"verificationRequired\":true,\"emailSent\":true}");
 		}
-		turnstile.require(request.turnstileToken());
-		String ip = forwardedFor == null || forwardedFor.isBlank() ? "desconhecido"
-			: forwardedFor.split(",")[0].trim();
+		turnstile.require(body.turnstileToken());
 		throttle.exigeSignupPermitido(ip, deviceFingerprint);
-		String scope = authScope(request.email());
-		String hash = idempotency.hash(request);
+		String scope = authScope(body.email());
+		String hash = idempotency.hash(body);
 		return idempotency.execute(scope, "POST", "/api/auth/signup", idempotencyKey, hash, () -> new CommandResponse(201,
-			signupUseCase.signup(new SignupCommand(request.name(), "USER", request.email(), request.password(),
-				request.acceptedTerms()))));
+			signupUseCase.signup(new SignupCommand(body.name(), "USER", body.email(), body.password(),
+				body.acceptedTerms()))));
 	}
 
 	/**
@@ -160,15 +175,18 @@ class AuthController {
 	@RateLimiter(name = "auth")
 	ResponseEntity<String> login(@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@RequestHeader(value = "X-Device-Fingerprint", required = false) String deviceFingerprint,
-			@RequestBody LoginRequest request) {
-		turnstile.require(request.turnstileToken());
-		String scope = authScope(request.email());
-		String hash = idempotency.hash(request);
-		throttle.exigeLoginPermitido(request.email());
+			@RequestBody LoginRequest body,
+			jakarta.servlet.http.HttpServletRequest httpRequest) {
+		String ip = ipResolver.resolve(httpRequest);
+		exigeIpNaoBloqueado(ip);
+		turnstile.require(body.turnstileToken());
+		String scope = authScope(body.email());
+		String hash = idempotency.hash(body);
+		throttle.exigeLoginPermitido(body.email());
 		return idempotency.execute(scope, "POST", "/api/auth/login", idempotencyKey, hash, () -> {
 			try {
-				LoginResult result = loginUseCase.login(new LoginCommand(request.email(), request.password()));
-				throttle.limpaLogin(request.email());
+				LoginResult result = loginUseCase.login(new LoginCommand(body.email(), body.password(), ip));
+				throttle.limpaLogin(body.email());
 				if (!result.requiresTwoFactor()) {
 					newDeviceNotifier.check(result.session().user().id(), deviceFingerprint);
 					return new CommandResponse(200, result.session());
@@ -179,7 +197,7 @@ class AuthController {
 					"expiresAt", result.challenge().expiresAt().toString()));
 			} catch (ApiException falha) {
 				if (falha.status() == 401) {
-					throttle.registraFalhaLogin(request.email());
+					throttle.registraFalhaLogin(body.email());
 				}
 				throw falha;
 			}
@@ -191,8 +209,10 @@ class AuthController {
 	@RateLimiter(name = "auth")
 	ResponseEntity<AuthResponse> verifyTwoFactor(
 			@RequestHeader(value = "X-Device-Fingerprint", required = false) String deviceFingerprint,
-			@RequestBody VerifyTwoFactorRequest request) {
-		AuthResponse auth = twoFactorLoginUseCase.verifyTwoFactor(request.challengeId(), request.code());
+			@RequestBody VerifyTwoFactorRequest body,
+			jakarta.servlet.http.HttpServletRequest httpRequest) {
+		exigeIpNaoBloqueado(ipResolver.resolve(httpRequest));
+		AuthResponse auth = twoFactorLoginUseCase.verifyTwoFactor(body.challengeId(), body.code());
 		newDeviceNotifier.check(auth.user().id(), deviceFingerprint);
 		return ResponseEntity.ok(auth);
 	}

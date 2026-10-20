@@ -108,7 +108,10 @@ public class SanctionService {
 	public UserSanction banAuthor(UserSanction sanction, String authorId, String reviewerId,
 			com.socialcoisa.rede.identity.application.port.out.AuthSessionRepository sessions) {
 		UserSanction saved = sanctions.save(sanction);
-		UserSanction banned = sanctions.save(saved.escalateToBan());
+		// PERMABAN já é permanente: só o RESTRICTION vira BAN no caminho do recurso negado.
+		UserSanction banned = sanction.type() == com.socialcoisa.rede.moderation.domain.SanctionType.PERMABAN
+			? saved
+			: sanctions.save(saved.escalateToBan());
 		sessions.revokeAllByUser(authorId, Instant.now(clock));
 		return banned;
 	}

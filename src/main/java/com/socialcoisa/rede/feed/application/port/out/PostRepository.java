@@ -23,6 +23,9 @@ public interface PostRepository {
 
 	List<Post> findByIds(Collection<PostId> ids);
 
+	/** TODOS os posts do autor, em qualquer status — uso da purga (sanitização por spam). */
+	List<Post> findAllByAuthor(UserId authorId);
+
 	/** "Para você"/Seguindo: o que as identidades sociais assinaram (BUSINESS nunca entra). */
 	List<Post> findActiveByAuthors(Set<UserId> authorIds, Instant before, int limit);
 

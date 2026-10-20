@@ -15,6 +15,8 @@ import com.socialcoisa.rede.feed.domain.PostType;
 
 interface SpringDataPostJpaRepository extends JpaRepository<PostJpaEntity, String> {
 
+	List<PostJpaEntity> findByAuthorId(String authorId);
+
 	List<PostJpaEntity> findByIdIn(Collection<String> ids);
 
 	List<PostJpaEntity> findByAuthorIdInAndStatusAndCreatedAtBeforeOrderByCreatedAtDesc(Collection<String> authorIds,

@@ -51,4 +51,17 @@ class CommentPersistenceAdapter implements CommentRepository {
 			.map(CommentJpaEntity::toDomain)
 			.toList();
 	}
+
+	@Override
+	public List<Comment> findAllByAuthor(String authorId) {
+		return repository.findByAuthorId(authorId).stream().map(CommentJpaEntity::toDomain).toList();
+	}
+
+	@Override
+	public List<Comment> findAllByPostIds(java.util.Collection<String> postIds) {
+		if (postIds == null || postIds.isEmpty()) {
+			return List.of();
+		}
+		return repository.findByPostIdIn(postIds).stream().map(CommentJpaEntity::toDomain).toList();
+	}
 }

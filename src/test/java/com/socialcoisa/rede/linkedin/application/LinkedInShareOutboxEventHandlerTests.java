@@ -111,6 +111,11 @@ class LinkedInShareOutboxEventHandlerTests {
 		private Post post;
 
 		@Override
+		public List<Post> findAllByAuthor(com.socialcoisa.rede.feed.domain.UserId authorId) {
+			return List.of();
+		}
+
+		@Override
 		public Optional<Post> findById(PostId id) {
 			return post != null && post.id().equals(id) ? Optional.of(post) : Optional.empty();
 		}

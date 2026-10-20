@@ -18,4 +18,10 @@ public interface CommentRepository {
 	void deleteById(String id);
 
 	List<String> findPostIdsByAuthor(String authorId);
+
+	/** TODOS os comentários do autor, em qualquer status — uso da purga (sanitização por spam). */
+	List<Comment> findAllByAuthor(String authorId);
+
+	/** Todos os comentários (qualquer status) dos posts dados — uso da purga. */
+	List<Comment> findAllByPostIds(java.util.Collection<String> postIds);
 }

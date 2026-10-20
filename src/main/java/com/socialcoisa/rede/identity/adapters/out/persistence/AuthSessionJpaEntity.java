@@ -31,6 +31,10 @@ class AuthSessionJpaEntity {
 	@Column(name = "refresh_expires_at")
 	private Instant refreshExpiresAt;
 
+	/** IP de onde a sessao nasceu (V115); nulo para sessoes antigas e fluxos sem o cabecalho. */
+	@Column(name = "ip")
+	private String ip;
+
 	@Column(name = "revoked_at")
 	private Instant revokedAt;
 
@@ -39,12 +43,18 @@ class AuthSessionJpaEntity {
 
 	AuthSessionJpaEntity(String token, String refreshToken, String userId, Instant createdAt, Instant expiresAt,
 			Instant refreshExpiresAt) {
+		this(token, refreshToken, userId, createdAt, expiresAt, refreshExpiresAt, null);
+	}
+
+	AuthSessionJpaEntity(String token, String refreshToken, String userId, Instant createdAt, Instant expiresAt,
+			Instant refreshExpiresAt, String ip) {
 		this.token = token;
 		this.refreshToken = refreshToken;
 		this.userId = userId;
 		this.createdAt = createdAt;
 		this.expiresAt = expiresAt;
 		this.refreshExpiresAt = refreshExpiresAt;
+		this.ip = ip;
 	}
 
 	String userId() {
