@@ -33,7 +33,7 @@ public class DailyBlocksService {
     public record Entry(String username,String name,int score,int lines,long elapsedMillis) {}
     public record Ranking(List<Entry> items) {}
     private List<Session> sessions(Date d,String user,boolean lock) {
-        return jdbc.query("select started_at,last_action_at,completed_at,status,score,lines from daily_blocks_sessions where challenge_date=? and user_id=?"+(lock?" for update":""),(r,n)->new Session(r.getTimestamp(1),r.getTimestamp(2),r.getTimestamp(3),r.getString(4),r.getInt(5),r.getInt(6)),d,user);
+        return jdbc.query("select started_at,last_action_at,completed_at,status,score,`lines` from daily_blocks_sessions where challenge_date=? and user_id=?"+(lock?" for update":""),(r,n)->new Session(r.getTimestamp(1),r.getTimestamp(2),r.getTimestamp(3),r.getString(4),r.getInt(5),r.getInt(6)),d,user);
     }
     private BlocksEngine.Result replay(Date d,String user) {
         var challenge=jdbc.queryForMap("select seed,target_lines from daily_blocks_challenges where challenge_date=?",d);
@@ -73,7 +73,7 @@ public class DailyBlocksService {
     @Transactional public State start(String user) {
         LocalDate day=today(); Date d=Date.valueOf(day);
         jdbc.update("insert into daily_blocks_challenges (challenge_date,seed,target_lines,rules_version) values (?,?,3,?) on duplicate key update challenge_date=challenge_date",d,random.nextLong(),BlocksEngine.RULES_VERSION);
-        jdbc.update("insert into daily_blocks_sessions (challenge_date,user_id,started_at,status,score,lines) values (?,?,?,'PLAYING',0,0) on duplicate key update user_id=user_id",d,user,Timestamp.from(clock.instant()));
+        jdbc.update("insert into daily_blocks_sessions (challenge_date,user_id,started_at,status,score,`lines`) values (?,?,?,'PLAYING',0,0) on duplicate key update user_id=user_id",d,user,Timestamp.from(clock.instant()));
         return stateFor(day,user);
     }
     @Transactional public State action(String user,String action,String requestId,LocalDate requestedDate) {
@@ -100,11 +100,11 @@ public class DailyBlocksService {
         jdbc.update("insert into daily_blocks_actions (challenge_date,user_id,action_no,request_id,action,created_at) values (?,?,?,?,?,?)",d,user,count+1,requestId,command.name(),Timestamp.from(clock.instant()));
         BlocksEngine.Result result=replay(d,user);
         Timestamp now=Timestamp.from(clock.instant());
-        jdbc.update("update daily_blocks_sessions set last_action_at=?,completed_at=?,status=?,score=?,lines=? where challenge_date=? and user_id=?",now,result.status()==BlocksEngine.Status.PLAYING?null:now,result.status().name(),result.score(),result.lines(),d,user);
+        jdbc.update("update daily_blocks_sessions set last_action_at=?,completed_at=?,status=?,score=?,`lines`=? where challenge_date=? and user_id=?",now,result.status()==BlocksEngine.Status.PLAYING?null:now,result.status().name(),result.score(),result.lines(),d,user);
         return stateFor(day,user);
     }
     @Transactional(readOnly=true) public Ranking leaderboard() {
-        var entries=jdbc.query("select u.username,u.name,s.score,s.lines,s.started_at,s.completed_at from daily_blocks_sessions s join users u on u.id=s.user_id where s.challenge_date=? and s.status='WON'",(r,n)->new Entry(r.getString(1),r.getString(2),r.getInt(3),r.getInt(4),Math.max(0,Duration.between(r.getTimestamp(5).toInstant(),r.getTimestamp(6).toInstant()).toMillis())),Date.valueOf(today()));
+        var entries=jdbc.query("select u.username,u.name,s.score,s.`lines`,s.started_at,s.completed_at from daily_blocks_sessions s join users u on u.id=s.user_id where s.challenge_date=? and s.status='WON'",(r,n)->new Entry(r.getString(1),r.getString(2),r.getInt(3),r.getInt(4),Math.max(0,Duration.between(r.getTimestamp(5).toInstant(),r.getTimestamp(6).toInstant()).toMillis())),Date.valueOf(today()));
         return new Ranking(entries.stream().sorted(Comparator.comparingInt(Entry::score).reversed().thenComparingLong(Entry::elapsedMillis).thenComparing(Entry::username)).limit(100).toList());
     }
 
