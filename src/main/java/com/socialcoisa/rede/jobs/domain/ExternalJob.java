@@ -26,6 +26,17 @@ public record ExternalJob(String id, String platform, String externalId, String 
 			status, canonicalUrl, applyEmail, null, null, null, null, null);
 	}
 
+	/**
+	 * Vaga cadastrada por alguem da comunidade (submittedBy preenchido), sem os campos novos
+	 * (descricao/faixa) — mantem os testes e chamadas anteriores compilando contra o domínio.
+	 */
+	public ExternalJob(String id, String platform, String externalId, String title, String company, String location,
+			String salary, String currency, String url, Instant importedAt, Instant lastCheckedAt, String status,
+			String canonicalUrl, String applyEmail, String submittedBy) {
+		this(id, platform, externalId, title, company, location, salary, currency, url, importedAt, lastCheckedAt,
+			status, canonicalUrl, applyEmail, submittedBy, null, null, null, null);
+	}
+
 	/** Vaga cadastrada por alguem da comunidade (e nao importada de agregador). */
 	public boolean isCommunitySubmission() {
 		return submittedBy != null && !submittedBy.isBlank();
