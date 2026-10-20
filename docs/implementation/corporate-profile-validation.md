@@ -255,7 +255,7 @@
 
 ## 2026-10-20 — Fase 15 (suíte completa e aceite)
 
-- Backend, worktree isolado do commit (`/tmp/rede-full`, HEAD `9ba1f70` + os dois commits
+- Backend, worktree isolado do commit (`/tmp/rede-full`, HEAD `2b06f8f` (com os dois commits
   de estabilização): `mvn test` → **Tests run: 575, Failures: 0, Errors: 0, Skipped: 1**,
   exit 0. Nenhum teste do plano foi desativado.
 - Front: `npx vitest run` → 101 testes verdes; `npm run test:eslint-rules` → verde (os
