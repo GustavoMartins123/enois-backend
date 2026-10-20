@@ -63,7 +63,7 @@ jobs:
           repository: ${{ env.ECR_REPOSITORY }}
 
       - name: ⚙️ Configurar Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       # PRs, especialmente de forks, não precisam de credenciais ou acesso ao ECR.
       - name: 🧪 Validar build da imagem no PR
