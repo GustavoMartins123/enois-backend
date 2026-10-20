@@ -49,25 +49,26 @@ interface SpringDataPostJpaRepository extends JpaRepository<PostJpaEntity, Strin
 			@Param("excluded") Collection<PostType> excluded, @Param("before") Instant before, Pageable pageable);
 
 	/**
-	 * Posts de um conjunto de autores (Para você / Seguindo), SEM o que foi assinado pela
-	 * identidade profissional — isso só existe no feed corporativo.
+	 * Posts de um conjunto de autores (Para você / Seguindo): só o que a identidade SOCIAL
+	 * assinou — o conteúdo profissional existe apenas no feed corporativo.
 	 */
 	@Query("""
 			SELECT p FROM PostJpaEntity p
 			WHERE p.authorId IN :authorIds AND p.status = :status
-			  AND p.authorIdentity <> :social AND p.createdAt < :before
+			  AND p.authorIdentity = :social AND p.createdAt < :before
 			ORDER BY p.createdAt DESC""")
 	List<PostJpaEntity> findSocialByAuthorIds(@Param("authorIds") Collection<String> authorIds,
 			@Param("status") PostStatus status, @Param("social") AuthorIdentity social,
 			@Param("before") Instant before, Pageable pageable);
 
 	/**
-	 * Perfil SOCIAL do autor: exclui BLOG (ponteiro) e o que a identidade profissional assinou.
+	 * Perfil SOCIAL do autor: só o que a identidade social assinou, sem BLOG (o conteúdo mora
+	 * no blog) e sem o que a identidade profissional assinou (isso é do perfil profissional).
 	 */
 	@Query("""
 			SELECT p FROM PostJpaEntity p
 			WHERE p.authorId = :authorId AND p.status = :status
-			  AND p.authorIdentity <> :social AND p.type <> :blog AND p.createdAt < :before
+			  AND p.authorIdentity = :social AND p.type <> :blog AND p.createdAt < :before
 			ORDER BY p.createdAt DESC""")
 	List<PostJpaEntity> findSocialByAuthor(@Param("authorId") String authorId, @Param("status") PostStatus status,
 			@Param("social") AuthorIdentity social, @Param("blog") PostType blog, @Param("before") Instant before,

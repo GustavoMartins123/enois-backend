@@ -40,6 +40,31 @@ class BusinessFeedSeparationTests {
 		auth = new TestAuthHelper(mockMvc, objectMapper);
 	}
 
+
+	private void createAndActivate(TestAuthHelper.AuthSession author, String username, String name)
+			throws Exception {
+		mockMvc.perform(post("/me/business-profile")
+				.header("X-Session-Token", author.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(java.util.Map.of("username", username, "name", name))))
+			.andExpect(status().isOk());
+		mockMvc.perform(patch("/me/business-profile")
+				.header("X-Session-Token", author.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(java.util.Map.of(
+					"headline", "Headline profissional de " + name))))
+			.andExpect(status().isOk());
+		mockMvc.perform(patch("/me/business-profile")
+				.header("X-Session-Token", author.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(java.util.Map.of(
+					"headline", "Headline profissional"))))
+			.andExpect(status().isOk());
+		mockMvc.perform(post("/me/business-profile/activate")
+				.header("X-Session-Token", author.token()))
+			.andExpect(status().isOk());
+	}
+
 	private String publish(TestAuthHelper.AuthSession author, String type, String content) throws Exception {
 		MvcResult result = mockMvc.perform(post("/feed/posts")
 				.header("X-Session-Token", author.token())
@@ -64,7 +89,7 @@ class BusinessFeedSeparationTests {
 				.content(objectMapper.writeValueAsString(java.util.Map.of(
 					"type", "BUSINESS", "content", "Anúncio corporativo.", "tags", java.util.List.of(),
 					"mediaIds", java.util.List.of()))))
-			.andExpect(status().isBadRequest())
+			.andExpect(status().isForbidden())
 			.andExpect(jsonPath("$.code").value("NO_ACTIVE_CORPORATE_PROFILE"));
 
 		// Cria e ativa o perfil profissional da mesma conta.
@@ -74,6 +99,12 @@ class BusinessFeedSeparationTests {
 				.content(objectMapper.writeValueAsString(java.util.Map.of(
 					"username", "bizsep.pro", "name", "Autor Profissional"))))
 			.andExpect(status().isOk());
+		mockMvc.perform(patch("/me/business-profile")
+				.header("X-Session-Token", author.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(java.util.Map.of(
+					"headline", "Headline profissional"))))
+			.andExpect(status().isOk());
 		mockMvc.perform(post("/me/business-profile/activate")
 				.header("X-Session-Token", author.token()))
 			.andExpect(status().isOk());
@@ -82,28 +113,28 @@ class BusinessFeedSeparationTests {
 		String businessId = publish(author, "BUSINESS", "Post corporativo da mesma pessoa.");
 
 		// Feed "Tudo": o social entra, o BUSINESS nunca.
-		mockMvc.perform(get("/feed").param("tab", "ALL"))
+		mockMvc.perform(get("/feed").param("tab", "ALL").header("X-Session-Token", author.token()))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$[?(@.id == '" + socialId + "')]").isNotEmpty())
-			.andExpect(jsonPath("$[?(@.id == '" + businessId + "')]").isEmpty());
+			.andExpect(jsonPath("$.items[?(@.id == '" + socialId + "')]").isNotEmpty())
+			.andExpect(jsonPath("$.items[?(@.id == '" + businessId + "')]").isEmpty());
 
 		// Feed corporativo: o BUSINESS entra, o social nunca.
-		mockMvc.perform(get("/feed/corporate"))
+		mockMvc.perform(get("/feed/corporate").header("X-Session-Token", author.token()))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$[?(@.id == '" + businessId + "')]").isNotEmpty())
-			.andExpect(jsonPath("$[?(@.id == '" + socialId + "')]").isEmpty());
+			.andExpect(jsonPath("$.items[?(@.id == '" + businessId + "')]").isNotEmpty())
+			.andExpect(jsonPath("$.items[?(@.id == '" + socialId + "')]").isEmpty());
 
 		// Perfil social (página pública do autor): só o social.
 		mockMvc.perform(get("/users/bizsep-author/posts"))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$[?(@.id == '" + socialId + "')]").isNotEmpty())
-			.andExpect(jsonPath("$[?(@.id == '" + businessId + "')]").isEmpty());
+			.andExpect(jsonPath("$.items[?(@.id == '" + socialId + "')]").isNotEmpty())
+			.andExpect(jsonPath("$.items[?(@.id == '" + businessId + "')]").isEmpty());
 
 		// Página do perfil profissional: só o BUSINESS.
 		mockMvc.perform(get("/corporate/bizsep.pro/posts"))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$[?(@.id == '" + businessId + "')]").isNotEmpty())
-			.andExpect(jsonPath("$[?(@.id == '" + socialId + "')]").isEmpty());
+			.andExpect(jsonPath("$.items[?(@.id == '" + businessId + "')]").isNotEmpty())
+			.andExpect(jsonPath("$.items[?(@.id == '" + socialId + "')]").isEmpty());
 	}
 
 	@Test
@@ -116,6 +147,12 @@ class BusinessFeedSeparationTests {
 					"username", "bizsep.ed", "name", "Editor Profissional"))))
 			.andDo(r -> System.out.println("CREATE RESP " + r.getResponse().getStatus() + " "
 				+ r.getResponse().getContentAsString()))
+			.andExpect(status().isOk());
+		mockMvc.perform(patch("/me/business-profile")
+				.header("X-Session-Token", author.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(java.util.Map.of(
+					"headline", "Headline profissional"))))
 			.andExpect(status().isOk());
 		mockMvc.perform(post("/me/business-profile/activate")
 				.header("X-Session-Token", author.token()))
@@ -142,9 +179,9 @@ class BusinessFeedSeparationTests {
 					"type", "BUSINESS", "content", "Corporativo editado.", "tags", java.util.List.of()))))
 			.andExpect(status().isOk());
 
-		mockMvc.perform(get("/feed/corporate"))
+		mockMvc.perform(get("/feed/corporate").header("X-Session-Token", author.token()))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$[?(@.id == '" + businessId + "')].content").value("Corporativo editado."));
+			.andExpect(jsonPath("$.items[?(@.id == '" + businessId + "')].content").value("Corporativo editado."));
 	}
 
 	@Test
@@ -158,6 +195,12 @@ class BusinessFeedSeparationTests {
 			.andExpect(status().isOk());
 		// Ativa, publica, desativa: a página some (404), o feed corporativo também o esconde? Não:
 		// a página 404; o post permanece (desativar não apaga nada).
+		mockMvc.perform(patch("/me/business-profile")
+				.header("X-Session-Token", author.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(java.util.Map.of(
+					"headline", "Headline profissional"))))
+			.andExpect(status().isOk());
 		mockMvc.perform(post("/me/business-profile/activate")
 				.header("X-Session-Token", author.token()))
 			.andExpect(status().isOk());

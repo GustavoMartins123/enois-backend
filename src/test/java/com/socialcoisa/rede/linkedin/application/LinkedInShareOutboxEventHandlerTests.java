@@ -146,6 +146,14 @@ class LinkedInShareOutboxEventHandlerTests {
 		}
 
 		@Override
+		public List<Post> findActiveCorporateByAuthor(UserId authorId, Instant before, int limit) {
+			return List.of();
+		}
+
+		public List<Post> findActiveCorporate(Instant before, int limit) {
+			return List.of();
+		}
+
 		public List<Post> findActiveAll(Instant before, int limit) {
 			throw new UnsupportedOperationException();
 		}
