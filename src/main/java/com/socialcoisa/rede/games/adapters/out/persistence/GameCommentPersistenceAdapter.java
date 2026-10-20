@@ -40,6 +40,14 @@ class GameCommentPersistenceAdapter implements GameCommentRepository {
 	}
 
 	@Override
+	public List<Object[]> countByGameIds(List<String> gameIds) {
+		if (gameIds == null || gameIds.isEmpty()) {
+			return List.of();
+		}
+		return repository.countByGameIds(gameIds);
+	}
+
+	@Override
 	public void delete(String id) {
 		repository.deleteById(id);
 	}

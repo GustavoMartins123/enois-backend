@@ -18,4 +18,7 @@ public interface GameReviewRepository {
 	double averageByGame(String gameId);
 
 	void delete(String id);
+
+	/** Estatísticas em lote (para os cards do catálogo): [gameId, average, count]. */
+	List<Object[]> statsByGameIds(List<String> gameIds);
 }

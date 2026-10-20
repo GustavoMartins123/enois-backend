@@ -51,6 +51,28 @@ public class GameSocialService {
 		return new ReviewsView(reviews.averageByGame(game.id()), reviews.countByGame(game.id()), items);
 	}
 
+	/** Resumo em lote dos cards: id → {média, avaliações, comentários}. */
+	@Transactional(readOnly = true)
+	public java.util.Map<String, RatingSummary> ratings(java.util.List<String> gameIds) {
+		java.util.Map<String, double[]> stats = new java.util.HashMap<>();
+		for (Object[] row : reviews.statsByGameIds(gameIds)) {
+			String id = (String) row[0];
+			double average = row[1] == null ? 0d : ((Number) row[1]).doubleValue();
+			long count = ((Number) row[2]).longValue();
+			stats.put(id, new double[] { average, count });
+		}
+		java.util.Map<String, Long> commentCounts = new java.util.HashMap<>();
+		for (Object[] row : comments.countByGameIds(gameIds)) {
+			commentCounts.put((String) row[0], ((Number) row[1]).longValue());
+		}
+		java.util.Map<String, RatingSummary> out = new java.util.LinkedHashMap<>();
+		for (String id : gameIds) {
+			double[] r = stats.getOrDefault(id, new double[] { 0d, 0d });
+			out.put(id, new RatingSummary(r[0], (long) r[1], commentCounts.getOrDefault(id, 0L)));
+		}
+		return out;
+	}
+
 	@Transactional
 	public ReviewView review(String gameId, String userId, int rating, String body) {
 		Game game = game(gameId);
@@ -153,6 +175,9 @@ public class GameSocialService {
 	}
 
 	public record CommentsView(long count, List<CommentView> items) {
+	}
+
+	public record RatingSummary(double average, long reviews, long comments) {
 	}
 
 	public record CommentView(String id, String userId, String username, String name, String avatar, String body,
