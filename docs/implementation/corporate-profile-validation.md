@@ -137,3 +137,26 @@
 - Diálogo de Uso saudável com as três seções; eslint 0; `tsc` no baseline;
   `npx vitest run`: 101 verdes. O conflito liked×blocked é impedido na própria tela
   (o backend continua validando e recusando com 409).
+
+
+## 2026-10-20 — Extensão Fase F (segurança e superfícies)
+
+- `mvn -q test -Dtest='PersonalizationSecurityTests'`: **3/3 verdes** (39,6 s)
+  1. preferência não é alterável para outra conta: payload com `userId` alheio é
+     ignorado; a vítima mantém `likedTopics=[TECNOLOGIA]` e nenhum bloqueio;
+  2. desativar MESSAGES/JOBS/COMMUNITIES/EVENTS na preferência não bloqueia a API:
+     `GET /conversations`, `/jobs`, `/communities`, `/events` respondem 200;
+  3. post com assunto bloqueado continua acessível por `GET /feed/posts/{id}` → 200
+     (o filtro vale para o feed, não é censura do conteúdo).
+- `mvn -q test -Dtest='PersonalizationSurfaceAuditTests'`: **3/3 verdes** (62,6 s)
+  1. salvos seguem o que foi salvo: post de TECNOLOGIA salvo antes do bloqueio sai
+     do `GET /feed?tab=ALL` do leitor e permanece em `GET /feed/saved`;
+  2. notificação segue a publicação BUSINESS: comentário de outra conta gera
+     NEW_COMMENT para a autora com href `/api/feed/posts/{id}` (worker da outbox
+     aguardado na própria asserção);
+  3. busca pública não devolve posts (só usuários/comunidades/vagas/eventos/
+     mentores), logo não há vazamento de BUSINESS pela busca.
+- Primeira execução da auditoria: 2/3 — o teste de busca publicava BUSINESS sem
+  ativar o perfil (403 `NO_ACTIVE_CORPORATE_PROFILE`). Corrigido no teste (patch de
+  headline + activate, o fluxo real) e reexecutado: 3/3. Nenhuma mudança de produção
+  foi necessária: as três superfícies já cumpriam a tabela de separação.

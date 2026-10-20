@@ -179,5 +179,18 @@
   outro — o backend recusa o conflito), "O que não quero ver" como switches com a
   nota da dependência Eventos→Acontecendo agora; salvar grava a fonte única no
   backend e o lembrete local. (commit no front)
-- [ ] Fase F — Testes da seção 10.5 (segurança/regressão) + auditoria de busca/
-  notificações/salvos com as novas preferências.
+- [x] Fase F — Testes da seção 10.5 + auditoria das superfícies
+  (`PersonalizationSecurityTests`, 3 verdes): a conta das preferências é sempre a da
+  SESSÃO (um payload com `userId` alheio não altera a outra conta); desativar módulos
+  não revoga acesso — `/conversations`, `/jobs`, `/communities` e `/events` seguem
+  200, porque preferência é de experiência, não de autorização; assunto bloqueado
+  não esconde o post por link direto (`GET /feed/posts/{id}` → 200), ou seja, não há
+  censura global.
+- [x] Fase F — Auditoria busca/notificações/salvos com as preferências
+  (`PersonalizationSurfaceAuditTests`, 3 verdes): **salvos** seguem o que foi salvo
+  (post de assunto bloqueado continua em `/feed/saved`, mesmo saindo do feed);
+  **notificações** seguem a publicação, inclusive BUSINESS (comentário gera
+  NEW_COMMENT com href `/api/feed/posts/{id}` — a identidade de autoria não interfere);
+  **busca pública** lista usuários/comunidades/vagas/eventos/mentores e nunca posts,
+  então BUSINESS não vaza por ela. Critérios 10.1–10.4 já estavam cobertos pelos
+  testes das Fases A–C (preferências 5 verdes, aplicação nos feeds 1 verde).
