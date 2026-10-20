@@ -18,4 +18,7 @@ public interface CommentRepository {
 	void deleteById(String id);
 
 	List<String> findPostIdsByAuthor(String authorId);
+
+	/** Todos os comentarios do autor — usado pelo ban cleanup. */
+	List<Comment> findAllByAuthor(String authorId);
 }
