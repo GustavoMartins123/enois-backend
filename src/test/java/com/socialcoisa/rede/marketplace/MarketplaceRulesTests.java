@@ -40,9 +40,12 @@ class MarketplaceRulesTests {
 	private MarketplaceService marketplace;
 
 	private String publishedTheme(TestAuthHelper.AuthSession owner, String name) throws Exception {
+		// Paleta completa: a publicacao agora cobra o contrato que o front consome (muted,
+		// onPrimary, text.date e o resto), senao a validacao recusa com 400 antes de listar.
 		String packageJson = """
-				{"palette":{"background":"#ffffff","surface":"#f4f4ff","border":"#dddddd",
-				"primary":"#6d28d9","text":{"strong":"#111111","subtle":"#555555"}}}""";
+				{"palette":{"background":"#f5e6c8","surface":"#f0e2c4","muted":"#e8d9b8",
+				"border":"#d8c9a8","primary":"#7c3aed","onPrimary":"#ffffff","soft":"#ede8f5",
+				"text":{"strong":"#3a2a10","subtle":"#5a4a30","date":"#777777"},"radius":"8px"}}""";
 
 		MvcResult result = mockMvc.perform(post("/temas/galeria")
 				.header("X-Session-Token", owner.token())
