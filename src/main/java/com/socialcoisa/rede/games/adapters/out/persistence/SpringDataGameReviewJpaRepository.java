@@ -18,4 +18,8 @@ interface SpringDataGameReviewJpaRepository extends JpaRepository<GameReviewJpaE
 
 	@Query("SELECT AVG(r.rating) FROM GameReviewJpaEntity r WHERE r.gameId = :gameId")
 	Double averageByGameId(@Param("gameId") String gameId);
+
+	@Query("SELECT r.gameId, AVG(r.rating), COUNT(r) FROM GameReviewJpaEntity r "
+		+ "WHERE r.gameId IN :gameIds GROUP BY r.gameId")
+	List<Object[]> statsByGameIds(@Param("gameIds") java.util.Collection<String> gameIds);
 }

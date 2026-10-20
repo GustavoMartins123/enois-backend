@@ -16,4 +16,7 @@ public interface GameCommentRepository {
 	long countByGame(String gameId);
 
 	void delete(String id);
+
+	/** Contagem em lote (para os cards do catálogo): [gameId, count]. */
+	List<Object[]> countByGameIds(List<String> gameIds);
 }
