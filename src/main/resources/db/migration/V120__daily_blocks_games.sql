@@ -1,3 +1,4 @@
+-- (renumerada: colidia com migracao ja aplicada em producao; idempotente)
 -- Jogos diarios: Blocos (tetris diario com replay deterministico por acao).
 -- Idempotente por convencao do projeto (see V68-V82 apos o rollout quebrado com MySQL 1061):
 -- `create table if not exists` em tudo e unicidades nomeadas — indice unico anonimo ganha nome

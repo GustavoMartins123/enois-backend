@@ -1,3 +1,4 @@
+-- (renumerada: colidia com migracao ja aplicada em producao; idempotente)
 -- Em producao, a tabela `user_projects` foi criada antes com a coluna `html` em varchar menor
 -- (5.000 caracteres). O V61 foi editado no repositorio para longtext depois de ja ter sido aplicado
 -- em producao, mas o Flyway nao reaplica migracoes ja registradas (validate-on-migrate=false silencia

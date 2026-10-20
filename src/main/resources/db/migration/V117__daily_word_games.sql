@@ -1,3 +1,5 @@
+-- (renumerada: colidia com outra migracao de mesmo numero; idempotente, entao
+--  reexecutar em producao nao recria nada)
 -- Jogos diarios: Palavra (estilo Wordle, 6 tentativas, retomada no dia anterior).
 -- Idempotente por convencao do projeto (see V68-V82 apos o rollout quebrado com MySQL 1061):
 -- `create table if not exists` em tudo e unicidades nomeadas — indice unico anonimo ganha nome

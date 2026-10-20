@@ -1,3 +1,4 @@
+-- (renumerada: colidia com migracao ja aplicada em producao; idempotente)
 -- Jogos diarios: Labirinto (maze diario deterministico por seed, trilha de movimentos).
 -- Idempotente por convencao do projeto (see V68-V82 apos o rollout quebrado com MySQL 1061):
 -- `create table if not exists` em tudo; sem indice unico anonimo (o request_id ja e PK composta).
