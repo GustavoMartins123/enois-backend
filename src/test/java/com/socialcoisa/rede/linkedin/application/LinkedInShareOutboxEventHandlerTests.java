@@ -154,6 +154,15 @@ class LinkedInShareOutboxEventHandlerTests {
 			return List.of();
 		}
 
+		public List<Post> findActiveAllExcludingTopics(Collection<String> blockedTopics, Instant before, int limit) {
+			return List.of();
+		}
+
+		public List<Post> findActiveByAuthorsExcludingTopics(Set<UserId> authorIds, Collection<String> blockedTopics,
+				Instant before, int limit) {
+			return List.of();
+		}
+
 		public List<Post> findActiveAll(Instant before, int limit) {
 			throw new UnsupportedOperationException();
 		}

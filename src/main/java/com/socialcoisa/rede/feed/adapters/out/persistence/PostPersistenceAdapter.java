@@ -92,6 +92,29 @@ class PostPersistenceAdapter implements PostRepository {
 	}
 
 	@Override
+	public List<Post> findActiveAllExcludingTopics(Collection<String> blockedTopics, Instant before, int limit) {
+		return repository.findFeedExcludingAndBlocking(PostStatus.ACTIVE, List.of(PostType.BLOG, PostType.BUSINESS),
+			blockedTopics == null || blockedTopics.isEmpty() ? List.of("") : blockedTopics, before,
+			PageRequest.of(0, limit)).stream()
+			.map(PostJpaEntity::toDomain)
+			.toList();
+	}
+
+	@Override
+	public List<Post> findActiveByAuthorsExcludingTopics(Set<UserId> authorIds, Collection<String> blockedTopics,
+			Instant before, int limit) {
+		if (authorIds == null || authorIds.isEmpty()) {
+			return List.of();
+		}
+		return repository.findSocialByAuthorIdsAndBlocking(authorIds.stream().map(UserId::value).toList(),
+			PostStatus.ACTIVE, AuthorIdentity.SOCIAL,
+			blockedTopics == null || blockedTopics.isEmpty() ? List.of("") : blockedTopics, before,
+			PageRequest.of(0, limit)).stream()
+			.map(PostJpaEntity::toDomain)
+			.toList();
+	}
+
+	@Override
 	public List<Post> findActiveAll(Instant before, int limit) {
 		// "Tudo" nunca mostra post de blog (quem quer acompanhar se inscreve) nem BUSINESS (assina
 		// o feed corporativo): uma unica consulta com as exclusoes, nada de filtrar fora.

@@ -17,10 +17,14 @@ public interface PostCommunityReader {
 	 */
 	Map<String, CommunityRef> byIds(Collection<String> communityIds, String viewerId);
 
-	record CommunityRef(String id, String name, boolean joined) {
+	record CommunityRef(String id, String name, String topic, boolean joined) {
 	}
 
 	static PostCommunityReader none() {
 		return (communityIds, viewerId) -> Map.of();
+	}
+
+	static CommunityRef communityRef(String id, String name, boolean joined) {
+		return new CommunityRef(id, name, null, joined);
 	}
 }

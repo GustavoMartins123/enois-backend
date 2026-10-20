@@ -36,6 +36,13 @@ public interface PostRepository {
 
 	List<Post> findActiveByType(PostType type, Instant before, int limit);
 
+	/** Feed "Tudo" respeitando os assuntos bloqueados do leitor (posts sem tópico passam). */
+	List<Post> findActiveAllExcludingTopics(Collection<String> blockedTopics, Instant before, int limit);
+
+	/** "Para você"/Seguindo respeitando os assuntos bloqueados do leitor. */
+	List<Post> findActiveByAuthorsExcludingTopics(Set<UserId> authorIds, Collection<String> blockedTopics,
+			Instant before, int limit);
+
 	/** Feed corporativo: só o que a identidade profissional assinou. */
 	List<Post> findActiveCorporate(Instant before, int limit);
 

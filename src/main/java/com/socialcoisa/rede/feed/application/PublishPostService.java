@@ -106,8 +106,13 @@ public class PublishPostService implements PublishPostUseCase {
 				throw new ApiException(403, "NOT_A_MEMBER", "Entre na comunidade para publicar nela.");
 			}
 		}
+		// Classificação REAL do assunto: o tópico da comunidade em que o post nasce. Post solto
+		// nasce sem classificação (nunca é bloqueado por preferência).
+		String topic = communityId != null ? postCommunityReader
+			.byIds(java.util.List.of(communityId), command.authorId().value())
+			.get(communityId).topic() : null;
 		Post post = Post.publish(idGenerator.newPostId(), command.authorId(), command.type(), textOf(command),
-			pageHtml(command), tags, mediaIds, communityId, clock.instant(), authorIdentity);
+			pageHtml(command), tags, mediaIds, communityId, topic, clock.instant(), authorIdentity);
 		Post saved = postRepository.save(post);
 		String articleBody = articleBody(command);
 		if (articleBody != null) {

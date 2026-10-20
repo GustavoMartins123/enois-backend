@@ -74,6 +74,33 @@ interface SpringDataPostJpaRepository extends JpaRepository<PostJpaEntity, Strin
 			@Param("social") AuthorIdentity social, @Param("blog") PostType blog, @Param("before") Instant before,
 			Pageable pageable);
 
+	/**
+	 * Feed "Tudo" com os assuntos bloqueados do leitor: posts SEM tópico nunca são bloqueados
+	 * (sem classificação não há evidência — regra do plano).
+	 */
+	@Query("""
+			SELECT p FROM PostJpaEntity p
+			WHERE p.status = :status AND p.type NOT IN :excluded AND p.createdAt < :before
+			  AND (p.topic IS NULL OR p.topic NOT IN :blocked)
+			ORDER BY p.createdAt DESC""")
+	List<PostJpaEntity> findFeedExcludingAndBlocking(@Param("status") PostStatus status,
+			@Param("excluded") Collection<PostType> excluded, @Param("blocked") Collection<String> blocked,
+			@Param("before") Instant before, Pageable pageable);
+
+	/**
+	 * "Para você"/Seguindo com assuntos bloqueados: apenas o que a identidade SOCIAL assinou
+	 * e cujo tópico não está bloqueado (posts sem tópico passam).
+	 */
+	@Query("""
+			SELECT p FROM PostJpaEntity p
+			WHERE p.authorId IN :authorIds AND p.status = :status
+			  AND p.authorIdentity = :social AND p.createdAt < :before
+			  AND (p.topic IS NULL OR p.topic NOT IN :blocked)
+			ORDER BY p.createdAt DESC""")
+	List<PostJpaEntity> findSocialByAuthorIdsAndBlocking(@Param("authorIds") Collection<String> authorIds,
+			@Param("status") PostStatus status, @Param("social") AuthorIdentity social,
+			@Param("blocked") Collection<String> blocked, @Param("before") Instant before, Pageable pageable);
+
 	/** Feed corporativo: só o que foi assinado pela identidade profissional. */
 	@Query("""
 			SELECT p FROM PostJpaEntity p

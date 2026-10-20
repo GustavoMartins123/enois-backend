@@ -25,10 +25,13 @@ public class Post {
 	private Instant expiresAt;
 	/** Quem assina: a identidade social (padrão) ou a profissional da mesma conta. Nunca nulo. */
 	private final AuthorIdentity authorIdentity;
+	/** Assunto da publicação (taxonomia das comunidades); nulo = sem classificação. */
+	private final String topic;
 
 	private Post(PostId id, UserId authorId, PostType type, String content, String pageHtml, List<String> tags,
-			List<String> mediaIds, String communityId, Instant createdAt, Visibility visibility, Counters counters,
-			PostStatus status, Instant deletedAt, Instant editedAt, Instant expiresAt, AuthorIdentity authorIdentity) {
+			List<String> mediaIds, String communityId, String topic, Instant createdAt, Visibility visibility,
+			Counters counters, PostStatus status, Instant deletedAt, Instant editedAt, Instant expiresAt,
+			AuthorIdentity authorIdentity) {
 		this.id = id;
 		this.authorId = authorId;
 		this.type = type;
@@ -46,11 +49,12 @@ public class Post {
 		this.expiresAt = expiresAt;
 		// Invariante: toda publicação tem uma identidade. Nada no banco nem no código cria post sem.
 		this.authorIdentity = authorIdentity == null ? AuthorIdentity.SOCIAL : authorIdentity;
+		this.topic = topic == null || topic.isBlank() ? null : topic;
 	}
 
 	public static Post publish(PostId id, UserId authorId, PostType type, String content, String pageHtml,
 			List<String> tags, List<String> mediaIds, String communityId, Instant createdAt) {
-		return publish(id, authorId, type, content, pageHtml, tags, mediaIds, communityId, createdAt,
+		return publish(id, authorId, type, content, pageHtml, tags, mediaIds, communityId, null, createdAt,
 			AuthorIdentity.SOCIAL);
 	}
 
@@ -58,9 +62,20 @@ public class Post {
 	public static Post publish(PostId id, UserId authorId, PostType type, String content, String pageHtml,
 			List<String> tags, List<String> mediaIds, String communityId, Instant createdAt,
 			AuthorIdentity authorIdentity) {
+		return publish(id, authorId, type, content, pageHtml, tags, mediaIds, communityId, null, createdAt,
+			authorIdentity);
+	}
+
+	/**
+	 * Publicação completa: identidade + assunto. O assunto é a classificação REAL da publicação
+	 * (o tópico da comunidade em que nasce) — nunca uma heurística do texto.
+	 */
+	public static Post publish(PostId id, UserId authorId, PostType type, String content, String pageHtml,
+			List<String> tags, List<String> mediaIds, String communityId, String topic, Instant createdAt,
+			AuthorIdentity authorIdentity) {
 		// Momento é efêmero por definição: nasce com prazo de 24 horas e se apaga sozinho.
 		Instant expiresAt = type == PostType.MOMENT ? createdAt.plus(Duration.ofHours(24)) : null;
-		return new Post(id, authorId, type, content, pageHtml, tags, mediaIds, communityId, createdAt,
+		return new Post(id, authorId, type, content, pageHtml, tags, mediaIds, communityId, topic, createdAt,
 			Visibility.PUBLIC, Counters.zero(), PostStatus.ACTIVE, null, null, expiresAt, authorIdentity);
 	}
 
@@ -68,8 +83,16 @@ public class Post {
 			List<String> tags, List<String> mediaIds, String communityId, Instant createdAt, Visibility visibility,
 			Counters counters, PostStatus status, Instant deletedAt, Instant editedAt, Instant expiresAt,
 			AuthorIdentity authorIdentity) {
-		return new Post(id, authorId, type, content, pageHtml, tags, mediaIds, communityId, createdAt, visibility,
-			counters, status, deletedAt, editedAt, expiresAt, authorIdentity);
+		return restore(id, authorId, type, content, pageHtml, tags, mediaIds, communityId, null, createdAt,
+			visibility, counters, status, deletedAt, editedAt, expiresAt, authorIdentity);
+	}
+
+	public static Post restore(PostId id, UserId authorId, PostType type, String content, String pageHtml,
+			List<String> tags, List<String> mediaIds, String communityId, String topic, Instant createdAt,
+			Visibility visibility, Counters counters, PostStatus status, Instant deletedAt, Instant editedAt,
+			Instant expiresAt, AuthorIdentity authorIdentity) {
+		return new Post(id, authorId, type, content, pageHtml, tags, mediaIds, communityId, topic, createdAt,
+			visibility, counters, status, deletedAt, editedAt, expiresAt, authorIdentity);
 	}
 
 	/** Restore sem identidade explícita: post antigo/legado é sempre SOCIAL. */
@@ -98,9 +121,9 @@ public class Post {
 		Instant newExpiresAt = newType == PostType.MOMENT
 			? (expiresAt != null ? expiresAt : editedAt.plus(Duration.ofHours(24)))
 			: null;
-		// Editar nunca muda a autoria: tipo, conteúdo e tags são editáveis, identidade não.
-		return new Post(id, authorId, newType, newContent, newPageHtml, newTags, mediaIds, communityId, createdAt,
-			visibility, counters, status, deletedAt, editedAt, newExpiresAt, authorIdentity);
+		// Editar nunca muda a autoria nem o assunto: tipo, conteúdo e tags são editáveis.
+		return new Post(id, authorId, newType, newContent, newPageHtml, newTags, mediaIds, communityId, topic,
+			createdAt, visibility, counters, status, deletedAt, editedAt, newExpiresAt, authorIdentity);
 	}
 
 	public boolean isActive() {
@@ -123,6 +146,11 @@ public class Post {
 	/** Quem assina esta publicação: a identidade social ou a profissional da mesma conta. */
 	public AuthorIdentity authorIdentity() {
 		return authorIdentity;
+	}
+
+	/** Assunto da publicação (da taxonomia das comunidades) ou null se não classificado. */
+	public String topic() {
+		return topic;
 	}
 
 	public boolean delete(Instant deletedAt) {

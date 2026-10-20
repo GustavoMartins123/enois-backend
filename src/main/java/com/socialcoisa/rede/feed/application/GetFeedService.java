@@ -2,6 +2,7 @@ package com.socialcoisa.rede.feed.application;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -54,6 +55,7 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 	private final PostCommunityReader postCommunityReader;
 	private final SubscribedBlogAuthorsReader subscribedBlogAuthors;
 	private final com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles;
+	private final com.socialcoisa.rede.feed.application.port.out.ReaderPreferencesReader readerPreferences;
 	private static final Instant DEFAULT_BEFORE = Instant.parse("9999-12-31T23:59:59Z");
 
 	public GetFeedService(PostRepository postRepository, ArticleRepository articleRepository,
@@ -62,7 +64,8 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 			PostInteractionRepository postInteractionRepository, CommentRepository commentRepository,
 			CursorCodec cursorCodec, BlockedUsersReader blockedUsersReader, PostCommunityReader postCommunityReader,
 			SubscribedBlogAuthorsReader subscribedBlogAuthors,
-			com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles) {
+			com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles,
+			com.socialcoisa.rede.feed.application.port.out.ReaderPreferencesReader readerPreferences) {
 		this.postRepository = postRepository;
 		this.articleRepository = articleRepository;
 		this.feedCacheRepository = feedCacheRepository;
@@ -75,6 +78,7 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 		this.postCommunityReader = postCommunityReader;
 		this.subscribedBlogAuthors = subscribedBlogAuthors;
 		this.corporateProfiles = corporateProfiles;
+		this.readerPreferences = readerPreferences;
 	}
 
 	@Override
@@ -93,7 +97,11 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 				authors.addAll(connectionGraphRepository.findFriends(query.userId()));
 				yield postRepository.findActiveByAuthors(authors, before, limit);
 			}
-			case ALL -> postRepository.findActiveAll(before, limit);
+			case ALL -> {
+				Collection<String> blocked = readerPreferences.blockedTopics(query.userId().value());
+				yield blocked.isEmpty() ? postRepository.findActiveAll(before, limit)
+					: postRepository.findActiveAllExcludingTopics(blocked, before, limit);
+			}
 			case DISCUSSIONS, RECENT -> {
 				List<String> postIds = commentRepository.findPostIdsByAuthor(query.userId().value());
 				yield postRepository.findByIds(postIds.stream().map(PostId::new).toList()).stream()
@@ -301,12 +309,24 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 			.map(UserId::new)
 			.forEach(authors::add);
 		// Busca mais que o limite porque a filtragem por comunidade pode encolher a pagina.
-		List<Post> fetched = postRepository.findActiveByAuthors(authors, before, limit * 3);
+		Collection<String> blocked = readerPreferences.blockedTopics(query.userId().value());
+		List<Post> fetched = blocked.isEmpty()
+			? postRepository.findActiveByAuthors(authors, before, limit * 3)
+			: postRepository.findActiveByAuthorsExcludingTopics(authors, blocked, before, limit * 3);
 		Set<String> hiddenCommunities = communityIdsWithoutMembership(fetched, query.userId());
 		List<Post> visible = fetched.stream()
 			.filter(post -> post.communityId() == null || !hiddenCommunities.contains(post.communityId()))
-			.limit(limit)
 			.toList();
+		// "O que quero ver" es AUMENTO DE PRIORIDAD, no filtro: los posts de los asuntos
+		// elegidos van primero, el resto sigue cronológico. Nada se elimina del feed.
+		Collection<String> liked = readerPreferences.likedTopics(query.userId().value());
+		if (!liked.isEmpty() && visible.size() > 1) {
+			visible = visible.stream()
+				.sorted(java.util.Comparator.comparing((Post post) -> liked.contains(post.topic()) ? 0 : 1)
+					.thenComparing(Post::createdAt).reversed())
+				.toList();
+		}
+		visible = visible.stream().limit(limit).toList();
 		// Cursor pela pagina EXIBIDA (nao pela bruta): repetir post ou pular pedaco seria pior do que
 		// uma pagina mais curta. So ha "proxima pagina" quando a busca bruta veio saturada.
 		String nextCursor = fetched.size() == limit * 3 && !visible.isEmpty()
