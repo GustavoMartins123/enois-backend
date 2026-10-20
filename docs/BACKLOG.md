@@ -46,8 +46,15 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
    `JobAbandonPenaltyTests` (3: sem resposta penaliza e avisa; respondido não penaliza; não
    conta duas vezes) + `ReputationServiceTests` 6/6 (penalidade desconta 25). V114 validada na
    bancada MariaDB (create 1x + reexecução + PK rejeitando duplicata).
-8. **Currículo em PDF** — campo no perfil (upload PDF validado por tipo/tamanho) + anexar/atualizar na
-   candidatura; link no snapshot que o empregador recebe. *Aceite:* PDF válido anexa; inválido recusa.
+8. **[x] ENTREGUE 2026-10-20 (verificação de código; entregue nas rodadas anteriores) —
+   Currículo em PDF.** Confirmado no código de ponta a ponta: o diálogo do perfil
+   (`profile-resume-dialog.tsx`) sobe o PDF pelo fluxo de mídia com purpose `RESUME`,
+   validando tipo (`application/pdf`) e tamanho no cliente, com baixar e remover; o campo
+   vive no perfil (V64, `resume_url`/`resume_name`); a candidatura congela o currículo no
+   `candidate_snapshot` (não é coluna: trocar o PDF depois não reescreve candidatura antiga)
+   e o empregador recebe o link no resumo e no `CandidateView`. O backend aceita o purpose
+   com teto de 50MB (`MediaService`). Aceite cumprido: PDF válido anexa; tipo errado recusa
+   no cliente.
 
 ## Médio-grande (pedido 2026-10-17, Game Dev community)
 9. **[x] ENTREGUE 2026-10-20 — Imagem no meio do texto.** O conteúdo aceita o marcador
