@@ -102,6 +102,16 @@ class GameJpaEntity {
 	@Column(name = "media_ids", length = 1000)
 	private String mediaIds;
 
+	/** Identidade visual própria do jogo (V104): ícone e banner por foto ou HTML. */
+	@Column(length = 500)
+	private String icon;
+
+	@Column(length = 500)
+	private String banner;
+
+	@Column(name = "banner_html", columnDefinition = "longtext")
+	private String bannerHtml;
+
 	@Column(nullable = false)
 	private int plays;
 
@@ -161,6 +171,9 @@ class GameJpaEntity {
 		e.websiteUrl = details.websiteUrl();
 		e.supportUrl = details.supportUrl();
 		e.mediaIds = details.mediaIds();
+		e.icon = details.icon();
+		e.banner = details.banner();
+		e.bannerHtml = details.bannerHtml();
 		e.plays = game.plays();
 		e.boostUntil = game.boostUntil();
 		e.publishedAt = game.publishedAt();
@@ -172,7 +185,8 @@ class GameJpaEntity {
 		return Game.restore(id, userId, slug, title, description, cover, url, tags, status, reviewedBy, reviewNote,
 			submittedAt, reviewedAt, createdAt, updatedAt,
 			GameDetails.of(shortDescription, genres, languages, controls, requirements, contentWarnings, stage,
-				distribution, priceCoins, aspect, version, websiteUrl, supportUrl, mediaIds),
+				distribution, priceCoins, aspect, version, websiteUrl, supportUrl, mediaIds)
+				.withBranding(icon, banner, bannerHtml),
 			plays, publishedAt, suspendedAt, boostUntil);
 	}
 }

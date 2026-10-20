@@ -16,4 +16,7 @@ public interface GameFavoriteRepository {
 
 	/** Favoritos de uma pessoa, mais recentes primeiro. */
 	List<GameFavorite> findByUser(String userId, int limit);
+
+	/** O jogo foi excluído: os favoritos dele vão junto. */
+	void deleteByGame(String gameId);
 }

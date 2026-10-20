@@ -35,4 +35,17 @@ class GameEventPersistenceAdapter implements GameEventRepository {
 	public long distinctPlayers(String gameId) {
 		return events.distinctPlayers(gameId, GameEventKind.PLAY_START);
 	}
+
+	@Override
+	public java.util.List<com.socialcoisa.rede.games.domain.GameEvent> findSince(String gameId, Instant from,
+			int limit) {
+		return events.findByGameIdAndCreatedAtAfterOrderByCreatedAtAsc(gameId, from,
+			org.springframework.data.domain.PageRequest.of(0, Math.max(1, limit))).stream()
+			.map(GameEventJpaEntity::toDomain).toList();
+	}
+
+	@Override
+	public void deleteByGame(String gameId) {
+		events.deleteByGameId(gameId);
+	}
 }

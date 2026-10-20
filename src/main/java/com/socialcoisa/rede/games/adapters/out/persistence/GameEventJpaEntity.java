@@ -43,4 +43,8 @@ class GameEventJpaEntity {
 		e.createdAt = now;
 		return e;
 	}
+
+	com.socialcoisa.rede.games.domain.GameEvent toDomain() {
+		return new com.socialcoisa.rede.games.domain.GameEvent(id, gameId, kind, userId, createdAt);
+	}
 }

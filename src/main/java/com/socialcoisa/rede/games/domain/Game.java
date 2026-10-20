@@ -102,9 +102,18 @@ public class Game {
 	/** Edição pelo dono: a ficha e os textos mudam, o ciclo de vida e a moderação não. */
 	public Game edit(String title, String description, String cover, String url, String tags, GameDetails details,
 			Instant now) {
-		return new Game(id, userId, slug, title, description, cover, url, tags, status, reviewedBy, reviewNote,
-			submittedAt, reviewedAt, createdAt, now, details == null ? this.details : details, plays, publishedAt,
-			suspendedAt, boostUntil);
+		return edit(title, description, cover, url, tags, details, null, now);
+	}
+
+	/**
+	 * Edição com endereço novo: o slug pode mudar depois de criado (pedido da Mel) — quem publica
+	 * escolhe o endereço na loja. Nulo mantém o atual; quem valida formato e colisão é o serviço.
+	 */
+	public Game edit(String title, String description, String cover, String url, String tags, GameDetails details,
+			String newSlug, Instant now) {
+		return new Game(id, userId, newSlug == null || newSlug.isBlank() ? slug : newSlug, title, description, cover,
+			url, tags, status, reviewedBy, reviewNote, submittedAt, reviewedAt, createdAt, now,
+			details == null ? this.details : details, plays, publishedAt, suspendedAt, boostUntil);
 	}
 
 	/** Moderação tira do ar (o registro, as licenças e o histórico continuam existindo). */
@@ -173,4 +182,8 @@ public class Game {
 	public GameDistribution distribution() { return details.distribution(); }
 	public int priceCoins() { return details.priceCoins(); }
 	public GameAspect aspect() { return details.aspect(); }
+	/** Ícone próprio do jogo (nulo = a loja cai no favicon do site de origem). */
+	public String icon() { return details.icon(); }
+	public String banner() { return details.banner(); }
+	public String bannerHtml() { return details.bannerHtml(); }
 }
