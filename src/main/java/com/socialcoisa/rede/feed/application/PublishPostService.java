@@ -21,7 +21,9 @@ import com.socialcoisa.rede.notifications.application.NotificationService;
 import com.socialcoisa.rede.profile.domain.UserProfile;
 import com.socialcoisa.rede.shared.html.SafeHtml;
 import com.socialcoisa.rede.shared.text.PlainText;
+import com.socialcoisa.rede.shared.security.ContentDuplicationGuard;
 import com.socialcoisa.rede.shared.security.NewAccountCooldown;
+import com.socialcoisa.rede.shared.security.UserRateLimiter;
 import com.socialcoisa.rede.shared.web.ApiException;
 
 @Service
@@ -46,6 +48,9 @@ public class PublishPostService implements PublishPostUseCase {
 	private final org.springframework.context.ApplicationEventPublisher events;
 	/** Cooldown de conta nova (PR #29): segura o flood inicial sem punir quem já tem história. */
 	private final NewAccountCooldown newAccountCooldown;
+	/** Rate limit por usuário e dedup de conteúdo (PR #28). */
+	private final UserRateLimiter userRateLimiter;
+	private final ContentDuplicationGuard duplicationGuard;
 
 	public PublishPostService(PostRepository postRepository, ArticleRepository articleRepository,
 			IdGenerator idGenerator, Clock clock,
@@ -57,7 +62,9 @@ public class PublishPostService implements PublishPostUseCase {
 			PostCommunityReader postCommunityReader,
 			com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles,
 			org.springframework.context.ApplicationEventPublisher events,
-			NewAccountCooldown newAccountCooldown) {
+			NewAccountCooldown newAccountCooldown,
+			UserRateLimiter userRateLimiter,
+			ContentDuplicationGuard duplicationGuard) {
 		this.postRepository = postRepository;
 		this.articleRepository = articleRepository;
 		this.idGenerator = idGenerator;
@@ -72,6 +79,8 @@ public class PublishPostService implements PublishPostUseCase {
 		this.corporateProfiles = corporateProfiles;
 		this.events = events;
 		this.newAccountCooldown = newAccountCooldown;
+		this.userRateLimiter = userRateLimiter;
+		this.duplicationGuard = duplicationGuard;
 	}
 
 	@Override
@@ -82,6 +91,7 @@ public class PublishPostService implements PublishPostUseCase {
 				"Sua conta esta restrita por moderacao. Voce pode recorrer na pagina Penalidades.");
 		}
 		newAccountCooldown.require(command.authorId().value());
+		userRateLimiter.require(command.authorId().value(), UserRateLimiter.CREATE_POST);
 		validate(command);
 		List<String> tags = command.tags() == null ? List.of() : command.tags().stream()
 			.filter(StringUtils::hasText)
@@ -121,6 +131,9 @@ public class PublishPostService implements PublishPostUseCase {
 		String topic = communityId != null ? postCommunityReader
 			.byIds(java.util.List.of(communityId), command.authorId().value())
 			.get(communityId).topic() : null;
+		if (StringUtils.hasText(command.content())) {
+			duplicationGuard.require(command.authorId().value(), command.content());
+		}
 		Post post = Post.publish(idGenerator.newPostId(), command.authorId(), command.type(), textOf(command),
 			pageHtml(command), tags, mediaIds, communityId, topic, clock.instant(), authorIdentity);
 		Post saved = postRepository.save(post);

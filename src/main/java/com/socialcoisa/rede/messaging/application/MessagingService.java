@@ -14,6 +14,7 @@ import com.socialcoisa.rede.messaging.domain.Conversation;
 import com.socialcoisa.rede.messaging.domain.ConversationParticipant;
 import com.socialcoisa.rede.messaging.domain.Message;
 import com.socialcoisa.rede.notifications.application.NotificationService;
+import com.socialcoisa.rede.shared.security.UserRateLimiter;
 import com.socialcoisa.rede.shared.web.ApiException;
 
 @Service
@@ -22,11 +23,14 @@ public class MessagingService {
 	private final MessagingRepository repository;
 	private final NotificationService notificationService;
 	private final Clock clock;
+	private final UserRateLimiter userRateLimiter;
 
-	public MessagingService(MessagingRepository repository, NotificationService notificationService, Clock clock) {
+	public MessagingService(MessagingRepository repository, NotificationService notificationService, Clock clock,
+			UserRateLimiter userRateLimiter) {
 		this.repository = repository;
 		this.notificationService = notificationService;
 		this.clock = clock;
+		this.userRateLimiter = userRateLimiter;
 	}
 
 	@Transactional
@@ -78,6 +82,7 @@ public class MessagingService {
 	@Transactional
 	public Message sendMessage(String conversationId, String senderId, String text,
 			java.util.List<String> mediaIds) {
+		userRateLimiter.require(senderId, UserRateLimiter.SEND_MESSAGE);
 		Conversation conversation = repository.findConversationById(conversationId)
 			.orElseThrow(() -> new ApiException(404, "CONVERSATION_NOT_FOUND", "Conversa nao encontrada."));
 		if (!repository.isParticipant(conversationId, senderId)) {
