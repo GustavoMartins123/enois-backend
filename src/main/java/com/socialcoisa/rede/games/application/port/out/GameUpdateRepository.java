@@ -12,4 +12,7 @@ public interface GameUpdateRepository {
 
 	/** Ids dos jogos que têm novidade depois de um instante (para o aviso de quem acompanha). */
 	long countByGame(String gameId);
+
+	/** O jogo foi excluído: as novidades dele vão junto. */
+	void deleteByGame(String gameId);
 }

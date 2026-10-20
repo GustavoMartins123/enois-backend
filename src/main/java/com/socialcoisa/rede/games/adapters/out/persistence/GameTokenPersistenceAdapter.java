@@ -67,6 +67,10 @@ interface SpringDataGameTokenRepository
 	GameTokenJpaEntity save(GameTokenJpaEntity entity);
 
 	Optional<GameTokenJpaEntity> findByTokenHash(String tokenHash);
+
+	@org.springframework.data.jpa.repository.Modifying
+	@org.springframework.data.jpa.repository.Query("DELETE FROM GameTokenJpaEntity t WHERE t.gameId = :gameId")
+	int deleteByGameId(@org.springframework.data.repository.query.Param("gameId") String gameId);
 }
 
 @Repository
@@ -87,5 +91,10 @@ class GameTokenPersistenceAdapter implements GameIdentityService.GameTokenReposi
 	@Override
 	public Optional<GameToken> findByHash(String hash) {
 		return tokens.findByTokenHash(hash).map(GameTokenJpaEntity::toDomain);
+	}
+
+	@Override
+	public void deleteByGame(String gameId) {
+		tokens.deleteByGameId(gameId);
 	}
 }

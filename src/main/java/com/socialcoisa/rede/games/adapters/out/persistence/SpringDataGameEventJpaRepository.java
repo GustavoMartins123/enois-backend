@@ -17,4 +17,12 @@ interface SpringDataGameEventJpaRepository extends JpaRepository<GameEventJpaEnt
 	@Query("SELECT COUNT(DISTINCT COALESCE(e.userId, e.id)) FROM GameEventJpaEntity e "
 		+ "WHERE e.gameId = :gameId AND e.kind = :kind")
 	long distinctPlayers(@Param("gameId") String gameId, @Param("kind") GameEventKind kind);
+
+	/** Série do painel: eventos desde um instante, mais antigos primeiro (a agregação é em memória). */
+	java.util.List<GameEventJpaEntity> findByGameIdAndCreatedAtAfterOrderByCreatedAtAsc(String gameId,
+			java.time.Instant from, org.springframework.data.domain.Pageable pageable);
+
+	@org.springframework.data.jpa.repository.Modifying
+	@Query("DELETE FROM GameEventJpaEntity e WHERE e.gameId = :gameId")
+	int deleteByGameId(@Param("gameId") String gameId);
 }

@@ -36,6 +36,8 @@ public class GameService {
 	private final com.socialcoisa.rede.games.application.port.out.GameCollectionRepository colecoes;
 	private final com.socialcoisa.rede.games.application.port.out.GameEventRepository events;
 	private final com.socialcoisa.rede.feed.application.PublishPostService feed;
+	private final com.socialcoisa.rede.games.application.port.out.GameFavoriteRepository favorites;
+	private final GameIdentityService identities;
 
 	public GameService(GameRepository games,
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles, GameUrlGuard urlGuard,
@@ -46,7 +48,9 @@ public class GameService {
 			com.socialcoisa.rede.coin.application.port.out.CoinLedgerRepository ledger,
 			com.socialcoisa.rede.games.application.port.out.GameCollectionRepository colecoes,
 			com.socialcoisa.rede.games.application.port.out.GameEventRepository events,
-			com.socialcoisa.rede.feed.application.PublishPostService feed) {
+			com.socialcoisa.rede.feed.application.PublishPostService feed,
+			com.socialcoisa.rede.games.application.port.out.GameFavoriteRepository favorites,
+			GameIdentityService identities) {
 		this.games = games;
 		this.profiles = profiles;
 		this.urlGuard = urlGuard;
@@ -59,6 +63,8 @@ public class GameService {
 		this.colecoes = colecoes;
 		this.events = events;
 		this.feed = feed;
+		this.favorites = favorites;
+		this.identities = identities;
 	}
 
 	@Transactional
@@ -96,6 +102,16 @@ public class GameService {
 	@Transactional
 	public Game edit(String gameId, String userId, String title, String description, String cover, String url,
 			String tags, com.socialcoisa.rede.games.domain.GameDetails details) {
+		return edit(gameId, userId, title, description, cover, url, tags, details, null);
+	}
+
+	/**
+	 * Edição pelo dono, com o endereço público opcional: quem publica escolhe o slug na loja
+	 * (`/games/{username}/{slug}`). Vazio mantém o atual; o formato e a colisão são validados aqui.
+	 */
+	@Transactional
+	public Game edit(String gameId, String userId, String title, String description, String cover, String url,
+			String tags, com.socialcoisa.rede.games.domain.GameDetails details, String slug) {
 		Game game = owned(gameId, userId);
 		if (!StringUtils.hasText(title) || title.trim().length() < 3) {
 			throw new ApiException(400, "INVALID_TITLE", "Título do jogo precisa de pelo menos 3 caracteres.");
@@ -104,7 +120,42 @@ public class GameService {
 		return games.save(game.edit(title.trim(),
 			StringUtils.hasText(description) ? description.trim() : null,
 			StringUtils.hasText(cover) ? cover.trim() : null, safeUrl,
-			StringUtils.hasText(tags) ? tags.trim() : null, details, clock.instant()));
+			StringUtils.hasText(tags) ? tags.trim() : null, details, changeSlugIfNeeded(game, slug),
+			clock.instant()));
+	}
+
+	/** Nulo = mantém o endereço; o slug novo é normalizado e não pode colidir com outro jogo do mesmo criador. */
+	private String changeSlugIfNeeded(Game game, String requested) {
+		if (!StringUtils.hasText(requested)) {
+			return null;
+		}
+		String candidate = slugFrom(requested);
+		if (candidate.equals(game.slug())) {
+			return null;
+		}
+		if (candidate.length() < 3) {
+			throw new ApiException(400, "INVALID_SLUG",
+				"O endereço do jogo precisa de pelo menos 3 caracteres (letras, números ou hífen).");
+		}
+		if (games.existsByUserAndSlug(game.userId(), candidate)) {
+			throw new ApiException(409, "SLUG_IN_USE", "Você já tem um jogo nesse endereço. Escolha outro.");
+		}
+		return candidate;
+	}
+
+	/**
+	 * Excluir o jogo da loja (só o dono). O que existe POR CAUSA dele vai junto — novidades,
+	 * favoritos, histórico de uso e tokens de identidade —, senão sobra lixo apontando para um jogo
+	 * que não existe mais. As coleções guardam ids: o id que sobra simplesmente não resolve.
+	 */
+	@Transactional
+	public void remove(String gameId, String userId) {
+		owned(gameId, userId);
+		updates.deleteByGame(gameId);
+		favorites.deleteByGame(gameId);
+		events.deleteByGame(gameId);
+		identities.revokeForGame(gameId);
+		games.delete(gameId);
 	}
 
 	/** Moderação tira o jogo do ar. O registro e o histórico continuam (suspender não é apagar). */
@@ -178,19 +229,27 @@ public class GameService {
 			.orElseThrow(() -> new ApiException(404, "GAME_NOT_FOUND", "Criador não encontrado."));
 	}
 
-	@Transactional(readOnly = true)
 	public Game byUserAndSlug(String username, String slug) {
 		return byUserAndSlug(username, slug, null);
 	}
 
-	/** Com o leitor: o dono vê o próprio jogo em qualquer estado; os outros, só publicado. */
-	@Transactional(readOnly = true)
+	/**
+	 * Com o leitor: o dono vê o próprio jogo em qualquer estado; os outros, só publicado.
+	 *
+	 * A abertura PÚBLICA registra a visualização da página (é a série "visualizações" do painel).
+	 * A do dono não conta: quem publica não infla os próprios números.
+	 */
+	@Transactional
 	public Game byUserAndSlug(String username, String slug, String viewerId) {
 		Game game = games.findByUserAndSlug(userIdFromUsername(username), slug)
 			.orElseThrow(() -> new ApiException(404, "GAME_NOT_FOUND", "Jogo não encontrado."));
 		boolean owner = viewerId != null && game.ownedBy(viewerId);
 		if (game.status() != GameStatus.PUBLISHED && !owner) {
 			throw new ApiException(404, "GAME_NOT_FOUND", "Jogo não encontrado.");
+		}
+		if (!owner) {
+			events.record("gevt_" + UUID.randomUUID().toString().replace("-", ""), game.id(),
+				GameEventKind.PAGE_VIEW, viewerId, clock.instant());
 		}
 		return game;
 	}
