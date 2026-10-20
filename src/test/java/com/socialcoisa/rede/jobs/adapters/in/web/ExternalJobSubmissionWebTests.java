@@ -182,7 +182,12 @@ class ExternalJobSubmissionWebTests {
 			.andReturn();
 		JsonNode aggregatorItems = objectMapper.readTree(aggregators.getResponse().getContentAsString())
 			.get("items");
-		assertThat(aggregatorItems.findValuesAsText("id")).doesNotContain(id);
+		// Jackson 3 (tools.jackson) não tem findValuesAsText: coleta explícita, como no resto do arquivo.
+		java.util.List<String> aggregatorIds = new java.util.ArrayList<>();
+		for (JsonNode item : aggregatorItems) {
+			aggregatorIds.add(item.path("id").asText());
+		}
+		assertThat(aggregatorIds).doesNotContain(id);
 
 		// O filtro próprio ("Criadas no Énóis" = plataforma Comunidade) devolve.
 		mockMvc.perform(get("/jobs")
