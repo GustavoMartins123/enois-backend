@@ -15,6 +15,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import com.socialcoisa.rede.linkedin.application.port.out.LinkedInShareClient;
+import com.socialcoisa.rede.linkedin.application.port.out.LinkedInShareClient.ShareOutcome;
 
 import tools.jackson.databind.ObjectMapper;
 
@@ -33,9 +34,10 @@ class HttpLinkedInShareClient implements LinkedInShareClient {
 	}
 
 	@Override
-	public boolean share(String accessToken, String memberSub, String commentary, String url, String title) {
+	public ShareOutcome share(
+			String accessToken, String memberSub, String commentary, String url, String title) {
 		if (!StringUtils.hasText(accessToken) || !StringUtils.hasText(memberSub)) {
-			return false;
+			return ShareOutcome.failed("SEM_TOKEN");
 		}
 		try {
 			Map<String, Object> payload = Map.of(
@@ -60,16 +62,16 @@ class HttpLinkedInShareClient implements LinkedInShareClient {
 
 			HttpResponse<String> response = http.send(request, BodyHandlers.ofString());
 			if (response.statusCode() == 201) {
-				return true;
+				return ShareOutcome.ok();
 			}
 			// 401/403 = token sem w_member_social ou expirado; 422 = texto/URL recusados.
 			LOG.warn("LinkedIn recusou a publicacao: status={} body={}", response.statusCode(),
 				response.body() == null ? "" : response.body().substring(0, Math.min(300, response.body().length())));
-			return false;
+			return ShareOutcome.failed("HTTP_" + response.statusCode());
 		}
 		catch (Exception exception) {
 			LOG.warn("Falha ao publicar no LinkedIn: {}", exception.getMessage());
-			return false;
+			return ShareOutcome.failed("EXCEPTION");
 		}
 	}
 }

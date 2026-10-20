@@ -45,7 +45,7 @@ class LinkedInShareOutboxEventHandlerTests {
 	@Test
 	void postPublicadoViraShare() {
 		connections.save(new LinkedInConnection("u1", "sub-1", cipher.encrypt("token"), NOW.plusSeconds(3600),
-			true, NOW, NOW));
+			true, NOW, NOW, null, null));
 		posts.post = Post.publish(new PostId("post_1"), new UserId("u1"), PostType.INSIGHT, "meu texto", null,
 			List.of(), List.of(), null, NOW);
 
@@ -58,7 +58,7 @@ class LinkedInShareOutboxEventHandlerTests {
 	@Test
 	void momentoNaoVaiParaOLinkedIn() {
 		connections.save(new LinkedInConnection("u1", "sub-1", cipher.encrypt("token"), NOW.plusSeconds(3600),
-			true, NOW, NOW));
+			true, NOW, NOW, null, null));
 		posts.post = Post.publish(new PostId("post_2"), new UserId("u1"), PostType.MOMENT, "some em 24h", null,
 			List.of(), List.of(), null, NOW);
 
@@ -81,9 +81,10 @@ class LinkedInShareOutboxEventHandlerTests {
 		private final List<String> calls = new ArrayList<>();
 
 		@Override
-		public boolean share(String accessToken, String memberSub, String commentary, String url, String title) {
+		public com.socialcoisa.rede.linkedin.application.port.out.LinkedInShareClient.ShareOutcome share(
+				String accessToken, String memberSub, String commentary, String url, String title) {
 			calls.add(accessToken + "|" + memberSub + "|" + commentary);
-			return true;
+			return com.socialcoisa.rede.linkedin.application.port.out.LinkedInShareClient.ShareOutcome.ok();
 		}
 	}
 
