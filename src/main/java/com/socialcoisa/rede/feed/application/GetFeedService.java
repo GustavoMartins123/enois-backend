@@ -26,6 +26,8 @@ import com.socialcoisa.rede.feed.application.port.out.PostInteractionRepository;
 import com.socialcoisa.rede.feed.application.port.out.ArticleRepository;
 import com.socialcoisa.rede.feed.application.port.out.PostRepository;
 import com.socialcoisa.rede.feed.application.port.out.SubscribedBlogAuthorsReader;
+import com.socialcoisa.rede.corporate.domain.CorporateProfile;
+import com.socialcoisa.rede.feed.domain.AuthorIdentity;
 import com.socialcoisa.rede.feed.domain.FeedItem;
 import com.socialcoisa.rede.feed.domain.FeedTab;
 import com.socialcoisa.rede.feed.domain.Post;
@@ -190,7 +192,7 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 			com.socialcoisa.rede.feed.domain.UserId viewer) {
 		limit = normalizeLimit(limit);
 		before = before == null ? DEFAULT_BEFORE : before;
-		com.socialcoisa.rede.corporate.domain.CorporateProfile profile = corporateProfiles
+		CorporateProfile profile = corporateProfiles
 			.findByUsername(profileUsername == null ? "" : profileUsername.trim().toLowerCase())
 			.filter(p -> p.active())
 			.orElseThrow(() -> new ApiException(404, "PROFILE_NOT_FOUND", "Perfil profissional não encontrado."));
@@ -217,13 +219,13 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 		// A apresentação de quem assinou: post CORPORATE mostra o perfil profissional (nome, @,
 		// avatar), nunca a identidade pessoal. Uma consulta em lote para a página inteira.
 		Set<String> corporateAuthorIds = visible.stream()
-			.filter(p -> p.authorIdentity() == com.socialcoisa.rede.feed.domain.AuthorIdentity.CORPORATE)
+			.filter(p -> p.authorIdentity() == AuthorIdentity.CORPORATE)
 			.map(p -> p.authorId().value())
 			.collect(Collectors.toSet());
-		Map<String, com.socialcoisa.rede.corporate.domain.CorporateProfile> corporate = corporateAuthorIds
+		Map<String, CorporateProfile> corporate = corporateAuthorIds
 			.isEmpty() ? Map.of()
 			: corporateProfiles.findByUserIds(corporateAuthorIds).stream()
-				.collect(Collectors.toMap(com.socialcoisa.rede.corporate.domain.CorporateProfile::userId,
+				.collect(Collectors.toMap(CorporateProfile::userId,
 					Function.identity()));
 		// Comunidade dos posts da pagina: nome para o "publicou em ..." e se o leitor ja participa
 		// (a consulta e em lote, uma para a pagina inteira).
