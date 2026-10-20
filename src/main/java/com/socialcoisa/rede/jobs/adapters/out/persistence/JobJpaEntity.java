@@ -1,5 +1,6 @@
 package com.socialcoisa.rede.jobs.adapters.out.persistence;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -50,6 +51,21 @@ class JobJpaEntity {
 	@Column(nullable = false, length = 3)
 	private String currency;
 
+	/** Valor mínimo obrigatório das vagas novas (nulo nas antigas, que usam `salary`). */
+	@Column(name = "salary_min", precision = 12, scale = 2)
+	private BigDecimal salaryMin;
+
+	/** Teto opcional da faixa. */
+	@Column(name = "salary_max", precision = 12, scale = 2)
+	private BigDecimal salaryMax;
+
+	/** HOUR | DAY | MONTH | YEAR; padrão MONTH na vaga nova. */
+	@Column(name = "salary_period", length = 10)
+	private String salaryPeriod;
+
+	/** Texto que explica a vaga; obrigatório na criação/edição de vaga nova. */
+	private String description;
+
 	@Column(name = "community_agreed_at")
 	private Instant communityAgreedAt;
 
@@ -94,6 +110,10 @@ class JobJpaEntity {
 		e.level = job.level();
 		e.salary = job.salary();
 		e.currency = job.currency();
+		e.salaryMin = job.salaryMin();
+		e.salaryMax = job.salaryMax();
+		e.salaryPeriod = job.salaryPeriod();
+		e.description = job.description();
 		e.communityAgreedAt = job.communityAgreedAt();
 		e.skills = new ArrayList<>(job.skills());
 		e.applicationFields = job.applicationFields().stream()
@@ -108,7 +128,8 @@ class JobJpaEntity {
 	}
 
 	Job toDomain() {
-		return Job.restore(id, title, company, logo, location, type, level, salary, currency, skills,
+		return Job.restore(id, title, company, logo, location, type, level, salary, currency, salaryMin,
+			salaryMax, salaryPeriod, description, skills,
 			applicationFields.stream().map(JobApplicationFieldEmbeddable::toDomain).toList(), postedBy,
 			communityAgreedAt, status, closedAt, postedAt, updatedAt);
 	}

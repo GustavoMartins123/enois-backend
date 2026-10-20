@@ -20,11 +20,16 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
 4. **Áudio nos comentários** — anexo de comentário (gravação pelo microfone → upload de mídia +
    player) e/ou embed de YouTube/Spotify (GIF e embeds **já entregues**).
    *Aceite:* gravar, enviar, tocar; recarregar mantém o anexo; sem autoplay.
-5. **Vaga: valor obrigatório + período + faixa + descrição** — modelo novo (`description` obrigatório,
-   `salary` = mínimo obrigatório > 0, `salaryMax` opcional, `salaryPeriod HOUR|DAY|MONTH|YEAR`) +
-   `JobView.salaryLabel` + validação (`DESCRIPTION_REQUIRED`, `SALARY_REQUIRED`, `INVALID_SALARY_RANGE`)
-   + formulário e página da vaga. Atualizar os testes que hoje criam vaga sem valor.
-   *Aceite:* sem valor/descrição não salva; faixa invertida → 400; exibe "R$ X / mês" ou "de X até Y / mês".
+5. **[x] ENTREGUE 2026-10-20 — Vaga: valor obrigatório + período + faixa + descrição.** V110
+   (`description longtext`, `salary_min numeric(12,2)`, `salary_max`, `salary_period`); vagas
+   antigas continuam exibindo o texto livre em `salary`. Backend: descrição e mínimo > 0
+   obrigatórios em criar E editar (`DESCRIPTION_REQUIRED`, `SALARY_REQUIRED`), faixa invertida
+   recusada (`INVALID_SALARY_RANGE`), período HOUR|DAY|MONTH|YEAR (padrão MONTH;
+   `INVALID_SALARY_PERIOD`), rótulo pronto no `JobView.salaryLabel` ("R$ 1.500 / mês" ou
+   "de R$ 1.500 até R$ 2.000 / mês"). Front: formulário de criação e edição com mínimo/teto/
+   período e descrição obrigatória; listagem e página mostram `salaryLabel` primeiro.
+   Testes: `JobSalaryTests` (7) + ajuste dos testes que criavam vaga sem valor; V110
+   validada na bancada MariaDB (aplicada 2x + insert com as colunas novas).
 
 ## Médio-grande
 6. **Feedback por candidato** — `JobApplicationStatus {APPLIED, IN_REVIEW, NEXT_STAGE, REJECTED}` +

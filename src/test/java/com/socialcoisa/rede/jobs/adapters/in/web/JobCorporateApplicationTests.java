@@ -60,6 +60,8 @@ class JobCorporateApplicationTests {
 				.content(objectMapper.writeValueAsString(java.util.Map.of(
 					"title", "Vaga com identidade", "company", "Énóis", "location", "Remoto",
 					"type", "FULL_TIME", "level", "SENIOR", "skills", java.util.List.of(),
+					// A vaga nova exige descrição e valor (item 5 do backlog).
+					"description", "Vaga de teste com valor.", "salaryMin", "1500",
 					"communityAgreement", true))))
 			.andExpect(status().isCreated())
 			.andReturn();

@@ -103,7 +103,8 @@ class JobContractController {
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		Job job = jobService.create(body.title(), body.company(), body.logo(), body.location(), body.type(), body.level(),
-			body.salary(), body.currency(), body.skills(), toFieldInputs(body.applicationFields()), user.id().value(),
+			body.salary(), body.currency(), body.salaryMin(), body.salaryMax(), body.salaryPeriod(),
+			body.description(), body.skills(), toFieldInputs(body.applicationFields()), user.id().value(),
 			body.communityAgreement());
 		return ResponseEntity.status(HttpStatus.CREATED).body(toView(job, user.id().value(), false, false, 0));
 	}
@@ -176,7 +177,8 @@ class JobContractController {
 					base.type(), base.level(), base.salary(), base.currency(), base.skills(), base.postedAt(),
 					base.applicationsCount(), base.applied(), true, false, 0, null, base.applicationFields(),
 					base.status(), base.closedAt(), base.sourceType(), base.sourceUrl(), base.sourcePlatform(),
-					base.applyEmail()));
+					base.applyEmail(), base.description(), base.salaryMin(), base.salaryMax(),
+					base.salaryPeriod(), base.salaryLabel()));
 			}
 		}
 		return new PageResponse<>(views, null);
@@ -292,8 +294,8 @@ class JobContractController {
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		Job job = jobService.update(jobId, body.title(), body.company(), body.logo(), body.location(), body.type(),
-			body.level(), body.salary(), body.currency(), body.skills(), toFieldInputs(body.applicationFields()),
-			user.id().value());
+			body.level(), body.salary(), body.currency(), body.salaryMin(), body.salaryMax(), body.salaryPeriod(),
+			body.description(), body.skills(), toFieldInputs(body.applicationFields()), user.id().value());
 		return ResponseEntity.ok(toView(job, user.id().value(), false, false, jobService.applicationsCount(job.id())));
 	}
 
@@ -455,7 +457,9 @@ class JobContractController {
 					!owner && appliedIds.contains(job.id()), savedIds.contains(job.id()), owner,
 					owner ? counts.getOrDefault(job.id(), 0) : 0, authorOf(job), fieldViews(job),
 					job.status().name(), job.closedAt() != null ? job.closedAt().toString() : null,
-					"INTERNAL", null, null, null);
+					"INTERNAL", null, null, null,
+					job.description(), formatAmount(job.salaryMin()), formatAmount(job.salaryMax()),
+					job.salaryPeriod(), salaryLabel(job));
 			})
 			.toList();
 		String nextCursor = jobs.size() == limit
@@ -494,7 +498,8 @@ class JobContractController {
 		return new JobView(job.id(), job.title(), job.company(), null, job.location(), null, null,
 			job.salary(), job.currency(), List.of(),
 			job.importedAt() != null ? job.importedAt().toString() : null, 0, false, false, owner, 0, null,
-			List.of(), "OPEN", null, "EXTERNAL", job.url(), job.platform(), job.applyEmail());
+			List.of(), "OPEN", null, "EXTERNAL", job.url(), job.platform(), job.applyEmail(),
+			null, null, null, null, null);
 	}
 
 	private JobView toView(Job job, String viewer, boolean applied, boolean saved, int applicationsCount) {
@@ -502,7 +507,56 @@ class JobContractController {
 			job.salary(), job.currency(), job.skills(), job.postedAt() != null ? job.postedAt().toString() : null, 0,
 			applied, saved, viewer != null && viewer.equals(job.postedBy()), applicationsCount, authorOf(job),
 			fieldViews(job), job.status().name(), job.closedAt() != null ? job.closedAt().toString() : null,
-			"INTERNAL", null, null, null);
+			"INTERNAL", null, null, null,
+			job.description(), formatAmount(job.salaryMin()), formatAmount(job.salaryMax()),
+			job.salaryPeriod(), salaryLabel(job));
+	}
+
+	/** Faixa da vaga nova em pt-BR: "R$ 1.500 / mês" ou "de R$ 1.500 até R$ 2.000 / mês". */
+	private String salaryLabel(Job job) {
+		if (job.salaryMin() == null) {
+			return null;
+		}
+		String symbol = currencySymbol(job.currency());
+		String min = symbol + " " + formatAmount(job.salaryMin());
+		if (job.salaryMax() != null) {
+			return "de " + min + " até " + symbol + " " + formatAmount(job.salaryMax()) + " / "
+				+ periodLabel(job.salaryPeriod());
+		}
+		return min + " / " + periodLabel(job.salaryPeriod());
+	}
+
+	private static String currencySymbol(String currency) {
+		return switch (currency == null ? "BRL" : currency.toUpperCase(java.util.Locale.ROOT)) {
+			case "USD" -> "US$";
+			case "EUR" -> "€";
+			default -> "R$";
+		};
+	}
+
+	/** Inteiro sem centavos ("1.500"); com centavos, sempre dois dígitos ("2.500,50"). */
+	private static String formatAmount(java.math.BigDecimal value) {
+		if (value == null) {
+			return null;
+		}
+		java.text.NumberFormat nf = java.text.NumberFormat
+			.getNumberInstance(new java.util.Locale("pt", "BR"));
+		if (value.stripTrailingZeros().scale() <= 0) {
+			nf.setMaximumFractionDigits(0);
+		} else {
+			nf.setMinimumFractionDigits(2);
+			nf.setMaximumFractionDigits(2);
+		}
+		return nf.format(value);
+	}
+
+	private static String periodLabel(String period) {
+		return switch (period == null ? "MONTH" : period) {
+			case "HOUR" -> "hora";
+			case "DAY" -> "dia";
+			case "YEAR" -> "ano";
+			default -> "mês";
+		};
 	}
 
 	/** Quem criou a vaga (com reputacao e verificacao): o candidato precisa saber com quem fala. */
@@ -535,7 +589,11 @@ class JobContractController {
 			String salary, String currency, List<String> skills, String postedAt, int matchScore, boolean applied,
 			boolean saved, boolean owner, int applicationsCount, AuthorView author, List<ApplicationFieldView>
 			applicationFields, String status, String closedAt, String sourceType, String sourceUrl,
-			String sourcePlatform, String applyEmail) {
+			String sourcePlatform, String applyEmail,
+			// Valor estruturado da vaga nova (item 5 do backlog). `salaryLabel` já vem pronto
+			// ("R$ 1.500 / mês" ou "de R$ 1.500 até R$ 2.000 / mês"); vagas antigas trazem só
+			// o texto livre em `salary` e nulos aqui.
+			String description, String salaryMin, String salaryMax, String salaryPeriod, String salaryLabel) {
 	}
 
 	/** Quem publicou a vaga, com o que sustenta a credibilidade dele. */
@@ -547,7 +605,8 @@ class JobContractController {
 	}
 
 	record CreateJobRequest(String title, String company, String logo, String location, String type, String level,
-			String salary, String currency, List<String> skills, boolean communityAgreement,
+			String salary, String currency, String salaryMin, String salaryMax, String salaryPeriod,
+			String description, List<String> skills, boolean communityAgreement,
 			List<ApplicationFieldRequest> applicationFields) {
 	}
 
