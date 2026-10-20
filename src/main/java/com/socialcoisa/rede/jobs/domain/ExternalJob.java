@@ -12,7 +12,8 @@ import java.time.Instant;
  */
 public record ExternalJob(String id, String platform, String externalId, String title, String company,
 		String location, String salary, String currency, String url, Instant importedAt, Instant lastCheckedAt,
-		String status, String canonicalUrl, String applyEmail, String submittedBy) {
+		String status, String canonicalUrl, String applyEmail, String submittedBy, String description,
+		String salaryMin, String salaryMax, String salaryPeriod) {
 
 	public static final String FOUND = "FOUND";
 	public static final String POSSIBLY_CLOSED = "POSSIBLY_CLOSED";
@@ -22,7 +23,7 @@ public record ExternalJob(String id, String platform, String externalId, String 
 			String salary, String currency, String url, Instant importedAt, Instant lastCheckedAt, String status,
 			String canonicalUrl, String applyEmail) {
 		this(id, platform, externalId, title, company, location, salary, currency, url, importedAt, lastCheckedAt,
-			status, canonicalUrl, applyEmail, null);
+			status, canonicalUrl, applyEmail, null, null, null, null, null);
 	}
 
 	/** Vaga cadastrada por alguem da comunidade (e nao importada de agregador). */

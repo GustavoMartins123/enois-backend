@@ -54,6 +54,14 @@ public class ExternalJobSubmissionService {
 	@Transactional
 	public ExternalJob submit(String userId, String title, String company, String location, String url,
 			boolean communityAgreement) {
+		return submit(userId, title, company, location, url, null, null, null, null, null, communityAgreement);
+	}
+
+	/** Cadastro completo: detalhes da vaga e canal de candidatura opcionais. */
+	@Transactional
+	public ExternalJob submit(String userId, String title, String company, String location, String url,
+			String description, String salaryMin, String salaryMax, String salaryPeriod, String applyEmail,
+			boolean communityAgreement) {
 		String cleanTitle = required(title, MAX_TITLE, "Informe o titulo da vaga.");
 		String cleanCompany = required(company, MAX_COMPANY, "Informe a empresa da vaga.");
 		String cleanLocation = optional(location, MAX_LOCATION);
@@ -77,7 +85,8 @@ public class ExternalJobSubmissionService {
 		Instant now = clock.instant();
 		ExternalJob job = new ExternalJob("ext_com_" + suffix, COMMUNITY_PLATFORM, "community_" + suffix,
 			cleanTitle, cleanCompany, cleanLocation, null, null, cleanUrl, now, now, ExternalJob.FOUND,
-			canonicalUrl, null, userId);
+			canonicalUrl, cleanApplyEmail(applyEmail), userId, optional(description, 5000),
+			optional(salaryMin, 50), optional(salaryMax, 50), normalizePeriod(salaryPeriod));
 		repository.save(job);
 		evictListing();
 		return job;
@@ -116,6 +125,30 @@ public class ExternalJobSubmissionService {
 			throw new ApiException(400, "INVALID_EXTERNAL_JOB", message);
 		}
 		return clean;
+	}
+
+	/** E-mail/URL de candidatura informado pelo autor (opcional). */
+	private String cleanApplyEmail(String value) {
+		String clean = optional(value, 320);
+		if (clean == null) {
+			return null;
+		}
+		if (clean.toLowerCase(Locale.ROOT).startsWith("mailto:")) {
+			clean = clean.substring("mailto:".length());
+		}
+		if (!clean.contains("@") || clean.startsWith("@") || clean.endsWith("@")) {
+			throw new ApiException(400, "INVALID_APPLY_EMAIL", "Informe um e-mail de candidatura valido.");
+		}
+		return clean;
+	}
+
+	private String normalizePeriod(String value) {
+		String clean = optional(value, 20);
+		if (clean == null) {
+			return null;
+		}
+		String upper = clean.toUpperCase(Locale.ROOT);
+		return java.util.List.of("HOUR", "DAY", "MONTH", "YEAR").contains(upper) ? upper : null;
 	}
 
 	private String optional(String value, int max) {
