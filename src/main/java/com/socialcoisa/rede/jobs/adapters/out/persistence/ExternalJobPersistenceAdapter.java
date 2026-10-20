@@ -87,4 +87,17 @@ class ExternalJobPersistenceAdapter implements ExternalJobRepository {
 			.map(ExternalJobJpaEntity::toDomain)
 			.toList();
 	}
+
+	/** Sem cache: e a lista "minhas vagas externas", pessoal e curta — frescor importa mais. */
+	@Override
+	public List<ExternalJob> findBySubmitter(String userId) {
+		return repository.findBySubmittedByOrderByImportedAtDesc(userId).stream()
+			.map(ExternalJobJpaEntity::toDomain)
+			.toList();
+	}
+
+	@Override
+	public void delete(String id) {
+		repository.deleteById(id);
+	}
 }

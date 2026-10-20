@@ -78,8 +78,13 @@
 
 ## Fase 7 — Vagas e candidaturas
 
-- [ ] Candidatura usa o perfil profissional (nome completo, experiência); vagas funcionam
-  para quem só tem perfil social (teste dos dois cenários).
+- [x] Candidatura usa a IDENTIDADE PROFISSIONAL quando ela existe e está ATIVA: nome,
+  headline, local, avatar e indústria vêm do alterego; reputação, experiência,
+  habilidades, currículo e verificação são da conta (iguais para as duas identidades).
+  Sem perfil ativo, o retrato continua social — vagas funcionam para todo mundo.
+  O retrato congelado na candidatura registra `identity` (SOCIAL|CORPORATE) e a
+  indústria. `GET /jobs/{id}/applications` expõe candidate.identity/industry.
+  2 testes verdes (com e sem perfil profissional).
 
 ## Fase 8 — Busca, notificações, salvos, trending, shares
 

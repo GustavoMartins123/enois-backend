@@ -55,7 +55,32 @@ class JobServiceTests {
 
 	@BeforeEach
 	void setUp() {
-		service = new JobService(repository, reputationService, userProfileRepository, extensionRepository, delivery,
+		service = new JobService(repository, reputationService, userProfileRepository,
+			new com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository() {
+				@Override
+				public com.socialcoisa.rede.corporate.domain.CorporateProfile save(
+						com.socialcoisa.rede.corporate.domain.CorporateProfile profile) {
+					return profile;
+				}
+
+				@Override
+				public java.util.Optional<com.socialcoisa.rede.corporate.domain.CorporateProfile> findByUserId(
+						String userId) {
+					return java.util.Optional.empty();
+				}
+
+				@Override
+				public java.util.Optional<com.socialcoisa.rede.corporate.domain.CorporateProfile> findByUsername(
+						String username) {
+					return java.util.Optional.empty();
+				}
+
+				@Override
+				public boolean existsByUsername(String username) {
+					return false;
+				}
+			},
+			extensionRepository, delivery,
 			statusNotifier, new tools.jackson.databind.ObjectMapper(), Clock.systemUTC());
 	}
 

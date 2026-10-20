@@ -40,6 +40,7 @@ public class JobService {
 	private final JobRepository repository;
 	private final ReputationService reputationService;
 	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository;
+	private final com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles;
 	private final com.socialcoisa.rede.profile.application.port.out.ProfileExtensionRepository extensionRepository;
 	private final JobApplicationDelivery delivery;
 	private final JobApplicationStatusNotifier statusNotifier;
@@ -48,12 +49,14 @@ public class JobService {
 
 	public JobService(JobRepository repository, ReputationService reputationService,
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository,
+			com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles,
 			com.socialcoisa.rede.profile.application.port.out.ProfileExtensionRepository extensionRepository,
 			JobApplicationDelivery delivery, JobApplicationStatusNotifier statusNotifier,
 			tools.jackson.databind.ObjectMapper objectMapper, Clock clock) {
 		this.repository = repository;
 		this.reputationService = reputationService;
 		this.userProfileRepository = userProfileRepository;
+		this.corporateProfiles = corporateProfiles;
 		this.extensionRepository = extensionRepository;
 		this.delivery = delivery;
 		this.statusNotifier = statusNotifier;
@@ -261,18 +264,39 @@ public class JobService {
 		return result;
 	}
 
-	/** Retrato do candidato no momento da inscricao: perfil, tempo de experiencia e credibilidade. */
+	/**
+	 * Retrato do candidato no momento da inscricao: perfil, tempo de experiencia e credibilidade.
+	 *
+	 * A candidatura usa a IDENTIDADE PROFISSIONAL quando ela existe e esta ativa (nome, headline,
+	 * local, avatar e industria vem do alterego; o resto dos valores da conta — reputacao,
+	 * experiencia, habilidades, curriculo e verificacao — e o mesmo para as duas identidades).
+	 * Sem perfil profissional ativo, o retrato e o social, como sempre foi.
+	 */
 	private String snapshotOf(String userId) {
 		var profile = userProfileRepository.findById(userId).orElse(null);
+		var corporate = corporateProfiles.findByUserId(userId)
+			.filter(com.socialcoisa.rede.corporate.domain.CorporateProfile::active).orElse(null);
+		boolean professional = corporate != null;
 		int reputation = reputationService.reputationOf(userId);
 		int years = yearsOfExperience(userId);
 		Map<String, Object> snapshot = new java.util.LinkedHashMap<>();
-		snapshot.put("name", profile == null ? "" : profile.name());
+		snapshot.put("identity", professional ? "CORPORATE" : "SOCIAL");
+		snapshot.put("name", professional && StringUtils.hasText(corporate.name()) ? corporate.name()
+			: (profile == null ? "" : profile.name()));
 		snapshot.put("socialName", profile == null || profile.socialName() == null ? "" : profile.socialName());
 		snapshot.put("username", profile == null ? "" : profile.username());
-		snapshot.put("headline", profile == null ? "" : StringUtils.hasText(profile.headline()) ? profile.headline() : "");
-		snapshot.put("location", profile == null ? "" : StringUtils.hasText(profile.location()) ? profile.location() : "");
-		snapshot.put("avatar", profile == null ? "" : StringUtils.hasText(profile.avatar()) ? profile.avatar() : "");
+		snapshot.put("headline", professional
+			? (StringUtils.hasText(corporate.headline()) ? corporate.headline() : "")
+			: (profile == null ? "" : StringUtils.hasText(profile.headline()) ? profile.headline() : ""));
+		snapshot.put("location", professional
+			? (StringUtils.hasText(corporate.location()) ? corporate.location()
+				: (profile == null ? "" : profile.location() == null ? "" : profile.location()))
+			: (profile == null ? "" : StringUtils.hasText(profile.location()) ? profile.location() : ""));
+		snapshot.put("avatar", professional
+			? (StringUtils.hasText(corporate.avatar()) ? corporate.avatar()
+				: (profile == null ? "" : profile.avatar() == null ? "" : profile.avatar()))
+			: (profile == null ? "" : StringUtils.hasText(profile.avatar()) ? profile.avatar() : ""));
+		snapshot.put("industry", professional && corporate.industry() != null ? corporate.industry() : "");
 		snapshot.put("skills", profile == null ? List.of() : profile.skills());
 		snapshot.put("experienceYears", years);
 		snapshot.put("experiencesCount", extensionRepository.countExperiencesByUserId(userId));
