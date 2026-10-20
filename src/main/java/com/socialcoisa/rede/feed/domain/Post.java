@@ -23,10 +23,12 @@ public class Post {
 	private Instant editedAt;
 	/** Quando o post se apaga sozinho (MOMENT: +24h); null = nunca. */
 	private Instant expiresAt;
+	/** Quem assina: a identidade social (padrão) ou a profissional da mesma conta. Nunca nulo. */
+	private final AuthorIdentity authorIdentity;
 
 	private Post(PostId id, UserId authorId, PostType type, String content, String pageHtml, List<String> tags,
 			List<String> mediaIds, String communityId, Instant createdAt, Visibility visibility, Counters counters,
-			PostStatus status, Instant deletedAt, Instant editedAt, Instant expiresAt) {
+			PostStatus status, Instant deletedAt, Instant editedAt, Instant expiresAt, AuthorIdentity authorIdentity) {
 		this.id = id;
 		this.authorId = authorId;
 		this.type = type;
@@ -42,21 +44,32 @@ public class Post {
 		this.deletedAt = deletedAt;
 		this.editedAt = editedAt;
 		this.expiresAt = expiresAt;
+		// Invariante: toda publicação tem uma identidade. Nada no banco nem no código cria post sem.
+		this.authorIdentity = authorIdentity == null ? AuthorIdentity.SOCIAL : authorIdentity;
 	}
 
 	public static Post publish(PostId id, UserId authorId, PostType type, String content, String pageHtml,
 			List<String> tags, List<String> mediaIds, String communityId, Instant createdAt) {
+		return publish(id, authorId, type, content, pageHtml, tags, mediaIds, communityId, createdAt,
+			AuthorIdentity.SOCIAL);
+	}
+
+	/** Publicação com a identidade explícita (BUSINESS é sempre CORPORATE; o service valida). */
+	public static Post publish(PostId id, UserId authorId, PostType type, String content, String pageHtml,
+			List<String> tags, List<String> mediaIds, String communityId, Instant createdAt,
+			AuthorIdentity authorIdentity) {
 		// Momento é efêmero por definição: nasce com prazo de 24 horas e se apaga sozinho.
 		Instant expiresAt = type == PostType.MOMENT ? createdAt.plus(Duration.ofHours(24)) : null;
 		return new Post(id, authorId, type, content, pageHtml, tags, mediaIds, communityId, createdAt,
-			Visibility.PUBLIC, Counters.zero(), PostStatus.ACTIVE, null, null, expiresAt);
+			Visibility.PUBLIC, Counters.zero(), PostStatus.ACTIVE, null, null, expiresAt, authorIdentity);
 	}
 
 	public static Post restore(PostId id, UserId authorId, PostType type, String content, String pageHtml,
 			List<String> tags, List<String> mediaIds, String communityId, Instant createdAt, Visibility visibility,
-			Counters counters, PostStatus status, Instant deletedAt, Instant editedAt, Instant expiresAt) {
+			Counters counters, PostStatus status, Instant deletedAt, Instant editedAt, Instant expiresAt,
+			AuthorIdentity authorIdentity) {
 		return new Post(id, authorId, type, content, pageHtml, tags, mediaIds, communityId, createdAt, visibility,
-			counters, status, deletedAt, editedAt, expiresAt);
+			counters, status, deletedAt, editedAt, expiresAt, authorIdentity);
 	}
 
 	/**
@@ -77,8 +90,9 @@ public class Post {
 		Instant newExpiresAt = newType == PostType.MOMENT
 			? (expiresAt != null ? expiresAt : editedAt.plus(Duration.ofHours(24)))
 			: null;
+		// Editar nunca muda a autoria: tipo, conteúdo e tags são editáveis, identidade não.
 		return new Post(id, authorId, newType, newContent, newPageHtml, newTags, mediaIds, communityId, createdAt,
-			visibility, counters, status, deletedAt, editedAt, newExpiresAt);
+			visibility, counters, status, deletedAt, editedAt, newExpiresAt, authorIdentity);
 	}
 
 	public boolean isActive() {
@@ -96,6 +110,11 @@ public class Post {
 
 	public boolean belongsTo(UserId userId) {
 		return authorId.equals(userId);
+	}
+
+	/** Quem assina esta publicação: a identidade social ou a profissional da mesma conta. */
+	public AuthorIdentity authorIdentity() {
+		return authorIdentity;
 	}
 
 	public boolean delete(Instant deletedAt) {
