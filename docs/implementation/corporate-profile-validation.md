@@ -114,3 +114,12 @@
   (os 2 "arquivos falhos" são as regras de ESLint, pré-existentes).
 - Página /profissional e seletor de identidade no menu implementados; commit local
   no front (push bloqueado pelo plano).
+
+
+## 2026-10-20 — Fase 11 (compositor e feed corporativo)
+
+- `active-identity.test.ts` (3 verdes): efetiva é CORPORATE só com perfil ATIVO;
+  sem perfil/DRAFT/DISABLED → SOCIAL; escolha social continua social.
+- `npx vitest run`: 98 verdes; `tsc` no baseline (nenhum erro nos arquivos do plano);
+  eslint 0 nos arquivos tocados (3 erros de prettier pré-existentes em linhas de
+  outras sessões no feed.tsx, fora dos meus hunks).
