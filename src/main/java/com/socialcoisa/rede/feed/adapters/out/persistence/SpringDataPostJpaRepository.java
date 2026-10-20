@@ -120,5 +120,4 @@ interface SpringDataPostJpaRepository extends JpaRepository<PostJpaEntity, Strin
 	List<PostJpaEntity> findCorporateByAuthor(@Param("authorId") String authorId, @Param("status") PostStatus status,
 			@Param("corporate") AuthorIdentity corporate, @Param("before") Instant before, Pageable pageable);
 	/** Todos os posts do autor (sem filtro de status) — ban cleanup, PR #37. */
-	List<PostJpaEntity> findByAuthorId(String authorId);
 }
