@@ -123,3 +123,10 @@
 - `npx vitest run`: 98 verdes; `tsc` no baseline (nenhum erro nos arquivos do plano);
   eslint 0 nos arquivos tocados (3 erros de prettier pré-existentes em linhas de
   outras sessões no feed.tsx, fora dos meus hunks).
+
+
+## 2026-10-20 — Extensão Fase D (módulos desativáveis, frontend)
+
+- `module-paths.test.ts` (3 verdes): mapa área→módulo, incluindo /acontecendo→EVENTS;
+  rotas fora de módulos desativáveis ficam livres (/feed, /perfil).
+- `npx vitest run`: 101 verdes; eslint 0 nos arquivos tocados; tsc no baseline.

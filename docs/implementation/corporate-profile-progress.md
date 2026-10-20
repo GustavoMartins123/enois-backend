@@ -167,9 +167,13 @@
   "O que quero ver" aumenta a prioridade no Para você (posts escolhidos primeiro,
   o resto segue cronológico — não é filtro). Teste: 1 verde (bloquear tira do
   feed do leitor, autor continua vendo, desbloquear traz de volta).
-- [ ] Fase D — Módulos desativáveis: backend persiste (disabled_modules já
-  existe); falta aplicar no frontend (navegação, atalhos, cards, descoberta,
-  tela de módulo desativado, dependência Events→Acontecendo agora).
+- [x] Fase D — Módulos desativáveis (frontend): navegação filtra pelos módulos
+  desativados (fonte única /me/preferences); acesso direto a URL desativada mostra
+  a tela explicativa com "Reativar esta área"; EVENTOS governa /acontecendo
+  (dependência do plano); mapa módulo→rota testado (3 testes).
+- [ ] Faltam na Fase D: atalhos/cards contextuais (ex.: card de comunidade em
+  notificação) e evitar chamadas desnecessárias aos endpoints do módulo — a
+  navegação e o gate já cobrem os caminhos principais.
 - [ ] Fase E — Interface das três seções na área Uso saudável.
 - [ ] Fase F — Testes da seção 10.5 (segurança/regressão) + auditoria de busca/
   notificações/salvos com as novas preferências.
