@@ -159,6 +159,52 @@ class GameStoreCustomizationTests {
 			.andExpect(status().isUnauthorized());
 	}
 
+	/**
+	 * A LOJA sabe o que é meu: com sessão, o catálogo marca `owned` no meu jogo — é o que faz o
+	 * card oferecer "Editar" para quem publicou. Sem sessão (ou para outra pessoa) nada é meu.
+	 */
+	@Test
+	void catalogMarksMyOwnGameSoTheStoreCanOfferEdit() throws Exception {
+		var creator = auth.authenticate("gstore_creator4");
+		var other = auth.authenticate("gstore_other4");
+		var admin = auth.authenticate("gstore_admin");
+		String titulo = "Jogo do Catalogo " + System.nanoTime();
+		String gameId = publish(creator, admin, titulo, "https://8.8.8.8/catalogo");
+
+		assertThat(ownedInCatalog(titulo, null)).isFalse();
+		assertThat(ownedInCatalog(titulo, other.token())).isFalse();
+		assertThat(ownedInCatalog(titulo, creator.token())).isTrue();
+
+		// "Meus envios" (a lista do dono): todos são meus.
+		MvcResult mine = mockMvc.perform(get("/me/games").header("X-Session-Token", creator.token()))
+			.andExpect(status().isOk())
+			.andReturn();
+		JsonNode items = objectMapper.readTree(mine.getResponse().getContentAsString());
+		boolean found = false;
+		for (JsonNode item : items) {
+			if (gameId.equals(item.path("id").asString())) {
+				found = true;
+				assertThat(item.path("owned").asBoolean()).isTrue();
+			}
+		}
+		assertThat(found).as("o jogo tem que estar em /me/games").isTrue();
+	}
+
+	/** `owned` do meu jogo na busca do catálogo; `token` nulo = visita anônima. */
+	private boolean ownedInCatalog(String title, String token) throws Exception {
+		var request = get("/games").param("query", title);
+		if (token != null) {
+			request = request.header("X-Session-Token", token);
+		}
+		MvcResult result = mockMvc.perform(request).andExpect(status().isOk()).andReturn();
+		for (JsonNode item : objectMapper.readTree(result.getResponse().getContentAsString()).get("items")) {
+			if (title.equals(item.path("title").asString())) {
+				return item.path("owned").asBoolean();
+			}
+		}
+		throw new AssertionError("o jogo não apareceu no catálogo: " + title);
+	}
+
 	@Test
 	void creatorPanelPrefillsWithoutKnowingTheUsername() throws Exception {
 		var creator = auth.authenticate("gstore_creator3");
