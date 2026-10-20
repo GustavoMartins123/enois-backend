@@ -35,7 +35,7 @@
 		<awssdk.version>2.21.1</awssdk.version>
 		<!-- Cache em memoria dos agregados da landing (ver CacheConfig). 2.9.x porque e a versao
 		     que ja esta no repositorio local; a API usada e a mesma das 3.x. -->
-		<caffeine.version>2.9.3</caffeine.version>
+		<caffeine.version>3.3.1</caffeine.version>
 	</properties>
 	<dependencies>
 		<dependency>
