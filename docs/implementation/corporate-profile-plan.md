@@ -115,3 +115,63 @@
   de segurança da seção 18, sem regressão das funcionalidades existentes.
 - **Fase 16 — Gate final**: revisão cruzada, `validation.md` completo, e só então push nos
   dois repositórios (a única vez); depois, remover a automação.
+
+
+---
+
+# EXTENSÃO: PERSONALIZAÇÃO PROFUNDA ("USO SAUDÁVEL" COMO CENTRO DE CONTROLE)
+
+Incorporada ao mesmo projeto (2026-10-20). Não é um sistema paralelo: mesmas fases, mesmo
+gate de push, mesma automação de continuidade.
+
+## Três controles com efeitos distintos (diretriz da dona — NÃO confundir)
+
+| Configuração | Efeito |
+|---|---|
+| **O que quero ver** | AUMENTA A PRIORIDADE dos assuntos escolhidos nas recomendações. Nunca elimina o resto do feed. |
+| **Assuntos que não gosto** | FILTRA publicações classificadas com os assuntos escolhidos nas superfícies definidas. Não é censura global. |
+| **O que não quero ver** | DESATIVA módulos específicos na experiência pessoal. Nunca apaga dados. |
+
+## Fonte única de verdade no backend
+
+As preferências moram no backend (tabela user_preferences, ampliada) e são aplicadas
+consistentemente em TODAS as superfícies: menu, notificações, cards, recomendações,
+descoberta. Escondeter no menu e deixar aparecer em outro lugar não é personalização.
+
+## Decisões de taxonomia (após auditoria)
+
+- **Selos NÃO são assuntos**: são sinais editoriais dos leitores (importante, dica,
+  massante...). Ficam fora do filtro de assuntos.
+- **A taxonomia real de assuntos é a das comunidades** (TECNOLOGIA, ENGENHARIA, DESIGN,
+  PRODUTO, LIDERANÇA, CARREIRA, FREELANCE, OUTROS). Posts não têm classificação hoje:
+  esta extensão adiciona a camada — coluna `topic` opcional em posts, da mesma taxonomia;
+  post publicado numa comunidade herda o tópico dela na criação (classificação real,
+  declarada pela comunidade, não heurística).
+- Post sem tópico nunca é bloqueado por "assuntos que não gosto".
+
+## Novas fases
+
+- **Fase A — Preferências no backend**: ampliar user_preferences (liked_topics,
+  blocked_topics, disabled_modules — listas validadas contra a taxonomia); endpoints
+  GET/PUT /me/preferences; validação de valores; defaults = tudo habilitado/listas vazias.
+- **Fase B — Classificação de posts**: V108 (topic em posts), herança do tópico da
+  comunidade na criação, seletor opcional no compositor (fase 11).
+- **Fase C — Aplicação nos feeds**: blocked topics filtra Tuto/Para mim no backend
+  (paginação sem buracos); liked topics aumenta prioridade no Para mim (não filtra);
+  feed corporativo respeita a política documentada.
+- **Fase D — Módulos desativáveis**: backend persiste; frontend aplica em navegação,
+  atalhos, cards, recomendações e descoberta; acesso direto a URL desativada mostra
+  tela explicativa com atalho para reativar; **Eventos desativado = Acontecendo agora
+  desativado** (única dependência obrigatória).
+- **Fase E — Interface**: as três seções na área Uso saudável, com os componentes
+  existentes; feedback de salvamento; acessibilidade.
+- **Fase F — Testes**: critérios 10.1–10.5 do documento de extensão, integrados aos
+  gates existentes.
+
+### Regras de comportamento dos módulos desativados
+
+- Desativar não apaga dados (mensagens, candidaturas, eventos criados permanecem).
+- Desativar é por usuário: não muda nada para as outras pessoas.
+- Reversível a qualquer momento; recarregar e outras sessões respeitam.
+- Backend continua aplicando suas regras de acesso (preferência não é autorização).
+- Evitar chamadas desnecessárias aos endpoints do módulo desativado.
