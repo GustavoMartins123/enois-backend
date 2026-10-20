@@ -21,8 +21,10 @@ import com.socialcoisa.rede.notifications.application.NotificationService;
 import com.socialcoisa.rede.profile.domain.UserProfile;
 import com.socialcoisa.rede.shared.html.SafeHtml;
 import com.socialcoisa.rede.shared.text.PlainText;
+import com.socialcoisa.rede.shared.security.BehavioralTimingGuard;
 import com.socialcoisa.rede.shared.security.ContentDuplicationGuard;
 import com.socialcoisa.rede.shared.security.NewAccountCooldown;
+import com.socialcoisa.rede.shared.security.UserRateLimiter;
 import com.socialcoisa.rede.shared.security.UserRateLimiter;
 import com.socialcoisa.rede.shared.web.ApiException;
 
@@ -51,6 +53,8 @@ public class PublishPostService implements PublishPostUseCase {
 	/** Rate limit por usuário e dedup de conteúdo (PR #28). */
 	private final UserRateLimiter userRateLimiter;
 	private final ContentDuplicationGuard duplicationGuard;
+	/** Detecção comportamental de automação (PR #36). */
+	private final BehavioralTimingGuard behavioralTimingGuard;
 
 	public PublishPostService(PostRepository postRepository, ArticleRepository articleRepository,
 			IdGenerator idGenerator, Clock clock,
@@ -64,7 +68,8 @@ public class PublishPostService implements PublishPostUseCase {
 			org.springframework.context.ApplicationEventPublisher events,
 			NewAccountCooldown newAccountCooldown,
 			UserRateLimiter userRateLimiter,
-			ContentDuplicationGuard duplicationGuard) {
+			ContentDuplicationGuard duplicationGuard,
+			BehavioralTimingGuard behavioralTimingGuard) {
 		this.postRepository = postRepository;
 		this.articleRepository = articleRepository;
 		this.idGenerator = idGenerator;
@@ -81,6 +86,7 @@ public class PublishPostService implements PublishPostUseCase {
 		this.newAccountCooldown = newAccountCooldown;
 		this.userRateLimiter = userRateLimiter;
 		this.duplicationGuard = duplicationGuard;
+		this.behavioralTimingGuard = behavioralTimingGuard;
 	}
 
 	@Override
@@ -92,6 +98,7 @@ public class PublishPostService implements PublishPostUseCase {
 		}
 		newAccountCooldown.require(command.authorId().value());
 		userRateLimiter.require(command.authorId().value(), UserRateLimiter.CREATE_POST);
+		behavioralTimingGuard.record(command.authorId().value());
 		validate(command);
 		List<String> tags = command.tags() == null ? List.of() : command.tags().stream()
 			.filter(StringUtils::hasText)

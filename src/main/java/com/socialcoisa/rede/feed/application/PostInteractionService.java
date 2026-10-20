@@ -26,6 +26,7 @@ import com.socialcoisa.rede.feed.domain.Post;
 import com.socialcoisa.rede.feed.domain.PostId;
 import com.socialcoisa.rede.notifications.application.NotificationService;
 import com.socialcoisa.rede.shared.blocks.BlockedUsersReader;
+import com.socialcoisa.rede.shared.security.BehavioralTimingGuard;
 import com.socialcoisa.rede.shared.security.NewAccountCooldown;
 import com.socialcoisa.rede.shared.text.PlainText;
 import com.socialcoisa.rede.shared.security.ContentDuplicationGuard;
@@ -55,6 +56,8 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 	/** Rate limit por usuário e dedup de conteúdo (PR #28). */
 	private final UserRateLimiter userRateLimiter;
 	private final ContentDuplicationGuard duplicationGuard;
+	/** Detecção comportamental de automação (PR #36). */
+	private final BehavioralTimingGuard behavioralTimingGuard;
 
 	public PostInteractionService(PostRepository postRepository, CommentRepository commentRepository,
 			PostInteractionRepository postInteractionRepository, OutboxEventRepository outboxEventRepository,
@@ -67,7 +70,8 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 			com.socialcoisa.rede.coin.application.CoinService coins,
 			NewAccountCooldown newAccountCooldown,
 			UserRateLimiter userRateLimiter,
-			ContentDuplicationGuard duplicationGuard) {
+			ContentDuplicationGuard duplicationGuard,
+			BehavioralTimingGuard behavioralTimingGuard) {
 		this.postRepository = postRepository;
 		this.commentRepository = commentRepository;
 		this.postInteractionRepository = postInteractionRepository;
@@ -83,6 +87,8 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 		this.newAccountCooldown = newAccountCooldown;
 		this.userRateLimiter = userRateLimiter;
 		this.duplicationGuard = duplicationGuard;
+		this.duplicationGuard = duplicationGuard;
+		this.behavioralTimingGuard = behavioralTimingGuard;
 	}
 
 	@Override
@@ -94,6 +100,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 		}
 		newAccountCooldown.require(command.authorId().value());
 		userRateLimiter.require(command.authorId().value(), UserRateLimiter.CREATE_COMMENT);
+		behavioralTimingGuard.record(command.authorId().value());
 		duplicationGuard.require(command.authorId().value(), command.content());
 		Post post = activePost(command.postId());
 		List<String> mediaIds = normalizeCommentMedia(command.mediaIds(), command.authorId());

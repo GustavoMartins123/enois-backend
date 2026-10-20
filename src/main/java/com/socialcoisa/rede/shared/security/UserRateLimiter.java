@@ -5,10 +5,16 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
+import com.socialcoisa.rede.moderation.domain.ReportReason;
+import com.socialcoisa.rede.moderation.domain.TargetType;
 import com.socialcoisa.rede.shared.web.ApiException;
 
 /**
@@ -17,9 +23,14 @@ import com.socialcoisa.rede.shared.web.ApiException;
  * O IpRateLimiter protege autenticação (signup, login). Este protege ações dentro do app: publicar
  * posts, comentar, candidatar-se a vagas e enviar mensagens. A mecânica é a mesma (janela
  * deslizante em memória, sem Redis), e a mesma consequência se aplica: o limite vale por pod.
+ *
+ * <p>Fase 3: conta rejeicoes por usuario. 3+ rejeicoes/hora publica {@link AutoReportEvent}
+ * para a moderacao.
  */
 @Component
 public class UserRateLimiter {
+
+	private static final Logger LOG = LoggerFactory.getLogger(UserRateLimiter.class);
 
 	public static final String CREATE_POST = "create_post";
 	public static final String CREATE_COMMENT = "create_comment";
@@ -27,9 +38,13 @@ public class UserRateLimiter {
 	public static final String SEND_MESSAGE = "send_message";
 
 	private static final int MAX_KEYS = 50_000;
+	static final int REJECTION_THRESHOLD = 3;
+	private static final long REJECTION_WINDOW_MS = 3_600_000L;
 
 	private final Map<String, Deque<Long>> hits = new ConcurrentHashMap<>();
+	private final Map<String, Deque<Long>> rejections = new ConcurrentHashMap<>();
 	private final Clock clock;
+	private final ApplicationEventPublisher events;
 
 	private final int postLimit;
 	private final long postWindowMs;
@@ -40,7 +55,7 @@ public class UserRateLimiter {
 	private final int messageLimit;
 	private final long messageWindowMs;
 
-	public UserRateLimiter(Clock clock,
+	public UserRateLimiter(Clock clock, ApplicationEventPublisher events,
 			@Value("${rede.rate.post-limit:10}") int postLimit,
 			@Value("${rede.rate.post-window-minutes:60}") long postWindowMinutes,
 			@Value("${rede.rate.comment-limit:30}") int commentLimit,
@@ -50,6 +65,7 @@ public class UserRateLimiter {
 			@Value("${rede.rate.message-limit:60}") int messageLimit,
 			@Value("${rede.rate.message-window-minutes:1}") long messageWindowMinutes) {
 		this.clock = clock;
+		this.events = events;
 		this.postLimit = postLimit;
 		this.postWindowMs = postWindowMinutes * 60_000L;
 		this.commentLimit = commentLimit;
@@ -62,9 +78,11 @@ public class UserRateLimiter {
 
 	/**
 	 * Verifica se o usuário pode executar a ação. Lança 429 se o limite foi atingido.
+	 * Quando o limite e rejeitado, conta a rejeicao e, ao atingir o limiar, reporta.
 	 */
 	public void require(String userId, String action) {
 		if (!tryAcquire(userId, action)) {
+			trackRejection(userId, action);
 			throw new ApiException(429, "RATE_LIMIT_EXCEEDED",
 				"Voce atingiu o limite desta acao. Tente novamente em alguns minutos.");
 		}
@@ -91,6 +109,29 @@ public class UserRateLimiter {
 			}
 			timestamps.addLast(now);
 			return true;
+		}
+	}
+
+	private void trackRejection(String userId, String action) {
+		long now = clock.millis();
+		Deque<Long> ts = rejections.computeIfAbsent(userId, k -> new ArrayDeque<>());
+		int count;
+		synchronized (ts) {
+			while (!ts.isEmpty() && now - ts.peekFirst() >= REJECTION_WINDOW_MS) {
+				ts.pollFirst();
+			}
+			ts.addLast(now);
+			count = ts.size();
+		}
+		if (count == REJECTION_THRESHOLD) {
+			LOG.warn("Usuario {} atingiu {} rejeicoes de rate limit em 1h (acao: {})", userId, count, action);
+			try {
+				events.publishEvent(new AutoReportEvent(userId, TargetType.USER, ReportReason.SPAM,
+					"[auto] Usuario rejeitado pelo rate limiter " + count
+						+ " vezes em 1 hora (ultima acao: " + action + ")."));
+			} catch (RuntimeException e) {
+				LOG.debug("Falha ao publicar auto-report para {}: {}", userId, e.getMessage());
+			}
 		}
 	}
 
