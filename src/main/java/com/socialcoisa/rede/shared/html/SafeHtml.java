@@ -102,6 +102,11 @@ public final class SafeHtml {
 	/** Tag de link aberta, para reescrever alvo e `rel`. */
 	private static final Pattern LINK_TAG = Pattern.compile("(?is)<a\\b[^>]*>");
 
+	/** Tags de SVG que REFERENCIAM outro documento (só o próprio, por fragmento, é aceito). */
+	private static final Pattern SVG_REF_TAG = Pattern.compile("(?is)<(?:use|mpath)\\b[^>]*>");
+	private static final Pattern HREF_ATTRIBUTE = Pattern
+		.compile("(?is)\\s(?:xlink:)?href\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)')");
+
 	/** Atributo que marca "aqui vai um player"; o front casa esse marcador com o player do app. */
 	private static final String EMBED_MARKER_ATTRIBUTE = "data-enois-embed";
 
@@ -191,7 +196,7 @@ public final class SafeHtml {
 		clean.outputSettings().prettyPrint(false);
 		normalizeAutoplay(clean);
 
-		String markup = hardenLinks(dropUnknownIframes(clean.body().html().trim()));
+		String markup = hardenSvgReferences(hardenLinks(dropUnknownIframes(clean.body().html().trim())));
 		String result = (css.isEmpty() ? "" : "<style>" + css + "</style>") + sanitizeStyleAttributes(markup);
 		if (result.length() > maxLength) {
 			throw new ApiException(400, tooLongCode,
@@ -287,6 +292,20 @@ public final class SafeHtml {
 		});
 	}
 
+	/**
+	 * Referências de SVG ({@code <use>}/{@code <mpath>}) só valem para o PRÓPRIO documento
+	 * ({@code href="#id"}). Um endereço externo faria o navegador de quem lê buscar outro arquivo —
+	 * requisição que o leitor não vê e que denuncia para o dono do endereço que a página foi aberta.
+	 * `<image>` continua com https/data (é mídia visível, como o `<img>`), pelo protocolo da lista.
+	 */
+	private static String hardenSvgReferences(String markup) {
+		return SVG_REF_TAG.matcher(markup).replaceAll(tag -> HREF_ATTRIBUTE.matcher(tag.group(0))
+			.replaceAll(href -> {
+				String url = href.group(1) != null ? href.group(1) : href.group(2);
+				return url != null && url.trim().startsWith("#") ? href.group(0) : "";
+			}));
+	}
+
 	/** Junta o CSS de todos os blocos {@code <style>} do documento colado (head e body). */
 	private static String collectCss(String raw) {
 		StringBuilder css = new StringBuilder();
@@ -371,6 +390,58 @@ public final class SafeHtml {
 			addProtocols("track", "src", "https");
 			// O src do iframe so passa em https, e a checagem de host acontece antes (keepProviderEmbed).
 			addProtocols("iframe", "src", "https");
+
+			// ===== SVG INLINE =====
+			// Desenho animado colado costuma ser SVG (com CSS e animação SMIL). Sem estas tags o
+			// sanitizador apagava o desenho INTEIRO: a prévia (HTML cru, no editor) mostrava tudo e
+			// o perfil aparecia sem o SVG e sem as animações. SVG é markup inerte — quem executa
+			// script seria `<script>`, que continua fora da lista (o jsoup preserva a caixa dos
+			// nomes: `viewBox`, `linearGradient`, `attributeName` seguem como o navegador espera).
+			addTags("svg", "g", "defs", "symbol", "use", "mpath", "marker", "pattern", "mask", "clippath", "view",
+				"path", "rect", "circle", "ellipse", "line", "polyline", "polygon",
+				"text", "tspan", "textpath", "desc",
+				"lineargradient", "radialgradient", "stop",
+				"filter", "fegaussianblur", "feoffset", "feblend", "fecolormatrix", "fecomposite", "femerge",
+				"femergenode", "feflood", "fedropshadow", "feturbulence", "fedisplacementmap",
+				// Animação declarativa (SMIL): roda sem script, é o que faz o desenho se mexer.
+				"animate", "animatetransform", "animatemotion", "set",
+				// `image` dentro de SVG carrega https/data (mesma regra do <img>), declarada abaixo.
+				// Fora de propósito: `foreignObject` (embute HTML de novo, com as regras do HTML),
+				// `script` e qualquer atributo de evento — os testes cobrem o descarte dos três.
+				"image");
+			addAttributes(":all",
+				// Forma, cor e traço.
+				"fill", "fill-opacity", "fill-rule", "stroke", "stroke-width", "stroke-linecap", "stroke-linejoin",
+				"stroke-dasharray", "stroke-dashoffset", "stroke-opacity", "opacity", "color", "display",
+				"visibility", "transform", "transform-origin", "transform-box", "clip-path", "clip-rule", "mask",
+				"filter", "vector-effect", "paint-order", "mix-blend-mode", "isolation",
+				// Geometria.
+				"d", "x", "y", "x1", "y1", "x2", "y2", "cx", "cy", "r", "rx", "ry", "points", "viewbox",
+				"preserveaspectratio", "pathlength",
+				// Texto.
+				"font-family", "font-size", "font-weight", "font-style", "text-anchor", "dominant-baseline",
+				"dx", "dy", "rotate", "letter-spacing", "text-decoration", "startoffset", "textlength",
+				"lengthadjust",
+				// Gradientes, padrões e filtros.
+				"offset", "stop-color", "stop-opacity", "gradientunits", "gradienttransform", "spreadmethod",
+				"patternunits", "patterncontentunits", "patterntransform",
+				"in", "in2", "result", "stddeviation", "mode", "values", "flood-color", "flood-opacity",
+				"preservealpha", "kernelmatrix", "order", "radius", "scale", "basefrequency", "numoctaves", "seed",
+				"operator", "k1", "k2", "k3", "k4",
+				// Marcadores, máscaras e recortes.
+				"markerwidth", "markerheight", "refx", "refy", "orient", "markerunits", "clip-pathunits",
+				"maskunits", "maskcontentunits",
+				// SMIL.
+				"attributename", "attributetype", "from", "to", "by", "begin", "dur", "end", "repeatcount",
+				"repeatdur", "keytimes", "keysplines", "calcmode", "additive", "accumulate", "restart");
+			// Referências: `image`/`use` seguem a mesma régua do <img> (https ou data:), e o `use`
+			// ainda passa por um corte depois (só fragmento do próprio documento — ver
+			// hardenSvgReferences).
+			addAttributes("image", "href", "xlink:href");
+			addAttributes("use", "href", "xlink:href");
+			addAttributes("mpath", "href", "xlink:href");
+			addProtocols("image", "href", "https", "data");
+			addProtocols("image", "xlink:href", "https", "data");
 		}
 	}
 
