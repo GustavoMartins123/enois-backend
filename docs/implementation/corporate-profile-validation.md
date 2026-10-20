@@ -64,3 +64,15 @@
 - `FeedCorporateController` + rotas `/feed/corporate` e `/corporate/{username}/posts`.
 - `CorporateProfileController` (endpoints /me/business-profile) com a regra de
   ativação exigindo headline.
+
+
+## 2026-10-20 — Extensão: personalização (Fases A, B, C)
+
+- `PersonalizationTests` (5 verdes): defaults vazios + persistência; valores
+  inválidos recusados (taxonomia e módulos); conflito liked+blocked → 409;
+  limpar volta ao padrão; tema preservado na mesma linha.
+- `PersonalizationFeedTests` (1 verde, ponta a ponta): comunidade de tecnologia
+  → post herda o assunto → leitor bloqueia → post some do feed DO LEITOR →
+  autor (sem bloqueio) continua vendo → desbloquear traz de volta.
+- Correções: V108 dividida em instruções únicas (H2); tema da conta virou
+  nullable; grafia TECNOLOGIA (a taxonomia é em português).

@@ -118,3 +118,28 @@
 
 - [ ] Revisão cruzada; validation.md completo; push nos dois repositórios (única vez);
   remover a automação de 40 minutos.
+
+
+---
+
+# EXTENSÃO: PERSONALIZAÇÃO (progresso)
+
+- [x] Fase A — Preferências no backend (commit 96b4c39): user_preferences ampliada
+  (liked_topics, blocked_topics, disabled_modules; tema agora nullable); GET/PUT
+  /me/preferences; validação item a item (taxonomia real = a das comunidades; selos
+  ficam fora); conflito liked+blocked recusado; tema preservado ao atualizar listas.
+  Testes: 5 verdes.
+- [x] Fase B — Classificação de posts (commit 96b4c39): coluna topic em posts
+  (V108), herdada do tópico da comunidade na criação; post solto nasce sem
+  classificação (nunca bloqueado).
+- [x] Fase C — Aplicação nos feeds (commit 96b4c39): Tudo e Para você/Following
+  excluem os assuntos bloqueados na consulta (sem buracos de paginação);
+  "O que quero ver" aumenta a prioridade no Para você (posts escolhidos primeiro,
+  o resto segue cronológico — não é filtro). Teste: 1 verde (bloquear tira do
+  feed do leitor, autor continua vendo, desbloquear traz de volta).
+- [ ] Fase D — Módulos desativáveis: backend persiste (disabled_modules já
+  existe); falta aplicar no frontend (navegação, atalhos, cards, descoberta,
+  tela de módulo desativado, dependência Events→Acontecendo agora).
+- [ ] Fase E — Interface das três seções na área Uso saudável.
+- [ ] Fase F — Testes da seção 10.5 (segurança/regressão) + auditoria de busca/
+  notificações/salvos com as novas preferências.
