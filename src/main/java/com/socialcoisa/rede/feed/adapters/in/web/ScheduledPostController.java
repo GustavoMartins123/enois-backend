@@ -52,7 +52,8 @@ class ScheduledPostController {
 			() -> new CommandResponse(201, view(service.schedule(user.id().value(),
 				new ScheduledPostService.ScheduleCommand(tipo(request.type()), request.content(),
 					request.pageHtml(), request.articleBody(), request.tags(), request.mediaIds(),
-					request.mentionedUserIds(), request.communityId(), instante(request.scheduledAt()))))));
+					request.mentionedUserIds(), request.communityId(), request.topic(),
+					instante(request.scheduledAt()))))));
 	}
 
 	@GetMapping("/feed/scheduled")
@@ -97,14 +98,16 @@ class ScheduledPostController {
 
 	private static View view(ScheduledPost post) {
 		return new View(post.id(), post.type().name(), post.content(), post.pageHtml(), post.communityId(),
-			post.scheduledAt().toString(), post.createdAt().toString(), post.lastError(), post.attempts());
+			post.topic(), post.scheduledAt().toString(), post.createdAt().toString(), post.lastError(),
+			post.attempts());
 	}
 
 	record ScheduleRequest(String type, String content, String pageHtml, String articleBody, List<String> tags,
-			List<String> mediaIds, List<String> mentionedUserIds, String communityId, String scheduledAt) {
+			List<String> mediaIds, List<String> mentionedUserIds, String communityId, String topic,
+			String scheduledAt) {
 	}
 
-	record View(String id, String type, String content, String pageHtml, String communityId, String scheduledAt,
-			String createdAt, String lastError, int attempts) {
+	record View(String id, String type, String content, String pageHtml, String communityId, String topic,
+			String scheduledAt, String createdAt, String lastError, int attempts) {
 	}
 }

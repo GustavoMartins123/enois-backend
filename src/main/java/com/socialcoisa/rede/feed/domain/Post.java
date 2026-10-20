@@ -118,11 +118,21 @@ public class Post {
 	 */
 	public Post edited(PostType newType, String newContent, String newPageHtml, List<String> newTags,
 			Instant editedAt) {
+		return edited(newType, newContent, newPageHtml, newTags, topic, editedAt);
+	}
+
+	/**
+	 * Edicao com assunto declarado: so o post AVULSO troca o assunto na edicao (o de comunidade
+	 * herda o dela e o service recusa qualquer tentativa). Validacao do valor e do service, pois
+	 * a taxonomia mora la.
+	 */
+	public Post edited(PostType newType, String newContent, String newPageHtml, List<String> newTags,
+			String newTopic, Instant editedAt) {
 		Instant newExpiresAt = newType == PostType.MOMENT
 			? (expiresAt != null ? expiresAt : editedAt.plus(Duration.ofHours(24)))
 			: null;
-		// Editar nunca muda a autoria nem o assunto: tipo, conteúdo e tags são editáveis.
-		return new Post(id, authorId, newType, newContent, newPageHtml, newTags, mediaIds, communityId, topic,
+		// Editar nunca muda a autoria: tipo, conteúdo, tags e assunto são editáveis.
+		return new Post(id, authorId, newType, newContent, newPageHtml, newTags, mediaIds, communityId, newTopic,
 			createdAt, visibility, counters, status, deletedAt, editedAt, newExpiresAt, authorIdentity);
 	}
 
