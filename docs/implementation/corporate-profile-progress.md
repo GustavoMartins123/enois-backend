@@ -106,12 +106,20 @@
 
 ## Fase 9 — Frontend: alternância e identidade ativa
 
-- [ ] Seletor social/profissional no menu + indicador da identidade ativa; atalhos.
+- [x] Seletor social/profissional no menu da conta (só com perfil existente; opção
+  profissional desabilitada sem ACTIVE) + atalho "Perfil profissional" + estado
+  persistido no aparelho com fallback seguro (effectiveIdentity nunca devolve
+  CORPORATE sem perfil ativo). A escolha é conveniência de UI; o backend decide a
+  autoria de cada publicação. (commit no front)
 
 ## Fase 10 — Frontend: editor do perfil profissional
 
-- [ ] Editor completo (com o fluxo de importação com consentimento) + rotas coerentes
-  com o roteamento real (decisão documentada em decisions.md).
+- [x] Página /profissional: criar (@ + nome), editar (headline, bio, local, indústria,
+  links), ativar/desativar, e importação do perfil social com checkbox por campo
+  (só os marcados viajam; a prévia não grava nada).
+- [ ] Pendente: upload de avatar/banner próprios do perfil profissional (a API já
+  aceita; falta o seletor de mídia na página) e a rota pública do perfil profissional
+  (decisão de URL em decisions.md).
 
 ## Fase 11 — Frontend: compositor e feeds
 

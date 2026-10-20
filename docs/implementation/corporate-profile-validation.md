@@ -105,3 +105,12 @@
   (corretos); abas por tipo não casam com BUSINESS.
 - `BusinessFeedSeparationTests` ampliado: as abas DISCUSSIONS e PROJECTS também provam
   ausência do post BUSINESS (3/3 verdes).
+
+
+## 2026-10-20 — Fases 9/10 (frontend do perfil profissional)
+
+- `npx eslint` nos arquivos tocados: 0; `tsc --noEmit`: 9 erros (baseline
+  pré-existente, nenhum nos arquivos do plano); `npx vitest run`: 95 testes verdes
+  (os 2 "arquivos falhos" são as regras de ESLint, pré-existentes).
+- Página /profissional e seletor de identidade no menu implementados; commit local
+  no front (push bloqueado pelo plano).
