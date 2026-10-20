@@ -24,7 +24,9 @@ public final class PostContentLimits {
 		PostType.PROJECT, 2_000,
 		PostType.NEWS, 2_000,
 		PostType.OPPORTUNITY, 1_500,
-		PostType.TUTORIAL, 5_000);
+		PostType.TUTORIAL, 5_000,
+		// Conteúdo profissional: apresentação de serviço/projeto — par com NEWS/PROJECT.
+		PostType.BUSINESS, 2_000);
 
 	private PostContentLimits() {
 	}

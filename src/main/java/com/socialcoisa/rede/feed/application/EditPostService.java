@@ -12,6 +12,7 @@ import com.socialcoisa.rede.feed.application.port.out.ArticleRepository;
 import com.socialcoisa.rede.feed.application.port.out.AuditLogRepository;
 import com.socialcoisa.rede.feed.application.port.out.FeedCacheRepository;
 import com.socialcoisa.rede.feed.application.port.out.PostRepository;
+import com.socialcoisa.rede.feed.domain.AuthorIdentity;
 import com.socialcoisa.rede.feed.domain.Post;
 import com.socialcoisa.rede.feed.domain.PostType;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
@@ -64,6 +65,15 @@ public class EditPostService implements EditPostUseCase {
 		// A CATEGORIA e editavel (pedido via suporte): nulo mantem, preenchido troca — e as regras
 		// de conteudo passam a ser as do tipo NOVO, iguais as da criacao.
 		PostType tipoNovo = command.type() == null ? post.type() : command.type();
+		// A identidade NAO acompanha troca de tipo: um post BUSINESS nunca vira social (sairia
+		// do feed corporativo para o social sem regra nenhuma) e um social nunca vira BUSINESS
+		// por edicao (publicar no corporativo exige perfil profissional ativo na criacao).
+		if ((post.authorIdentity() == AuthorIdentity.CORPORATE) != (tipoNovo == PostType.BUSINESS)) {
+			throw new ApiException(400, "IDENTITY_TYPE_MISMATCH",
+				post.authorIdentity() == AuthorIdentity.CORPORATE
+					? "Publicação corporativa permanece BUSINESS. Se quiser um post social, publique um novo."
+					: "Posts sociais não viram BUSINESS. Publique um novo com o perfil profissional.");
+		}
 		String content = validateContent(command.content(), tipoNovo);
 		List<String> tags = normalizeTags(command.tags());
 

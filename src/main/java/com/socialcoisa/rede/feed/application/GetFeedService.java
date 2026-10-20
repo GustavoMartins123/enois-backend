@@ -53,6 +53,7 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 	private final BlockedUsersReader blockedUsersReader;
 	private final PostCommunityReader postCommunityReader;
 	private final SubscribedBlogAuthorsReader subscribedBlogAuthors;
+	private final com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles;
 	private static final Instant DEFAULT_BEFORE = Instant.parse("9999-12-31T23:59:59Z");
 
 	public GetFeedService(PostRepository postRepository, ArticleRepository articleRepository,
@@ -60,7 +61,8 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 			ConnectionGraphRepository connectionGraphRepository, UserProfileRepository userProfileRepository,
 			PostInteractionRepository postInteractionRepository, CommentRepository commentRepository,
 			CursorCodec cursorCodec, BlockedUsersReader blockedUsersReader, PostCommunityReader postCommunityReader,
-			SubscribedBlogAuthorsReader subscribedBlogAuthors) {
+			SubscribedBlogAuthorsReader subscribedBlogAuthors,
+			com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles) {
 		this.postRepository = postRepository;
 		this.articleRepository = articleRepository;
 		this.feedCacheRepository = feedCacheRepository;
@@ -72,6 +74,7 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 		this.blockedUsersReader = blockedUsersReader;
 		this.postCommunityReader = postCommunityReader;
 		this.subscribedBlogAuthors = subscribedBlogAuthors;
+		this.corporateProfiles = corporateProfiles;
 	}
 
 	@Override
@@ -156,6 +159,36 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 		before = before == null ? DEFAULT_BEFORE : before;
 		List<Post> posts = postRepository.findActiveByCommunity(communityId, before, limit);
 		return page(enrich(posts, currentUserId), posts, limit);
+	}
+
+	/**
+	 * Feed corporativo: somente o que as identidades profissionais assinam (BUSINESS). Consulta
+	 * própria, no banco — nada de buscar o feed social e filtrar fora.
+	 */
+	@Transactional(readOnly = true)
+	public FeedPage getCorporateFeed(com.socialcoisa.rede.feed.domain.UserId viewer, Instant before, int limit) {
+		limit = normalizeLimit(limit);
+		before = before == null ? DEFAULT_BEFORE : before;
+		List<Post> posts = postRepository.findActiveCorporate(before, limit);
+		return page(enrich(posts, viewer), posts, limit);
+	}
+
+	/**
+	 * Página do perfil profissional (endereço do perfil): somente o que o dono assinou como
+	 * CORPORATE. Perfil desativado ou inexistente não tem página pública (404).
+	 */
+	@Transactional(readOnly = true)
+	public FeedPage getCorporateProfilePosts(String profileUsername, Instant before, int limit,
+			com.socialcoisa.rede.feed.domain.UserId viewer) {
+		limit = normalizeLimit(limit);
+		before = before == null ? DEFAULT_BEFORE : before;
+		com.socialcoisa.rede.corporate.domain.CorporateProfile profile = corporateProfiles
+			.findByUsername(profileUsername == null ? "" : profileUsername.trim().toLowerCase())
+			.filter(p -> p.active())
+			.orElseThrow(() -> new ApiException(404, "PROFILE_NOT_FOUND", "Perfil profissional não encontrado."));
+		List<Post> posts = postRepository.findActiveCorporateByAuthor(
+			new com.socialcoisa.rede.feed.domain.UserId(profile.userId()), before, limit);
+		return page(enrich(posts, viewer), posts, limit);
 	}
 
 	private List<PostView> enrich(List<Post> posts, UserId currentUserId) {

@@ -13,6 +13,7 @@ import com.socialcoisa.rede.feed.application.port.out.IdGenerator;
 import com.socialcoisa.rede.feed.application.port.out.PostCommunityReader;
 import com.socialcoisa.rede.feed.application.port.out.OutboxEventRepository;
 import com.socialcoisa.rede.feed.application.port.out.PostRepository;
+import com.socialcoisa.rede.feed.domain.AuthorIdentity;
 import com.socialcoisa.rede.feed.domain.Post;
 import com.socialcoisa.rede.feed.domain.PostType;
 import com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseCase;
@@ -39,6 +40,7 @@ public class PublishPostService implements PublishPostUseCase {
 	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository;
 	private final com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate;
 	private final PostCommunityReader postCommunityReader;
+	private final com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles;
 
 	public PublishPostService(PostRepository postRepository, ArticleRepository articleRepository,
 			IdGenerator idGenerator, Clock clock,
@@ -47,7 +49,8 @@ public class PublishPostService implements PublishPostUseCase {
 			NotificationService notificationService,
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository,
 			com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate,
-			PostCommunityReader postCommunityReader) {
+			PostCommunityReader postCommunityReader,
+			com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles) {
 		this.postRepository = postRepository;
 		this.articleRepository = articleRepository;
 		this.idGenerator = idGenerator;
@@ -59,6 +62,7 @@ public class PublishPostService implements PublishPostUseCase {
 		this.userProfileRepository = userProfileRepository;
 		this.sanctionGate = sanctionGate;
 		this.postCommunityReader = postCommunityReader;
+		this.corporateProfiles = corporateProfiles;
 	}
 
 	@Override
@@ -81,6 +85,15 @@ public class PublishPostService implements PublishPostUseCase {
 			.toList();
 		validateMediaOwnershipUseCase.validateOwnedBy(command.authorId(), mediaIds);
 		String communityId = StringUtils.hasText(command.communityId()) ? command.communityId().trim() : null;
+		// Regra do plano: BUSINESS assina o feed corporativo — não nasce dentro de comunidade
+		// (a tabela de separação de feeds vale no backend, não só na tela).
+		AuthorIdentity authorIdentity = command.type() == PostType.BUSINESS
+			? requireActiveCorporateProfile(command.authorId().value())
+			: AuthorIdentity.SOCIAL;
+		if (command.type() == PostType.BUSINESS && communityId != null) {
+			throw new ApiException(400, "BUSINESS_NOT_IN_COMMUNITY",
+				"Publicação corporativa não vai para comunidades. Publique no seu feed corporativo.");
+		}
 		if (communityId != null) {
 			// Publicar numa comunidade e escrever no feed dela: sem ser membro, qualquer pessoa
 			// logada colocaria post na vitrine dos outros (e o post nao aparece para quem participa).
@@ -94,7 +107,7 @@ public class PublishPostService implements PublishPostUseCase {
 			}
 		}
 		Post post = Post.publish(idGenerator.newPostId(), command.authorId(), command.type(), textOf(command),
-			pageHtml(command), tags, mediaIds, communityId, clock.instant());
+			pageHtml(command), tags, mediaIds, communityId, clock.instant(), authorIdentity);
 		Post saved = postRepository.save(post);
 		String articleBody = articleBody(command);
 		if (articleBody != null) {
@@ -112,8 +125,20 @@ public class PublishPostService implements PublishPostUseCase {
 		return PostView.from(saved);
 	}
 
-	private void notifyMentions(List<String> mentionedUserIds, String actorId, String postId, String kind) {
-		if (mentionedUserIds == null) return;
+	/**
+	 * Uma publicação BUSINESS exige um perfil profissional ATIVO pertencente à mesma conta que
+	 * está publicando — o perfil é resolvido pelo backend a partir da sessão, nunca aceito do
+	 * payload do navegador.
+	 */
+	private AuthorIdentity requireActiveCorporateProfile(String authorId) {
+		return corporateProfiles.findByUserId(authorId)
+			.filter(com.socialcoisa.rede.corporate.domain.CorporateProfile::active)
+			.map(p -> AuthorIdentity.CORPORATE)
+			.orElseThrow(() -> new ApiException(403, "NO_ACTIVE_CORPORATE_PROFILE",
+				"Você precisa de um perfil profissional ativo para publicar no feed corporativo."));
+	}
+
+	private void notifyMentions(List<String> mentionedUserIds, String actorId, String postId, String kind) {		if (mentionedUserIds == null) return;
 		for (String mentionedId : mentionedUserIds.stream().filter(StringUtils::hasText).map(String::trim).distinct().toList()) {
 			if (mentionedId.equals(actorId)) continue;
 			if (userProfileRepository.findById(mentionedId).isEmpty()) continue;
