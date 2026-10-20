@@ -87,7 +87,6 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 		this.newAccountCooldown = newAccountCooldown;
 		this.userRateLimiter = userRateLimiter;
 		this.duplicationGuard = duplicationGuard;
-		this.duplicationGuard = duplicationGuard;
 		this.behavioralTimingGuard = behavioralTimingGuard;
 	}
 
