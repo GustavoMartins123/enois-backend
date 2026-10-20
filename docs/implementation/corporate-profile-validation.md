@@ -39,3 +39,28 @@
 - Insert legado sem informar identidade → gravado como **SOCIAL**; update explícito →
   **CORPORATE** lido de volta. Banco scratch descartado após a validação.
 - Compatibilidade comprovada: nenhum registro existente muda de mãos (default SOCIAL).
+
+
+## 2026-10-20 — Fases 3–6 (serviço, BUSINESS, separação de feeds)
+
+**Testes (árvore compartilhada e worktree isolado):**
+
+- `BusinessFeedSeparationTests` (3, verdes): a mesma conta publica um social e um
+  BUSINESS — o social aparece em Tuto/Following/perfil social, o BUSINESS não; o
+  BUSINESS existe apenas no feed corporativo e na página do perfil profissional;
+  BUSINESS sem perfil ativo → 403 NO_ACTIVE_CORPORATE_PROFILE; editar não troca
+  identidade (400 IDENTITY_TYPE_MISMATCH); perfil inativo não tem página (404).
+- `PostAuthorIdentityTests` (4) e `CorporateProfileTests` (5): verdes (fase 1).
+- **Suíte completa no worktree isolado (commit 6472cbe): 346 testes, 2 falhas —
+  ambas em módulos de OUTRAS sessões** (media LazyMigration e SupportCategories,
+  trabalho em voo no repositório), nenhuma no escopo deste plano. Módulos deste
+  plano (feed, corporate, linkedin share) 100% verdes.
+
+**Correções feitas durante a validação:**
+
+- As queries "sociais" do repositório estavam invertidas (retornavam o que NÃO
+  era social); corrigidas para `authorIdentity = :social` (commit 6472cbe).
+- `FeedDistributionService`: post CORPORATE não entra no fanout do cache social.
+- `FeedCorporateController` + rotas `/feed/corporate` e `/corporate/{username}/posts`.
+- `CorporateProfileController` (endpoints /me/business-profile) com a regra de
+  ativação exigindo headline.

@@ -39,6 +39,10 @@
 
 ## Fase 3 — Serviço do perfil profissional
 
+- [x] Serviço + controller (/me/business-profile): criar (1:1, um por conta),
+  editar detalhes, renomear, ativar (exige headline), desativar. Username em
+  namespace próprio com unicidade no banco (409 amigável). (commit 1a10133)
+
 - [ ] Username próprio com unicidade real no banco (índice único; corrida coberta; sem
   colisão com o namespace social).
 - [ ] Criar/editar/desativar + regras de estados; testes (H2) do serviço.
@@ -50,10 +54,19 @@
 
 ## Fase 5 — Publicação BUSINESS
 
+- [x] Publicar BUSINESS exige perfil ativo da MESMA conta (resolvido pela sessão,
+  nunca do payload); BUSINESS não entra em comunidade; edição não troca
+  identidade (IDENDITY_TYPE_MISMATCH → corrigido para IDENTITY_TYPE_MISMATCH).
+  (commit 1a10133)
+
 - [ ] Validar no backend: só com perfil ACTIVE e autoria corporativa da própria conta;
   edição preserva tipo/autoria; testes de negação (perfil DRAFT, perfil alheio).
 
 ## Fase 6 — Feeds no backend
+
+- [x] Tuto/Following/perfil social excluem CORPORATE; feed corporativo e página
+  do perfil profissional (novas rotas) trazem apenas BUSINESS; cache social sem
+  posts corporativos (distribuição filtrada). (commit 1a10133)
 
 - [ ] `getFeed` exclui BUSINESS (teste com post BUSINESS + social na mesma conta).
 - [ ] Feed corporativo novo + perfil profissional novo (só BUSINESS; paginação preservada).
