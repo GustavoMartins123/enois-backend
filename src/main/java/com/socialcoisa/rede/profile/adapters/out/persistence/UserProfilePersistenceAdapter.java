@@ -4,6 +4,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -189,11 +190,11 @@ class UserProfilePersistenceAdapter implements UserProfileRepository {
 	}
 
 	@Override
-	public List<UserProfile> findTopByReputation(int limit) {
-		// Ordem CRESCENTE (o menor número de credibilidade em primeiro): decisão do dono do
-		// produto para o ranking público. A busca de perfis continua por reputação descendente.
-		return repository.findByOrderByReputationAsc().stream()
-			.limit(limit)
+	public List<UserProfile> findNewestProfiles(int limit) {
+		// O ranking público virou a vitrine de chegada (decisão do dono do produto, 2026-10-20):
+		// mais recentes primeiro, ordenado NO BANCO (antes a lista inteira vinha para a memória e
+		// só então era cortada). A busca de perfis continua por reputação descendente.
+		return repository.findByOrderByCreatedAtDesc(PageRequest.of(0, Math.max(1, limit))).stream()
 			.map(UserProfileJpaEntity::toDomain)
 			.toList();
 	}

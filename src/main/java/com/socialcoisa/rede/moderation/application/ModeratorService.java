@@ -56,6 +56,7 @@ public class ModeratorService {
 	private final NotificationService notifications;
 	private final UserProfileRepository profiles;
 	private final AuthSessionRepository sessions;
+	private final com.socialcoisa.rede.feed.application.port.in.PurgeAuthorContentUseCase contentPurge;
 	private final Clock clock;
 	private final int minReputation;
 	private final int voteQuorum;
@@ -64,6 +65,7 @@ public class ModeratorService {
 			ReportRepository reports, ModerationService moderationService, SanctionService sanctionService,
 			ReputationService reputationService, ReportedContentAuthorReader contentAuthors,
 			NotificationService notifications, UserProfileRepository profiles, AuthSessionRepository sessions,
+			com.socialcoisa.rede.feed.application.port.in.PurgeAuthorContentUseCase contentPurge,
 			Clock clock,
 			@Value("${rede.moderation.moderator-min-reputation:200}") int minReputation,
 			@Value("${rede.moderation.vote-quorum:3}") int voteQuorum) {
@@ -77,6 +79,7 @@ public class ModeratorService {
 		this.notifications = notifications;
 		this.profiles = profiles;
 		this.sessions = sessions;
+		this.contentPurge = contentPurge;
 		this.clock = clock;
 		this.minReputation = minReputation;
 		this.voteQuorum = Math.max(1, voteQuorum);
@@ -293,13 +296,14 @@ public class ModeratorService {
 
 	/**
 	 * Punição direta de qualquer usuário por um administrador do painel. RESTRICTION tira o direito
-	 * de publicar/comentar; BAN derruba as sessões e impede novo login. Não é denúncia: fica
-	 * registrado com a referência `admin:{id do admin}` para o recurso do usuário funcionar.
+	 * de publicar/comentar; BAN derruba as sessões e impede novo login; PERMABAN é o banimento
+	 * definitivo (sem caminho de recurso oferecido no painel). Não é denúncia: fica registrado
+	 * com a referência `admin:{id do admin}` para o recurso do usuário funcionar.
 	 */
 	@Transactional
 	public SanctionResult sanctionUser(String adminId, String username, SanctionType type, String reason) {
 		if (type == null) {
-			throw new ApiException(400, "INVALID_SANCTION_TYPE", "Escolha restrição ou banimento.");
+			throw new ApiException(400, "INVALID_SANCTION_TYPE", "Escolha restrição, banimento ou banimento permanente.");
 		}
 		String cleanReason = trim(reason);
 		if (cleanReason.length() < 10) {
@@ -311,7 +315,12 @@ public class ModeratorService {
 			throw new ApiException(400, "CANNOT_SANCTION_SELF", "Você não pode punir a própria conta.");
 		}
 		String reference = "admin:" + adminId;
-		if (type == SanctionType.BAN) {
+		if (type == SanctionType.PERMABAN) {
+			UserSanction sanction = UserSanction.permaBan("sanc_" + randomId(), target.id(), reference,
+				cleanReason, Instant.now(clock));
+			sanctionService.banAuthor(sanction, target.id(), adminId, sessions);
+		}
+		else if (type == SanctionType.BAN) {
 			UserSanction sanction = UserSanction.create("sanc_" + randomId(), target.id(), reference,
 				cleanReason, Instant.now(clock));
 			sanctionService.banAuthor(sanction, target.id(), adminId, sessions);
@@ -320,6 +329,30 @@ public class ModeratorService {
 			sanctionService.restrictUser(target.id(), reference, cleanReason);
 		}
 		return new SanctionResult(target.id(), target.username(), type.name(), "ACTIVE");
+	}
+
+	/**
+	 * Sanitização do usuário (limpeza por spam): APAGA DO BANCO todos os posts que ele publicou
+	 * e os comentários que ele escreveu, com reações, selos, salvamentos e mídias anexadas.
+	 * Diferente da remoção por moderação (soft delete): aqui a linha sai do banco de verdade.
+	 */
+	@Transactional
+	public SanitizeResult sanitizeUser(String adminId, String username, String reason) {
+		String cleanReason = trim(reason);
+		if (cleanReason.length() < 10) {
+			throw new ApiException(400, "REASON_REQUIRED", "Explique o motivo da sanitização (pelo menos 10 caracteres).");
+		}
+		UserProfile target = profiles.findByUsername(trim(username))
+			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuário não encontrado."));
+		if (target.id().equals(adminId)) {
+			throw new ApiException(400, "CANNOT_SANITIZE_SELF", "Você não pode sanitizar a própria conta.");
+		}
+		var result = contentPurge.purgeAllByAuthor(adminId, target.id(), cleanReason);
+		return new SanitizeResult(target.id(), target.username(), result.posts(), result.comments(),
+			result.otherRows());
+	}
+
+	public record SanitizeResult(String userId, String username, int posts, int comments, int otherRows) {
 	}
 
 	private static String randomId() {

@@ -59,14 +59,42 @@ class LinkedinImportServiceTests {
 		assertThat(first.title()).isEqualTo("Engenheira de Software");
 		assertThat(first.company()).isEqualTo("Énóis, LTDA");
 		assertThat(first.description()).isEqualTo("Construí coisas, com vírgulas, e \"aspas\" dentro.");
-		assertThat(first.startDate()).isEqualTo("2020-01");
-		assertThat(first.endDate()).isEqualTo("2022-06");
+		assertThat(first.startDate()).isEqualTo("2020-01-01");
+		assertThat(first.endDate()).isEqualTo("2022-06-01");
 		assertThat(first.currentlyHere()).isFalse();
 
 		var second = preview.experiences().get(1);
 		assertThat(second.company()).isEqualTo("Nubank");
 		assertThat(second.startDate()).isNull();
 		assertThat(second.currentlyHere()).isTrue();
+	}
+
+	/**
+	 * Cabeçalhos do export ATUAL (o que a pessoa baixa hoje): `Title` (era `Position Title`) e
+	 * `Degree Name` (era `Degree`). Sem os fallbacks, toda experiência vinha SEM cargo — e o
+	 * import parecia ter "reconhecido" só as empresas.
+	 *
+	 * Datas saem em ISO completo: o perfil recebe `LocalDate`, e "2026-10" fazia o save falhar com
+	 * "requisição inválida".
+	 */
+	@Test
+	void readsTheCurrentExportHeadersAndProducesIsoDates() {
+		var preview = service.parse(zip(
+			"Positions.csv", "Company Name,Title,Description,Location,Started On,Finished On\n"
+				+ "\"É Nóis\",\"Desenvolvedora\",\"\",\"remoto\",\"Oct 2026\",\"\"",
+			"Education.csv", "School Name,Start Date,End Date,Notes,Degree Name,Activities\n"
+				+ "\"UFPR\",\"2012-03\",\"2015-12\",\"\",\"Bacharelado\",\"\"",
+			"Profile.csv", "First Name,Last Name,Headline,Summary,Industry,Geo Location\n"
+				+ "\"Mel\",\"Santos\",\"Dev\",\"resumo\",\"Tech\",\"Arapongas, PR\""));
+
+		var experience = preview.experiences().get(0);
+		assertThat(experience.title()).isEqualTo("Desenvolvedora");
+		assertThat(experience.startDate()).isEqualTo("2026-10-01");
+		assertThat(experience.currentlyHere()).isTrue();
+
+		var education = preview.education().get(0);
+		assertThat(education.degree()).isEqualTo("Bacharelado");
+		assertThat(education.startDate()).isEqualTo("2012-03-01");
 	}
 
 	@Test
@@ -82,10 +110,10 @@ class LinkedinImportServiceTests {
 
 		assertThat(preview.education()).hasSize(1);
 		assertThat(preview.education().get(0).school()).isEqualTo("UFPE");
-		assertThat(preview.education().get(0).startDate()).isEqualTo("2012-03");
+		assertThat(preview.education().get(0).startDate()).isEqualTo("2012-03-01");
 		assertThat(preview.certifications()).hasSize(1);
 		assertThat(preview.certifications().get(0).name()).isEqualTo("AWS Solutions Architect");
-		assertThat(preview.certifications().get(0).issueDate()).isEqualTo("2021-05");
+		assertThat(preview.certifications().get(0).issueDate()).isEqualTo("2021-05-01");
 		assertThat(preview.projects()).hasSize(1);
 		assertThat(preview.projects().get(0).url()).isEqualTo("https://github.com/eu/comp");
 		assertThat(preview.found()).isEqualTo(4);
@@ -97,7 +125,7 @@ class LinkedinImportServiceTests {
 			"Positions.csv", "\"Position Title\",\"Company Name\",\"Started On\"\n\"Dev\",\"Acme\",\"mar de 2021\"",
 			"Education.csv", "", "Certifications.csv", "", "Projects.csv", ""));
 
-		assertThat(preview.experiences().get(0).startDate()).isEqualTo("2021-03");
+		assertThat(preview.experiences().get(0).startDate()).isEqualTo("2021-03-01");
 	}
 
 	@Test
@@ -228,7 +256,7 @@ class LinkedinImportServiceTests {
 		assertThat(primeira.title()).isEqualTo("Desenvolvedora Backend");
 		assertThat(primeira.company()).isEqualTo("Énóis");
 		assertThat(primeira.location()).isEqualTo("São Paulo, Brasil");
-		assertThat(primeira.startDate()).isEqualTo("2021-03");
+		assertThat(primeira.startDate()).isEqualTo("2021-03-01");
 		assertThat(primeira.endDate()).isNull();
 		assertThat(primeira.currentlyHere()).isTrue();
 		assertThat(primeira.description()).isEqualTo("Construí o feed, a carteira e a lojinha.");
@@ -236,8 +264,8 @@ class LinkedinImportServiceTests {
 		var segunda = preview.experiences().get(1);
 		assertThat(segunda.title()).isEqualTo("Desenvolvedora");
 		assertThat(segunda.company()).isEqualTo("Acme Ltda");
-		assertThat(segunda.startDate()).isEqualTo("2019-01");
-		assertThat(segunda.endDate()).isEqualTo("2021-02");
+		assertThat(segunda.startDate()).isEqualTo("2019-01-01");
+		assertThat(segunda.endDate()).isEqualTo("2021-02-01");
 		assertThat(segunda.currentlyHere()).isFalse();
 		// O "Ver mais" do LinkedIn não vira descrição e o título do próximo item não invade.
 		assertThat(segunda.description()).doesNotContain("Desenvolvedora").doesNotContain("Ver mais");
@@ -245,20 +273,20 @@ class LinkedinImportServiceTests {
 		assertThat(preview.education()).hasSize(1);
 		assertThat(preview.education().get(0).school()).isEqualTo("Universidade de São Paulo");
 		assertThat(preview.education().get(0).degree()).isEqualTo("Bacharelado, Ciência da Computação");
-		assertThat(preview.education().get(0).startDate()).isEqualTo("2015-01");
-		assertThat(preview.education().get(0).endDate()).isEqualTo("2019-12");
+		assertThat(preview.education().get(0).startDate()).isEqualTo("2015-01-01");
+		assertThat(preview.education().get(0).endDate()).isEqualTo("2019-12-01");
 
 		assertThat(preview.certifications()).hasSize(1);
 		var cert = preview.certifications().get(0);
 		assertThat(cert.name()).isEqualTo("Oracle Certified Professional: Java SE");
 		assertThat(cert.issuer()).isEqualTo("Oracle");
-		assertThat(cert.issueDate()).isEqualTo("2022-03");
+		assertThat(cert.issueDate()).isEqualTo("2022-03-01");
 		assertThat(cert.credentialUrl()).isEqualTo("https://certs.example.com/ocp");
 
 		assertThat(preview.projects()).hasSize(1);
 		assertThat(preview.projects().get(0).title()).isEqualTo("KofBot");
-		assertThat(preview.projects().get(0).startDate()).isEqualTo("2020-01");
-		assertThat(preview.projects().get(0).endDate()).isEqualTo("2020-12");
+		assertThat(preview.projects().get(0).startDate()).isEqualTo("2020-01-01");
+		assertThat(preview.projects().get(0).endDate()).isEqualTo("2020-12-01");
 
 		assertThat(preview.skills()).containsExactly("Java", "Spring Boot", "PostgreSQL");
 

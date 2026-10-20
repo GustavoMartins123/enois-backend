@@ -426,7 +426,7 @@ public class SocialLoginService implements OAuthUseCase {
 		Instant refreshExpiresAt = now.plus(refreshTokenTtl);
 		String token = randomToken();
 		String refreshToken = randomToken();
-		authSessionRepository.save(token, refreshToken, userId, now, expiresAt, refreshExpiresAt);
+		authSessionRepository.save(token, refreshToken, userId, now, expiresAt, refreshExpiresAt, null);
 		UserProfile profile = userProfileRepository.findById(userId)
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
 		// Quem entrou pelo provedor pode ja ter criado uma senha depois; a tela pergunta por ela

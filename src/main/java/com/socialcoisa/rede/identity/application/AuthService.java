@@ -139,7 +139,7 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 			TwoFactorChallenge challenge = twoFactorService.startChallenge(profile.id(), requiredMethod.get());
 			return LoginResult.twoFactorRequired(challenge.id(), challenge.method().name(), challenge.expiresAt());
 		}
-		return LoginResult.authenticated(createResponse(profile));
+		return LoginResult.authenticated(createResponse(profile, command.ip()));
 	}
 
 	/** Conclui o login com o codigo do segundo fator (ou um codigo de recuperacao). */
@@ -156,7 +156,7 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 			throw new ApiException(403, "ACCOUNT_BANNED",
 				"Esta conta foi banida apos revisao do recurso. Fale com o suporte se precisar.");
 		}
-		return createResponse(profile);
+		return createResponse(profile, null);
 	}
 
 	@Override
@@ -188,7 +188,7 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		}
 		// Uso unico: consome o token antes de emitir a sessao.
 		emailVerificationTokenRepository.markUsed(tokenHash);
-		return createResponse(profile);
+		return createResponse(profile, null);
 	}
 
 	@Override
@@ -401,13 +401,14 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 			.orElseThrow(() -> new ApiException(401, "UNAUTHENTICATED", "Sessao invalida ou expirada."));
 	}
 
-	private AuthResponse createResponse(UserProfile profile) {
+	private AuthResponse createResponse(UserProfile profile, String ip) {
 		Instant now = clock.instant();
 		Instant expiresAt = now.plus(accessTokenTtl);
 		Instant refreshExpiresAt = now.plus(refreshTokenTtl);
 		String token = newToken();
 		String refreshToken = newToken();
-		authSessionRepository.save(token, refreshToken, profile.id(), now, expiresAt, refreshExpiresAt);
+		authSessionRepository.save(token, refreshToken, profile.id(), now, expiresAt, refreshExpiresAt,
+			ip == null || ip.isBlank() ? null : ip.trim());
 		return new AuthResponse(token, refreshToken, expiresAt, refreshExpiresAt,
 			AuthUserView.from(profile, hasUsablePassword(profile.id())));
 	}
@@ -419,7 +420,7 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		authSessionRepository.revokeByRefreshToken(currentRefreshToken, now);
 		UserProfile profile = userProfileRepository.findById(userId)
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
-		return createResponse(profile);
+		return createResponse(profile, null);
 	}
 
 	@Override

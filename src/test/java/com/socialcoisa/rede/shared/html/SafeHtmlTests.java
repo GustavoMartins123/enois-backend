@@ -280,4 +280,71 @@ class SafeHtmlTests {
 		assertThat(clean).contains("href=\"https://youtu.be/aqz-KE-bpKQ\"");
 		assertThat(clean).contains("o video");
 	}
+
+	/**
+	 * Relato da Mel (2026-10-20): a prévia (HTML cru, no editor) mostrava o SVG animado, mas o
+	 * perfil saía sem o desenho e sem as animações. A allowlist não conhecia SVG e o jsoup apagava
+	 * o desenho inteiro na gravação.
+	 */
+	@Test
+	void inlineSvgAndItsAnimationsSurviveTheSanitizer() {
+		String clean = SafeHtml.sanitizeProfileHtml("""
+			<style>
+			  @keyframes girar { to { transform: rotate(360deg); } }
+			  .roda { animation: girar 4s linear infinite; transform-origin: center; }
+			</style>
+			<svg viewBox="0 0 100 100" width="120">
+			  <defs><linearGradient id="g"><stop offset="0" stop-color="#7c3aed"/></linearGradient></defs>
+			  <g class="roda">
+			    <circle cx="50" cy="50" r="40" fill="url(#g)"/>
+			    <animate attributeName="r" from="40" to="45" dur="2s" repeatCount="indefinite"/>
+			    <animateTransform attributeName="transform" type="rotate" from="0 50 50" to="360 50 50" dur="6s" repeatCount="indefinite"/>
+			  </g>
+			</svg>
+			""");
+
+		assertThat(clean).contains("<svg").contains("viewBox=\"0 0 100 100\"");
+		assertThat(clean).contains("<circle").contains("fill=\"url(#g)\"");
+		assertThat(clean).contains("stop-color=\"#7c3aed\"");
+		// SMIL e a animação em CSS que dá o movimento no desenho.
+		assertThat(clean).contains("<animate ").contains("<animateTransform ");
+		assertThat(clean).contains("@keyframes girar").contains("animation: girar");
+	}
+
+	@Test
+	void svgReferencesStayInsideTheDocumentAndMediaFollowsTheImageRule() {
+		String clean = SafeHtml.sanitizeProfileHtml("""
+			<svg viewBox="0 0 10 10">
+			  <symbol id="estrela"><path d="M0 0h10v10z"/></symbol>
+			  <use href="#estrela"/>
+			  <use href="https://malicioso.test/externo.svg#x"/>
+			  <use xlink:href="#estrela"/>
+			  <image href="https://enois.ia.br/foto.png" width="10" height="10"/>
+			  <image href="javascript:alert(1)"/>
+			</svg>
+			""");
+
+		// Referência interna fica; externa perde o endereço (deixa de buscar outro documento).
+		assertThat(clean).contains("href=\"#estrela\"");
+		assertThat(clean).doesNotContain("malicioso.test").doesNotContain("externo.svg");
+		// Imagem dentro do SVG segue a régua do <img>.
+		assertThat(clean).contains("href=\"https://enois.ia.br/foto.png\"");
+		assertThat(clean).doesNotContain("javascript:");
+	}
+
+	@Test
+	void svgCannotSmuggleScriptOrHtml() {
+		String clean = SafeHtml.sanitizePageHtml("""
+			<svg onload="alert(1)">
+			  <script>alert(2)</script>
+			  <foreignObject><div onclick="alert(3)">html</div></foreignObject>
+			  <a href="javascript:alert(4)">clique</a>
+			</svg>
+			""");
+		String checked = clean == null ? "" : clean;
+
+		assertThat(checked).doesNotContain("<script").doesNotContain("alert")
+			.doesNotContain("onload").doesNotContain("onclick").doesNotContain("<foreignObject")
+			.doesNotContain("javascript:");
+	}
 }

@@ -66,14 +66,16 @@ class ExternalJobPersistenceAdapter implements ExternalJobRepository {
 	}
 
 	@Override
-	@org.springframework.cache.annotation.Cacheable("externalJobs")
+	@org.springframework.cache.annotation.Cacheable(value = "externalJobs",
+		key = "'excluding:' + #platform + ':' + #limit")
 	public List<ExternalJob> findRecentExcludingPlatform(String platform, int limit) {
 		return repository.findByPlatformNotOrderByLastCheckedAtDesc(platform,
 			PageRequest.of(0, Math.max(1, limit))).stream().map(ExternalJobJpaEntity::toDomain).toList();
 	}
 
 	@Override
-	@org.springframework.cache.annotation.Cacheable("externalJobs")
+	@org.springframework.cache.annotation.Cacheable(value = "externalJobs",
+		key = "'excluding:' + #platform + ':' + (#query ?: '') + ':' + #limit")
 	public List<ExternalJob> searchExcludingPlatform(String platform, String query, int limit) {
 		String escaped = query.toLowerCase(java.util.Locale.ROOT)
 			.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");

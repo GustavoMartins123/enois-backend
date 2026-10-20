@@ -54,6 +54,13 @@ class PostPersistenceAdapter implements PostRepository {
 	}
 
 	@Override
+	public List<Post> findAllByAuthor(UserId authorId) {
+		return repository.findByAuthorId(authorId.value()).stream()
+			.map(PostJpaEntity::toDomain)
+			.toList();
+	}
+
+	@Override
 	public List<Post> findActiveByAuthors(Set<UserId> authorIds, Instant before, int limit) {
 		if (authorIds == null || authorIds.isEmpty()) {
 			return List.of();

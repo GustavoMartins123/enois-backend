@@ -24,7 +24,7 @@ class ScheduledPostJpaEntity {
 	@Column(columnDefinition = "text")
 	String content;
 
-	@Column(name = "page_html", columnDefinition = "text")
+	@Column(name = "page_html", columnDefinition = "longtext")
 	String pageHtml;
 
 	@Column(name = "article_body", columnDefinition = "text")

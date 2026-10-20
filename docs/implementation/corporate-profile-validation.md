@@ -272,3 +272,18 @@
   `SupportCategoriesTests` filtrava por `toEmail`, que o painel mascara como "***";
   `LazyMigrationPersistenceTests` dependia de `@Transactional` de teste para ver a conta
   criada por outra conexão (agora o update direto usa `TransactionTemplate`).
+
+
+## 2026-10-20 — Fase 16 (gate final e push único)
+
+- Gate do backend em worktree isolado, JÁ COM `enois/main` mesclado (nenhum conflito):
+  `mvn test` → **Tests run: 581, Failures: 0, Errors: 0, Skipped: 1**, BUILD SUCCESS.
+- Gate do frontend em worktree isolado, já com `origin/main` mesclado: conflitos em
+  `src/texts.ts` (formatação + chaves novas dos dois lados) e em
+  `src/components/post/link-previews.tsx` (a correção de pontuação final veio do main).
+  Resolução preservou a união: as chaves de personalização/perfil profissional
+  continuam presentes e a correção de GIF/pontuação do main entrou. Resultado:
+  `vite build` ok, `vitest` **105 verdes**, `tsc` nos mesmos 9 erros de baseline.
+- Push único (fast-forward) para `main` nos dois repositórios, a partir dos commits de
+  merge do gate. Os repositórios de trabalho originais não foram reescritos: as sessões
+  concorrentes seguem com as alterações não commitadas delas.

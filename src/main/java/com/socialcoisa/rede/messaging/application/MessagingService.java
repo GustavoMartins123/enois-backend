@@ -14,6 +14,8 @@ import com.socialcoisa.rede.messaging.domain.Conversation;
 import com.socialcoisa.rede.messaging.domain.ConversationParticipant;
 import com.socialcoisa.rede.messaging.domain.Message;
 import com.socialcoisa.rede.notifications.application.NotificationService;
+import com.socialcoisa.rede.shared.security.BehavioralTimingGuard;
+import com.socialcoisa.rede.shared.security.UserRateLimiter;
 import com.socialcoisa.rede.shared.web.ApiException;
 
 @Service
@@ -22,11 +24,16 @@ public class MessagingService {
 	private final MessagingRepository repository;
 	private final NotificationService notificationService;
 	private final Clock clock;
+	private final UserRateLimiter userRateLimiter;
+	private final BehavioralTimingGuard behavioralTimingGuard;
 
-	public MessagingService(MessagingRepository repository, NotificationService notificationService, Clock clock) {
+	public MessagingService(MessagingRepository repository, NotificationService notificationService, Clock clock,
+			UserRateLimiter userRateLimiter, BehavioralTimingGuard behavioralTimingGuard) {
 		this.repository = repository;
 		this.notificationService = notificationService;
 		this.clock = clock;
+		this.userRateLimiter = userRateLimiter;
+		this.behavioralTimingGuard = behavioralTimingGuard;
 	}
 
 	@Transactional
@@ -78,6 +85,8 @@ public class MessagingService {
 	@Transactional
 	public Message sendMessage(String conversationId, String senderId, String text,
 			java.util.List<String> mediaIds) {
+		userRateLimiter.require(senderId, UserRateLimiter.SEND_MESSAGE);
+		behavioralTimingGuard.record(senderId);
 		Conversation conversation = repository.findConversationById(conversationId)
 			.orElseThrow(() -> new ApiException(404, "CONVERSATION_NOT_FOUND", "Conversa nao encontrada."));
 		if (!repository.isParticipant(conversationId, senderId)) {
@@ -95,6 +104,9 @@ public class MessagingService {
 		String id = "message_" + UUID.randomUUID().toString().replace("-", "");
 		Message message = Message.create(id, conversationId, senderId, corpo, midias, clock.instant());
 		repository.saveMessage(message);
+		// Ao enviar, a conversa fica lida para QUEM ENVIOU (PR #15) — antes o contador continuava
+		// aceso mesmo com a conversa aberta.
+		repository.markRead(conversationId, senderId, clock.instant());
 		// A lista de conversas ordena por updatedAt; sem este toque a conversa antiga fica no lugar
 		// mesmo recebendo mensagem nova (#25 dos issues).
 		repository.saveConversation(conversation.touch(clock.instant()));

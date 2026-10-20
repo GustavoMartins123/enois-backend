@@ -21,6 +21,11 @@ import com.socialcoisa.rede.notifications.application.NotificationService;
 import com.socialcoisa.rede.profile.domain.UserProfile;
 import com.socialcoisa.rede.shared.html.SafeHtml;
 import com.socialcoisa.rede.shared.text.PlainText;
+import com.socialcoisa.rede.shared.security.BehavioralTimingGuard;
+import com.socialcoisa.rede.shared.security.ContentDuplicationGuard;
+import com.socialcoisa.rede.shared.security.NewAccountCooldown;
+import com.socialcoisa.rede.shared.security.UserRateLimiter;
+import com.socialcoisa.rede.shared.security.UserRateLimiter;
 import com.socialcoisa.rede.shared.web.ApiException;
 
 @Service
@@ -41,6 +46,15 @@ public class PublishPostService implements PublishPostUseCase {
 	private final com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate;
 	private final PostCommunityReader postCommunityReader;
 	private final com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles;
+	/** Avisa quem escuta fora daqui (automod de spam), DEPOIS do commit. */
+	private final org.springframework.context.ApplicationEventPublisher events;
+	/** Cooldown de conta nova (PR #29): segura o flood inicial sem punir quem já tem história. */
+	private final NewAccountCooldown newAccountCooldown;
+	/** Rate limit por usuário e dedup de conteúdo (PR #28). */
+	private final UserRateLimiter userRateLimiter;
+	private final ContentDuplicationGuard duplicationGuard;
+	/** Detecção comportamental de automação (PR #36). */
+	private final BehavioralTimingGuard behavioralTimingGuard;
 
 	public PublishPostService(PostRepository postRepository, ArticleRepository articleRepository,
 			IdGenerator idGenerator, Clock clock,
@@ -50,7 +64,12 @@ public class PublishPostService implements PublishPostUseCase {
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository,
 			com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate,
 			PostCommunityReader postCommunityReader,
-			com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles) {
+			com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles,
+			org.springframework.context.ApplicationEventPublisher events,
+			NewAccountCooldown newAccountCooldown,
+			UserRateLimiter userRateLimiter,
+			ContentDuplicationGuard duplicationGuard,
+			BehavioralTimingGuard behavioralTimingGuard) {
 		this.postRepository = postRepository;
 		this.articleRepository = articleRepository;
 		this.idGenerator = idGenerator;
@@ -63,6 +82,11 @@ public class PublishPostService implements PublishPostUseCase {
 		this.sanctionGate = sanctionGate;
 		this.postCommunityReader = postCommunityReader;
 		this.corporateProfiles = corporateProfiles;
+		this.events = events;
+		this.newAccountCooldown = newAccountCooldown;
+		this.userRateLimiter = userRateLimiter;
+		this.duplicationGuard = duplicationGuard;
+		this.behavioralTimingGuard = behavioralTimingGuard;
 	}
 
 	@Override
@@ -72,6 +96,9 @@ public class PublishPostService implements PublishPostUseCase {
 			throw new ApiException(403, "ACCOUNT_RESTRICTED",
 				"Sua conta esta restrita por moderacao. Voce pode recorrer na pagina Penalidades.");
 		}
+		newAccountCooldown.require(command.authorId().value());
+		userRateLimiter.require(command.authorId().value(), UserRateLimiter.CREATE_POST);
+		behavioralTimingGuard.record(command.authorId().value());
 		validate(command);
 		List<String> tags = command.tags() == null ? List.of() : command.tags().stream()
 			.filter(StringUtils::hasText)
@@ -125,6 +152,9 @@ public class PublishPostService implements PublishPostUseCase {
 		} else {
 			topic = null;
 		}
+		if (StringUtils.hasText(command.content())) {
+			duplicationGuard.require(command.authorId().value(), command.content());
+		}
 		Post post = Post.publish(idGenerator.newPostId(), command.authorId(), command.type(), textOf(command),
 			pageHtml(command), tags, mediaIds, communityId, topic, clock.instant(), authorIdentity);
 		Post saved = postRepository.save(post);
@@ -136,10 +166,13 @@ public class PublishPostService implements PublishPostUseCase {
 		}
 		feedDistributionService.distribute(saved);
 		outboxEventRepository.append("PostPublished", saved.id().value(), "{\"postId\":\"" + saved.id().value() + "\"}");
+		// O automod de spam roda fora desta transação (listener AFTER_COMMIT + executor): flood,
+		// repetição e posts muito curtos passam pela IA sem depender de denúncia.
+		events.publishEvent(new PostPublishedEvent(saved.id().value(), saved.authorId().value()));
 		notifyMentions(command.mentionedUserIds(), command.authorId().value(), saved.id().value(), "post");
 		UserProfile author = userProfileRepository.findById(command.authorId().value()).orElse(null);
 		if (author != null) {
-			return PostView.from(saved, author.username(), author.name(), author.avatar(), author.allBadges());
+			return PostView.from(saved, author.username(), author.name(), author.avatar(), author.allBadges()).withAvatarFrame(author.avatarFrame());
 		}
 		return PostView.from(saved);
 	}

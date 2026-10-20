@@ -248,6 +248,45 @@ class ProfileControllerTests {
 			.andExpect(jsonPath("$.username").isNotEmpty());
 	}
 
+	/**
+	 * O ranking público virou a vitrine de CHEGADA (2026-10-20): quem entrou por último aparece
+	 * primeiro, e cada item diz desde quando está aqui (`joinedAt`) para a tela deixar isso claro.
+	 */
+	@Test
+	void rankingListsTheNewestProfilesFirst() throws Exception {
+		var auth = new com.socialcoisa.rede.shared.web.TestAuthHelper(mockMvc, objectMapper);
+		String suffix = String.valueOf(System.nanoTime());
+		var older = auth.authenticate("rank_older_" + suffix);
+		// O created_at tem precisão de microssegundos, mas um respiro evita empate na ordenação.
+		Thread.sleep(20);
+		var newer = auth.authenticate("rank_newer_" + suffix);
+
+		MvcResult result = mockMvc.perform(get("/profile/ranking").param("limit", "50"))
+			.andExpect(status().isOk())
+			.andReturn();
+		JsonNode items = objectMapper.readTree(result.getResponse().getContentAsString());
+
+		int olderIndex = indexOfUser(items, older.userId());
+		int newerIndex = indexOfUser(items, newer.userId());
+		org.assertj.core.api.Assertions.assertThat(olderIndex).as("perfil antigo na lista")
+			.isGreaterThanOrEqualTo(0);
+		org.assertj.core.api.Assertions.assertThat(newerIndex).as("perfil novo na lista")
+			.isGreaterThanOrEqualTo(0);
+		org.assertj.core.api.Assertions.assertThat(newerIndex).as("quem chegou por último vem primeiro")
+			.isLessThan(olderIndex);
+		org.assertj.core.api.Assertions.assertThat(items.get(newerIndex).path("joinedAt").asString())
+			.as("a tela mostra há quanto tempo a pessoa chegou").isNotBlank();
+	}
+
+	private int indexOfUser(JsonNode items, String userId) {
+		for (int i = 0; i < items.size(); i++) {
+			if (userId.equals(items.get(i).path("id").asString())) {
+				return i;
+			}
+		}
+		return -1;
+	}
+
 	@Test
 	void rankingEOpcionalPorPreferenciaDaConta() throws Exception {
 		// Padrao: mostra (compatibilidade com quem ja usava).

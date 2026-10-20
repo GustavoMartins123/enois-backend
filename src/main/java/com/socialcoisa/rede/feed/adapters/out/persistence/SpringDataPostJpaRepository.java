@@ -15,6 +15,8 @@ import com.socialcoisa.rede.feed.domain.PostType;
 
 interface SpringDataPostJpaRepository extends JpaRepository<PostJpaEntity, String> {
 
+	List<PostJpaEntity> findByAuthorId(String authorId);
+
 	List<PostJpaEntity> findByIdIn(Collection<String> ids);
 
 	List<PostJpaEntity> findByAuthorIdInAndStatusAndCreatedAtBeforeOrderByCreatedAtDesc(Collection<String> authorIds,
@@ -117,4 +119,5 @@ interface SpringDataPostJpaRepository extends JpaRepository<PostJpaEntity, Strin
 			ORDER BY p.createdAt DESC""")
 	List<PostJpaEntity> findCorporateByAuthor(@Param("authorId") String authorId, @Param("status") PostStatus status,
 			@Param("corporate") AuthorIdentity corporate, @Param("before") Instant before, Pageable pageable);
+	/** Todos os posts do autor (sem filtro de status) — ban cleanup, PR #37. */
 }

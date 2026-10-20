@@ -141,6 +141,51 @@ class UserProjectsTests {
 	}
 
 	@Test
+	void largeProjectHtmlAllowed() throws Exception {
+		var session = auth.authenticate("user_proj_large_html");
+
+		// HTML grande com ~9.000 caracteres (acima de 5.000, dentro do teto de 20.000)
+		String largeHtml = "<div><h2>Projeto Grande</h2>"
+				+ "<p style=\"color:#fff\">" + "Bloco de conteudo explicativo detalhado sobre a plataforma. ".repeat(150) + "</p></div>";
+		assertThat(largeHtml.length()).isGreaterThan(5000);
+		assertThat(largeHtml.length()).isLessThan(20000);
+
+		var payload = objectMapper.createObjectNode()
+			.put("title", "NeoToons")
+			.put("html", largeHtml);
+		payload.putArray("stack");
+		payload.putArray("diary");
+
+		var response = mockMvc.perform(withSession(post("/me/projects"), session).contentType(MediaType.APPLICATION_JSON)
+			.content(objectMapper.writeValueAsString(payload)))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.id").isString())
+			.andExpect(jsonPath("$.title").value("NeoToons"))
+			.andReturn().getResponse().getContentAsString();
+
+		assertThat(response).contains("Projeto Grande");
+	}
+
+	@Test
+	void projectHtmlKeepsUnicodeOutsideLatin1() throws Exception {
+		var session = auth.authenticate("user_proj_unicode_html");
+		String html = "<p>Conhecer a Flecha →</p>";
+
+		var payload = objectMapper.createObjectNode()
+			.put("title", "Flecha")
+			.put("html", html);
+		payload.putArray("stack");
+		payload.putArray("diary");
+
+		var response = mockMvc.perform(withSession(post("/me/projects"), session).contentType(MediaType.APPLICATION_JSON)
+			.content(objectMapper.writeValueAsString(payload)))
+			.andExpect(status().isCreated())
+			.andReturn().getResponse().getContentAsString();
+
+		assertThat(response).contains("→");
+	}
+
+	@Test
 	void requiresSessionForWrites() throws Exception {
 		mockMvc.perform(post("/me/projects").contentType(MediaType.APPLICATION_JSON).content(body("X")))
 			.andExpect(status().isUnauthorized());

@@ -55,6 +55,9 @@ class JobServiceTests {
 
 	@BeforeEach
 	void setUp() {
+		var noopPublisher = new org.springframework.context.ApplicationEventPublisher() {
+			@Override public void publishEvent(Object event) { }
+		};
 		service = new JobService(repository, reputationService, userProfileRepository,
 			new com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository() {
 				@Override
@@ -99,7 +102,10 @@ class JobServiceTests {
 					return 0;
 				}
 			},
-			new tools.jackson.databind.ObjectMapper(), Clock.systemUTC());
+			new tools.jackson.databind.ObjectMapper(), Clock.systemUTC(),
+			new com.socialcoisa.rede.shared.security.UserRateLimiter(Clock.systemUTC(), noopPublisher,
+				10, 60, 30, 60, 100, 30, 60, 1),
+			new com.socialcoisa.rede.shared.security.BehavioralTimingGuard(Clock.systemUTC(), noopPublisher));
 	}
 
 	@Test

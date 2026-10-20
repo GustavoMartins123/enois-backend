@@ -2,5 +2,7 @@ package com.socialcoisa.rede.moderation.domain;
 
 public enum SanctionType {
 	RESTRICTION,
-	BAN
+	BAN,
+	/** Banimento permanente por decisao de admin: como o BAN, e sem caminho de recurso. */
+	PERMABAN
 }

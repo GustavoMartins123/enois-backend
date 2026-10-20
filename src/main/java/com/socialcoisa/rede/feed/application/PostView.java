@@ -19,6 +19,8 @@ public record PostView(String id, String authorId, String authorUsername, String
 		Instant expiresAt,
 		/** Quem assinou: a apresentação (nome/@/avatar) acima vem da identidade dona do post. */
 		AuthorIdentity authorIdentity,
+		/** Moldura do avatar do autor (cosmético); nulo = sem moldura. */
+		String authorAvatarFrame,
 		/** Assunto do post (taxonomia da plataforma) ou null quando o autor não classificou. */
 		String topic) {
 
@@ -39,7 +41,8 @@ public record PostView(String id, String authorId, String authorUsername, String
 	public static PostView from(Post post) {
 		return new PostView(post.id().value(), post.authorId().value(), null, null, null, null, List.of(),
 			post.type(), post.content(), null, null, post.tags(), post.mediaIds(), post.createdAt(), post.counters(),
-			null, post.communityId(), null, post.editedAt(), post.expiresAt(), post.authorIdentity(), post.topic());
+			null, post.communityId(), null, post.editedAt(), post.expiresAt(), post.authorIdentity(), null,
+			post.topic());
 	}
 
 	public static PostView from(Post post, String authorUsername, String authorName, String authorAvatar) {
@@ -64,33 +67,40 @@ public record PostView(String id, String authorId, String authorUsername, String
 		return new PostView(post.id().value(), post.authorId().value(), authorUsername, authorName, authorAvatar,
 			badges.isEmpty() ? null : badges.get(0), badges, post.type(), post.content(), null, null, post.tags(),
 			post.mediaIds(), post.createdAt(), post.counters(), null, post.communityId(), null, post.editedAt(),
-			post.expiresAt(), authorIdentity, post.topic());
+			post.expiresAt(), authorIdentity, null, post.topic());
+	}
+
+	/** Anexa a moldura do avatar do autor (cosmético) depois do enriquecimento do perfil. */
+	public PostView withAvatarFrame(String frame) {
+		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
+			content, pageHtml, articleBody, tags, mediaIds, createdAt, counters, currentUserReaction, communityId,
+			community, editedAt, expiresAt, authorIdentity, frame, topic);
 	}
 
 	public PostView withCurrentUserReaction(ReactionType reaction) {
 		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
 			content, pageHtml, articleBody, tags, mediaIds, createdAt, counters, reaction, communityId, community,
-			editedAt, expiresAt, authorIdentity, topic);
+			editedAt, expiresAt, authorIdentity, authorAvatarFrame, topic);
 	}
 
 	/** Anexa o HTML da pagina; so o post unico faz isso (ver {@link #from(Post)}). */
 	public PostView withPageHtml(String pageHtml) {
 		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
 			content, pageHtml, articleBody, tags, mediaIds, createdAt, counters, currentUserReaction, communityId,
-			community, editedAt, expiresAt, authorIdentity, topic);
+			community, editedAt, expiresAt, authorIdentity, authorAvatarFrame, topic);
 	}
 
 	/** Anexa a comunidade (nome + participacao do leitor) depois do enriquecimento. */
 	public PostView withCommunity(String communityId, CommunityView community) {
 		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
 			content, pageHtml, articleBody, tags, mediaIds, createdAt, counters, currentUserReaction, communityId,
-			community, editedAt, expiresAt, authorIdentity, topic);
+			community, editedAt, expiresAt, authorIdentity, authorAvatarFrame, topic);
 	}
 
 	/** Anexa o corpo do artigo; so a leitura do post unico faz isso (mesma regra da pagina). */
 	public PostView withArticleBody(String body) {
 		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
 			content, pageHtml, body, tags, mediaIds, createdAt, counters, currentUserReaction, communityId, community,
-			editedAt, expiresAt, authorIdentity, topic);
+			editedAt, expiresAt, authorIdentity, authorAvatarFrame, topic);
 	}
 }
