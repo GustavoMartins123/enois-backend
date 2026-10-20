@@ -19,6 +19,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import com.socialcoisa.rede.shared.web.TestAuthHelper;
 
@@ -193,5 +194,38 @@ class CorporateIdentitySecurityTests {
 		mockMvc.perform(get("/feed/posts/" + postId))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.id").value(postId));
+	}
+
+	@Test
+	void sharedAccountValuesAreNotDuplicatedByTheCorporateIdentity() throws Exception {
+		var author = auth.authenticate("corpsec_shared");
+
+		MvcResult before = mockMvc.perform(get("/me").header("X-Session-Token", author.token()))
+			.andExpect(status().isOk())
+			.andReturn();
+		JsonNode social = objectMapper.readTree(before.getResponse().getContentAsString());
+		int reputation = social.get("reputation").asInt();
+		int followers = social.get("followersCount").asInt();
+		int connections = social.get("connectionsCount").asInt();
+
+		createAndActivate(author, "corpsec.shared", "Mesma Conta");
+
+		// A diretriz da dona: é a MESMA conta. Criar/ativar a identidade profissional não
+		// zera, duplica nem muda os valores da conta.
+		mockMvc.perform(get("/me").header("X-Session-Token", author.token()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.reputation").value(reputation))
+			.andExpect(jsonPath("$.followersCount").value(followers))
+			.andExpect(jsonPath("$.connectionsCount").value(connections));
+
+		// E o perfil profissional não carrega uma segunda cópia desses valores: eles vivem
+		// na conta, não na apresentação.
+		mockMvc.perform(get("/corporate/corpsec.shared"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.username").value("corpsec.shared"))
+			.andExpect(jsonPath("$.reputation").doesNotExist())
+			.andExpect(jsonPath("$.followersCount").doesNotExist())
+			.andExpect(jsonPath("$.connectionsCount").doesNotExist())
+			.andExpect(jsonPath("$.email").doesNotExist());
 	}
 }

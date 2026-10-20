@@ -148,7 +148,10 @@
   `CorporateProfileController` e `PersonalizationController` declaravam
   `@RequestHeader("X-Session-Token")` obrigatório e devolviam 400 "cabeçalho ausente"
   sem sessão; agora `required=false` + resolver → 401 `UNAUTHENTICATED`, como o resto
-  da API (teste próprio em `PersonalizationSecurityTests`, 4 verdes).
+  da API (teste próprio em `PersonalizationSecurityTests`, 4 verdes). Diretriz 4 da dona
+  também testada: criar/ativar o perfil profissional não altera reputação, seguidores
+  nem conexões da conta, e a página profissional não carrega cópia desses valores
+  (`sharedAccountValuesAreNotDuplicatedByTheCorporateIdentity`). 6/6 verdes.
 
 ## Fase 13 — Migração de usuários existentes
 

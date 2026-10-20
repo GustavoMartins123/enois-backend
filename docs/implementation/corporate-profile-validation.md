@@ -201,3 +201,8 @@
   `rows≈100`. Feed social (exclui BLOG/BUSINESS): `key=idx_posts_created`, como antes.
 - Migração V109 aplicada no H2 de teste na rodada conjunta (9/9 verdes) e no MariaDB da
   bancada sem erro (`create index if not exists`).
+- Diretriz 4 (valores da conta compartilhados) em `sharedAccountValuesAreNotDuplicatedByTheCorporateIdentity`:
+  reputação/seguidores/conexões de `GET /me` são idênticos antes e depois de criar+ativar o
+  perfil profissional; `GET /corporate/{username}` não expõe `reputation`, `followersCount`,
+  `connectionsCount` nem `email` (esses valores vivem na conta, não na apresentação).
+  Reexecução da classe: **6/6 verdes** (118,8 s, V109 aplicada no H2).
