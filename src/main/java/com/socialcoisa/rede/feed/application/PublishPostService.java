@@ -21,6 +21,10 @@ import com.socialcoisa.rede.notifications.application.NotificationService;
 import com.socialcoisa.rede.profile.domain.UserProfile;
 import com.socialcoisa.rede.shared.html.SafeHtml;
 import com.socialcoisa.rede.shared.text.PlainText;
+import com.socialcoisa.rede.shared.security.BehavioralTimingGuard;
+import com.socialcoisa.rede.shared.security.NewAccountCooldown;
+import com.socialcoisa.rede.shared.security.ContentDuplicationGuard;
+import com.socialcoisa.rede.shared.security.UserRateLimiter;
 import com.socialcoisa.rede.shared.web.ApiException;
 
 @Service
@@ -41,6 +45,10 @@ public class PublishPostService implements PublishPostUseCase {
 	private final com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate;
 	private final PostCommunityReader postCommunityReader;
 	private final com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles;
+	private final NewAccountCooldown newAccountCooldown;
+	private final UserRateLimiter userRateLimiter;
+	private final ContentDuplicationGuard duplicationGuard;
+	private final BehavioralTimingGuard behavioralTimingGuard;
 
 	public PublishPostService(PostRepository postRepository, ArticleRepository articleRepository,
 			IdGenerator idGenerator, Clock clock,
@@ -50,7 +58,11 @@ public class PublishPostService implements PublishPostUseCase {
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository,
 			com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate,
 			PostCommunityReader postCommunityReader,
-			com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles) {
+			com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles,
+			NewAccountCooldown newAccountCooldown,
+			UserRateLimiter userRateLimiter,
+			ContentDuplicationGuard duplicationGuard,
+			BehavioralTimingGuard behavioralTimingGuard) {
 		this.postRepository = postRepository;
 		this.articleRepository = articleRepository;
 		this.idGenerator = idGenerator;
@@ -63,6 +75,10 @@ public class PublishPostService implements PublishPostUseCase {
 		this.sanctionGate = sanctionGate;
 		this.postCommunityReader = postCommunityReader;
 		this.corporateProfiles = corporateProfiles;
+		this.newAccountCooldown = newAccountCooldown;
+		this.userRateLimiter = userRateLimiter;
+		this.duplicationGuard = duplicationGuard;
+		this.behavioralTimingGuard = behavioralTimingGuard;
 	}
 
 	@Override
@@ -72,6 +88,9 @@ public class PublishPostService implements PublishPostUseCase {
 			throw new ApiException(403, "ACCOUNT_RESTRICTED",
 				"Sua conta esta restrita por moderacao. Voce pode recorrer na pagina Penalidades.");
 		}
+		newAccountCooldown.require(command.authorId().value());
+		userRateLimiter.require(command.authorId().value(), UserRateLimiter.CREATE_POST);
+		behavioralTimingGuard.record(command.authorId().value());
 		validate(command);
 		List<String> tags = command.tags() == null ? List.of() : command.tags().stream()
 			.filter(StringUtils::hasText)
@@ -105,6 +124,9 @@ public class PublishPostService implements PublishPostUseCase {
 			if (!community.joined()) {
 				throw new ApiException(403, "NOT_A_MEMBER", "Entre na comunidade para publicar nela.");
 			}
+		}
+		if (StringUtils.hasText(command.content())) {
+			duplicationGuard.require(command.authorId().value(), command.content());
 		}
 		// Classificação REAL do assunto: o tópico da comunidade em que o post nasce. Post solto
 		// nasce sem classificação (nunca é bloqueado por preferência).

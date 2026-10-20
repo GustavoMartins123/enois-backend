@@ -67,6 +67,8 @@ class AuthController {
 	private final IdempotencyApplicationService idempotency;
 	private final com.socialcoisa.rede.identity.application.AuthThrottle throttle;
 	private final OAuthProperties oAuthProperties;
+	private final com.socialcoisa.rede.identity.adapters.out.TurnstileValidator turnstile;
+	private final com.socialcoisa.rede.identity.application.NewDeviceNotifier newDeviceNotifier;
 
 	AuthController(SignupUseCase signupUseCase, VerifyEmailUseCase verifyEmailUseCase,
 			TwoFactorLoginUseCase twoFactorLoginUseCase, TwoFactorUseCase twoFactorUseCase,
@@ -81,7 +83,9 @@ class AuthController {
 			DeleteAccountUseCase deleteAccountUseCase,
 			IdempotencyApplicationService idempotency,
 			OAuthProperties oAuthProperties,
-			com.socialcoisa.rede.identity.application.AuthThrottle throttle) {
+			com.socialcoisa.rede.identity.application.AuthThrottle throttle,
+			com.socialcoisa.rede.identity.adapters.out.TurnstileValidator turnstile,
+			com.socialcoisa.rede.identity.application.NewDeviceNotifier newDeviceNotifier) {
 		this.signupUseCase = signupUseCase;
 		this.verifyEmailUseCase = verifyEmailUseCase;
 		this.twoFactorLoginUseCase = twoFactorLoginUseCase;
@@ -99,16 +103,26 @@ class AuthController {
 		this.idempotency = idempotency;
 		this.throttle = throttle;
 		this.oAuthProperties = oAuthProperties;
+		this.turnstile = turnstile;
+		this.newDeviceNotifier = newDeviceNotifier;
 	}
 
 	@PostMapping("/signup")
 	@RateLimiter(name = "auth")
 	ResponseEntity<String> signup(@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@RequestHeader(value = "X-Forwarded-For", required = false) String forwardedFor,
+			@RequestHeader(value = "X-Device-Fingerprint", required = false) String deviceFingerprint,
 			@RequestBody SignupRequest request) {
+		// Honeypot: bots preenchem o campo "website" que humanos nunca veem.
+		// Resposta fake (201) para nao dar dica ao atacante.
+		if (request.website() != null && !request.website().isBlank()) {
+			return ResponseEntity.status(201)
+				.body("{\"email\":\"" + request.email() + "\",\"verificationRequired\":true,\"emailSent\":true}");
+		}
+		turnstile.require(request.turnstileToken());
 		String ip = forwardedFor == null || forwardedFor.isBlank() ? "desconhecido"
 			: forwardedFor.split(",")[0].trim();
-		throttle.exigeSignupPermitido(ip);
+		throttle.exigeSignupPermitido(ip, deviceFingerprint);
 		String scope = authScope(request.email());
 		String hash = idempotency.hash(request);
 		return idempotency.execute(scope, "POST", "/api/auth/signup", idempotencyKey, hash, () -> new CommandResponse(201,
@@ -145,7 +159,9 @@ class AuthController {
 	@PostMapping("/login")
 	@RateLimiter(name = "auth")
 	ResponseEntity<String> login(@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@RequestHeader(value = "X-Device-Fingerprint", required = false) String deviceFingerprint,
 			@RequestBody LoginRequest request) {
+		turnstile.require(request.turnstileToken());
 		String scope = authScope(request.email());
 		String hash = idempotency.hash(request);
 		throttle.exigeLoginPermitido(request.email());
@@ -153,12 +169,14 @@ class AuthController {
 			try {
 				LoginResult result = loginUseCase.login(new LoginCommand(request.email(), request.password()));
 				throttle.limpaLogin(request.email());
-				return result.requiresTwoFactor()
-					? new CommandResponse(202, Map.of("twoFactorRequired", true,
-						"challengeId", result.challenge().challengeId(),
-						"method", result.challenge().method(),
-						"expiresAt", result.challenge().expiresAt().toString()))
-					: new CommandResponse(200, result.session());
+				if (!result.requiresTwoFactor()) {
+					newDeviceNotifier.check(result.session().user().id(), deviceFingerprint);
+					return new CommandResponse(200, result.session());
+				}
+				return new CommandResponse(202, Map.of("twoFactorRequired", true,
+					"challengeId", result.challenge().challengeId(),
+					"method", result.challenge().method(),
+					"expiresAt", result.challenge().expiresAt().toString()));
 			} catch (ApiException falha) {
 				if (falha.status() == 401) {
 					throttle.registraFalhaLogin(request.email());
@@ -171,8 +189,12 @@ class AuthController {
 	/** Conclui o login com o codigo do segundo fator (ou com um codigo de recuperacao). */
 	@PostMapping("/2fa/verify")
 	@RateLimiter(name = "auth")
-	ResponseEntity<AuthResponse> verifyTwoFactor(@RequestBody VerifyTwoFactorRequest request) {
-		return ResponseEntity.ok(twoFactorLoginUseCase.verifyTwoFactor(request.challengeId(), request.code()));
+	ResponseEntity<AuthResponse> verifyTwoFactor(
+			@RequestHeader(value = "X-Device-Fingerprint", required = false) String deviceFingerprint,
+			@RequestBody VerifyTwoFactorRequest request) {
+		AuthResponse auth = twoFactorLoginUseCase.verifyTwoFactor(request.challengeId(), request.code());
+		newDeviceNotifier.check(auth.user().id(), deviceFingerprint);
+		return ResponseEntity.ok(auth);
 	}
 
 	/** Reenvia o codigo por e-mail do desafio em andamento. */
