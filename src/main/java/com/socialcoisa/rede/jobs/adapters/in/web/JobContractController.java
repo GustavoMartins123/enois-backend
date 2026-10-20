@@ -382,12 +382,17 @@ class JobContractController {
 	}
 
 	@DeleteMapping("/{jobId}")
-	ResponseEntity<Void> delete(@PathVariable String jobId,
+	ResponseEntity<DeleteResultView> delete(@PathVariable String jobId,
 			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		jobService.delete(jobId, user.id().value());
-		return ResponseEntity.noContent().build();
+		JobService.DeleteResult result = jobService.delete(jobId, user.id().value());
+		// O aviso volta na resposta: quem excluiu com candidatos sem resposta precisa saber
+		// na hora que a credibilidade é afetada (item 7 do backlog).
+		return ResponseEntity.ok(new DeleteResultView(result.jobId(), result.unanswered(), result.penalized()));
+	}
+
+	record DeleteResultView(String jobId, int unanswered, boolean penalized) {
 	}
 
 	/**

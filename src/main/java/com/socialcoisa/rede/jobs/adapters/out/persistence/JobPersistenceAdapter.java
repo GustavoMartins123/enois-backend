@@ -240,6 +240,12 @@ class JobPersistenceAdapter implements JobRepository {
 	}
 
 	@Override
+	public int countUnansweredApplications(String jobId) {
+		return applicationRepo.countByJobIdAndStatus(jobId,
+			com.socialcoisa.rede.jobs.domain.JobApplicationStatus.APPLIED);
+	}
+
+	@Override
 	public void deleteById(String id) {
 		applicationRepo.deleteByJobId(id);
 		saveRepo.deleteByJobId(id);

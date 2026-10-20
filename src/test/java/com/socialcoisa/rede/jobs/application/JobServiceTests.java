@@ -87,7 +87,19 @@ class JobServiceTests {
 				}
 			},
 			extensionRepository, delivery,
-			statusNotifier, new tools.jackson.databind.ObjectMapper(), Clock.systemUTC());
+			statusNotifier,
+			new com.socialcoisa.rede.jobs.application.port.out.JobAbandonPenaltyRepository() {
+				@Override
+				public boolean record(String jobId, String userId, int unanswered) {
+					return true;
+				}
+
+				@Override
+				public int countByUser(String userId) {
+					return 0;
+				}
+			},
+			new tools.jackson.databind.ObjectMapper(), Clock.systemUTC());
 	}
 
 	@Test

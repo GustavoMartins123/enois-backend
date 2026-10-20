@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import com.socialcoisa.rede.jobs.application.port.out.JobAbandonPenaltyRepository;
 import com.socialcoisa.rede.jobs.application.port.out.JobApplicationDelivery;
 import com.socialcoisa.rede.jobs.application.port.out.JobApplicationStatusNotifier;
 import com.socialcoisa.rede.jobs.application.port.out.JobRepository;
@@ -52,6 +53,7 @@ public class JobService {
 	private final com.socialcoisa.rede.profile.application.port.out.ProfileExtensionRepository extensionRepository;
 	private final JobApplicationDelivery delivery;
 	private final JobApplicationStatusNotifier statusNotifier;
+	private final JobAbandonPenaltyRepository abandonPenalties;
 	private final tools.jackson.databind.ObjectMapper objectMapper;
 	private final Clock clock;
 
@@ -60,6 +62,7 @@ public class JobService {
 			com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles,
 			com.socialcoisa.rede.profile.application.port.out.ProfileExtensionRepository extensionRepository,
 			JobApplicationDelivery delivery, JobApplicationStatusNotifier statusNotifier,
+			JobAbandonPenaltyRepository abandonPenalties,
 			tools.jackson.databind.ObjectMapper objectMapper, Clock clock) {
 		this.repository = repository;
 		this.reputationService = reputationService;
@@ -68,6 +71,7 @@ public class JobService {
 		this.extensionRepository = extensionRepository;
 		this.delivery = delivery;
 		this.statusNotifier = statusNotifier;
+		this.abandonPenalties = abandonPenalties;
 		this.objectMapper = objectMapper;
 		this.clock = clock;
 	}
@@ -179,14 +183,26 @@ public class JobService {
 		return moved;
 	}
 
+	/**
+	 * Exclui a vaga. Candidaturas ainda em APPLIED (o empregador nunca deu retorno) geram
+	 * REGISTRO de penalidade no componente de integridade da credibilidade — uma linha por
+	 * vaga, com teto no cálculo. Quem respondeu todas (IN_REVIEW/ADVANCED/NOT_SELECTED) não
+	 * é penalizado: a regra é "sem resposta reduz credibilidade; com resposta, não".
+	 */
+	public record DeleteResult(String jobId, int unanswered, boolean penalized) {
+	}
+
 	@Transactional
-	public void delete(String jobId, String userId) {
+	public DeleteResult delete(String jobId, String userId) {
 		Job existing = repository.findById(jobId)
 			.orElseThrow(() -> new ApiException(404, "JOB_NOT_FOUND", "Vaga nao encontrada."));
 		if (!existing.postedBy().equals(userId)) {
 			throw new ApiException(403, "NOT_OWNER", "Voce nao pode excluir uma vaga que nao criou.");
 		}
+		int unanswered = repository.countUnansweredApplications(jobId);
+		boolean penalized = unanswered > 0 && abandonPenalties.record(jobId, userId, unanswered);
 		repository.deleteById(jobId);
+		return new DeleteResult(jobId, unanswered, penalized);
 	}
 
 	/**

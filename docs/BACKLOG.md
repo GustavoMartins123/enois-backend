@@ -35,8 +35,17 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
 6. **Feedback por candidato** — `JobApplicationStatus {APPLIED, IN_REVIEW, NEXT_STAGE, REJECTED}` +
    `status/feedback/reviewed_at` + `PATCH /jobs/{jobId}/applications/{id}` (REJECTED exige motivo) +
    notificação (DM + e-mail). *Aceite:* avançar/reprovar com motivo; candidato notificado.
-7. **Penalidade por excluir vaga sem feedback** — débito de credibilidade (ledger/`ReputationService`),
-   com teto, + aviso no painel. *Aceite:* excluir sem responder reduz credibilidade; com respostas, não.
+7. **[x] ENTREGUE 2026-10-20 — Penalidade por excluir vaga sem dar retorno.** V114
+   (`job_abandon_penalties`, uma linha por vaga — a PK garante que a mesma exclusão não conta
+   duas vezes). O `delete` da vaga conta as candidaturas ainda em APPLIED; se houver, registra
+   a penalidade e devolve o aviso na própria resposta (`{unanswered, penalized}`), que o painel
+   "Minhas vagas" mostra como toast; o diálogo de exclusão já alerta a regra antes de confirmar.
+   No `ReputationService`, a penalidade entra no componente de integridade: 25, depois 75,
+   depois 150 (teto próprio de 150, somado à penalidade de moderação com teto global de 600).
+   Quem respondeu todas (qualquer estado fora de APPLIED) não é penalizado. Testes:
+   `JobAbandonPenaltyTests` (3: sem resposta penaliza e avisa; respondido não penaliza; não
+   conta duas vezes) + `ReputationServiceTests` 6/6 (penalidade desconta 25). V114 validada na
+   bancada MariaDB (create 1x + reexecução + PK rejeitando duplicata).
 8. **Currículo em PDF** — campo no perfil (upload PDF validado por tipo/tamanho) + anexar/atualizar na
    candidatura; link no snapshot que o empregador recebe. *Aceite:* PDF válido anexa; inválido recusa.
 
