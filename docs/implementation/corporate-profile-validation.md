@@ -223,3 +223,31 @@
   comunidades vazavam para `ContractControllerTests`, que exige a listagem global vazia
   (era exatamente o que a execução completa pegou). Rodada conjunta das classes de
   personalização + feed BUSINESS: **16/16 verdes**.
+
+
+## 2026-10-20 — Fase 10 restante + autoria no front (frontend)
+
+- Rota pública `/profissional/{username}` em `profissional_.$username.tsx` (irmã do editor;
+  o routeTree foi regenerado pelo `vite build` com id `/profissional_/$username` e
+  `fullPath /profissional/$username`): capa, avatar, headline, bio, local, indústria,
+  links e só as publicações BUSINESS do @, com paginação por cursor e estados de
+  carregamento/404.
+- Editor `/profissional` ganhou upload de avatar e capa (`useMediaUpload`, mesmo caminho
+  S3 do resto do app). O PATCH manda o perfil inteiro: o serviço substitui todos os
+  campos, então trocar uma imagem sem reenviar os textos (ou a outra imagem) apagaria o
+  resto — o mesmo tipo de armadilha do PUT de vaga.
+- `AuthorInfo` linka pela identidade (`authorIdentity`): CORPORATE → `/profissional/{username}`,
+  SOCIAL → `/perfil/{username}`.
+- Verificação: `npx vite build` ok (16,58 s); `npx tsc --noEmit` mantém os 9 erros do
+  baseline, nenhum nos arquivos tocados; eslint 0 nos arquivos novos/corrigidos;
+  `npx vitest run`: 101 verdes (os 2 "arquivos falhos" são as regras de ESLint
+  pré-existentes).
+
+
+## 2026-10-20 — Notificações e módulos desativados (frontend)
+
+- `notification-module.test.ts`: **4/4 verdes** — tipos do backend (MAIÚSCULAS) mapeados
+  para MESSAGES/EVENTS/JOBS/MENTORING/DAILY_GAMES; prefixos `GROUP_`/`NEW_GROUP_` →
+  GROUPS; comentário/rede ficam sempre visíveis; o filtro só esconde o módulo desativado.
+- O sino (`NotificationsPopover`) usa a mesma fonte única (`useDisabledModules`, de
+  /me/preferences) para filtrar a lista.

@@ -214,9 +214,13 @@
   desativados (fonte única /me/preferences); acesso direto a URL desativada mostra
   a tela explicativa com "Reativar esta área"; EVENTOS governa /acontecendo
   (dependência do plano); mapa módulo→rota testado (3 testes).
-- [ ] Faltam na Fase D: atalhos/cards contextuais (ex.: card de comunidade em
-  notificação) e evitar chamadas desnecessárias aos endpoints do módulo — a
-  navegação e o gate já cobrem os caminhos principais.
+- [x] 2026-10-20 — Notificações respeitam os módulos desativados:
+  `moduleForNotification`/`isNotificationHidden` mapeiam os tipos reais do backend para
+  MESSAGES/EVENTS/JOBS/MENTORING/DAILY_GAMES/GROUPS (4 testes) e o sino filtra pela mesma
+  fonte única (/me/preferences) — desativar um módulo não pode esconder o menu e deixar
+  a notificação voltar por outro caminho. Cards de módulo fora da própria área não
+  existem hoje no feed (as sugestões são de pessoas); navegação + gate + sino cobrem as
+  superfícies reais.
 - [x] Fase E — Interface das três seções em Uso saudável: "O que quero ver" e
   "Assuntos que não gosto" como chips da taxonomia real (marcar num lado tira do
   outro — o backend recusa o conflito), "O que não quero ver" como switches com a
