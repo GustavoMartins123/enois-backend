@@ -9,7 +9,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.transaction.annotation.Transactional;
 
 import tools.jackson.databind.ObjectMapper;
 
@@ -31,7 +30,10 @@ import jakarta.persistence.EntityManager;
  */
 @SpringBootTest
 @AutoConfigureMockMvc
-@Transactional
+// Sem @Transactional de propósito: o helper de autenticação cria a conta por uma requisição
+// MockMvc e o TestDatabase a lê por outro JdbcTemplate. Numa transação de teste a conta fica
+// não-commitada e a leitura (conexão diferente quando o contexto é trocado) não a vê — era o
+// "usuario nao criado" que só aparecia na suíte completa.
 class LazyMigrationPersistenceTests {
 
 	@Autowired
