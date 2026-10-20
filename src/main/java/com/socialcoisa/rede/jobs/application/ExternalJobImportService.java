@@ -83,7 +83,7 @@ public class ExternalJobImportService {
 				repository.save(new ExternalJob(current.id(), current.platform(), current.externalId(),
 					external.title(), external.company(), external.location(), external.salary(),
 					current.currency(), external.url(), current.importedAt(), clock.instant(),
-					ExternalJob.FOUND, canonicalUrl, applyEmail));
+					ExternalJob.FOUND, canonicalUrl, applyEmail, current.submittedBy()));
 				saved++;
 				continue;
 			}
@@ -93,10 +93,15 @@ public class ExternalJobImportService {
 				: repository.findByCanonicalUrl(canonicalUrl);
 			if (otherSource.isPresent()) {
 				ExternalJob original = otherSource.get();
+				// Vaga cadastrada pela COMUNIDADE: o registro do autor e a fonte da verdade — a
+				// importacao nao reescreve titulo/empresa nem assume a procedencia dele.
+				if (original.isCommunitySubmission()) {
+					continue;
+				}
 				repository.save(new ExternalJob(original.id(), original.platform(), original.externalId(),
 					original.title(), original.company(), original.location(), original.salary(),
 					original.currency(), original.url(), original.importedAt(), clock.instant(),
-					original.status(), original.canonicalUrl(), original.applyEmail()));
+					original.status(), original.canonicalUrl(), original.applyEmail(), original.submittedBy()));
 				saved++;
 				continue;
 			}
