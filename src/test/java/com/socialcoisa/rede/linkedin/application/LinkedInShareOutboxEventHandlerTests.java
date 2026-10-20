@@ -121,6 +121,11 @@ class LinkedInShareOutboxEventHandlerTests {
 		}
 
 		@Override
+		public List<Post> findAllByAuthor(UserId authorId) {
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
 		public List<Post> findExpiredMoments(Instant now, int limit) {
 			throw new UnsupportedOperationException();
 		}
