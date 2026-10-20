@@ -89,14 +89,18 @@ public class LinkedinImportService {
 		} catch (IOException error) {
 			throw new ApiException(400, "INVALID_FILE", "Não foi possível ler o arquivo. É um .zip do LinkedIn?");
 		}
-		if (!StringUtils.hasText(csvs.get("Positions.csv"))) {
+		// O export RÁPIDO ("fast file") só traz Profile.csv + Registration.csv — aceitamos ele com
+		// o que tem (perfil), em vez de dar beco sem saída. Recusamos só quando NENHUM CSV é do
+		// LinkedIn (arquivo que não é export, imagem etc.). O export completo vem com senha: o
+		// ZipInputStream do Java não abre, e a saída é a aba de COLAR TEXTO (mesma análise).
+		if (!StringUtils.hasText(csvs.get("Positions.csv")) && !StringUtils.hasText(csvs.get("Profile.csv"))) {
 			throw new ApiException(400, "NOT_A_LINKEDIN_EXPORT",
 				"Não encontrei os CSVs do LinkedIn dentro do arquivo. Exporte em Configurações → "
 					+ "\"Obter uma cópia dos seus dados\" → arquivamento completo.");
 		}
 
 		List<ExperiencePreview> experiences = new ArrayList<>();
-		for (Map<String, String> row : rows(csvs.get("Positions.csv"))) {
+		for (Map<String, String> row : rows(csvs.getOrDefault("Positions.csv", ""))) {
 			String title = row.get("position title");
 			String company = row.get("company name");
 			if (!StringUtils.hasText(title) && !StringUtils.hasText(company)) {

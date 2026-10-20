@@ -109,6 +109,24 @@ class LinkedinImportServiceTests {
 	}
 
 	@Test
+	void parsesTheFastExportWithProfileOnly() {
+		// O export RÁPIDO ("fast file") não tem Positions.csv: aceitamos com o que tem (perfil),
+		// em vez de beco sem saída — relato de quem baixou Basic_LinkedInDataExport.
+		var preview = service.parse(zip(
+			"Registration.csv", "foo,bar\n1,2",
+			"Profile.csv", "\"First Name\",\"Last Name\",\"Headline\",\"Summary\",\"Industry\",\"Geo Location\"\n"
+				+ "\"Mel\",\"Santos\",\"Criadora da linguagem Kof\",\" Sou engenheira de software\",\"Technology\",\"Arapongas, Paraná, Brasil\""));
+
+		assertThat(preview.experiences()).isEmpty();
+		assertThat(preview.education()).isEmpty();
+		assertThat(preview.profile()).isNotNull();
+		assertThat(preview.profile().name()).isEqualTo("Mel Santos");
+		assertThat(preview.profile().headline()).isEqualTo("Criadora da linguagem Kof");
+		assertThat(preview.profile().location()).isEqualTo("Arapongas, Paraná, Brasil");
+		assertThat(preview.found()).isEqualTo(1);
+	}
+
+	@Test
 	void refusesEmptyAndHuge() {
 		assertThatThrownBy(() -> service.parse(null)).isInstanceOf(ApiException.class);
 		assertThatThrownBy(() -> service.parse(new MockMultipartFile("file", "x.zip", "application/zip",
