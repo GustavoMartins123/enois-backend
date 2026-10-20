@@ -13,7 +13,7 @@ import java.util.regex.Pattern;
  * chega por um fluxo de importação com revisão e consentimento explícito (na camada de app).
  */
 public record CorporateProfile(String userId, String username, String name, String headline, String bio,
-		String avatar, String banner, String location, String industry, String externalLinks,
+		String avatar, String banner, String bannerHtml, String location, String industry, String externalLinks,
 		CorporateProfileStatus status, Instant createdAt, Instant updatedAt) {
 
 	/** Mesmas regras de formato do @ social, em namespace próprio: [a-z0-9._-], com pontos. */
@@ -21,19 +21,19 @@ public record CorporateProfile(String userId, String username, String name, Stri
 
 	public static CorporateProfile create(String userId, String username, String name, Instant now) {
 		return new CorporateProfile(userId, validUsername(username), validName(name), null, null, null, null,
-			null, null, null, CorporateProfileStatus.DRAFT, now, now);
+			null, null, null, null, CorporateProfileStatus.DRAFT, now, now);
 	}
 
 	public CorporateProfile withDetails(String newHeadline, String newBio, String newAvatar, String newBanner,
-			String newLocation, String newIndustry, String newExternalLinks, Instant now) {
+			String newBannerHtml, String newLocation, String newIndustry, String newExternalLinks, Instant now) {
 		return new CorporateProfile(userId, username, name, newHeadline, newBio, newAvatar, newBanner,
-			newLocation, newIndustry, newExternalLinks, status, createdAt, now);
+			newBannerHtml, newLocation, newIndustry, newExternalLinks, status, createdAt, now);
 	}
 
 	/** Renomear a apresentação não muda o @ (o @ tem fluxo próprio, decidido na fase de app). */
 	public CorporateProfile withName(String newName, Instant now) {
 		return new CorporateProfile(userId, username, validName(newName), headline, bio, avatar, banner,
-			location, industry, externalLinks, status, createdAt, now);
+			bannerHtml, location, industry, externalLinks, status, createdAt, now);
 	}
 
 	public CorporateProfile activate(Instant now) {
@@ -54,8 +54,8 @@ public record CorporateProfile(String userId, String username, String name, Stri
 	}
 
 	private CorporateProfile withStatus(CorporateProfileStatus newStatus, Instant now) {
-		return new CorporateProfile(userId, username, name, headline, bio, avatar, banner, location, industry,
-			externalLinks, newStatus, createdAt, now);
+		return new CorporateProfile(userId, username, name, headline, bio, avatar, banner, bannerHtml, location,
+			industry, externalLinks, newStatus, createdAt, now);
 	}
 
 	private static String validUsername(String username) {
