@@ -26,6 +26,7 @@ import com.socialcoisa.rede.feed.domain.Post;
 import com.socialcoisa.rede.feed.domain.PostId;
 import com.socialcoisa.rede.notifications.application.NotificationService;
 import com.socialcoisa.rede.shared.blocks.BlockedUsersReader;
+import com.socialcoisa.rede.shared.security.NewAccountCooldown;
 import com.socialcoisa.rede.shared.text.PlainText;
 import com.socialcoisa.rede.shared.web.ApiException;
 import com.socialcoisa.rede.shared.web.CursorCodec;
@@ -48,6 +49,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 	private final com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseCase validateMediaOwnership;
 	private final com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate;
 	private final com.socialcoisa.rede.coin.application.CoinService coins;
+	private final NewAccountCooldown newAccountCooldown;
 
 	public PostInteractionService(PostRepository postRepository, CommentRepository commentRepository,
 			PostInteractionRepository postInteractionRepository, OutboxEventRepository outboxEventRepository,
@@ -57,7 +59,8 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 			BlockedUsersReader blockedUsersReader,
 			com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseCase validateMediaOwnership,
 			com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate,
-			com.socialcoisa.rede.coin.application.CoinService coins) {
+			com.socialcoisa.rede.coin.application.CoinService coins,
+			NewAccountCooldown newAccountCooldown) {
 		this.postRepository = postRepository;
 		this.commentRepository = commentRepository;
 		this.postInteractionRepository = postInteractionRepository;
@@ -70,6 +73,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 		this.validateMediaOwnership = validateMediaOwnership;
 		this.sanctionGate = sanctionGate;
 		this.coins = coins;
+		this.newAccountCooldown = newAccountCooldown;
 	}
 
 	@Override
@@ -79,6 +83,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 			throw new ApiException(403, "ACCOUNT_RESTRICTED",
 				"Sua conta esta restrita por moderacao. Voce pode recorrer na pagina Penalidades.");
 		}
+		newAccountCooldown.require(command.authorId().value());
 		Post post = activePost(command.postId());
 		List<String> mediaIds = normalizeCommentMedia(command.mediaIds(), command.authorId());
 		String content = normalizeContent(command.content(), !mediaIds.isEmpty());

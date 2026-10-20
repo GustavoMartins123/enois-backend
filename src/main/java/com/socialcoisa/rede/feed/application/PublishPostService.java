@@ -21,6 +21,7 @@ import com.socialcoisa.rede.notifications.application.NotificationService;
 import com.socialcoisa.rede.profile.domain.UserProfile;
 import com.socialcoisa.rede.shared.html.SafeHtml;
 import com.socialcoisa.rede.shared.text.PlainText;
+import com.socialcoisa.rede.shared.security.NewAccountCooldown;
 import com.socialcoisa.rede.shared.web.ApiException;
 
 @Service
@@ -43,6 +44,8 @@ public class PublishPostService implements PublishPostUseCase {
 	private final com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles;
 	/** Avisa quem escuta fora daqui (automod de spam), DEPOIS do commit. */
 	private final org.springframework.context.ApplicationEventPublisher events;
+	/** Cooldown de conta nova (PR #29): segura o flood inicial sem punir quem já tem história. */
+	private final NewAccountCooldown newAccountCooldown;
 
 	public PublishPostService(PostRepository postRepository, ArticleRepository articleRepository,
 			IdGenerator idGenerator, Clock clock,
@@ -53,7 +56,8 @@ public class PublishPostService implements PublishPostUseCase {
 			com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate,
 			PostCommunityReader postCommunityReader,
 			com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles,
-			org.springframework.context.ApplicationEventPublisher events) {
+			org.springframework.context.ApplicationEventPublisher events,
+			NewAccountCooldown newAccountCooldown) {
 		this.postRepository = postRepository;
 		this.articleRepository = articleRepository;
 		this.idGenerator = idGenerator;
@@ -67,6 +71,7 @@ public class PublishPostService implements PublishPostUseCase {
 		this.postCommunityReader = postCommunityReader;
 		this.corporateProfiles = corporateProfiles;
 		this.events = events;
+		this.newAccountCooldown = newAccountCooldown;
 	}
 
 	@Override
@@ -76,6 +81,7 @@ public class PublishPostService implements PublishPostUseCase {
 			throw new ApiException(403, "ACCOUNT_RESTRICTED",
 				"Sua conta esta restrita por moderacao. Voce pode recorrer na pagina Penalidades.");
 		}
+		newAccountCooldown.require(command.authorId().value());
 		validate(command);
 		List<String> tags = command.tags() == null ? List.of() : command.tags().stream()
 			.filter(StringUtils::hasText)
