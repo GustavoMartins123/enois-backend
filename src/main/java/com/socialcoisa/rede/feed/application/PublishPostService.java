@@ -20,6 +20,7 @@ import com.socialcoisa.rede.notifications.application.NotificationService;
 import com.socialcoisa.rede.profile.domain.UserProfile;
 import com.socialcoisa.rede.shared.html.SafeHtml;
 import com.socialcoisa.rede.shared.text.PlainText;
+import com.socialcoisa.rede.shared.security.BehavioralTimingGuard;
 import com.socialcoisa.rede.shared.security.NewAccountCooldown;
 import com.socialcoisa.rede.shared.security.ContentDuplicationGuard;
 import com.socialcoisa.rede.shared.security.UserRateLimiter;
@@ -45,6 +46,7 @@ public class PublishPostService implements PublishPostUseCase {
 	private final NewAccountCooldown newAccountCooldown;
 	private final UserRateLimiter userRateLimiter;
 	private final ContentDuplicationGuard duplicationGuard;
+	private final BehavioralTimingGuard behavioralTimingGuard;
 
 	public PublishPostService(PostRepository postRepository, ArticleRepository articleRepository,
 			IdGenerator idGenerator, Clock clock,
@@ -56,7 +58,8 @@ public class PublishPostService implements PublishPostUseCase {
 			PostCommunityReader postCommunityReader,
 			NewAccountCooldown newAccountCooldown,
 			UserRateLimiter userRateLimiter,
-			ContentDuplicationGuard duplicationGuard) {
+			ContentDuplicationGuard duplicationGuard,
+			BehavioralTimingGuard behavioralTimingGuard) {
 		this.postRepository = postRepository;
 		this.articleRepository = articleRepository;
 		this.idGenerator = idGenerator;
@@ -71,6 +74,7 @@ public class PublishPostService implements PublishPostUseCase {
 		this.newAccountCooldown = newAccountCooldown;
 		this.userRateLimiter = userRateLimiter;
 		this.duplicationGuard = duplicationGuard;
+		this.behavioralTimingGuard = behavioralTimingGuard;
 	}
 
 	@Override
@@ -82,6 +86,7 @@ public class PublishPostService implements PublishPostUseCase {
 		}
 		newAccountCooldown.require(command.authorId().value());
 		userRateLimiter.require(command.authorId().value(), UserRateLimiter.CREATE_POST);
+		behavioralTimingGuard.record(command.authorId().value());
 		validate(command);
 		List<String> tags = command.tags() == null ? List.of() : command.tags().stream()
 			.filter(StringUtils::hasText)
