@@ -7,7 +7,7 @@ create table if not exists blocked_ips (
   created_by varchar(255),
   created_at timestamp not null,
   primary key (id)
-);
+) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_uca1400_ai_ci;
 
 create unique index uk_blocked_ips_ip on blocked_ips (ip);
 
