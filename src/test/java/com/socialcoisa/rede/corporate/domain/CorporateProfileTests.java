@@ -56,7 +56,8 @@ class CorporateProfileTests {
 		CorporateProfile profile = CorporateProfile.create("user_1", "mel.santos", "Mel Santos", now);
 
 		CorporateProfile ativo = profile.withDetails("Engenheira de software", "Bio profissional", null, null,
-			"São Paulo", "Tecnologia", null, now.plus(1, ChronoUnit.MINUTES)).activate(now.plus(2, ChronoUnit.MINUTES));
+			null, "São Paulo", "Tecnologia", null, now.plus(1, ChronoUnit.MINUTES))
+			.activate(now.plus(2, ChronoUnit.MINUTES));
 		assertThat(ativo.active()).isTrue();
 		assertThat(ativo.headline()).isEqualTo("Engenheira de software");
 
