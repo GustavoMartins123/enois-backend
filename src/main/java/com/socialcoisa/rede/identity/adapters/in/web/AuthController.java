@@ -301,11 +301,20 @@ class AuthController {
 	@RateLimiter(name = "auth")
 	Object oauthCallback(@PathVariable String provider, @RequestParam(required = false) String code,
 			@RequestParam(required = false) String state, @RequestParam(required = false) String error) {
-		OAuthProvider oauthProvider = parseProvider(provider);
-		if (StringUtils.hasText(error) || !StringUtils.hasText(code)) {
-			return finishOAuthError(oauthProvider, error);
+		// Este callback e uma NAVIGACAO do browser (o provedor redireciona para ca). Qualquer
+		// falha vira redirect para a tela de callback do app com mensagem legivel — JSON cru
+		// aqui deixa a pessoa olhando um erro sem saida (relato de suporte: "Requisicao
+		// invalida" ao importar o perfil do LinkedIn).
+		try {
+			OAuthProvider oauthProvider = parseProvider(provider);
+			if (StringUtils.hasText(error) || !StringUtils.hasText(code)) {
+				return finishOAuthError(oauthProvider, error);
+			}
+			return finishOAuth(oAuthUseCase.callback(oauthProvider, code, state, null));
 		}
-		return finishOAuth(oAuthUseCase.callback(oauthProvider, code, state, null));
+		catch (ApiException e) {
+			return finishOAuthError(parseProvider(provider), e.code());
+		}
 	}
 
 	/**
