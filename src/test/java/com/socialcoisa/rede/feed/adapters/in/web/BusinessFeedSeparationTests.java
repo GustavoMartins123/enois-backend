@@ -118,6 +118,14 @@ class BusinessFeedSeparationTests {
 			.andExpect(jsonPath("$.items[?(@.id == '" + socialId + "')]").isNotEmpty())
 			.andExpect(jsonPath("$.items[?(@.id == '" + businessId + "')]").isEmpty());
 
+		// Abas sociais por tipo (Discussões = QUESTION, Projetos = PROJECT): o BUSINESS
+		// nunca entra — o filtro por tipo é estrutural, mas o teste fecha a porta.
+		for (String tab : java.util.List.of("DISCUSSIONS", "PROJECTS")) {
+			mockMvc.perform(get("/feed").param("tab", tab).header("X-Session-Token", author.token()))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.items[?(@.id == '" + businessId + "')]").isEmpty());
+		}
+
 		// Feed corporativo: o BUSINESS entra, o social nunca.
 		mockMvc.perform(get("/feed/corporate").header("X-Session-Token", author.token()))
 			.andExpect(status().isOk())

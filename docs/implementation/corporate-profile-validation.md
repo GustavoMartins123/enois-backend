@@ -96,3 +96,12 @@
   repositório corporativo vazio foi adicionado ao construtor do serviço).
 - Correções: reputação mockada (>150) como nos testes de vaga existentes; o apply
   responde 201 (não 200).
+
+
+## 2026-10-20 — Fase 8 (auditoria busca/notificações/salvos)
+
+- Auditoria endpoint por endpoint registrada no progress (tabela). Achados: a busca não
+  indexa posts (sem vazamento por construção); salvos e link direto são acesso explícito
+  (corretos); abas por tipo não casam com BUSINESS.
+- `BusinessFeedSeparationTests` ampliado: as abas DISCUSSIONS e PROJECTS também provam
+  ausência do post BUSINESS (3/3 verdes).

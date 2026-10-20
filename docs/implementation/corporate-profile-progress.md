@@ -88,8 +88,21 @@
 
 ## Fase 8 — Busca, notificações, salvos, trending, shares
 
-- [ ] Auditar cada endpoint que lista publicações; BUSINESS fora do contexto social;
-  registro da auditoria aqui (endpoint por endpoint).
+- [x] Auditoria endpoint por endpoint (2026-10-20):
+
+| superfície | regra | estado |
+|---|---|---|
+| Feed Tudo | BUSINESS nunca | query exclui BLOG+BUSINESS (testado) |
+| Para você / Seguindo | só SOCIAL | query `authorIdentity = SOCIAL` (testado) |
+| Perfil social | só SOCIAL | query social (testado) |
+| Feed corporativo / página do perfil profissional | só CORPORATE | queries dedicadas (testado) |
+| Abas Discussões/Recentes/Projetos | filtro por tipo (QUESTION/PROJECT) | BUSINESS não casa por tipo (testado) |
+| Comunidades | BUSINESS não nasce nelas | recusa no publish + consulta por comunidade |
+| Busca (`/search`) | não indexa posts (só users/communities/jobs/events/mentors) | sem vazamento por construção |
+| Salvos | escolha explícita do usuário | BUSINESS salvo aparece (correto: acesso explícito) |
+| Notificações | apontam para o post único (acesso explícito) | só autor/participantes recebem |
+| Compartilhamento | link direto do post | acesso explícito, sem prévia em feed |
+| Cache do feed social | não recebe CORPORATE | distribuição filtra (testado) |
 
 ## Fase 9 — Frontend: alternância e identidade ativa
 
