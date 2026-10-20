@@ -185,7 +185,19 @@
 
 ## Fase 15 — Testes e critérios de aceite
 
-- [ ] Suíte completa verde (backend + front); cenários da seção 18 do plan; sem regressão.
+- [x] 2026-10-20 — Suíte COMPLETA do backend verde, num worktree isolado do commit:
+  `mvn test` → **575 testes, 0 falhas, 0 erros, 1 ignorado**, exit 0. Front:
+  `npx vitest run` 101 verdes; `npm run test:eslint-rules` verde; `npx vite build` ok;
+  `npx tsc --noEmit` mantém os 9 erros pré-existentes do baseline, nenhum nos arquivos
+  do plano. Página pública também renderizada de verdade: com uma API mock, o Chrome
+  headless mostrou nome, headline, bio e o post BUSINESS assinado pela identidade
+  profissional.
+- [x] 2026-10-20 — Bloqueios de suíte alheios ao plano corrigidos para o gate: a V102
+  (`external_jobs.submitted_by`) estava sem commit embora o código commitado exigisse a
+  coluna (9 erros em vagas externas); comunidades criadas em testes vazavam para o
+  contrato de página vazia (H2 compartilhado); o log de e-mail mascara o destinatário
+  ("***") e um teste filtrava por ele; e o teste de CAS usava `@Transactional` de teste,
+  que escondia a conta recém-criada numa leitura por outra conexão.
 
 ## Fase 16 — Gate final
 

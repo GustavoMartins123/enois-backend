@@ -251,3 +251,24 @@
   GROUPS; comentário/rede ficam sempre visíveis; o filtro só esconde o módulo desativado.
 - O sino (`NotificationsPopover`) usa a mesma fonte única (`useDisabledModules`, de
   /me/preferences) para filtrar a lista.
+
+
+## 2026-10-20 — Fase 15 (suíte completa e aceite)
+
+- Backend, worktree isolado do commit (`/tmp/rede-full`, HEAD `9ba1f70` + os dois commits
+  de estabilização): `mvn test` → **Tests run: 575, Failures: 0, Errors: 0, Skipped: 1**,
+  exit 0. Nenhum teste do plano foi desativado.
+- Front: `npx vitest run` → 101 testes verdes; `npm run test:eslint-rules` → verde (os
+  dois "arquivos falhos" do vitest são as regras de ESLint, que têm runner próprio);
+  `npx vite build` → ok (16,58 s); `npx tsc --noEmit` → os mesmos 9 erros pré-existentes
+  do baseline, nenhum nos arquivos do plano.
+- Verificação de tela da rota pública: API mock (perfil + um post BUSINESS) + `vite dev`
+  + Chrome headless `--dump-dom` → o DOM trouxe "Ana Profissional", a headline, a bio e o
+  texto do post com `authorIdentity: CORPORATE`. Não houve screenshot: o Chrome deste
+  host travou no modo screenshot; a prova é o DOM renderizado com os dados.
+- Bloqueios alheios ao plano corrigidos para o gate: V102 sem commit (coluna
+  `external_jobs.submitted_by` exigida pelo código commitado); `GroupCommunityIsolationTests`
+  e os testes de personalização deixavam comunidades no H2 compartilhado;
+  `SupportCategoriesTests` filtrava por `toEmail`, que o painel mascara como "***";
+  `LazyMigrationPersistenceTests` dependia de `@Transactional` de teste para ver a conta
+  criada por outra conexão (agora o update direto usa `TransactionTemplate`).
