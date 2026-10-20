@@ -47,6 +47,7 @@ class JobContractController {
 	private final List<com.socialcoisa.rede.jobs.application.port.out.JobImportSource> jobImportSources;
 	private final ExternalJobRepository externalJobRepository;
 	private final com.socialcoisa.rede.jobs.application.port.out.CompanyDirectoryReader companyDirectory;
+	private final com.socialcoisa.rede.jobs.application.ExternalJobSubmissionService externalJobSubmission;
 	private final boolean externalListingEnabled;
 	private final int externalListingLimit;
 	private final tools.jackson.databind.ObjectMapper objectMapper;
@@ -60,7 +61,8 @@ class JobContractController {
 			ExternalJobRepository externalJobRepository,
 			@org.springframework.beans.factory.annotation.Value("${rede.jobs.import.external-listing-enabled:false}") boolean externalListingEnabled,
 			@org.springframework.beans.factory.annotation.Value("${rede.jobs.import.external-listing-limit:20}") int externalListingLimit,
-			com.socialcoisa.rede.jobs.application.port.out.CompanyDirectoryReader companyDirectory) {
+			com.socialcoisa.rede.jobs.application.port.out.CompanyDirectoryReader companyDirectory,
+			com.socialcoisa.rede.jobs.application.ExternalJobSubmissionService externalJobSubmission) {
 		this.idempotency = idempotency;
 		this.currentUserResolver = currentUserResolver;
 		this.jobService = jobService;
@@ -73,6 +75,7 @@ class JobContractController {
 		this.externalJobRepository = externalJobRepository;
 		this.externalListingEnabled = externalListingEnabled;
 		this.externalListingLimit = externalListingLimit;
+		this.externalJobSubmission = externalJobSubmission;
 	}
 
 	/** Candidaturas recebidas (somente quem publicou a vaga). */
@@ -183,6 +186,48 @@ class JobContractController {
 	@GetMapping("/platforms")
 	List<String> platforms() {
 		return externalJobRepository.distinctPlatforms();
+	}
+
+	/**
+	 * Cadastra uma vaga EXTERNA (achada em outro site): o enois lista, e o "Candidatar-se" vai para
+	 * o link de origem. Mesmo gate de reputacao da vaga da casa, dedupe por URL e idempotencia.
+	 */
+	@PostMapping("/external")
+	ResponseEntity<String> createExternal(@RequestBody CreateExternalJobRequest body,
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		String hash = idempotency.hash(Map.of(
+			"title", body.title() == null ? "" : body.title(),
+			"company", body.company() == null ? "" : body.company(),
+			"location", body.location() == null ? "" : body.location(),
+			"url", body.url() == null ? "" : body.url()));
+		return idempotency.execute(user.id(), "POST", "/api/jobs/external", idempotencyKey, hash, () -> {
+			ExternalJob job = externalJobSubmission.submit(user.id().value(), body.title(), body.company(),
+				body.location(), body.url(), body.communityAgreement());
+			return new CommandResponse(201, toExternalView(job, true));
+		});
+	}
+
+	/** As vagas externas que EU cadastrei (a tela lista e permite excluir). */
+	@GetMapping("/external/mine")
+	List<JobView> myExternalJobs(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		return externalJobSubmission.mine(user.id().value()).stream()
+			.map(job -> toExternalView(job, true))
+			.toList();
+	}
+
+	/** Exclui uma vaga externa CADASTRADA POR MIM (as importadas nao tem dono). */
+	@DeleteMapping("/external/{externalJobId}")
+	ResponseEntity<Void> deleteExternal(@PathVariable String externalJobId,
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		externalJobSubmission.remove(user.id().value(), externalJobId);
+		return ResponseEntity.noContent().build();
 	}
 
 	/** Vagas publicadas pelo usuario autenticado (com o total de candidaturas recebidas). */
@@ -441,9 +486,14 @@ class JobContractController {
 	}
 
 	private JobView toExternalView(ExternalJob job) {
+		return toExternalView(job, false);
+	}
+
+	/** `owner`: a vaga externa foi cadastrada por quem esta vendo (a tela mostra "excluir"). */
+	private JobView toExternalView(ExternalJob job, boolean owner) {
 		return new JobView(job.id(), job.title(), job.company(), null, job.location(), null, null,
 			job.salary(), job.currency(), List.of(),
-			job.importedAt() != null ? job.importedAt().toString() : null, 0, false, false, false, 0, null,
+			job.importedAt() != null ? job.importedAt().toString() : null, 0, false, false, owner, 0, null,
 			List.of(), "OPEN", null, "EXTERNAL", job.url(), job.platform(), job.applyEmail());
 	}
 
@@ -499,6 +549,11 @@ class JobContractController {
 	record CreateJobRequest(String title, String company, String logo, String location, String type, String level,
 			String salary, String currency, List<String> skills, boolean communityAgreement,
 			List<ApplicationFieldRequest> applicationFields) {
+	}
+
+	/** Cadastro de vaga EXTERNA: so o que a listagem mostra e o link para onde a candidatura vai. */
+	record CreateExternalJobRequest(String title, String company, String location, String url,
+			boolean communityAgreement) {
 	}
 
 	record ApplicationFieldRequest(String label, String type, boolean required) {

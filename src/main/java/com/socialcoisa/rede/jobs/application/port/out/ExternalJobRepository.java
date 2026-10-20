@@ -31,4 +31,10 @@ public interface ExternalJobRepository {
 
 	/** Resolve as salvas: o id pode ser de uma vaga externa. */
 	List<ExternalJob> findByIds(List<String> ids);
+
+	/** As vagas externas cadastradas por ESTA pessoa (tela "Minhas vagas"). */
+	List<ExternalJob> findBySubmitter(String userId);
+
+	/** Exclusao definitiva (somente para as cadastradas pela comunidade). */
+	void delete(String id);
 }

@@ -57,6 +57,10 @@ class ExternalJobJpaEntity {
 	@Column(name = "apply_email", length = 320)
 	private String applyEmail;
 
+	/** Autor do cadastro manual (nulo nas importadas de agregador). */
+	@Column(name = "submitted_by")
+	private String submittedBy;
+
 	protected ExternalJobJpaEntity() {
 	}
 
@@ -76,11 +80,12 @@ class ExternalJobJpaEntity {
 		e.externalStatus = job.status() == null ? ExternalJob.FOUND : job.status();
 		e.canonicalUrl = job.canonicalUrl();
 		e.applyEmail = job.applyEmail();
+		e.submittedBy = job.submittedBy();
 		return e;
 	}
 
 	ExternalJob toDomain() {
 		return new ExternalJob(id, platform, externalId, title, company, location, salary, currency, url,
-			importedAt, lastCheckedAt, externalStatus, canonicalUrl, applyEmail);
+			importedAt, lastCheckedAt, externalStatus, canonicalUrl, applyEmail, submittedBy);
 	}
 }

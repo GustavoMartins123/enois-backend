@@ -28,6 +28,9 @@ interface SpringDataExternalJobJpaRepository extends JpaRepository<ExternalJobJp
 
 	List<ExternalJobJpaEntity> findByIdIn(java.util.Collection<String> ids);
 
+	/** Vagas cadastradas pela propria pessoa (as importadas nao tem autor). */
+	List<ExternalJobJpaEntity> findBySubmittedByOrderByImportedAtDesc(String submittedBy);
+
 	// Mesmo agregado para as vagas externas (Remotive/Jobicy/...): empresa e total (a origem
 	// nao guarda logo — o diretorio mostra a inicial quando nao ha logo de vaga interna).
 	@Query("SELECT e.company, COUNT(e) AS total FROM ExternalJobJpaEntity e " +
