@@ -72,6 +72,14 @@ public class Post {
 			counters, status, deletedAt, editedAt, expiresAt, authorIdentity);
 	}
 
+	/** Restore sem identidade explícita: post antigo/legado é sempre SOCIAL. */
+	public static Post restore(PostId id, UserId authorId, PostType type, String content, String pageHtml,
+			List<String> tags, List<String> mediaIds, String communityId, Instant createdAt, Visibility visibility,
+			Counters counters, PostStatus status, Instant deletedAt, Instant editedAt, Instant expiresAt) {
+		return restore(id, authorId, type, content, pageHtml, tags, mediaIds, communityId, createdAt, visibility,
+			counters, status, deletedAt, editedAt, expiresAt, AuthorIdentity.SOCIAL);
+	}
+
 	/**
 	 * Edicao do proprio post: troca conteudo, pagina e tags e marca a data. Devolve uma nova instancia
 	 * porque o conteudo e imutavel; id, autor e contadores sao preservados (editar nao zera nada).
