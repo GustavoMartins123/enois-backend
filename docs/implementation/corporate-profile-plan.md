@@ -33,6 +33,12 @@
    (incluindo busca, notificações, salvos, trending, shares e caches).
 3. **Agendamento real.** A automação de 40 minutos existe de fato (criada via CronCreate;
    documentada aqui). Sem mecanismo real, não fingir — documentar o bloqueio.
+4. **Valores da conta são COMPARTILHADOS entre as duas identidades** (diretriz da dona,
+   2026-10-20): é a MESMA conta com uma versão pessoal e uma profissional — não são duas
+   pessoas. Faíscas/carteira, credibilidade/reputação, seguidores/conexões, verificação de
+   identidade, segundo fator e login continuam no nível da conta e NUNCA são duplicados por
+   identidade. O que é próprio de cada identidade: apresentação (nome, username, headline,
+   bio, avatar, banner, links) e autoria/destino das publicações (social vs. BUSINESS).
 
 ## Auditoria do estado atual (Fase 0, 2026-10-20)
 

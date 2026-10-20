@@ -4,6 +4,13 @@
 
 ## Decisões
 
+0. **2026-10-20 — Valores de conta compartilhados (diretriz da dona).** Faíscas, credibilidade,
+   reputação, seguidores, verificação e segundo fator são do nível da CONTA: as duas
+   identidades os compartilham, sem duplicação nem separação de carteira. O que muda por
+   identidade é apenas a apresentação e a autoria/destino de publicações. Impacto prático:
+   interações em posts BUSINESS afetam a mesma reputação/carteira; o perfil profissional não
+   tem saldo nem métricas próprios.
+
 1. **2026-10-20 — Perfil profissional em tabela própria (`corporate_profiles`), não em
    colunas na tabela do perfil social.** Racional: o perfil social já tem ~40 colunas e um
    namespace de username; misturar os dois estados numa linha só criaria condicionais em todo
