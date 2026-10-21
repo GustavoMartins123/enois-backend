@@ -40,14 +40,14 @@ public class PersonalizationService {
 	}
 
 	public record Personalization(List<String> likedTopics, List<String> blockedTopics,
-			List<String> disabledModules) {
+			List<String> disabledModules, boolean nightRestReminder) {
 	}
 
 	public Personalization of(String userId) {
 		return repository.find(userId)
 			.map(p -> new Personalization(parse(p.likedTopics()), parse(p.blockedTopics()),
-				parse(p.disabledModules())))
-			.orElseGet(() -> new Personalization(List.of(), List.of(), List.of()));
+				parse(p.disabledModules()), p.nightRestReminder()))
+			.orElseGet(() -> new Personalization(List.of(), List.of(), List.of(), true));
 	}
 
 	/**
@@ -56,7 +56,7 @@ public class PersonalizationService {
 	 * vazias = volta ao padrão. O tema da conta é preservado.
 	 */
 	public Personalization update(String userId, List<String> likedTopics, List<String> blockedTopics,
-			List<String> disabledModules) {
+			List<String> disabledModules, Boolean nightRestReminder) {
 		UserPreference existing = repository.find(userId).orElse(null);
 		String liked = validateAndJoin(likedTopics, ContentTaxonomy.TOPIC_SET, "assunto");
 		String blocked = validateAndJoin(blockedTopics, ContentTaxonomy.TOPIC_SET, "assunto");
@@ -70,8 +70,10 @@ public class PersonalizationService {
 					"\"" + topic + "\" não pode estar em \"quero ver\" e em \"não gosto\" ao mesmo tempo.");
 			}
 		}
+		boolean reminder = nightRestReminder != null ? nightRestReminder
+			: (existing == null || existing.nightRestReminder());
 		repository.save(new UserPreference(userId,
-			existing == null ? null : existing.themeId(), liked, blocked, modules, clock.instant()));
+			existing == null ? null : existing.themeId(), liked, blocked, modules, reminder, clock.instant()));
 		return of(userId);
 	}
 

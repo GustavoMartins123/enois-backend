@@ -29,6 +29,9 @@ class UserPreferenceJpaEntity {
 	@Column(name = "disabled_modules", length = 400)
 	private String disabledModules;
 
+	@Column(name = "night_rest_reminder", nullable = false)
+	private boolean nightRestReminder = true;
+
 	@Column(name = "updated_at", nullable = false)
 	private Instant updatedAt;
 
@@ -47,10 +50,12 @@ class UserPreferenceJpaEntity {
 		entity.likedTopics = preference.likedTopics();
 		entity.blockedTopics = preference.blockedTopics();
 		entity.disabledModules = preference.disabledModules();
+		entity.nightRestReminder = preference.nightRestReminder();
 		return entity;
 	}
 
 	UserPreference toDomain() {
-		return new UserPreference(userId, themeId, likedTopics, blockedTopics, disabledModules, updatedAt);
+		return new UserPreference(userId, themeId, likedTopics, blockedTopics, disabledModules,
+			nightRestReminder, updatedAt);
 	}
 }

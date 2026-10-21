@@ -33,10 +33,11 @@ class PersonalizationController {
 	}
 
 	record PersonalizationResponse(List<String> likedTopics, List<String> blockedTopics,
-			List<String> disabledModules) {
+			List<String> disabledModules, boolean nightRestReminder) {
 	}
 
-	record UpdateRequest(List<String> likedTopics, List<String> blockedTopics, List<String> disabledModules) {
+	record UpdateRequest(List<String> likedTopics, List<String> blockedTopics, List<String> disabledModules,
+			Boolean nightRestReminder) {
 	}
 
 	@GetMapping("/me/preferences")
@@ -45,7 +46,7 @@ class PersonalizationController {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		var personalization = service.of(user.id().value());
 		return new PersonalizationResponse(personalization.likedTopics(), personalization.blockedTopics(),
-			personalization.disabledModules());
+			personalization.disabledModules(), personalization.nightRestReminder());
 	}
 
 	@PutMapping("/me/preferences")
@@ -56,8 +57,9 @@ class PersonalizationController {
 		var updated = service.update(user.id().value(),
 			request == null ? null : request.likedTopics(),
 			request == null ? null : request.blockedTopics(),
-			request == null ? null : request.disabledModules());
+			request == null ? null : request.disabledModules(),
+			request == null ? null : request.nightRestReminder());
 		return new PersonalizationResponse(updated.likedTopics(), updated.blockedTopics(),
-			updated.disabledModules());
+			updated.disabledModules(), updated.nightRestReminder());
 	}
 }
