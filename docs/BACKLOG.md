@@ -76,25 +76,41 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
    idem; sem marcador não valida nada). Sem marcador = anexo no fim, como sempre.
 
 ## Grande
-9. **Importador de vagas plugável** — porta `JobImportSource` + `imported_jobs` (unique `(source,
+10. **Importador de vagas plugável** — porta `JobImportSource` + `imported_jobs` (unique `(source,
    external_id)`) + dedupe/normalização + revisão antes de publicar (respeita identidade + ≥150).
    Fontes só com API/feed oficial. **Sem scraping.** *Aceite:* importar e deduplicar; bloqueio sem os requisitos.
-10. **API `/api/v1` + OpenAPI validado no CI** — alias versionado dos endpoints existentes + DTOs
+11. **API `/api/v1` + OpenAPI validado no CI** — alias versionado dos endpoints existentes + DTOs
     explícitos + erros/paginação padronizados; springdoc já plugado. *Aceite:* OpenAPI bate com os
     endpoints (falha o CI se divergir); v1 responde igual v0.
-11. **Portal de docs no app + matriz de escopos** — página pública de desenvolvedores + escopos.
+12. **Portal de docs no app + matriz de escopos** — página pública de desenvolvedores + escopos.
     *Aceite:* documenta só o que existe; exemplos sintéticos.
-12. **Registro de aplicações de terceiros (OAuth + PKCE, escopos, revogação)** — programa de auth de
+13. **Registro de aplicações de terceiros (OAuth + PKCE, escopos, revogação)** — programa de auth de
     terceiros. Exige decisão de produto/segurança antes. *Aceite:* app só recebe escopo autorizado; revogável.
-13. **CI de segurança + testes adversariais** — secret-scanning, SCA, SAST com política de bloqueio;
+14. **CI de segurança + testes adversariais** — secret-scanning, SCA, SAST com política de bloqueio;
     testes negativos (anônimo x privado, id de terceiro, mass assignment, token expirado, payload
     gigante, automação social por caminho alternativo). *Aceite:* gates verdes sem desligar checagem.
 
 ## BLOQUEADO por dependência externa (não é código meu)
-14. **Portal `developers.enois.ia.br`** — exige DNS, TLS, hospedagem, roteamento e pipeline.
-15. **gov.br** — pedido pelo representante legal + credenciais (código pronto, desligado).
-16. **LinkedIn** — app aprovado (`w_member_social`); sem isso, sem publicação legítima.
-17. **Sanitizar usuários/posts de teste em produção** — sem acesso ao banco e sem endpoint admin.
+15. **Portal `developers.enois.ia.br`** — exige DNS, TLS, hospedagem, roteamento e pipeline.
+16. **gov.br** — pedido pelo representante legal + credenciais (código pronto, desligado).
+17. **LinkedIn** — app aprovado (`w_member_social`); sem isso, sem publicação legítima.
+18. **Sanitizar usuários/posts de teste em produção** — sem acesso ao banco e sem endpoint admin.
+
+## Higiene do front (entregue 2026-10-21)
+- **[x] ENTREGUE 2026-10-21 — Front com lint limpo e build que nao quebra no `npm install`.**
+  O `eslint` do front acusava 53 erros e a CI nao roda lint, entoa divida acumulou em silencio
+  (regra `local/type-boundaries`: um tipo por arquivo em `src/types/**`). Os tipos que viviam
+  fora de `src/types/**` (matriz da API em `developers-api.ts`, tipos do jogo de palavras, tipos
+  de moderacao) foram para a casa canonica; `SessionPayload` e `ThemeGalleryItem` ja tinham
+  arquivo proprio e passaram a importar dele. Tambem sumiram dois statements mortos do
+  ImageKit em `src/lib/api/media.ts` (chave publica do ImageKit, morta desde o S3).
+  *Verificado:* `eslint .` de 53 erros para 0 (4 avisos preexistentes), `tsc --noEmit` sem erro,
+  `vitest` 273/273, `vite build` ok. Alem disso, `@tanstack/react-start` estava com `^` e o
+  `npm install` resolvia 1.169.x (exige vite >= 8): o build quebrava com "Could not resolve entry
+  module index.html" e o proprio `npm install` falhava com ERESOLVE. As tres versoes do
+  `@tanstack` foram travadas na que o lock ja resolvia (react-start 1.168.22, react-router
+  1.170.13, router-plugin 1.168.16) e o `npm install` puro voltou a resolver.
+  Front: `847adfc8` (branch `fix/lint-higiene-front`).
 
 ## Regras que valem para tudo
 - **Proibido automatizar a criação/publicação de posts** (IA/bots/integrações/endpoints alternativos/
