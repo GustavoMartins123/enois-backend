@@ -143,6 +143,17 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
 18. **Sanitizar usuários/posts de teste em produção** — sem acesso ao banco e sem endpoint admin.
 
 ## Higiene do front (entregue 2026-10-21)
+- **[x] ENTREGUE 2026-10-21 — As telas de erro do app estavam em inglês.** A página 404 e a
+  *error boundary* do root (a que aparece quando qualquer rota quebra) falavam inglês: "Page not
+  found", "Try again", "Go home" — num produto que fala português do começo ao fim. As rotas com
+  `notFoundComponent` próprio (perfil, blog, vaga) já estavam em português; o root ficou para trás.
+  A varredura também achou a categoria de tema "Save points" (as outras cinco são em português).
+  Agora: "Página não encontrada" / "Esta página não carregou" / "Tentar de novo" / "Voltar para o
+  início" / "Pontos de save". `src/texts.test.ts` trava a regra — varre todos os valores de
+  `texts` e falha se algum tiver palavra inequivocamente inglesa (o português não tem "the",
+  "your", "try again"); o teste **falha** se o texto em inglês voltar.
+  *Achado pela auditoria de responsividade* (Chrome headless a 390px): uma URL inexistente caía
+  na 404 em inglês. Front: `0aaca5b8`.
 - **[x] ENTREGUE 2026-10-21 — Front com lint limpo e build que nao quebra no `npm install`.**
   O `eslint` do front acusava 53 erros e a CI nao roda lint, entoa divida acumulou em silencio
   (regra `local/type-boundaries`: um tipo por arquivo em `src/types/**`). Os tipos que viviam
