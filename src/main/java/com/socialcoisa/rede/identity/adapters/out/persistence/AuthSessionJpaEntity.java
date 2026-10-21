@@ -57,6 +57,10 @@ class AuthSessionJpaEntity {
 		this.ip = ip;
 	}
 
+	String token() {
+		return token;
+	}
+
 	String userId() {
 		return userId;
 	}

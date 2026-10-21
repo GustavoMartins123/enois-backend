@@ -19,20 +19,24 @@ interface SpringDataPostJpaRepository extends JpaRepository<PostJpaEntity, Strin
 
 	List<PostJpaEntity> findByIdIn(Collection<String> ids);
 
-	List<PostJpaEntity> findByAuthorIdInAndStatusAndCreatedAtBeforeOrderByCreatedAtDesc(Collection<String> authorIds,
+	List<PostJpaEntity> findByAuthorIdInAndStatusAndChannelIdIsNullAndCreatedAtBeforeOrderByCreatedAtDesc(Collection<String> authorIds,
 			PostStatus status, Instant before, Pageable pageable);
 
-	List<PostJpaEntity> findByAuthorIdAndStatusAndTypeNotAndCreatedAtBeforeOrderByCreatedAtDesc(String authorId,
+	List<PostJpaEntity> findByAuthorIdAndStatusAndTypeNotAndChannelIdIsNullAndCreatedAtBeforeOrderByCreatedAtDesc(String authorId,
 			PostStatus status, PostType excludedType, Instant before, Pageable pageable);
 
-	List<PostJpaEntity> findByCommunityIdAndStatusAndCreatedAtBeforeOrderByCreatedAtDesc(String communityId,
+	List<PostJpaEntity> findByCommunityIdAndStatusAndChannelIdIsNullAndCreatedAtBeforeOrderByCreatedAtDesc(String communityId,
 			PostStatus status, Instant before, Pageable pageable);
 
-	List<PostJpaEntity> findByStatusAndTypeNotAndCreatedAtBeforeOrderByCreatedAtDesc(PostStatus status,
+	List<PostJpaEntity> findByStatusAndTypeNotAndChannelIdIsNullAndCreatedAtBeforeOrderByCreatedAtDesc(PostStatus status,
 			PostType excludedType, Instant before, Pageable pageable);
 
-	List<PostJpaEntity> findByTypeAndStatusAndCreatedAtBeforeOrderByCreatedAtDesc(PostType type, PostStatus status,
+	List<PostJpaEntity> findByTypeAndStatusAndChannelIdIsNullAndCreatedAtBeforeOrderByCreatedAtDesc(PostType type, PostStatus status,
 			Instant before, Pageable pageable);
+
+	/** Posts de um canal privado (só o feed do canal usa; nunca os feeds gerais). */
+	List<PostJpaEntity> findByChannelIdAndStatusAndCreatedAtBeforeOrderByCreatedAtDesc(String channelId,
+			PostStatus status, Instant before, Pageable pageable);
 
 	/** Momentos vencidos e ainda ativos — o worker aplica o soft-delete do fluxo normal. */
 	List<PostJpaEntity> findByTypeAndStatusAndExpiresAtBefore(PostType type, PostStatus status, Instant now);
@@ -45,7 +49,8 @@ interface SpringDataPostJpaRepository extends JpaRepository<PostJpaEntity, Strin
 	 */
 	@Query("""
 			SELECT p FROM PostJpaEntity p
-			WHERE p.status = :status AND p.type NOT IN :excluded AND p.createdAt < :before
+			WHERE p.status = :status AND p.type NOT IN :excluded AND p.channelId IS NULL
+			  AND p.createdAt < :before
 			ORDER BY p.createdAt DESC""")
 	List<PostJpaEntity> findFeedExcluding(@Param("status") PostStatus status,
 			@Param("excluded") Collection<PostType> excluded, @Param("before") Instant before, Pageable pageable);
@@ -57,7 +62,7 @@ interface SpringDataPostJpaRepository extends JpaRepository<PostJpaEntity, Strin
 	@Query("""
 			SELECT p FROM PostJpaEntity p
 			WHERE p.authorId IN :authorIds AND p.status = :status
-			  AND p.authorIdentity = :social AND p.createdAt < :before
+			  AND p.authorIdentity = :social AND p.channelId IS NULL AND p.createdAt < :before
 			ORDER BY p.createdAt DESC""")
 	List<PostJpaEntity> findSocialByAuthorIds(@Param("authorIds") Collection<String> authorIds,
 			@Param("status") PostStatus status, @Param("social") AuthorIdentity social,
@@ -70,7 +75,8 @@ interface SpringDataPostJpaRepository extends JpaRepository<PostJpaEntity, Strin
 	@Query("""
 			SELECT p FROM PostJpaEntity p
 			WHERE p.authorId = :authorId AND p.status = :status
-			  AND p.authorIdentity = :social AND p.type <> :blog AND p.createdAt < :before
+			  AND p.authorIdentity = :social AND p.type <> :blog AND p.channelId IS NULL
+			  AND p.createdAt < :before
 			ORDER BY p.createdAt DESC""")
 	List<PostJpaEntity> findSocialByAuthor(@Param("authorId") String authorId, @Param("status") PostStatus status,
 			@Param("social") AuthorIdentity social, @Param("blog") PostType blog, @Param("before") Instant before,
@@ -82,8 +88,8 @@ interface SpringDataPostJpaRepository extends JpaRepository<PostJpaEntity, Strin
 	 */
 	@Query("""
 			SELECT p FROM PostJpaEntity p
-			WHERE p.status = :status AND p.type NOT IN :excluded AND p.createdAt < :before
-			  AND (p.topic IS NULL OR p.topic NOT IN :blocked)
+			WHERE p.status = :status AND p.type NOT IN :excluded AND p.channelId IS NULL
+			  AND p.createdAt < :before AND (p.topic IS NULL OR p.topic NOT IN :blocked)
 			ORDER BY p.createdAt DESC""")
 	List<PostJpaEntity> findFeedExcludingAndBlocking(@Param("status") PostStatus status,
 			@Param("excluded") Collection<PostType> excluded, @Param("blocked") Collection<String> blocked,
@@ -96,7 +102,7 @@ interface SpringDataPostJpaRepository extends JpaRepository<PostJpaEntity, Strin
 	@Query("""
 			SELECT p FROM PostJpaEntity p
 			WHERE p.authorId IN :authorIds AND p.status = :status
-			  AND p.authorIdentity = :social AND p.createdAt < :before
+			  AND p.authorIdentity = :social AND p.channelId IS NULL AND p.createdAt < :before
 			  AND (p.topic IS NULL OR p.topic NOT IN :blocked)
 			ORDER BY p.createdAt DESC""")
 	List<PostJpaEntity> findSocialByAuthorIdsAndBlocking(@Param("authorIds") Collection<String> authorIds,
@@ -106,7 +112,8 @@ interface SpringDataPostJpaRepository extends JpaRepository<PostJpaEntity, Strin
 	/** Feed corporativo: só o que foi assinado pela identidade profissional. */
 	@Query("""
 			SELECT p FROM PostJpaEntity p
-			WHERE p.status = :status AND p.authorIdentity = :corporate AND p.createdAt < :before
+			WHERE p.status = :status AND p.authorIdentity = :corporate AND p.channelId IS NULL
+			  AND p.createdAt < :before
 			ORDER BY p.createdAt DESC""")
 	List<PostJpaEntity> findCorporateByStatus(@Param("status") PostStatus status,
 			@Param("corporate") AuthorIdentity corporate, @Param("before") Instant before, Pageable pageable);
@@ -115,7 +122,7 @@ interface SpringDataPostJpaRepository extends JpaRepository<PostJpaEntity, Strin
 	@Query("""
 			SELECT p FROM PostJpaEntity p
 			WHERE p.authorId = :authorId AND p.status = :status
-			  AND p.authorIdentity = :corporate AND p.createdAt < :before
+			  AND p.authorIdentity = :corporate AND p.channelId IS NULL AND p.createdAt < :before
 			ORDER BY p.createdAt DESC""")
 	List<PostJpaEntity> findCorporateByAuthor(@Param("authorId") String authorId, @Param("status") PostStatus status,
 			@Param("corporate") AuthorIdentity corporate, @Param("before") Instant before, Pageable pageable);

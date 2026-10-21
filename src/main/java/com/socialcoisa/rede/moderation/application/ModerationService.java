@@ -35,6 +35,7 @@ public class ModerationService {
 	private final SanctionService sanctionService;
 	private final NotificationService notifications;
 	private final com.socialcoisa.rede.shared.security.ActionThrottle actionThrottle;
+	private final ModerationLearningService learning;
 	private final int reportsPerHour;
 
 	public ModerationService(ReportRepository reportRepository,
@@ -46,6 +47,7 @@ public class ModerationService {
 			SanctionService sanctionService,
 			NotificationService notifications,
 			com.socialcoisa.rede.shared.security.ActionThrottle actionThrottle,
+			ModerationLearningService learning,
 			@org.springframework.beans.factory.annotation.Value("${rede.moderation.reports-per-hour:10}") int reportsPerHour,
 			Clock clock) {
 		this.reportRepository = reportRepository;
@@ -60,6 +62,7 @@ public class ModerationService {
 		this.sanctionService = sanctionService;
 		this.notifications = notifications;
 		this.actionThrottle = actionThrottle;
+		this.learning = learning;
 		this.reportsPerHour = reportsPerHour;
 	}
 
@@ -183,7 +186,9 @@ public class ModerationService {
 		if (!applied) {
 			throw new ApiException(409, "CANNOT_PENALIZE", "Esta denúncia não pode mais ser penalizada.");
 		}
-		return reportRepository.findById(reportId).orElse(report);
+		Report saved = reportRepository.findById(reportId).orElse(report);
+		learning.record(saved, "PUNISH", "HUMAN", reviewerId);
+		return saved;
 	}
 
 	/** Avisar o autor: a denuncia vira revisada e o autor recebe um aviso; o conteudo FICA. */
@@ -192,6 +197,7 @@ public class ModerationService {
 		Report report = pendingReport(reportId);
 		report.approve(reviewerId, "AVISO da moderação (conteúdo mantido)");
 		Report saved = reportRepository.save(report);
+		learning.record(saved, "WARN", "HUMAN", reviewerId);
 		contentAuthors.authorOf(report.targetType().name(), report.targetId()).ifPresent(authorId ->
 			notifications.create(authorId, "MODERACAO", reviewerId, "Aviso da moderação",
 				"Uma denúncia sobre seu conteúdo foi revisada e o time decidiu avisar você: "
@@ -217,6 +223,7 @@ public class ModerationService {
 			.create(id, authorId, report.id(), "Banimento por decisão humana (denúncia " + report.id() + ")",
 				Instant.now(clock));
 		sanctions_save_banned(sanction, authorId, reviewerId, sessions);
+		learning.record(saved, "BAN", "HUMAN", reviewerId);
 		return saved;
 	}
 
@@ -250,7 +257,9 @@ public class ModerationService {
 			moderationRemovePostUseCase.removeAsModerator(reviewerId, report.targetId(),
 				"REPORTED:" + report.reason().name());
 		}
-		return reportRepository.save(report);
+		Report saved = reportRepository.save(report);
+		learning.record(saved, "APPROVE", "HUMAN", reviewerId);
+		return saved;
 	}
 
 	@Transactional
@@ -261,7 +270,9 @@ public class ModerationService {
 			throw new ApiException(409, "ALREADY_REVIEWED", "Denuncia ja foi revisada.");
 		}
 		report.dismiss(reviewerId, note);
-		return reportRepository.save(report);
+		Report saved = reportRepository.save(report);
+		learning.record(saved, "DISMISS", "HUMAN", reviewerId);
+		return saved;
 	}
 
 	@Transactional(readOnly = true)

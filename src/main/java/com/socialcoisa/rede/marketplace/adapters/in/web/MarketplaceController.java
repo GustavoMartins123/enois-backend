@@ -30,24 +30,27 @@ class MarketplaceController {
 	private final MarketplaceService marketplace;
 	private final ThemeGalleryService gallery;
 	private final CurrentUserResolver currentUserResolver;
+	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles;
 
 	MarketplaceController(MarketplaceService marketplace, ThemeGalleryService gallery,
-			CurrentUserResolver currentUserResolver) {
+			CurrentUserResolver currentUserResolver,
+			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles) {
 		this.marketplace = marketplace;
 		this.gallery = gallery;
 		this.currentUserResolver = currentUserResolver;
+		this.profiles = profiles;
 	}
 
 	@GetMapping("/marketplace")
 	List<ListingView> catalog(@RequestParam(defaultValue = "60") int limit) {
-		return marketplace.catalog(limit).stream().map(ListingView::from).toList();
+		return views(marketplace.catalog(limit));
 	}
 
 	@GetMapping("/marketplace/mine")
 	List<ListingView> mine(@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		return marketplace.mine(user.id().value()).stream().map(ListingView::from).toList();
+		return views(marketplace.mine(user.id().value()));
 	}
 
 	@GetMapping("/marketplace/compras")
@@ -123,11 +126,25 @@ class MarketplaceController {
 		}
 	}
 
-	record ListingView(String id, String sellerId, String itemKind, String itemId, String title, String description,
-			long price, String status, String createdAt) {
-		static ListingView from(MarketplaceListing l) {
-			return new ListingView(l.id(), l.sellerId(), l.itemKind().name(), l.itemId(), l.title(), l.description(),
-				l.price(), l.status().name(), l.createdAt().toString());
+	/** Listagens com o nome de quem publicou (o card mostra "por @fulano"). */
+	private List<ListingView> views(List<MarketplaceListing> listings) {
+		java.util.Map<String, com.socialcoisa.rede.profile.domain.UserProfile> byId = new java.util.HashMap<>();
+		for (MarketplaceListing listing : listings) {
+			if (listing.sellerId() != null && !byId.containsKey(listing.sellerId())) {
+				profiles.findById(listing.sellerId()).ifPresent(profile -> byId.put(listing.sellerId(), profile));
+			}
 		}
+		return listings.stream().map(listing -> {
+			var profile = byId.get(listing.sellerId());
+			return new ListingView(listing.id(), listing.sellerId(),
+				profile == null ? null : profile.name(),
+				profile == null ? null : profile.username(),
+				listing.itemKind().name(), listing.itemId(), listing.title(), listing.description(),
+				listing.price(), listing.status().name(), listing.createdAt().toString());
+		}).toList();
+	}
+
+	record ListingView(String id, String sellerId, String sellerName, String sellerUsername, String itemKind,
+			String itemId, String title, String description, long price, String status, String createdAt) {
 	}
 }

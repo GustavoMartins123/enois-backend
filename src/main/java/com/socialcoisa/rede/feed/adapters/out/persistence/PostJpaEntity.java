@@ -71,6 +71,9 @@ class PostJpaEntity {
 	@Column(name = "community_id")
 	private String communityId;
 
+	@Column(name = "channel_id", length = 64)
+	private String channelId;
+
 	@Column(name = "created_at", nullable = false)
 	private Instant createdAt;
 
@@ -123,6 +126,7 @@ class PostJpaEntity {
 		entity.tags = new ArrayList<>(post.tags());
 		entity.mediaIds = new ArrayList<>(post.mediaIds());
 		entity.communityId = post.communityId();
+		entity.channelId = post.channelId();
 		entity.createdAt = post.createdAt();
 		entity.visibility = post.visibility();
 		entity.reactions = post.counters().reactions();
@@ -140,7 +144,7 @@ class PostJpaEntity {
 
 	Post toDomain() {
 		return Post.restore(new PostId(id), new UserId(authorId), type, content, pageHtml, tags, mediaIds, communityId,
-			topic, createdAt, visibility, new Counters(reactions, comments, saves, shares), status, deletedAt,
-			editedAt, expiresAt, authorIdentity);
+			topic, channelId, createdAt, visibility, new Counters(reactions, comments, saves, shares), status,
+			deletedAt, editedAt, expiresAt, authorIdentity);
 	}
 }

@@ -65,6 +65,15 @@ class ReportJpaEntity {
 	@Column(name = "ai_triaged_at")
 	private Instant aiTriagedAt;
 
+	@Column(name = "pre_triage", columnDefinition = "text")
+	private String preTriage;
+
+	@Column(name = "pre_triage_score")
+	private Integer preTriageScore;
+
+	@Column(name = "pre_triaged_at")
+	private Instant preTriagedAt;
+
 	protected ReportJpaEntity() {
 	}
 
@@ -83,13 +92,14 @@ class ReportJpaEntity {
 		e.resolutionNote = report.resolutionNote();
 		e.aiTriage = report.aiTriage();
 		e.aiTriagedAt = report.aiTriagedAt();
-		e.aiTriage = report.aiTriage();
-		e.aiTriagedAt = report.aiTriagedAt();
+		e.preTriage = report.preTriage();
+		e.preTriageScore = report.preTriageScore();
+		e.preTriagedAt = report.preTriagedAt();
 		return e;
 	}
 
 	Report toDomain() {
 		return Report.restore(id, reporterId, targetType, targetId, reason, description, status, createdAt,
-			reviewedBy, reviewedAt, resolutionNote, aiTriage, aiTriagedAt);
+			reviewedBy, reviewedAt, resolutionNote, aiTriage, aiTriagedAt, preTriage, preTriageScore, preTriagedAt);
 	}
 }

@@ -22,26 +22,37 @@ public class ReportAiTriageScheduler {
 
 	private final ModerationAiService moderationAiService;
 	private final com.socialcoisa.rede.moderation.application.AiVerdictApplicationService verdictApplication;
+	private final com.socialcoisa.rede.moderation.application.ReportPreTriageService preTriage;
 	private final boolean enabled;
 	private final boolean autoPenaltyEnabled;
 
 	public ReportAiTriageScheduler(ModerationAiService moderationAiService,
 			com.socialcoisa.rede.moderation.application.AiVerdictApplicationService verdictApplication,
+			com.socialcoisa.rede.moderation.application.ReportPreTriageService preTriage,
 			@Value("${rede.moderation.ai.triage-enabled:true}") boolean enabled,
 			@Value("${rede.moderation.ai.auto-penalty-enabled:true}") boolean autoPenaltyEnabled) {
 		this.moderationAiService = moderationAiService;
 		this.verdictApplication = verdictApplication;
+		this.preTriage = preTriage;
 		this.enabled = enabled;
 		this.autoPenaltyEnabled = autoPenaltyEnabled;
 	}
 
 	@Scheduled(fixedDelay = 60_000, initialDelay = 30_000)
 	public void triagePending() {
-		if (!enabled || !moderationAiService.available()) {
+		if (!enabled) {
 			return;
 		}
 		try {
-			int triaged = moderationAiService.triagePendingReports(10);
+			// Pré-triagem determinística primeiro: denúncia sem sinal não gasta LLM.
+			int scored = preTriage.preTriagePending(50);
+			if (scored > 0) {
+				LOG.info("Denuncias pré-triadas sem IA: {}", scored);
+			}
+			if (!moderationAiService.available()) {
+				return;
+			}
+			int triaged = moderationAiService.triagePendingReports(10, preTriage::shouldCallAi);
 			if (triaged > 0) {
 				LOG.info("Denuncias triadas por IA: {}", triaged);
 			}

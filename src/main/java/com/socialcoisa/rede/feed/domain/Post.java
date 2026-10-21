@@ -27,11 +27,13 @@ public class Post {
 	private final AuthorIdentity authorIdentity;
 	/** Assunto da publicação (taxonomia das comunidades); nulo = sem classificação. */
 	private final String topic;
+	/** Canal privado da comunidade onde o post nasceu; nulo = post normal (aparece nos feeds). */
+	private final String channelId;
 
 	private Post(PostId id, UserId authorId, PostType type, String content, String pageHtml, List<String> tags,
-			List<String> mediaIds, String communityId, String topic, Instant createdAt, Visibility visibility,
-			Counters counters, PostStatus status, Instant deletedAt, Instant editedAt, Instant expiresAt,
-			AuthorIdentity authorIdentity) {
+			List<String> mediaIds, String communityId, String topic, String channelId, Instant createdAt,
+			Visibility visibility, Counters counters, PostStatus status, Instant deletedAt, Instant editedAt,
+			Instant expiresAt, AuthorIdentity authorIdentity) {
 		this.id = id;
 		this.authorId = authorId;
 		this.type = type;
@@ -50,6 +52,7 @@ public class Post {
 		// Invariante: toda publicação tem uma identidade. Nada no banco nem no código cria post sem.
 		this.authorIdentity = authorIdentity == null ? AuthorIdentity.SOCIAL : authorIdentity;
 		this.topic = topic == null || topic.isBlank() ? null : topic;
+		this.channelId = channelId == null || channelId.isBlank() ? null : channelId;
 	}
 
 	public static Post publish(PostId id, UserId authorId, PostType type, String content, String pageHtml,
@@ -75,8 +78,20 @@ public class Post {
 			AuthorIdentity authorIdentity) {
 		// Momento é efêmero por definição: nasce com prazo de 24 horas e se apaga sozinho.
 		Instant expiresAt = type == PostType.MOMENT ? createdAt.plus(Duration.ofHours(24)) : null;
-		return new Post(id, authorId, type, content, pageHtml, tags, mediaIds, communityId, topic, createdAt,
+		return new Post(id, authorId, type, content, pageHtml, tags, mediaIds, communityId, topic, null, createdAt,
 			Visibility.PUBLIC, Counters.zero(), PostStatus.ACTIVE, null, null, expiresAt, authorIdentity);
+	}
+
+	/**
+	 * Publicação num CANAL privado da comunidade: o canal define o tema (o tópico vem dele) e o
+	 * post só é lido por quem participa da comunidade — nunca nos feeds.
+	 */
+	public static Post publish(PostId id, UserId authorId, PostType type, String content, String pageHtml,
+			List<String> tags, List<String> mediaIds, String communityId, String topic, String channelId,
+			Instant createdAt, AuthorIdentity authorIdentity) {
+		Instant expiresAt = type == PostType.MOMENT ? createdAt.plus(Duration.ofHours(24)) : null;
+		return new Post(id, authorId, type, content, pageHtml, tags, mediaIds, communityId, topic, channelId,
+			createdAt, Visibility.PUBLIC, Counters.zero(), PostStatus.ACTIVE, null, null, expiresAt, authorIdentity);
 	}
 
 	public static Post restore(PostId id, UserId authorId, PostType type, String content, String pageHtml,
@@ -91,8 +106,16 @@ public class Post {
 			List<String> tags, List<String> mediaIds, String communityId, String topic, Instant createdAt,
 			Visibility visibility, Counters counters, PostStatus status, Instant deletedAt, Instant editedAt,
 			Instant expiresAt, AuthorIdentity authorIdentity) {
-		return new Post(id, authorId, type, content, pageHtml, tags, mediaIds, communityId, topic, createdAt,
+		return restore(id, authorId, type, content, pageHtml, tags, mediaIds, communityId, topic, null, createdAt,
 			visibility, counters, status, deletedAt, editedAt, expiresAt, authorIdentity);
+	}
+
+	public static Post restore(PostId id, UserId authorId, PostType type, String content, String pageHtml,
+			List<String> tags, List<String> mediaIds, String communityId, String topic, String channelId,
+			Instant createdAt, Visibility visibility, Counters counters, PostStatus status, Instant deletedAt,
+			Instant editedAt, Instant expiresAt, AuthorIdentity authorIdentity) {
+		return new Post(id, authorId, type, content, pageHtml, tags, mediaIds, communityId, topic, channelId,
+			createdAt, visibility, counters, status, deletedAt, editedAt, expiresAt, authorIdentity);
 	}
 
 	/** Restore sem identidade explícita: post antigo/legado é sempre SOCIAL. */
@@ -133,7 +156,7 @@ public class Post {
 			: null;
 		// Editar nunca muda a autoria: tipo, conteúdo, tags e assunto são editáveis.
 		return new Post(id, authorId, newType, newContent, newPageHtml, newTags, mediaIds, communityId, newTopic,
-			createdAt, visibility, counters, status, deletedAt, editedAt, newExpiresAt, authorIdentity);
+			channelId, createdAt, visibility, counters, status, deletedAt, editedAt, newExpiresAt, authorIdentity);
 	}
 
 	public boolean isActive() {
@@ -161,6 +184,11 @@ public class Post {
 	/** Assunto da publicação (da taxonomia das comunidades) ou null se não classificado. */
 	public String topic() {
 		return topic;
+	}
+
+	/** Canal privado onde o post nasceu (null = post normal). */
+	public String channelId() {
+		return channelId;
 	}
 
 	public boolean delete(Instant deletedAt) {

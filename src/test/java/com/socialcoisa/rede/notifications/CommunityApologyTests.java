@@ -10,29 +10,24 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
 
-import tools.jackson.databind.ObjectMapper;
-
 import com.socialcoisa.rede.coin.application.CoinService;
-import com.socialcoisa.rede.notifications.application.MediaRecoveryApologyWorker;
+import com.socialcoisa.rede.notifications.application.CommunityApologyWorker;
 import com.socialcoisa.rede.notifications.application.NotificationService;
 import com.socialcoisa.rede.notifications.application.port.out.SystemAnnouncementRepository;
 import com.socialcoisa.rede.shared.web.TestAuthHelper;
 
-/**
- * O comunicado de desculpas só sai quando o S3 está configurado (upload assinado disponível),
- * uma única vez, com 100 faíscas idempotentes por usuário e notificação para cada um.
- */
-@SpringBootTest(properties = {"rede.media.storage=s3", "rede.media.s3.bucket=bucket-de-teste"})
-@AutoConfigureMockMvc
-class MediaRecoveryApologyTests {
+import tools.jackson.databind.ObjectMapper;
 
-	static {
-		System.setProperty("aws.accessKeyId", "test");
-		System.setProperty("aws.secretAccessKey", "test");
-	}
+/**
+ * Desculpas públicas: 100 faíscas por conta e uma notificação, uma única vez — reiniciar/rodar
+ * de novo não duplica crédito nem aviso.
+ */
+@SpringBootTest
+@AutoConfigureMockMvc
+class CommunityApologyTests {
 
 	@Autowired
-	private MediaRecoveryApologyWorker worker;
+	private CommunityApologyWorker worker;
 
 	@Autowired
 	private CoinService coins;
@@ -50,26 +45,25 @@ class MediaRecoveryApologyTests {
 	private ObjectMapper objectMapper;
 
 	@Test
-	void announcesOnceWithBonusAndNotification() throws Exception {
+	void grantsTheBonusAndNotifiesEachAccountOnce() throws Exception {
 		var auth = new TestAuthHelper(mockMvc, objectMapper);
-		var pessoaA = auth.authenticate("apology_user_a");
-		var pessoaB = auth.authenticate("apology_user_b");
+		var pessoaA = auth.authenticate("apology_community_a");
+		var pessoaB = auth.authenticate("apology_community_b");
 
-		worker.announceIfStorageRecovered();
+		worker.announce();
 
 		for (var pessoa : List.of(pessoaA, pessoaB)) {
-			String ref = MediaRecoveryApologyWorker.ANNOUNCEMENT_KEY + ":" + pessoa.userId();
+			String ref = CommunityApologyWorker.ANNOUNCEMENT_KEY + ":" + pessoa.userId();
 			assertThat(coins.hasReward(ref)).isTrue();
-			assertThat(coins.balance(pessoa.userId())).isGreaterThanOrEqualTo(MediaRecoveryApologyWorker.BONUS);
+			assertThat(coins.balance(pessoa.userId())).isGreaterThanOrEqualTo(CommunityApologyWorker.BONUS);
 			assertThat(notifications.list(pessoa.userId(), null, 50))
-				.anyMatch(aviso -> MediaRecoveryApologyWorker.TITULO.equals(aviso.title()));
+				.anyMatch(aviso -> CommunityApologyWorker.TITULO.equals(aviso.title()));
 		}
-		assertThat(announcements.isSent(MediaRecoveryApologyWorker.ANNOUNCEMENT_KEY)).isTrue();
+		assertThat(announcements.isSent(CommunityApologyWorker.ANNOUNCEMENT_KEY)).isTrue();
 
-		// Rodar de novo não duplica: marcador de comunicado + ref idempotente da recompensa.
 		long saldoAntes = coins.balance(pessoaA.userId());
 		int avisosAntes = notifications.list(pessoaA.userId(), null, 50).size();
-		worker.announceIfStorageRecovered();
+		worker.announce();
 		assertThat(coins.balance(pessoaA.userId())).isEqualTo(saldoAntes);
 		assertThat(notifications.list(pessoaA.userId(), null, 50)).hasSize(avisosAntes);
 	}

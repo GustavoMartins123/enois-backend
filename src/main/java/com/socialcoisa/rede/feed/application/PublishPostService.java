@@ -46,6 +46,7 @@ public class PublishPostService implements PublishPostUseCase {
 	private final com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate;
 	private final com.socialcoisa.rede.shared.age.AgeGate agePolicy;
 	private final PostCommunityReader postCommunityReader;
+	private final com.socialcoisa.rede.feed.application.port.out.CommunityChannelReader communityChannelReader;
 	private final com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles;
 	/** Avisa quem escuta fora daqui (automod de spam), DEPOIS do commit. */
 	private final org.springframework.context.ApplicationEventPublisher events;
@@ -66,6 +67,7 @@ public class PublishPostService implements PublishPostUseCase {
 			com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate,
 			com.socialcoisa.rede.shared.age.AgeGate agePolicy,
 			PostCommunityReader postCommunityReader,
+			com.socialcoisa.rede.feed.application.port.out.CommunityChannelReader communityChannelReader,
 			com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles,
 			org.springframework.context.ApplicationEventPublisher events,
 			NewAccountCooldown newAccountCooldown,
@@ -84,6 +86,7 @@ public class PublishPostService implements PublishPostUseCase {
 		this.sanctionGate = sanctionGate;
 		this.agePolicy = agePolicy;
 		this.postCommunityReader = postCommunityReader;
+		this.communityChannelReader = communityChannelReader;
 		this.corporateProfiles = corporateProfiles;
 		this.events = events;
 		this.newAccountCooldown = newAccountCooldown;
@@ -138,15 +141,38 @@ public class PublishPostService implements PublishPostUseCase {
 			if (!community.joined()) {
 				throw new ApiException(403, "NOT_A_MEMBER", "Entre na comunidade para publicar nela.");
 			}
-			if (StringUtils.hasText(command.topic())) {
+			// Com canal, quem responde pelo assunto é a regra do canal (mensagem mais precisa).
+			if (!StringUtils.hasText(command.channelId()) && StringUtils.hasText(command.topic())) {
 				throw new ApiException(400, "TOPIC_FROM_COMMUNITY",
 					"Post em comunidade herda o assunto dela — o compositor não escolhe assunto aqui.");
 			}
 		}
+		// Canal privado: só existe dentro de comunidade e o TEMA vem do canal (o compositor não
+		// escolhe assunto). O acesso continua sendo o da comunidade; o post não entra em feed.
+		String channelId = StringUtils.hasText(command.channelId()) ? command.channelId().trim() : null;
+		String channelTopic = null;
+		if (channelId != null) {
+			if (communityId == null) {
+				throw new ApiException(400, "CHANNEL_REQUIRES_COMMUNITY",
+					"Canal só existe dentro de uma comunidade.");
+			}
+			if (StringUtils.hasText(command.topic())) {
+				throw new ApiException(400, "TOPIC_FROM_CHANNEL",
+					"Post de canal herda o tema do canal — o compositor não escolhe assunto aqui.");
+			}
+			var channel = communityChannelReader.byId(channelId)
+				.orElseThrow(() -> new ApiException(404, "CHANNEL_NOT_FOUND", "Canal não encontrado."));
+			if (!channel.communityId().equals(communityId)) {
+				throw new ApiException(404, "CHANNEL_NOT_FOUND", "Canal não encontrado nesta comunidade.");
+			}
+			channelTopic = channel.topic();
+		}
 		// Classificação REAL do assunto: em comunidade, o tópico é o DELA (declarado por ela).
 		// Post avulso nasce com o assunto que o AUTOR declarou no compositor (opcional, validado
 		// contra a taxonomia). Sem assunto, sem classificação — nunca é bloqueado por preferência.
-		if (community != null) {
+		if (channelId != null) {
+			topic = channelTopic != null ? channelTopic : community.topic();
+		} else if (community != null) {
 			topic = community.topic();
 		} else if (StringUtils.hasText(command.topic())) {
 			String declared = command.topic().trim().toUpperCase(java.util.Locale.ROOT);
@@ -161,7 +187,7 @@ public class PublishPostService implements PublishPostUseCase {
 			duplicationGuard.require(command.authorId().value(), command.content());
 		}
 		Post post = Post.publish(idGenerator.newPostId(), command.authorId(), command.type(), textOf(command),
-			pageHtml(command), tags, mediaIds, communityId, topic, clock.instant(), authorIdentity);
+			pageHtml(command), tags, mediaIds, communityId, topic, channelId, clock.instant(), authorIdentity);
 		Post saved = postRepository.save(post);
 		String articleBody = articleBody(command);
 		if (articleBody != null) {

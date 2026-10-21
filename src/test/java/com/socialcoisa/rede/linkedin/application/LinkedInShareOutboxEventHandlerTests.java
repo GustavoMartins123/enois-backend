@@ -151,6 +151,11 @@ class LinkedInShareOutboxEventHandlerTests {
 		}
 
 		@Override
+		public List<Post> findActiveByChannel(String channelId, Instant before, int limit) {
+			return List.of();
+		}
+
+		@Override
 		public List<Post> findActiveCorporateByAuthor(UserId authorId, Instant before, int limit) {
 			return List.of();
 		}

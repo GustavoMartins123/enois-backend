@@ -26,6 +26,9 @@ import com.socialcoisa.rede.shared.web.ApiException;
 @Service
 public class MarketplaceService {
 
+	/** Piso de preço do marketplace: 50 faíscas (5% de uma "moeda" na escala interna). */
+	public static final long MIN_PRICE = CoinService.FAIS(50L);
+
 	private final MarketplaceRepository listings;
 	private final CoinService coins;
 	private final Clock clock;
@@ -40,11 +43,29 @@ public class MarketplaceService {
 	public MarketplaceListing publish(String sellerId, String itemKind, String itemId, String title,
 			String description, long price) {
 		MarketplaceListing.ItemKind kind = parseKind(itemKind);
+		if (price < MIN_PRICE) {
+			throw new ApiException(400, "PRICE_TOO_LOW", "O preço mínimo no marketplace é de 50 faíscas.");
+		}
 		Instant now = clock.instant();
 		listings.findActiveByItem(kind.name(), itemId).ifPresent(existing -> {
 			throw new ApiException(409, "ITEM_ALREADY_LISTED", "Este item já está à venda.");
 		});
 		return listings.saveListing(MarketplaceListing.create(sellerId, kind, itemId, title, description, price, now));
+	}
+
+	/**
+	 * Garante que um item da galeria apareça no marketplace com o preço mínimo. Idempotente:
+	 * se já existe listagem ativa, não faz nada. Usado na migração dos temas da comunidade.
+	 */
+	@Transactional
+	public java.util.Optional<MarketplaceListing> ensureListed(String sellerId, String itemKind, String itemId,
+			String title, String description, long price) {
+		MarketplaceListing.ItemKind kind = parseKind(itemKind);
+		java.util.Optional<MarketplaceListing> existing = listings.findActiveByItem(kind.name(), itemId);
+		if (existing.isPresent()) {
+			return java.util.Optional.empty();
+		}
+		return java.util.Optional.of(publish(sellerId, itemKind, itemId, title, description, price));
 	}
 
 	@Transactional
