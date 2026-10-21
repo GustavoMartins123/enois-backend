@@ -44,6 +44,7 @@ class CosmeticsFlowTests {
 		MvcResult catalog = mockMvc.perform(get("/loja"))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$[?(@.id == 'moldura-violeta')].priceMf").value(5_000))
+			.andExpect(jsonPath("$[?(@.id == 'moldura-buraco-negro')].priceMf").value(10_000))
 			.andReturn();
 
 		// A compra direta: 5.000 mf saem (105.000 -> 100.000).

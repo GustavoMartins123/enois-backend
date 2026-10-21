@@ -37,7 +37,15 @@ public class CosmeticsService {
 			"ring-2 ring-rose-400"),
 		new CosmeticItem("moldura-aurora", "Aurora", "Cores que se transformam ao redor do avatar.", 5_000, ""),
 		new CosmeticItem("moldura-pulsar", "Pulsar", "Um brilho violeta que pulsa suavemente.", 5_000, ""),
-		new CosmeticItem("moldura-solar", "Solar", "Um brilho quente e vivo.", 5_000, ""));
+		new CosmeticItem("moldura-solar", "Solar", "Um brilho quente e vivo.", 5_000, ""),
+		// Molduras com efeito: o desenho sai do círculo (raio, fogo...) e vive no front.
+		new CosmeticItem("moldura-tempestade", "Tempestade", "Raios que estalam em volta do avatar.", 10_000, ""),
+		new CosmeticItem("moldura-inferno", "Inferno", "Labaredas que lambem a borda do retrato.", 10_000, ""),
+		new CosmeticItem("moldura-buraco-negro", "Buraco Negro", "Matéria girando rumo ao horizonte de eventos.",
+			10_000, ""),
+		new CosmeticItem("moldura-orbita", "Órbita", "Cometas que passam por trás do seu rosto.", 10_000, ""),
+		new CosmeticItem("moldura-glacial", "Glacial", "Cristais de gelo que cintilam no frio.", 10_000, ""),
+		new CosmeticItem("moldura-toxica", "Tóxica", "Gosma radioativa que borbulha e escorre.", 10_000, ""));
 
 	private final CoinService coins;
 	private final CoinLedgerRepository ledger;
