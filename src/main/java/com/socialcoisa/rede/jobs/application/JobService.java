@@ -90,7 +90,11 @@ public class JobService {
 			boolean communityAgreement) {
 		validate(title, company, type, level);
 		int reputation = reputationService.reputationOf(userId);
-		if (reputation <= MIN_REPUTATION_TO_CREATE_JOB) {
+		// Freelance e trabalho pontual: qualquer pessoa com conta verificada publica, sem o
+		// gate de reputacao das vagas de empresa. Os demais guardas (sessao verificada, idade,
+		// declaracao de regras, limites de escrita) continuam iguais aos das vagas.
+		boolean freelance = "FREELANCE".equalsIgnoreCase(type == null ? "" : type.trim());
+		if (!freelance && reputation <= MIN_REPUTATION_TO_CREATE_JOB) {
 			throw new ApiException(403, "LOW_REPUTATION", "E necessario ter mais de " + MIN_REPUTATION_TO_CREATE_JOB
 				+ " de reputacao para criar vagas.");
 		}
