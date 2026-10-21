@@ -40,7 +40,9 @@ class WriteRouteInterceptor implements HandlerInterceptor {
 		"/auth/2fa/email/confirm",
 		"/auth/oauth/*/callback",
 		"/auth/oauth/*/token",
-		"/games/tokens/validate");
+		"/games/tokens/validate",
+		// GitHub não tem sessão no app: a autenticação é o HMAC X-Hub-Signature-256 do webhook.
+		"/webhooks/github");
 
 	private final AntPathMatcher matcher = new AntPathMatcher();
 	private final CurrentUserResolver currentUserResolver;

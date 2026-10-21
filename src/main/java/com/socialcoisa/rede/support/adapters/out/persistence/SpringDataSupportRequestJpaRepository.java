@@ -22,4 +22,8 @@ interface SpringDataSupportRequestJpaRepository extends JpaRepository<SupportReq
 			@Param("status") SupportStatus status, Pageable pageable);
 
 	long countByUserIdAndCreatedAtAfter(String userId, java.time.Instant since);
+
+	java.util.Optional<SupportRequestJpaEntity> findByGithubIssueNumber(int githubIssueNumber);
+
+	List<SupportRequestJpaEntity> findByUserIdOrderByCreatedAtDesc(String userId, Pageable pageable);
 }

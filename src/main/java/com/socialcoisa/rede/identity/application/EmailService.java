@@ -322,6 +322,32 @@ public class EmailService {
 		}
 	}
 
+	/**
+	 * Pedido concluído (fechado no painel ou na issue do GitHub): avisa quem abriu. Sem corpo
+	 * livre — só o assunto do ticket — para não repetir dado pessoal no e-mail.
+	 */
+	public void sendSupportClosedEmail(String toEmail, String originalSubject) {
+		String subject = "Pedido de suporte concluído — " + (originalSubject == null ? "" : originalSubject);
+		String htmlBody = "<p>Olá,</p>"
+			+ "<p>Seu pedido <b>" + escape(originalSubject) + "</b> foi concluído pelo time do Énóis.</p>"
+			+ "<p>Se o problema continuar, é só abrir um novo pedido em "
+			+ "<a href=\"https://enois.ia.br/suporte\">enois.ia.br/suporte</a>.</p>"
+			+ "<p>— Equipe Énóis</p>";
+		try {
+			MimeMessage message = mailSender.createMimeMessage();
+			MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+			helper.setFrom(new InternetAddress(fromEmail, "Suporte Énóis", "UTF-8"));
+			helper.setTo(toEmail);
+			helper.setSubject(subject);
+			helper.setText(htmlBody, true);
+			mailSender.send(message);
+			recordEmail(toEmail, subject, "SUPPORT_CLOSED", true, null);
+		} catch (Exception e) {
+			recordEmail(toEmail, subject, "SUPPORT_CLOSED", false, e.getMessage());
+			LOG.error("Falha ao avisar o encerramento do suporte para {}: {}", toEmail, e.getMessage(), e);
+		}
+	}
+
 	/** E-mail HTML pronto (o chamador escapa o conteudo do usuario). Best-effort: nunca lanca. */
 	public void sendHtmlEmail(String toEmail, String subject, String htmlBody) {
 		try {

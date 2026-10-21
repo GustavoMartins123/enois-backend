@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -34,17 +35,21 @@ public class SupportService {
 	private final EmailService emailService;
 	private final NotificationService notifications;
 	private final com.socialcoisa.rede.shared.security.OutboundUrlGuard outboundUrlGuard;
+	private final SupportStatusNotifier statusNotifier;
+	private final ApplicationEventPublisher events;
 	private final Clock clock;
 	private final String supportEmail;
 
 	public SupportService(SupportRequestRepository repository, EmailService emailService,
 			NotificationService notifications, com.socialcoisa.rede.shared.security.OutboundUrlGuard outboundUrlGuard,
-			Clock clock,
+			SupportStatusNotifier statusNotifier, ApplicationEventPublisher events, Clock clock,
 			@Value("${rede.support.email:}") String supportEmail) {
 		this.repository = repository;
 		this.emailService = emailService;
 		this.notifications = notifications;
 		this.outboundUrlGuard = outboundUrlGuard;
+		this.statusNotifier = statusNotifier;
+		this.events = events;
 		this.clock = clock;
 		this.supportEmail = supportEmail;
 	}
@@ -92,6 +97,8 @@ public class SupportService {
 		if (StringUtils.hasText(supportEmail)) {
 			emailService.sendSupportRequestEmail(supportEmail, request.subject(), request.message(), cleanEmail);
 		}
+		// O espelho no GitHub nasce depois do commit (ver SupportGithubSync).
+		events.publishEvent(new SupportRequestOpenedEvent(request.id()));
 		return request;
 	}
 
@@ -100,11 +107,21 @@ public class SupportService {
 		return repository.findFiltered(category, status, limit < 1 ? 30 : Math.min(limit, 100));
 	}
 
-	/** Triagem do painel: move o ticket entre aberto/em andamento/resolvido e/ou recategoriza. */
+	/** Histórico do próprio solicitante: é onde o fechamento (painel ou GitHub) fica visível. */
+	@Transactional(readOnly = true)
+	public List<SupportRequest> mine(String userId, int limit) {
+		return repository.findByUserId(userId, limit < 1 ? 20 : Math.min(limit, 100));
+	}
+
+	/**
+	 * Triagem do painel: move o ticket entre aberto/em andamento/resolvido e/ou recategoriza.
+	 * Concluir/reabrir avisa quem abriu e, depois do commit, sincroniza a issue do GitHub.
+	 */
 	@Transactional
 	public SupportRequest update(String id, SupportStatus status, SupportCategory category) {
 		SupportRequest request = repository.findById(id)
 			.orElseThrow(() -> new ApiException(404, "SUPPORT_REQUEST_NOT_FOUND", "Pedido de suporte não encontrado."));
+		SupportStatus previous = request.status();
 		SupportRequest updated = request;
 		if (status != null) {
 			updated = updated.withStatus(status);
@@ -112,7 +129,17 @@ public class SupportService {
 		if (category != null) {
 			updated = updated.withCategory(category);
 		}
-		return repository.save(updated);
+		SupportRequest saved = repository.save(updated);
+		if (status != null && status != previous) {
+			if (status == SupportStatus.CLOSED) {
+				statusNotifier.closed(saved);
+			}
+			else if (previous == SupportStatus.CLOSED) {
+				statusNotifier.reopened(saved);
+			}
+			events.publishEvent(new SupportStatusChangedEvent(saved.id(), previous, status));
+		}
+		return saved;
 	}
 
 	/**

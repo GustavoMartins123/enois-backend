@@ -17,4 +17,10 @@ public interface SupportRequestRepository {
 	List<SupportRequest> findFiltered(SupportCategory category, SupportStatus status, int limit);
 
 	long countByUserSince(String userId, java.time.Instant since);
+
+	/** Caminho de volta do webhook do GitHub: o evento traz apenas o numero da issue. */
+	Optional<SupportRequest> findByGithubIssueNumber(int githubIssueNumber);
+
+	/** Pedidos do proprio solicitante, do mais recente para o mais antigo. */
+	List<SupportRequest> findByUserId(String userId, int limit);
 }

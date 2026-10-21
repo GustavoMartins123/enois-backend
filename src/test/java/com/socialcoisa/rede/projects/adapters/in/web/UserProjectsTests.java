@@ -186,6 +186,37 @@ class UserProjectsTests {
 	}
 
 	@Test
+	void diaryEntryAcceptsTheWholeLinkedInDescription() throws Exception {
+		var session = auth.authenticate("user_proj_diary_2000");
+
+		// A descrição de uma experiência do LinkedIn tem até 2.000 caracteres e vira a
+		// primeira entrada do diário na importação: o limite antigo (400) derrubava o import.
+		String description = ("Entrega de plataforma com foco em desempenho, integrações e suporte "
+			+ "a times de produto em todos os ciclos. ").repeat(30).substring(0, 2000);
+		var payload = objectMapper.createObjectNode().put("title", "Projeto importado");
+		payload.putArray("stack");
+		payload.putArray("diary").addObject()
+			.put("date", "2026-01-01")
+			.put("text", description);
+
+		mockMvc.perform(withSession(post("/me/projects"), session).contentType(MediaType.APPLICATION_JSON)
+			.content(objectMapper.writeValueAsString(payload)))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.diary[0].text", org.hamcrest.Matchers.hasLength(2000)));
+
+		var tooLong = objectMapper.createObjectNode().put("title", "Projeto importado 2");
+		tooLong.putArray("stack");
+		tooLong.putArray("diary").addObject()
+			.put("date", "2026-01-01")
+			.put("text", description + "x");
+
+		mockMvc.perform(withSession(post("/me/projects"), session).contentType(MediaType.APPLICATION_JSON)
+			.content(objectMapper.writeValueAsString(tooLong)))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("FIELD_TOO_LONG"));
+	}
+
+	@Test
 	void requiresSessionForWrites() throws Exception {
 		mockMvc.perform(post("/me/projects").contentType(MediaType.APPLICATION_JSON).content(body("X")))
 			.andExpect(status().isUnauthorized());
