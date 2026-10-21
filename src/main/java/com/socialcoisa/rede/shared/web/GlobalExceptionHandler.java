@@ -32,8 +32,23 @@ public class GlobalExceptionHandler {
 			.body(new ErrorResponse(exception.code(), exception.getMessage(), Instant.now()));
 	}
 
+	/**
+	 * Cabeçalho de sessão ausente é 401, não 400. Semanticamente a rota está protegida e o cliente
+	 * não se autenticou; devolver BAD_REQUEST fazia o front tratar como requisição malformada e
+	 * escondia a exigência de login dos monitores. Outros cabeçalhos obrigatórios continuam 400.
+	 */
+	@ExceptionHandler(MissingRequestHeaderException.class)
+	ResponseEntity<ErrorResponse> handleMissingHeader(MissingRequestHeaderException exception) {
+		if ("X-Session-Token".equalsIgnoreCase(exception.getHeaderName())) {
+			return ResponseEntity.status(401)
+				.body(new ErrorResponse("UNAUTHENTICATED", "Sessao invalida ou expirada.", Instant.now()));
+		}
+		return ResponseEntity.badRequest()
+			.body(new ErrorResponse("BAD_REQUEST", "Requisicao invalida.", Instant.now()));
+	}
+
 	// InvalidDataAccessApiUsageException cobre, por exemplo, PageRequest com size < 1 (limit=0).
-	@ExceptionHandler({ MissingRequestHeaderException.class, MethodArgumentNotValidException.class,
+	@ExceptionHandler({ MethodArgumentNotValidException.class,
 			HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class,
 			IllegalArgumentException.class, InvalidDataAccessApiUsageException.class })
 	ResponseEntity<ErrorResponse> handleBadRequest(Exception exception) {
