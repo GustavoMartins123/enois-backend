@@ -34,6 +34,8 @@ public class MediaService implements CreateMediaUploadUseCase, GetMediaAssetUseC
 	 * transporte. Quem recusar e o proprio servico, com mensagem clara.
 	 */
 	public static final long MAX_MEDIA_BYTES = 500L * 1024L * 1024L;
+	/** Janela do upload direto ao S3 e da limpeza do asset pendente (arquivos de ate 500MB). */
+	private static final Duration UPLOAD_WINDOW = Duration.ofMinutes(60);
 
 	private final MediaAssetRepository mediaAssetRepository;
 	private final MediaDeletionJobRepository mediaDeletionJobRepository;
@@ -68,7 +70,7 @@ public class MediaService implements CreateMediaUploadUseCase, GetMediaAssetUseC
 		String objectKey = storageUrlFactory.objectKey(mediaId, command.fileName().trim());
 		MediaAsset asset = MediaAsset.pending(mediaId, command.ownerId(), command.fileName().trim(),
 			command.mimeType().trim(), command.size(), normalize(command.purpose()), objectKey,
-			storageUrlFactory.cdnUrl(objectKey), clock.instant(), clock.instant().plus(Duration.ofMinutes(15)),
+			storageUrlFactory.cdnUrl(objectKey), clock.instant(), clock.instant().plus(UPLOAD_WINDOW),
 			storageUrlFactory.provider());
 		MediaAsset saved = mediaAssetRepository.save(asset);
 		try {

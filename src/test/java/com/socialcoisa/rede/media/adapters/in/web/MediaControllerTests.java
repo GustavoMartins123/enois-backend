@@ -48,6 +48,39 @@ class MediaControllerTests {
 	}
 
 	@Test
+	void acceptsMediaUpTo500MbAndRejectsAboveIt() throws Exception {
+		var session = auth.authenticate("user_media_500mb");
+
+		String atLimit = objectMapper.writeValueAsString(Map.of(
+			"fileName", "video-grande.mp4",
+			"mimeType", "video/mp4",
+			"size", 500L * 1024L * 1024L,
+			"purpose", "POST_VIDEO"));
+
+		mockMvc.perform(post("/media/uploads")
+				.header("X-Session-Token", session.token())
+				.header("Idempotency-Key", "media-upload-500mb")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(atLimit))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.uploadUrl").exists());
+
+		String aboveLimit = objectMapper.writeValueAsString(Map.of(
+			"fileName", "video-grande-demais.mp4",
+			"mimeType", "video/mp4",
+			"size", 500L * 1024L * 1024L + 1,
+			"purpose", "POST_VIDEO"));
+
+		mockMvc.perform(post("/media/uploads")
+				.header("X-Session-Token", session.token())
+				.header("Idempotency-Key", "media-upload-500mb-plus")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(aboveLimit))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("MEDIA_TOO_LARGE"));
+	}
+
+	@Test
 	void createsMediaUploadAndReplaysIdempotentResponse() throws Exception {
 		var session = auth.authenticate("user_media_upload");
 		String payload = objectMapper.writeValueAsString(Map.of(

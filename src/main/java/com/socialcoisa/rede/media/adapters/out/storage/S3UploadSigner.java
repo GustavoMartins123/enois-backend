@@ -36,7 +36,7 @@ class S3UploadSigner implements MediaUploadSigner {
 
 	@Override
 	public SignedUpload sign(String objectKey, String mimeType) {
-		Duration validade = Duration.ofMinutes(15);
+		Duration validade = Duration.ofMinutes(60);
 		PutObjectRequest request = PutObjectRequest.builder()
 			.bucket(bucket)
 			.key(prefix + objectKey)

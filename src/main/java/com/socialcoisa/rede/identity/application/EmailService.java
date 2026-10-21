@@ -150,6 +150,34 @@ public class EmailService {
     }
 
     /**
+     * Convite de supervisao parental (ECA Digital): o responsavel abre o link, entra na propria
+     * conta e aceita ou recusa. O token vale 7 dias e e de uso unico.
+     */
+    public boolean sendParentalConsentEmail(String guardianEmail, String minorName, String token) {
+        Context context = new Context();
+        context.setVariable("minorName", minorName);
+        context.setVariable("consentLink", frontendUrl + "/responsavel?token=" + token);
+        context.setVariable("currentYear", java.time.Year.now().getValue());
+
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setFrom(fromEmail);
+            helper.setTo(guardianEmail);
+            helper.setSubject("Autorizacao de responsavel no Enois");
+            helper.setText(templateEngine.process("parental-consent", context), true);
+            mailSender.send(message);
+            recordEmail(guardianEmail, "Autorizacao de responsavel no Enois", "PARENTAL_CONSENT", true, null);
+            return true;
+        } catch (Exception e) {
+            recordEmail(guardianEmail, "Autorizacao de responsavel no Enois", "PARENTAL_CONSENT", false,
+                e.getMessage());
+            LOG.error("Falha ao enviar o convite de supervisao parental: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    /**
      * Envio de um HTML ja montado pelo chamador.
      *
      * Existe para modulos que precisam de um e-mail proprio (ex.: candidatura de vaga) sem que a
