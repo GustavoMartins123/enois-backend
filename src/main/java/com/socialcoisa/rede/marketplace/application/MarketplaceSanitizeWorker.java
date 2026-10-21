@@ -53,8 +53,13 @@ public class MarketplaceSanitizeWorker {
 
 	@Scheduled(initialDelayString = "${rede.marketplace.sanitize-initial-delay-ms:90000}",
 		fixedDelayString = "${rede.marketplace.sanitize-delay-ms:3600000}")
-	@Transactional
 	public void sanitize() {
+		sanitizeNow();
+	}
+
+	/** Mesma rotina, chamável pelo endpoint administrativo (diagnóstico e limpeza sob demanda). */
+	@Transactional
+	public int sanitizeNow() {
 		int removed = 0;
 		for (MarketplaceListing listing : marketplace.allListings(500)) {
 			if (listing.status() != MarketplaceListing.Status.ACTIVE) {
@@ -75,6 +80,7 @@ public class MarketplaceSanitizeWorker {
 			LOG.info("Marketplace: {} listagem(ns) de resquício removidas; temas da comunidade à venda.",
 				removed);
 		}
+		return removed;
 	}
 
 	private boolean hasSuspiciousName(String sellerId) {
