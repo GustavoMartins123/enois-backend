@@ -143,6 +143,16 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
 18. **Sanitizar usuários/posts de teste em produção** — sem acesso ao banco e sem endpoint admin.
 
 ## Higiene do front (entregue 2026-10-21)
+- **[x] ENTREGUE 2026-10-21 — A tela de entrada parou de afirmar o que o produto não tem.**
+  O painel de marca do login (e do reset de senha, que tinha o mesmo bloco) trazia **números
+  fixos no texto** — "120k+ profissionais", "2.8k mentores ativos", "640 comunidades" — numa
+  rede com **2.275 contas** (é o que o próprio `/stats/community` responde). E trazia um
+  **depoimento inventado**, atribuído a "Marina Rocha, Engenheira Sênior · Nubank": pessoa
+  que não existe, com o nome de uma empresa real.
+  Agora o painel usa os **números de verdade** (mesma fonte da landing, cache de ~10 min) e a
+  frase é a tese do produto. Se a consulta falhar, o painel fica **sem número** em vez de voltar
+  a inventar um. O bloco duplicado nas duas rotas virou o componente `AuthHero`.
+  *Achado pela auditoria de responsividade* (Chrome headless a 1280px). Front: `c8ac304d`.
 - **[x] ENTREGUE 2026-10-21 — As telas de erro do app estavam em inglês.** A página 404 e a
   *error boundary* do root (a que aparece quando qualquer rota quebra) falavam inglês: "Page not
   found", "Try again", "Go home" — num produto que fala português do começo ao fim. As rotas com
