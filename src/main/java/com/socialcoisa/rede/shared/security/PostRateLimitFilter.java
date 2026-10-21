@@ -49,7 +49,7 @@ public class PostRateLimitFilter extends OncePerRequestFilter {
 	public PostRateLimitFilter(Clock clock, ClientIpResolver ipResolver,
 			@Value("${rede.rate.post-guard-enabled:true}") boolean enabled,
 			@Value("${rede.rate.post-user-per-minute:60}") int userLimit,
-			@Value("${rede.rate.post-ip-per-minute:120}") int ipLimit) {
+			@Value("${rede.rate.post-ip-per-minute:240}") int ipLimit) {
 		this.clock = clock;
 		this.ipResolver = ipResolver;
 		this.enabled = enabled;
