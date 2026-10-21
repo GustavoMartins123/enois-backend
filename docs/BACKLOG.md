@@ -180,6 +180,19 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   queima o token e a pessoa vê "link inválido" ao clicar de verdade — o backend não tem como
   saber que ele já foi usado, porque o pendente é apagado na confirmação.
 
+- **[x] ENTREGUE 2026-10-21 — A caixa de entrada mostrava a própria pessoa no lugar do
+  parceiro.** A tela de mensagens resolve o "outro participante" com `getCurrentUserId()`, que lia
+  o **cache** da query `["me"]` sem se inscrever nela — e a página usa o `AppContainer` comum (não
+  o `AuthenticatedAppContainer`, que é quem assina a query), então o cache ficava vazio: o id vinha
+  `null` e o "outro" caía no **primeiro** participante da conversa, que era a própria pessoa. Na
+  tela: cada conversa da caixa aparecia com o nome e a foto de quem estava olhando, e a própria
+  mensagem saía alinhada como se fosse do outro.
+  *Corrigido:* `getCurrentUserId()` cai no `current_user` do `localStorage` (o app grava no login)
+  e exige sessão para isso; a página e os dois componentes passam a se inscrever na query do
+  `/me` para redesenhar quando a resposta chega. `current-user.test.ts` trava o fallback (4 casos).
+  *Prova:* Chrome headless a 390px, com sessão real contra backend local e uma conversa com
+  mensagem — a lista passou de "AA | Ana Auditoria" para "BA | Bruno Audicao" e a própria
+  mensagem saiu à direita (`justify-end`). Front: `d92bfdcc`.
 ## Higiene do front (entregue 2026-10-21)
 - **[x] ENTREGUE 2026-10-21 — A tela de entrada parou de afirmar o que o produto não tem.**
   O painel de marca do login (e do reset de senha, que tinha o mesmo bloco) trazia **números
