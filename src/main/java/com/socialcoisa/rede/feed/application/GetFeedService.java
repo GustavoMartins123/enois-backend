@@ -246,6 +246,9 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 		// buscar: a leitura publica nao pode depender de um usuario logado.
 		Map<PostId, ReactionType> currentUserReactions = currentUserId == null ? Map.of()
 			: postInteractionRepository.findReactionsByUserAndPostIds(currentUserId, postIds);
+		// Reaction pills for the whole page in one query: the card used to fetch them per post.
+		Map<PostId, Map<ReactionType, Long>> reactionSummaries = postInteractionRepository
+			.countReactionsByPostIds(postIds, hidden);
 		return visible.stream()
 			.map(post -> {
 				UserProfile profile = profiles.get(post.authorId().value());
@@ -260,7 +263,8 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 					profile != null ? profile.allBadges() : List.of())
 					.withAvatarFrame(profile != null ? profile.avatarFrame() : null);
 				ReactionType reaction = currentUserReactions.get(post.id());
-				PostView withReaction = reaction != null ? view.withCurrentUserReaction(reaction) : view;
+				PostView withReaction = (reaction != null ? view.withCurrentUserReaction(reaction) : view)
+					.withReactionSummary(reactionSummaries.getOrDefault(post.id(), Map.of()));
 				PostCommunityReader.CommunityRef community = post.communityId() == null ? null
 					: communities.get(post.communityId());
 				return community == null ? withReaction

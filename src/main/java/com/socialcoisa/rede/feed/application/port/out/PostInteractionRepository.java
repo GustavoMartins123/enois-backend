@@ -45,7 +45,15 @@ public interface PostInteractionRepository {
 
 	Map<PostId, ReactionType> findReactionsByUserAndPostIds(UserId userId, Collection<PostId> postIds);
 
+	/** Most recent reactions of a post (created before `before`, at most `limit`). */
 	List<ReactionSummary> findReactionsByPostId(PostId postId, Instant before, int limit);
+
+	/**
+	 * Reaction counts per type for several posts in one query, ignoring reactions from
+	 * `excludedUserIds` (people the reader blocked). Posts without reactions are absent.
+	 */
+	Map<PostId, Map<ReactionType, Long>> countReactionsByPostIds(Collection<PostId> postIds,
+			Collection<String> excludedUserIds);
 
 	boolean addCommentReaction(String id, String commentId, UserId userId, ReactionType type, Instant createdAt);
 

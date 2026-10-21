@@ -99,9 +99,30 @@ class PostInteractionPersistenceAdapter implements PostInteractionRepository {
 
 	@Override
 	public List<ReactionSummary> findReactionsByPostId(PostId postId, Instant before, int limit) {
-		return reactionRepository.findByPostIdOrderByCreatedAtDesc(postId.value()).stream()
+		// Bounded in SQL: a viral post must not load every reaction into memory to draw a list.
+		Instant until = before != null ? before : Instant.parse("9999-12-31T23:59:59Z");
+		return reactionRepository.findByPostIdAndCreatedAtBeforeOrderByCreatedAtDesc(postId.value(), until,
+				org.springframework.data.domain.PageRequest.of(0, Math.max(1, limit))).stream()
 			.map(r -> new ReactionSummary(r.getUserId(), r.getReactionType(), r.getCreatedAt()))
 			.toList();
+	}
+
+	@Override
+	public Map<PostId, Map<ReactionType, Long>> countReactionsByPostIds(Collection<PostId> postIds,
+			Collection<String> excludedUserIds) {
+		if (postIds.isEmpty()) {
+			return Map.of();
+		}
+		List<String> ids = postIds.stream().map(PostId::value).distinct().toList();
+		// Placeholder keeps NOT IN valid when nobody is excluded (same trick as the topic filters).
+		Collection<String> excluded = excludedUserIds == null || excludedUserIds.isEmpty() ? List.of("")
+			: excludedUserIds;
+		Map<PostId, Map<ReactionType, Long>> result = new HashMap<>();
+		for (Object[] row : reactionRepository.countByPostIdsGroupedByType(ids, excluded)) {
+			result.computeIfAbsent(new PostId((String) row[0]), key -> new java.util.EnumMap<>(ReactionType.class))
+				.put((ReactionType) row[1], (Long) row[2]);
+		}
+		return result;
 	}
 
 	@Override

@@ -69,6 +69,42 @@ class PostReactionsAndReplyTests {
 		assertThat(react(reactor, postId, "LIKE", "t-like-3")).isEqualTo(1);
 	}
 
+	/** The card reads the pills from the post itself (one batched query per page), not one call per post. */
+	@Test
+	void postReadsCarryTheReactionSummaryMatchingTheReactionsEndpoint() throws Exception {
+		var author = auth.authenticate("user_react_author_sum");
+		var a = auth.authenticate("user_react_a_sum");
+		var b = auth.authenticate("user_react_b_sum");
+		var c = auth.authenticate("user_react_c_sum");
+		String postId = publish(author, "Resumo de reacoes vem junto com o post.");
+		react(a, postId, "LIKE", "s-a-1");
+		react(b, postId, "LIKE", "s-b-1");
+		react(c, postId, "LOVE", "s-c-1");
+
+		MvcResult single = mockMvc.perform(get("/feed/posts/" + postId).header("X-Session-Token", author.token()))
+			.andExpect(status().isOk())
+			.andReturn();
+		JsonNode summary = objectMapper.readTree(single.getResponse().getContentAsString()).get("reactionSummary");
+		assertThat(summary.get("LIKE").asInt()).isEqualTo(2);
+		assertThat(summary.get("LOVE").asInt()).isEqualTo(1);
+
+		MvcResult list = mockMvc.perform(get("/feed/posts/" + postId + "/reactions")
+				.header("X-Session-Token", author.token()))
+			.andExpect(status().isOk())
+			.andReturn();
+		JsonNode body = objectMapper.readTree(list.getResponse().getContentAsString());
+		assertThat(body.get("summary")).isEqualTo(summary);
+		assertThat(body.get("reactions").size()).isEqualTo(3);
+
+		// A post nobody reacted to still carries the field (empty), so the card knows not to fetch.
+		String quiet = publish(author, "Post sem nenhuma reacao ainda.");
+		MvcResult empty = mockMvc.perform(get("/feed/posts/" + quiet).header("X-Session-Token", author.token()))
+			.andExpect(status().isOk())
+			.andReturn();
+		assertThat(objectMapper.readTree(empty.getResponse().getContentAsString()).get("reactionSummary").size())
+			.isZero();
+	}
+
 	@Test
 	void secondUserReactionCountsIndependently() throws Exception {
 		var author = auth.authenticate("user_react_author3");

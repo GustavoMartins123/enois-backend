@@ -372,8 +372,9 @@ class FeedController {
 		var reactions = postInteractionRepository.findReactionsByPostId(new PostId(postId), null, 50).stream()
 			.filter(reaction -> !hidden.contains(reaction.userId()))
 			.toList();
-		var summary = reactions.stream()
-			.collect(Collectors.groupingBy(PostInteractionRepository.ReactionSummary::type, Collectors.counting()));
+		// The list is the latest 50; the counts are exact for the whole post.
+		var summary = postInteractionRepository.countReactionsByPostIds(List.of(new PostId(postId)), hidden)
+			.getOrDefault(new PostId(postId), Map.of());
 		return Map.of("postId", postId, "summary", summary, "reactions", reactions);
 	}
 

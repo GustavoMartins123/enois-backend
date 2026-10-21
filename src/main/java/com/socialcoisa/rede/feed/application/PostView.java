@@ -2,6 +2,7 @@ package com.socialcoisa.rede.feed.application;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 import com.socialcoisa.rede.feed.domain.AuthorIdentity;
 import com.socialcoisa.rede.feed.domain.Counters;
@@ -22,7 +23,13 @@ public record PostView(String id, String authorId, String authorUsername, String
 		/** Moldura do avatar do autor (cosmético); nulo = sem moldura. */
 		String authorAvatarFrame,
 		/** Assunto do post (taxonomia da plataforma) ou null quando o autor não classificou. */
-		String topic) {
+		String topic,
+		/**
+		 * Reaction counts per type ({"LIKE": 3}). Filled by the feed/post reads (one batched query
+		 * per page) so the card does not fetch it per post; null where the read does not compute it
+		 * (publish/edit responses).
+		 */
+		Map<ReactionType, Long> reactionSummary) {
 
 	/** Comunidade onde o post foi publicado (nome para o texto "publicou em ...") + se quem le participa. */
 	public record CommunityView(String id, String name, boolean joined) {
@@ -42,7 +49,7 @@ public record PostView(String id, String authorId, String authorUsername, String
 		return new PostView(post.id().value(), post.authorId().value(), null, null, null, null, List.of(),
 			post.type(), post.content(), null, null, post.tags(), post.mediaIds(), post.createdAt(), post.counters(),
 			null, post.communityId(), null, post.editedAt(), post.expiresAt(), post.authorIdentity(), null,
-			post.topic());
+			post.topic(), null);
 	}
 
 	public static PostView from(Post post, String authorUsername, String authorName, String authorAvatar) {
@@ -67,40 +74,46 @@ public record PostView(String id, String authorId, String authorUsername, String
 		return new PostView(post.id().value(), post.authorId().value(), authorUsername, authorName, authorAvatar,
 			badges.isEmpty() ? null : badges.get(0), badges, post.type(), post.content(), null, null, post.tags(),
 			post.mediaIds(), post.createdAt(), post.counters(), null, post.communityId(), null, post.editedAt(),
-			post.expiresAt(), authorIdentity, null, post.topic());
+			post.expiresAt(), authorIdentity, null, post.topic(), null);
 	}
 
 	/** Anexa a moldura do avatar do autor (cosmético) depois do enriquecimento do perfil. */
 	public PostView withAvatarFrame(String frame) {
 		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
 			content, pageHtml, articleBody, tags, mediaIds, createdAt, counters, currentUserReaction, communityId,
-			community, editedAt, expiresAt, authorIdentity, frame, topic);
+			community, editedAt, expiresAt, authorIdentity, frame, topic, reactionSummary);
 	}
 
 	public PostView withCurrentUserReaction(ReactionType reaction) {
 		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
 			content, pageHtml, articleBody, tags, mediaIds, createdAt, counters, reaction, communityId, community,
-			editedAt, expiresAt, authorIdentity, authorAvatarFrame, topic);
+			editedAt, expiresAt, authorIdentity, authorAvatarFrame, topic, reactionSummary);
 	}
 
 	/** Anexa o HTML da pagina; so o post unico faz isso (ver {@link #from(Post)}). */
 	public PostView withPageHtml(String pageHtml) {
 		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
 			content, pageHtml, articleBody, tags, mediaIds, createdAt, counters, currentUserReaction, communityId,
-			community, editedAt, expiresAt, authorIdentity, authorAvatarFrame, topic);
+			community, editedAt, expiresAt, authorIdentity, authorAvatarFrame, topic, reactionSummary);
 	}
 
 	/** Anexa a comunidade (nome + participacao do leitor) depois do enriquecimento. */
 	public PostView withCommunity(String communityId, CommunityView community) {
 		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
 			content, pageHtml, articleBody, tags, mediaIds, createdAt, counters, currentUserReaction, communityId,
-			community, editedAt, expiresAt, authorIdentity, authorAvatarFrame, topic);
+			community, editedAt, expiresAt, authorIdentity, authorAvatarFrame, topic, reactionSummary);
+	}
+
+	public PostView withReactionSummary(Map<ReactionType, Long> summary) {
+		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
+			content, pageHtml, articleBody, tags, mediaIds, createdAt, counters, currentUserReaction, communityId,
+			community, editedAt, expiresAt, authorIdentity, authorAvatarFrame, topic, summary);
 	}
 
 	/** Anexa o corpo do artigo; so a leitura do post unico faz isso (mesma regra da pagina). */
 	public PostView withArticleBody(String body) {
 		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
 			content, pageHtml, body, tags, mediaIds, createdAt, counters, currentUserReaction, communityId, community,
-			editedAt, expiresAt, authorIdentity, authorAvatarFrame, topic);
+			editedAt, expiresAt, authorIdentity, authorAvatarFrame, topic, reactionSummary);
 	}
 }
