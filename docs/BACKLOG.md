@@ -82,8 +82,24 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
 11. **API `/api/v1` + OpenAPI validado no CI** — alias versionado dos endpoints existentes + DTOs
     explícitos + erros/paginação padronizados; springdoc já plugado. *Aceite:* OpenAPI bate com os
     endpoints (falha o CI se divergir); v1 responde igual v0.
-12. **Portal de docs no app + matriz de escopos** — página pública de desenvolvedores + escopos.
-    *Aceite:* documenta só o que existe; exemplos sintéticos.
+12. **[x] ENTREGUE 2026-10-21 — Portal de docs no app + matriz de escopos.** A página pública
+    `/developers` (`src/routes/developers.tsx` + `src/constants/developers-api.ts`) traz a
+    matriz da API com o escopo de cada endpoint (`public` / `auth` / `admin`, renderizado na
+    própria página) e os casos de uso em curl.
+    *Aceite cumprido (verificado em 2026-10-21):* **os 132 pares (método, caminho) documentados
+    batem com os mappings do backend** (checagem automática por script contra os `@*Mapping`) —
+    e antes da rodada de hoje 8 deles NÃO existiam (o módulo de serviços é `/servicos/...`, mas a
+    doc prometia `/services/servicos/...` e `/services/contratos/...`: quem copiasse pegava 404).
+    *Exemplos sintéticos:* a página é pública e os exemplos estavam com dado REAL capturado da
+    produção (nome completo da dona, nome completo de outra pessoa, username de um usuário e o id
+    de um post que continua no ar). Tudo virou a persona fictícia que o arquivo já usava
+    (`ada`/`ada-silva`), o id do post virou sintético e o placeholder de alvo do painel de
+    moderação deixou de citar um usuário real. O cabeçalho do arquivo, que se gabava de "exemplos
+    REAIS capturados da produção", foi corrigido. `developers-api.test.ts` trava a regra (só
+    persona fictícia e id de exemplo): o teste **falha** se o dado real voltar.
+    *Escopo que fica para o item 13:* escopos OAuth de aplicações de terceiros (aqui o escopo é o
+    nível de acesso da API de cada rota).
+    Front: `925b048a` (branch `fix/lint-higiene-front`).
 13. **Registro de aplicações de terceiros (OAuth + PKCE, escopos, revogação)** — programa de auth de
     terceiros. Exige decisão de produto/segurança antes. *Aceite:* app só recebe escopo autorizado; revogável.
 14. **CI de segurança + testes adversariais** — secret-scanning, SCA, SAST com política de bloqueio;
