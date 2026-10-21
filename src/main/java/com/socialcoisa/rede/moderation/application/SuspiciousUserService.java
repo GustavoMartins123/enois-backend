@@ -36,15 +36,18 @@ public class SuspiciousUserService {
 
 	private final SuspiciousUserReader reader;
 	private final AdminGuard adminGuard;
+	private final com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate;
 	private final Clock clock;
 	private final int defaultDays;
 	private final List<String> namePatterns;
 
-	public SuspiciousUserService(SuspiciousUserReader reader, AdminGuard adminGuard, Clock clock,
+	public SuspiciousUserService(SuspiciousUserReader reader, AdminGuard adminGuard,
+			com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate, Clock clock,
 			@Value("${rede.security.suspicious.days:90}") int defaultDays,
 			@Value("${rede.security.suspicious.name-patterns:probe}") String patterns) {
 		this.reader = reader;
 		this.adminGuard = adminGuard;
+		this.sanctionGate = sanctionGate;
 		this.clock = clock;
 		this.defaultDays = Math.max(1, Math.min(defaultDays, 365));
 		this.namePatterns = Arrays.stream(patterns.split(","))
@@ -67,6 +70,10 @@ public class SuspiciousUserService {
 		List<Scored> scored = new ArrayList<>();
 		for (var candidate : candidates) {
 			if (candidate.moderator() || adminGuard.isAdmin(candidate.email(), candidate.username())) {
+				continue;
+			}
+			// Quem já foi banido não volta para a fila de triagem: a decisão já foi tomada.
+			if (sanctionGate.banned(candidate.id())) {
 				continue;
 			}
 			Scored item = score(candidate, repeatedNames.getOrDefault(normalize(candidate.name()), 0L));

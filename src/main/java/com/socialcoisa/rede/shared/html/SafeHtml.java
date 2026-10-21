@@ -36,7 +36,12 @@ public final class SafeHtml {
 	 * algo que o servidor vai recusar depois. O numero e o MESMO da bio do perfil, de proposito:
 	 * um teto unico para "HTML colado" e mais facil de explicar do que um por superficie.
 	 */
-	public static final int MAX_PAGE_HTML = 20_000;
+	/**
+	 * Teto do HTML de uma pagina. Subiu de 20k para 200k porque um SVG colado (ilustracao com
+	 * gradientes e animacao) passa facil de 20 mil caracteres — o desenho era recusado antes mesmo
+	 * de o sanitizador olhar as tags. A coluna e longtext; quem segura abuso e o rate limit.
+	 */
+	public static final int MAX_PAGE_HTML = 200_000;
 
 	/**
 	 * Teto do HTML da bio do perfil. E o mesmo para todo mundo, como o da pagina; e menor porque o
