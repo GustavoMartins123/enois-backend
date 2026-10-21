@@ -180,6 +180,15 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   queima o token e a pessoa vê "link inválido" ao clicar de verdade — o backend não tem como
   saber que ele já foi usado, porque o pendente é apagado na confirmação.
 
+- **[x] ENTREGUE 2026-10-21 — O quadro de HTML nunca encolhia (buraco de 400px na tela).**
+  A bio em HTML do perfil — e os outros quadros com altura automática — ficavam com a altura
+  inicial de 520px mesmo com conteúdo de 116px: o card "Sobre" virava quase vazio. A causa: a
+  conta pegava o `scrollHeight` do `<html>` do quadro, mas o `<html>` tem a altura da **viewport**
+  e o `scrollHeight` dele nunca é menor que ela — então a média do quadro era sempre a viewport.
+  Agora o `<html>` só entra na conta quando o conteúdo **estoura** a viewport, e a conta virou uma
+  função pura (`src/lib/html-frame-height.ts`) com 4 casos de teste usando os números medidos no
+  navegador. *Prova:* Chrome headless com conta local e bio em HTML — o quadro foi de 520px para
+  116px, e o card "Sobre" passou a abraçar o texto. Front: `fffff551`.
 - **[x] ENTREGUE 2026-10-21 — A página de desenvolvedores era ilegível no celular.** O bloco de
   código usava `overflow-x-auto`: o comando de `curl` saía cortado e a única saída era um scroll
   lateral sem nenhuma pista. Agora a linha **quebra** (`whitespace-pre-wrap` + `break-words`) e o
