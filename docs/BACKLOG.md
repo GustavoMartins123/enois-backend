@@ -180,6 +180,17 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   queima o token e a pessoa vê "link inválido" ao clicar de verdade — o backend não tem como
   saber que ele já foi usado, porque o pendente é apagado na confirmação.
 
+- **[x] ENTREGUE 2026-10-21 — O link de confirmação não é mais consumido no carregamento da
+  página.** A tela `/auth/verify` confirmava o e-mail no `useEffect`, ou seja, no carregamento:
+  quem busca o link sem ser a pessoa (Safe Links do Outlook, verificador de links do Gmail e de
+  vários gateways corporativos) executa a página, **queima o token e cria a conta sem ninguém
+  pedir** — e a pessoa que clicava de verdade recebia "link inválido", sem entender que a conta
+  já existia. Agora a página mostra "Confirme seu e-mail" com um botão, e **só o clique consome o
+  token**; o clique duplo (com sessão na tela) mostra "link já usado" em vez de "link inválido".
+  *Prova* (Chrome headless, sessão real contra backend local, com o pendente lido do H2): scanner
+  (busca sem JS) deixa o pendente no banco; **com o código antigo, abrir a página no navegador
+  consumia o token** (pendente = 0 linhas e a conta nascia sozinha); **com o código novo, abrir a
+  página não consome** e o clique confirma, guarda a sessão e leva ao feed. Front: `924233af`.
 - **[x] ENTREGUE 2026-10-21 — O "quem sou eu" vinha do cache sem inscrição: a rede, os
   comentários e os grupos tinham o mesmo defeito da caixa de entrada.** A regra era
   `getCurrentUserId()` ler o **cache** da query `["me"]` sem se inscrever nela: só quem assina a
