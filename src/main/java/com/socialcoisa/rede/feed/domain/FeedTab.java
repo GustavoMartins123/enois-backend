@@ -17,5 +17,10 @@ public enum FeedTab {
 	REVIEWS,
 	FUN,
 	ALL,
-	RECENT
+	RECENT,
+	/**
+	 * "Ainda nao vi": o oposto de DISCUSSIONS — os posts em que a pessoa ainda nao reagiu nem
+	 * comentou (pedido da dona, 2026-10-21).
+	 */
+	UNSEEN
 }

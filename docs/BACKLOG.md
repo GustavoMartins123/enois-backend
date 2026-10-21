@@ -251,6 +251,22 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   *Prova:* Chrome headless a 390px, com sessão real contra backend local e uma conversa com
   mensagem — a lista passou de "AA | Ana Auditoria" para "BA | Bruno Audicao" e a própria
   mensagem saiu à direita (`justify-end`). Front: `d92bfdcc`.
+- **[x] ENTREGUE 2026-10-21 — Novo tipo de feed "Ainda não vi" + a lista de tipos recolhida.**
+  Pedido da dona (2026-10-21): uma opção que reúna **os posts em que a pessoa ainda não reagiu
+  nem comentou** (o oposto de "Discussões", que são os posts em que ela comentou) e as opções de
+  feed colapsadas, com a legenda "Tipo de feed" e um botão que abre a lista.
+  *Back:* `FeedTab.UNSEEN` + o caso em `GetFeedService` — tira da janela de candidatos os posts
+  comentados pela pessoa e os posts em que ela reagiu (as portas `CommentRepository` e
+  `PostInteractionRepository` que já existiam), e o próprio post dela fica de fora. Teste novo
+  `UnseenFeedTabTests` (2): o post sem interação entra, o reagido e o comentado saem, e o post
+  próprio não aparece. *Front:* a aba nova em `HOME_TABS` + `feed-tab.ts`, os textos
+  ("Ainda não vi", "Tipo de feed") e a lista de pílulas trocada por um seletor (o botão mostra o
+  tipo escolhido e abre a lista) — as 12 opções ocupavam três linhas na tela. *Prova no navegador
+  (Chrome headless a 390px, sessão real contra backend local):* o seletor mostra "Para você",
+  a lista abre com a opção nova e, escolhida, a URL vai para `/feed?aba=UNSEEN` e o feed traz os
+  posts que a pessoa ainda não tocou (3 → 2 depois de uma reação ✓).
+  Front: `fix/lint-higiene-front`; back: `e6073d2`+ (esta entrega).
+
 ## Higiene do front (entregue 2026-10-21)
 - **[x] ENTREGUE 2026-10-21 — A tela de entrada parou de afirmar o que o produto não tem.**
   O painel de marca do login (e do reset de senha, que tinha o mesmo bloco) trazia **números

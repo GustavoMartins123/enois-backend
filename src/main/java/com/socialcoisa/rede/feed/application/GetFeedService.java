@@ -121,6 +121,31 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 			case OPPORTUNITIES -> postRepository.findActiveByType(PostType.OPPORTUNITY, before, limit);
 			case REVIEWS -> postRepository.findActiveByType(PostType.REVIEW, before, limit);
 			case FUN -> postRepository.findActiveByType(PostType.DIVERTIDO, before, limit);
+			case UNSEEN -> {
+				// "Ainda nao vi": o oposto de Discussoes (que sao os posts em que a pessoa
+				// comentou). Aqui entram os posts em que ela ainda nao REAGIU nem COMENTOU.
+				//
+				// A janela de candidatos e maior que a pagina: o filtro descarta varios, e sem
+				// isso a aba viria quase vazia para quem ja interagiu com muita coisa.
+				Collection<String> bloqueados = readerPreferences.blockedTopics(query.userId().value());
+				int janela = Math.max(limit * 5, 60);
+				List<Post> candidatos = bloqueados.isEmpty()
+					? postRepository.findActiveAll(before, janela)
+					: postRepository.findActiveAllExcludingTopics(bloqueados, before, janela);
+				Set<String> comentados = new LinkedHashSet<>(
+					commentRepository.findPostIdsByAuthor(query.userId().value()));
+				Set<String> reagidos = postInteractionRepository
+					.findReactionsByUserAndPostIds(query.userId(),
+						candidatos.stream().map(Post::id).toList())
+					.keySet().stream().map(PostId::value).collect(Collectors.toSet());
+				yield candidatos.stream()
+					// O proprio post da pessoa nao entra: ela ja sabe que escreveu.
+					.filter(p -> !p.authorId().value().equals(query.userId().value()))
+					.filter(p -> !comentados.contains(p.id().value()))
+					.filter(p -> !reagidos.contains(p.id().value()))
+					.limit(limit)
+					.toList();
+			}
 		};
 		return page(enrich(posts, query.userId()), posts, limit);
 	}
@@ -316,7 +341,7 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 
 	private boolean matchesTab(PostView post, FeedTab tab) {
 		return switch (tab) {
-			case FOR_YOU, FOLLOWING, ALL -> true;
+			case FOR_YOU, FOLLOWING, ALL, UNSEEN -> true;
 			case DISCUSSIONS, RECENT -> post.type() == PostType.QUESTION;
 			case PROJECTS -> post.type() == PostType.PROJECT;
 			case NEWS -> post.type() == PostType.NEWS;
