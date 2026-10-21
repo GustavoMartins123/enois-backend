@@ -1,7 +1,5 @@
 package com.socialcoisa.rede.marketplace.application;
 
-import java.time.Clock;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -10,48 +8,42 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.socialcoisa.rede.marketplace.application.port.out.MarketplaceItemRepository;
 import com.socialcoisa.rede.marketplace.domain.MarketplaceListing;
-import com.socialcoisa.rede.notifications.application.port.out.SystemAnnouncementRepository;
+import com.socialcoisa.rede.shared.sanctions.SanctionGateReader;
 import com.socialcoisa.rede.themes.application.port.out.ThemeGalleryRepository;
 
 /**
  * Limpeza única dos resquícios do ataque no marketplace.
  *
- * <p>Listagens cujo item não existe mais (tema apagado) ou cujo vendedor não é o autor do tema
- * são removidas, com reembolso do que estiver retido no escrow. Depois, todos os temas publicados
- * na galeria entram à venda pelo piso de 50 faíscas — é o que substitui a aba "Temas da
- * comunidade". Roda uma vez (marcador em `system_announcements`); reiniciar não repete.</p>
+ * <p>Listagens cujo item não existe mais (tema apagado), cujo vendedor não é o autor do tema ou
+ * cujo vendedor foi BANIDO (contas do ataque) são removidas, com reembolso do que estiver retido
+ * no escrow. Depois, todos os temas publicados na galeria entram à venda pelo piso de 50 faíscas —
+ * é o que substitui a aba "Temas da comunidade". Idempotente: roda no boot e de hora em hora.</p>
  */
 @Component
 public class MarketplaceSanitizeWorker {
 
 	private static final Logger LOG = LoggerFactory.getLogger(MarketplaceSanitizeWorker.class);
 
-	public static final String KEY = "marketplace-sanitize-2026-10-21";
-
 	private final MarketplaceService marketplace;
 	private final ThemeGalleryRepository themes;
 	private final MarketplaceItemRepository items;
-	private final SystemAnnouncementRepository announcements;
+	private final SanctionGateReader sanctionGate;
 	private final MarketplaceGalleryImportWorker galleryImport;
-	private final Clock clock;
 
 	public MarketplaceSanitizeWorker(MarketplaceService marketplace, ThemeGalleryRepository themes,
-			MarketplaceItemRepository items, SystemAnnouncementRepository announcements,
-			MarketplaceGalleryImportWorker galleryImport, Clock clock) {
+			MarketplaceItemRepository items, SanctionGateReader sanctionGate,
+			MarketplaceGalleryImportWorker galleryImport) {
 		this.marketplace = marketplace;
 		this.themes = themes;
 		this.items = items;
-		this.announcements = announcements;
+		this.sanctionGate = sanctionGate;
 		this.galleryImport = galleryImport;
-		this.clock = clock;
 	}
 
-	@Scheduled(initialDelayString = "${rede.marketplace.sanitize-initial-delay-ms:90000}")
+	@Scheduled(initialDelayString = "${rede.marketplace.sanitize-initial-delay-ms:90000}",
+		fixedDelayString = "${rede.marketplace.sanitize-delay-ms:3600000}")
 	@Transactional
-	public void sanitizeOnce() {
-		if (announcements.isSent(KEY)) {
-			return;
-		}
+	public void sanitize() {
 		int removed = 0;
 		for (MarketplaceListing listing : marketplace.allListings(500)) {
 			if (listing.status() != MarketplaceListing.Status.ACTIVE) {
@@ -68,11 +60,17 @@ public class MarketplaceSanitizeWorker {
 		}
 		// Tudo o que está publicado na galeria volta à venda pelo piso de 50 faíscas.
 		galleryImport.importPublishedThemes();
-		announcements.markSent(KEY, clock.instant());
-		LOG.info("Marketplace: {} listagem(ns) de resquício removidas; temas da comunidade à venda.", removed);
+		if (removed > 0) {
+			LOG.info("Marketplace: {} listagem(ns) de resquício removidas; temas da comunidade à venda.",
+				removed);
+		}
 	}
 
 	private boolean isOrphan(MarketplaceListing listing) {
+		// Vendedor banido (contas do ataque): a listagem cai, com reembolso do escrow.
+		if (listing.sellerId() != null && sanctionGate.banned(listing.sellerId())) {
+			return true;
+		}
 		if (listing.itemKind() == MarketplaceListing.ItemKind.THEME) {
 			return themes.findById(listing.itemId())
 				.map(theme -> !theme.authorId().equals(listing.sellerId()))
