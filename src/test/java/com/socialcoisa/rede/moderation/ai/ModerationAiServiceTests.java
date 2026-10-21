@@ -139,6 +139,12 @@ class ModerationAiServiceTests {
 			return false;
 		}
 		@Override public List<Report> findPendingWithoutAiTriage(int limit) { return List.of(); }
+		@Override public List<Report> findPendingWithoutPreTriage(int limit) { return List.of(); }
+		@Override public List<Report> findPendingPostsByPreTriageScore(int minScore, int limit) {
+			return List.of();
+		}
+		@Override public long countAgainstTargetSince(String targetType, String targetId,
+				java.time.Instant since) { return 0; }
 		@Override public List<Report> findByReporter(String reporterId, int limit) { return List.of(); }
 	}
 }

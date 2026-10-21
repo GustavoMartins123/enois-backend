@@ -236,8 +236,16 @@ public class ModerationAiService {
 	 */
 	@org.springframework.transaction.annotation.Transactional
 	public int triagePendingReports(int limit) {
+		return triagePendingReports(limit, report -> true);
+	}
+
+	/** Mesma triagem, mas só para denúncias que passaram no gate determinístico. */
+	public int triagePendingReports(int limit, java.util.function.Predicate<Report> filter) {
 		int triaged = 0;
 		for (Report report : reportRepository.findPendingWithoutAiTriage(limit)) {
+			if (!filter.test(report)) {
+				continue;
+			}
 			String verdict = triage(reportUserPrompt(report))
 				.orElse(null);
 			var parsed = verdict == null ? Optional.<JsonNode>empty() : parseVerdict(verdict);

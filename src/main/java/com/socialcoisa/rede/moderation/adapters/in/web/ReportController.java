@@ -15,7 +15,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.socialcoisa.rede.idempotency.application.CommandResponse;
 import com.socialcoisa.rede.idempotency.application.IdempotencyApplicationService;
+import com.socialcoisa.rede.feed.application.port.in.ModerationRemovePostUseCase;
 import com.socialcoisa.rede.moderation.application.ModerationService;
+import com.socialcoisa.rede.moderation.application.port.out.ReportRepository;
 import com.socialcoisa.rede.moderation.domain.Report;
 import com.socialcoisa.rede.moderation.domain.ReportReason;
 import com.socialcoisa.rede.moderation.domain.TargetType;
@@ -30,13 +32,18 @@ class ReportController {
 	private final IdempotencyApplicationService idempotency;
 	private final CurrentUserResolver currentUserResolver;
 	private final AdminGuard adminGuard;
+	private final ReportRepository reports;
+	private final ModerationRemovePostUseCase removePost;
 
 	ReportController(ModerationService moderationService, IdempotencyApplicationService idempotency,
-			CurrentUserResolver currentUserResolver, AdminGuard adminGuard) {
+			CurrentUserResolver currentUserResolver, AdminGuard adminGuard, ReportRepository reports,
+			ModerationRemovePostUseCase removePost) {
 		this.moderationService = moderationService;
 		this.idempotency = idempotency;
 		this.currentUserResolver = currentUserResolver;
 		this.adminGuard = adminGuard;
+		this.reports = reports;
+		this.removePost = removePost;
 	}
 
 	@PostMapping("/reports")
@@ -81,6 +88,55 @@ class ReportController {
 			"authorId", review.authorId() == null ? "" : review.authorId(),
 			"author", review.author() == null ? "" : review.author(),
 			"content", review.content() == null ? "" : review.content());
+	}
+
+	/** Posts denunciados com score de pré-triagem alto: fila pronta para exclusão em lote. */
+	@GetMapping("/admin/posts/suspicious")
+	List<SuspiciousPostView> suspiciousPosts(
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestParam(defaultValue = "30") int minScore,
+			@RequestParam(defaultValue = "50") int limit) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		adminGuard.requireAdmin(user);
+		return reports.findPendingPostsByPreTriageScore(Math.max(0, minScore), Math.min(200, Math.max(1, limit)))
+			.stream()
+			.map(report -> new SuspiciousPostView(report.targetId(), report.id(),
+				report.preTriageScore() == null ? 0 : report.preTriageScore(), report.reason().name(),
+				report.preTriage()))
+			.toList();
+	}
+
+	/** Exclusão (soft delete com auditoria) dos posts suspeitos selecionados. */
+	@PostMapping("/admin/posts/bulk-delete")
+	BulkDeletePostsResult bulkDeleteSuspiciousPosts(
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestBody BulkDeleteSuspiciousRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		adminGuard.requireAdmin(user);
+		if (request == null || request.postIds() == null || request.postIds().isEmpty()) {
+			throw new com.socialcoisa.rede.shared.web.ApiException(400, "NO_POSTS_SELECTED",
+				"Selecione pelo menos um post.");
+		}
+		if (request.reason() == null || request.reason().trim().length() < 10) {
+			throw new com.socialcoisa.rede.shared.web.ApiException(400, "REASON_REQUIRED",
+				"Explique o motivo da exclusão (pelo menos 10 caracteres).");
+		}
+		List<String> ids = request.postIds().stream().filter(java.util.Objects::nonNull)
+			.map(String::trim).filter(id -> !id.isEmpty()).distinct().limit(100).toList();
+		List<BulkDeletePostItem> items = ids.stream()
+			.map(id -> {
+				try {
+					removePost.removeAsModerator(user.id().value(), id, "ADMIN:" + request.reason().trim());
+					return new BulkDeletePostItem(id, "DELETED");
+				}
+				catch (RuntimeException failure) {
+					return new BulkDeletePostItem(id, "FAILED");
+				}
+			})
+			.toList();
+		return new BulkDeletePostsResult(items.size(), items);
 	}
 
 	@PostMapping("/admin/reports/{reportId}/penalize")
@@ -135,6 +191,18 @@ class ReportController {
 	}
 
 	record CreateReportRequest(TargetType targetType, String targetId, ReportReason reason, String description) {
+	}
+
+	record SuspiciousPostView(String postId, String reportId, int score, String reason, String signals) {
+	}
+
+	record BulkDeleteSuspiciousRequest(List<String> postIds, String reason) {
+	}
+
+	record BulkDeletePostItem(String postId, String status) {
+	}
+
+	record BulkDeletePostsResult(int total, List<BulkDeletePostItem> items) {
 	}
 
 	record ReviewRequest(String note) {
