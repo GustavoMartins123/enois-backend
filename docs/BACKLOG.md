@@ -180,6 +180,16 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   queima o token e a pessoa vê "link inválido" ao clicar de verdade — o backend não tem como
   saber que ele já foi usado, porque o pendente é apagado na confirmação.
 
+- **[x] ENTREGUE 2026-10-21 — A página de desenvolvedores era ilegível no celular.** O bloco de
+  código usava `overflow-x-auto`: o comando de `curl` saía cortado e a única saída era um scroll
+  lateral sem nenhuma pista. Agora a linha **quebra** (`whitespace-pre-wrap` + `break-words`) e o
+  exemplo inteiro cabe na tela. E o **botão de copiar só aparecia no `hover`** (`opacity-0` →
+  `group-hover:opacity-100`): no toque não há hover, então o botão ficava invisível — agora ele
+  fica sempre visível no celular (`sm:opacity-0` mantém o hover no desktop), com o bloco abrindo
+  espaço (`pr-11`) para o texto não ficar embaixo do botão.
+  *Verificado* (Chrome headless a 390px): `scrollWidth` 390 = `clientWidth` 390 (sem transbordo),
+  bloco com 324px e a linha longa quebrada dentro da caixa, botão de copiar com `opacity: 1`.
+  Front: `e692a78f`.
 - **[x] ENTREGUE 2026-10-21 — O link de confirmação não é mais consumido no carregamento da
   página.** A tela `/auth/verify` confirmava o e-mail no `useEffect`, ou seja, no carregamento:
   quem busca o link sem ser a pessoa (Safe Links do Outlook, verificador de links do Gmail e de
