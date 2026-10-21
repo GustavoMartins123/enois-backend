@@ -5,45 +5,75 @@ Cada item é feito **numa passada**, compilando, com testes verdes e publicado (
 Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu).
 
 ## Fácil (1 arquivo/poucos pontos)
-1. **Tag "vulgo"/aka no perfil** — campo "conhecido como" (`aka`, varchar 60) no perfil, exibido ao
-   lado do nome. Backend: migração + domínio + view + validação de tamanho. Front: campo no editar
-   perfil (com contador) e exibição no perfil/card.
-   *Aceite:* salvar com/sem aka; aparece no perfil; limite respeitado.
-2. **Arquivar conversa (ver arquivadas / restaurar)** — complementa o `hidden_at` já entregue:
-   endpoint `POST /conversations/{id}/unhide` + lista de "Arquivadas" e ação "Restaurar".
-   *Aceite:* arquivar some da caixa; restaurar volta; não afeta o outro participante.
-3. **Apagar mensagens dentro da conversa** — marcar por usuário (`message_hidden(user_id, message_id)`),
-   endpoints em massa e seleção na thread (mesmo padrão do inbox: selecionar + selecionar tudo).
-   *Aceite:* apagar some só para quem apagou; paginação continua coerente.
+1. **[x] ENTREGUE (verificado no código em 2026-10-20) — Tag "vulgo"/aka no perfil.**
+   `UserProfile.aka` (coluna `aka`, varchar 60) no domínio e no perfil público; front com o
+   campo no editar perfil (com contador) e a exibição no perfil/card.
+   *Aceite cumprido:* salva com/sem aka, aparece no perfil, limite respeitado.
+2. **[x] ENTREGUE (verificado no código em 2026-10-20) — Arquivar conversa (ver arquivadas /
+   restaurar).** `GET /conversations/archived` + `POST /conversations/unhide` no backend
+   (`MessagingContractController`), com a aba "Arquivadas" e a ação "Restaurar" no front.
+   *Aceite cumprido:* arquivar some da caixa, restaurar volta, não afeta o outro participante.
+3. **[x] ENTREGUE (verificado no código em 2026-10-20) — Apagar mensagens dentro da conversa.**
+   `message_hidden(user_id, message_id)` com `POST /conversations/{id}/messages/hide` em massa
+   e a seleção na thread no front.
+   *Aceite cumprido:* apagar some só para quem apagou e a paginação continua coerente (a
+   leitura filtra no banco).
 
 ## Médio
-4. **Áudio nos comentários** — anexo de comentário (gravação pelo microfone → upload de mídia +
-   player) e/ou embed de YouTube/Spotify (GIF e embeds **já entregues**).
-   *Aceite:* gravar, enviar, tocar; recarregar mantém o anexo; sem autoplay.
-5. **Vaga: valor obrigatório + período + faixa + descrição** — modelo novo (`description` obrigatório,
-   `salary` = mínimo obrigatório > 0, `salaryMax` opcional, `salaryPeriod HOUR|DAY|MONTH|YEAR`) +
-   `JobView.salaryLabel` + validação (`DESCRIPTION_REQUIRED`, `SALARY_REQUIRED`, `INVALID_SALARY_RANGE`)
-   + formulário e página da vaga. Atualizar os testes que hoje criam vaga sem valor.
-   *Aceite:* sem valor/descrição não salva; faixa invertida → 400; exibe "R$ X / mês" ou "de X até Y / mês".
+4. **[x] ENTREGUE (verificado no código em 2026-10-20) — Áudio nos comentários.** Gravação
+   pelo microfone no composer de comentário (`MediaRecorder`, teto de 3 min) → upload de mídia →
+   player sem autoplay; GIF e embeds já entregues antes.
+   *Aceite cumprido:* gravar, enviar, tocar; recarregar mantém o anexo; sem autoplay.
+5. **[x] ENTREGUE 2026-10-20 — Vaga: valor obrigatório + período + faixa + descrição.** V110
+   (`description longtext`, `salary_min numeric(12,2)`, `salary_max`, `salary_period`); vagas
+   antigas continuam exibindo o texto livre em `salary`. Backend: descrição e mínimo > 0
+   obrigatórios em criar E editar (`DESCRIPTION_REQUIRED`, `SALARY_REQUIRED`), faixa invertida
+   recusada (`INVALID_SALARY_RANGE`), período HOUR|DAY|MONTH|YEAR (padrão MONTH;
+   `INVALID_SALARY_PERIOD`), rótulo pronto no `JobView.salaryLabel` ("R$ 1.500 / mês" ou
+   "de R$ 1.500 até R$ 2.000 / mês"). Front: formulário de criação e edição com mínimo/teto/
+   período e descrição obrigatória; listagem e página mostram `salaryLabel` primeiro.
+   Testes: `JobSalaryTests` (7) + ajuste dos testes que criavam vaga sem valor; V110
+   validada na bancada MariaDB (aplicada 2x + insert com as colunas novas).
 
 ## Médio-grande
-6. **Feedback por candidato** — `JobApplicationStatus {APPLIED, IN_REVIEW, NEXT_STAGE, REJECTED}` +
-   `status/feedback/reviewed_at` + `PATCH /jobs/{jobId}/applications/{id}` (REJECTED exige motivo) +
-   notificação (DM + e-mail). *Aceite:* avançar/reprovar com motivo; candidato notificado.
-7. **Penalidade por excluir vaga sem feedback** — débito de credibilidade (ledger/`ReputationService`),
-   com teto, + aviso no painel. *Aceite:* excluir sem responder reduz credibilidade; com respostas, não.
-8. **Currículo em PDF** — campo no perfil (upload PDF validado por tipo/tamanho) + anexar/atualizar na
-   candidatura; link no snapshot que o empregador recebe. *Aceite:* PDF válido anexa; inválido recusa.
+6. **[x] ENTREGUE (verificado no código em 2026-10-20) — Feedback por candidato.**
+   `JobApplicationStatus {APPLIED, IN_REVIEW, ADVANCED, NOT_SELECTED}` com `feedback` e
+   `reviewed_at` no domínio, `PATCH /jobs/{jobId}/applications/{id}` e o diálogo de retorno no
+   front (o motivo é obrigatório ao recusar).
+   *Aceite cumprido:* avançar/recusar com motivo; o candidato é notificado (DM e e-mail).
+7. **[x] ENTREGUE 2026-10-20 — Penalidade por excluir vaga sem dar retorno.** V114
+   (`job_abandon_penalties`, uma linha por vaga — a PK garante que a mesma exclusão não conta
+   duas vezes). O `delete` da vaga conta as candidaturas ainda em APPLIED; se houver, registra
+   a penalidade e devolve o aviso na própria resposta (`{unanswered, penalized}`), que o painel
+   "Minhas vagas" mostra como toast; o diálogo de exclusão já alerta a regra antes de confirmar.
+   No `ReputationService`, a penalidade entra no componente de integridade: 25, depois 75,
+   depois 150 (teto próprio de 150, somado à penalidade de moderação com teto global de 600).
+   Quem respondeu todas (qualquer estado fora de APPLIED) não é penalizado. Testes:
+   `JobAbandonPenaltyTests` (3: sem resposta penaliza e avisa; respondido não penaliza; não
+   conta duas vezes) + `ReputationServiceTests` 6/6 (penalidade desconta 25). V114 validada na
+   bancada MariaDB (create 1x + reexecução + PK rejeitando duplicata).
+8. **[x] ENTREGUE 2026-10-20 (verificação de código; entregue nas rodadas anteriores) —
+   Currículo em PDF.** Confirmado no código de ponta a ponta: o diálogo do perfil
+   (`profile-resume-dialog.tsx`) sobe o PDF pelo fluxo de mídia com purpose `RESUME`,
+   validando tipo (`application/pdf`) e tamanho no cliente, com baixar e remover; o campo
+   vive no perfil (V64, `resume_url`/`resume_name`); a candidatura congela o currículo no
+   `candidate_snapshot` (não é coluna: trocar o PDF depois não reescreve candidatura antiga)
+   e o empregador recebe o link no resumo e no `CandidateView`. O backend aceita o purpose
+   com teto de 50MB (`MediaService`). Aceite cumprido: PDF válido anexa; tipo errado recusa
+   no cliente.
 
 ## Médio-grande (pedido 2026-10-17, Game Dev community)
-9. **Imagem no meio do texto** — post/comentário com imagem INSERIDA no ponto exato da
-   explicação (ex.: ideia de jogo + screenshot no parágrafo correspondente), não só anexada
-   no fim. *Design sugerido:* conteúdo passa a aceitar marcadores `{{media:<id>}}` inline no
-   texto (PlainText/defuse preservando o marcador); upload via Mídia (3 passos já existentes);
-   o botão de inserir copia o marcador na posição do cursor; o render (RichText) troca o
-   marcador por `<figure><img></figure>` com a grade já existente; contador continua no teto
-   de 4 mídias; comentário e post usam o mesmo caminho. *Aceite:* imagem aparece exatamente
-   entre os parágrafos onde o autor colocou; sem marcador = anexo no fim (comportamento atual).
+9. **[x] ENTREGUE 2026-10-20 — Imagem no meio do texto.** O conteúdo aceita o marcador
+   `{{media:<id>}}` e o render troca cada um pela mídia real no ponto exato (imagem com zoom,
+   vídeo e áudio com player sem autoplay). Backend: `shared/text/InlineMedia` valida que TODO
+   marcador referencia anexo da MESMA publicação (400 `INVALID_MEDIA` para marcador órfão —
+   mídia alheia disfarçada de anexo não passa), aplicado em publicar, editar e comentar no
+   `FeedController` (a edição valida contra as mídias que o post JÁ tem, pois ela não mexe em
+   anexos). Front: `RichText` recebe `mediaIds` e divide o texto nos marcadores; a grade do fim
+   só mostra o que NÃO foi inserido inline (sem repetição); no composer, cada anexo ganha o
+   botão "Inserir no texto" — o marcador nasce `pendente-N` e vira o id real no upload.
+   `InlineMediaTests` 4/4 (marcador próprio aceito e preservado; alheio recusado; comentário
+   idem; sem marcador não valida nada). Sem marcador = anexo no fim, como sempre.
 
 ## Grande
 9. **Importador de vagas plugável** — porta `JobImportSource` + `imported_jobs` (unique `(source,

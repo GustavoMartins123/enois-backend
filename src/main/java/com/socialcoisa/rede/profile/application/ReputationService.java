@@ -47,13 +47,17 @@ public class ReputationService {
 	private final UserProfileRepository profileRepository;
 	private final ProfileExtensionRepository extensionRepository;
 	private final RecommendationRepository recommendationRepository;
+	/** Vagas excluídas com candidatos sem resposta (item 7 do backlog) — implementação no módulo de jobs. */
+	private final com.socialcoisa.rede.profile.application.port.out.JobAbandonPenaltyReader jobAbandonPenalties;
 	private final Clock clock;
 
 	public ReputationService(UserProfileRepository profileRepository, ProfileExtensionRepository extensionRepository,
-			RecommendationRepository recommendationRepository, Clock clock) {
+			RecommendationRepository recommendationRepository,
+			com.socialcoisa.rede.profile.application.port.out.JobAbandonPenaltyReader jobAbandonPenalties, Clock clock) {
 		this.profileRepository = profileRepository;
 		this.extensionRepository = extensionRepository;
 		this.recommendationRepository = recommendationRepository;
+		this.jobAbandonPenalties = jobAbandonPenalties;
 		this.clock = clock;
 	}
 
@@ -93,8 +97,13 @@ public class ReputationService {
 		// K — consistência temporal (teto de meses; sem privilégio infinito para conta velha).
 		double consistency = Math.min(120, 6 * Math.sqrt(Math.min(months, MAX_MONTHS) * 4.0));
 
-		// I — integridade: uma penalidade por FATO confirmado distinto, com teto total.
-		int penalty = Math.min(MAX_PENALTY, 60 * confirmedFacts * (confirmedFacts + 1) / 2);
+		// I — integridade: uma penalidade por FATO confirmado distinto (denúncia) e uma por vaga
+		// excluída com candidatos sem resposta (item 7 do backlog: 25, depois 75, depois 150 —
+		// teto próprio de 150, porque excluir vaga é infração leve comparada a fraude confirmada).
+		int jobAbandons = jobAbandonPenalties.countByUser(userId);
+		int abandonPenalty = Math.min(150, 25 * jobAbandons * (jobAbandons + 1) / 2);
+		int penalty = Math.min(MAX_PENALTY,
+			60 * confirmedFacts * (confirmedFacts + 1) / 2 + abandonPenalty);
 
 		int raw = (int) Math.round(trajectory + relations + contribution + consistency) - penalty;
 		int capped = Math.max(0, Math.min(MAX_REPUTATION, raw));

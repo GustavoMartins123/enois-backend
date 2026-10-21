@@ -41,12 +41,15 @@ class ProfileControllerTests {
 	void setUp() throws Exception {
 		String unique = "prof_" + System.nanoTime();
 		String email = unique + "@example.com";
+		// O cadastro exige a data de nascimento (ECA) e é em duas etapas: a conta só nasce
+		// quando o e-mail é confirmado.
 		String signupPayload = objectMapper.writeValueAsString(Map.of(
 			"name", "Profile Test User",
 			"role", "Engineer",
 			"email", email,
 			"password", "senha-segura",
-			"acceptedTerms", true));
+			"acceptedTerms", true,
+			"birthDate", "1990-05-10"));
 
 		mockMvc.perform(post("/auth/signup")
 				.header("Idempotency-Key", "prof-setup-" + unique)
@@ -54,7 +57,16 @@ class ProfileControllerTests {
 				.content(signupPayload))
 			.andExpect(status().isCreated());
 
-		// Conta pendente de confirmacao: confirmamos o e-mail para entrar pelo login normal.
+		// Token conhecido no cadastro pendente: o e-mail nao sai no teste.
+		String confirmToken = "token-prof-" + unique;
+		TestDatabase.setPendingSignupToken(email, confirmToken);
+		mockMvc.perform(post("/auth/email/verify")
+				.header("Idempotency-Key", "prof-verify-" + unique)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("token", confirmToken))))
+			.andExpect(status().isOk());
+
+		// Conta nascida e verificada: entramos pelo login normal.
 		userId = TestDatabase.userIdByEmail(email).orElseThrow();
 		TestDatabase.markEmailVerified(userId, java.time.Instant.now());
 

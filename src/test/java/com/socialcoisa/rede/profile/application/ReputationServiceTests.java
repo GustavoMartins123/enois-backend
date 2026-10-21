@@ -15,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.socialcoisa.rede.profile.application.port.out.JobAbandonPenaltyReader;
 import com.socialcoisa.rede.profile.application.port.out.ProfileExtensionRepository;
 import com.socialcoisa.rede.profile.application.port.out.RecommendationRepository;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
@@ -40,12 +41,27 @@ class ReputationServiceTests {
 	@Mock
 	private RecommendationRepository recommendationRepository;
 
+	@Mock
+	private JobAbandonPenaltyReader jobAbandonPenalties;
+
 	private ReputationService service;
 
 	@BeforeEach
 	void setUp() {
 		service = new ReputationService(profileRepository, extensionRepository, recommendationRepository,
-			Clock.fixed(AGORA, ZoneOffset.UTC));
+			jobAbandonPenalties, Clock.fixed(AGORA, ZoneOffset.UTC));
+	}
+
+	@Test
+	void abandoningJobsWithoutRespondingPenalizes() {
+		UserProfile profile = profile(AGORA.minusSeconds(184L * 24 * 3600));
+		profile.markEmailVerified(AGORA);
+		when(profileRepository.findById(USER)).thenReturn(java.util.Optional.of(profile));
+		stubActivity();
+		when(jobAbandonPenalties.countByUser(USER)).thenReturn(1);
+
+		// Componentes somam 86 (ver test acima); uma penalidade ativa desconta 25.
+		assertThat(service.countsFor(USER).reputation()).isEqualTo(61);
 	}
 
 	@Test

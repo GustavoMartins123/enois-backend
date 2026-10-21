@@ -22,14 +22,17 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 	private final UserProfileRepository repository;
 	private final ReputationService reputationService;
 	private final org.springframework.beans.factory.ObjectProvider<com.socialcoisa.rede.media.application.LazyUrlMigrationService> lazyMedia;
+	private final com.socialcoisa.rede.age.application.port.out.ParentalLinkRepository parentalLinks;
 	private final Clock clock;
 
 	public ProfileService(UserProfileRepository repository, ReputationService reputationService,
 			org.springframework.beans.factory.ObjectProvider<com.socialcoisa.rede.media.application.LazyUrlMigrationService> lazyMedia,
+			com.socialcoisa.rede.age.application.port.out.ParentalLinkRepository parentalLinks,
 			Clock clock) {
 		this.repository = repository;
 		this.reputationService = reputationService;
 		this.lazyMedia = lazyMedia;
+		this.parentalLinks = parentalLinks;
 		this.clock = clock;
 	}
 
@@ -175,7 +178,10 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
 		profile.declareBirthDate(date, java.time.Instant.now(clock));
 		repository.save(profile);
-		return new AgeStateView(age < 18 ? "MINOR_DECLARED" : "ADULT_DECLARED", age < 18, true);
+		boolean minor = age < 18;
+		boolean supervised = minor && parentalLinks.findActiveByMinor(userId).isPresent();
+		return new AgeStateView(minor ? (supervised ? "MINOR_SUPERVISED" : "MINOR_CONSENT_PENDING")
+			: "ADULT_DECLARED", minor, true, supervised);
 	}
 
 	/** Estado de idade para o front decidir se mostra a tela de regularizacao (sem expor a data). */
@@ -184,14 +190,18 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 		UserProfile profile = repository.findById(userId)
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
 		if (!profile.birthDateDeclared()) {
-			return new AgeStateView("BIRTH_DATE_REQUIRED", false, false);
+			return new AgeStateView("BIRTH_DATE_REQUIRED", false, false, false);
 		}
 		LocalDate today = LocalDate.now(clock.withZone(java.time.ZoneId.of("America/Sao_Paulo")));
 		boolean minor = profile.isMinorOn(today);
-		return new AgeStateView(minor ? "MINOR_DECLARED" : "ADULT_DECLARED", minor, true);
+		// O estado de supervisao e derivado do vinculo ACEITO por um adulto — nunca de uma flag do
+		// cliente. Completar 18 anos encerra a exigencia automaticamente (isMinorOn recalcula).
+		boolean supervised = minor && parentalLinks.findActiveByMinor(userId).isPresent();
+		return new AgeStateView(minor ? (supervised ? "MINOR_SUPERVISED" : "MINOR_CONSENT_PENDING")
+			: "ADULT_DECLARED", minor, true, supervised);
 	}
 
-	public record AgeStateView(String state, boolean minor, boolean declared) {
+	public record AgeStateView(String state, boolean minor, boolean declared, boolean supervised) {
 	}
 
 	@Override

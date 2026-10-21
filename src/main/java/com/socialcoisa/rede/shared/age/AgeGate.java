@@ -27,4 +27,18 @@ public class AgeGate {
 				"Confirme sua data de nascimento para continuar. É um requisito da plataforma.");
 		}
 	}
+
+	/**
+	 * Portao das acoes de escrita: data declarada E, para menor, autorizacao ativa de um
+	 * responsavel. A declaracao sozinha nao libera o menor — o vinculo precisa ter sido aceito por
+	 * um adulto (ver /age/parental).
+	 */
+	public void requireCanWrite(String userId) {
+		requireDeclared(userId);
+		if (reader.isMinor(userId) && !reader.parentalConsentActive(userId)) {
+			throw new ApiException(403, "PARENTAL_CONSENT_REQUIRED",
+				"Sua conta e de menor de 18 anos e precisa da autorizacao de um responsavel para publicar, "
+					+ "comentar e enviar mensagens.");
+		}
+	}
 }

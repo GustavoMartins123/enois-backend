@@ -30,11 +30,13 @@ import com.socialcoisa.rede.identity.application.port.out.AuthSessionRepository;
 import com.socialcoisa.rede.identity.application.port.out.CredentialRepository;
 import com.socialcoisa.rede.identity.application.port.out.EmailVerificationTokenRepository;
 import com.socialcoisa.rede.identity.application.port.out.PasswordResetTokenRepository;
+import com.socialcoisa.rede.identity.application.port.out.PendingSignupRepository;
 import com.socialcoisa.rede.identity.application.port.out.StoredCredential;
 import com.socialcoisa.rede.identity.application.port.out.UserExternalIdentityRepository;
 import com.socialcoisa.rede.identity.application.EmailService;
 import com.socialcoisa.rede.identity.domain.EmailVerificationToken;
 import com.socialcoisa.rede.identity.domain.PasswordResetToken;
+import com.socialcoisa.rede.identity.domain.PendingSignup;
 import com.socialcoisa.rede.identity.domain.TwoFactorChallenge;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.profile.domain.UserProfile;
@@ -61,6 +63,7 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 	private final AuthSessionRepository authSessionRepository;
 	private final PasswordResetTokenRepository passwordResetTokenRepository;
 	private final EmailVerificationTokenRepository emailVerificationTokenRepository;
+	private final PendingSignupRepository pendingSignups;
 	private final TwoFactorService twoFactorService;
 	private final UserExternalIdentityRepository externalIdentityRepository;
 	private final PasswordHasher passwordHasher;
@@ -75,6 +78,7 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
                        UserProfileRepository userProfileRepository, CredentialRepository credentialRepository,
                        AuthSessionRepository authSessionRepository, PasswordResetTokenRepository passwordResetTokenRepository,
                        EmailVerificationTokenRepository emailVerificationTokenRepository,
+                       PendingSignupRepository pendingSignups,
                        TwoFactorService twoFactorService,
                        UserExternalIdentityRepository externalIdentityRepository,
                        PasswordHasher passwordHasher, EmailService emailService, Clock clock,
@@ -86,6 +90,7 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		this.authSessionRepository = authSessionRepository;
 		this.passwordResetTokenRepository = passwordResetTokenRepository;
 		this.emailVerificationTokenRepository = emailVerificationTokenRepository;
+		this.pendingSignups = pendingSignups;
 		this.twoFactorService = twoFactorService;
 		this.externalIdentityRepository = externalIdentityRepository;
 		this.passwordHasher = passwordHasher;
@@ -104,19 +109,20 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 			throw new ApiException(409, "EMAIL_ALREADY_REGISTERED", "Email ja cadastrado.");
 		}
 		Instant now = clock.instant();
-		String userId = "user_" + UUID.randomUUID().toString().replace("-", "");
-		String username = uniqueUsername(command.name(), email);
-		// Nao existe papel no schema; o headline deve ficar vazio ate o usuario preencher.
-		UserProfile profile = UserProfile.create(userId, username, email, command.name().trim(), null, now);
-		profile.acceptTerms(now);
-		// ECA Digital: a data de nascimento e obrigatoria no cadastro e a idade e calculada AQUI,
-		// nunca no cliente. As protecoes de menor partem deste valor.
-		profile.declareBirthDate(birthDate, now);
-		UserProfile saved = userProfileRepository.save(profile);
-		credentialRepository.save(saved.id(), email, passwordHasher.hash(command.password()));
-		// A conta fica pendente ate confirmar o e-mail: nenhuma sessao e emitida aqui.
-		boolean emailSent = issueVerificationToken(saved, now);
-		return new SignupResult(normalizedEmail(saved), true, emailSent);
+		// Duas etapas: NADA de conta (users/credentials) nasce aqui. Guardamos o cadastro com o
+		// hash da senha e mandamos o link; a conta so existe quando o e-mail for confirmado — e
+		// assim um cadastro em massa com e-mail invalido nao polui a base.
+		pendingSignups.deleteExpired(now);
+		pendingSignups.deleteByEmail(email);
+		String rawToken = newVerificationToken();
+		String name = command.name().trim();
+		PendingSignup pending = new PendingSignup(
+			"pending_" + UUID.randomUUID().toString().replace("-", ""),
+			email, name, birthDate, passwordHasher.hash(command.password()),
+			hashToken(rawToken), now.plus(VERIFICATION_TOKEN_TTL), now);
+		pendingSignups.save(pending);
+		boolean emailSent = emailService.sendVerificationEmail(email, name, rawToken);
+		return new SignupResult(email, true, emailSent);
 	}
 
 	/**
@@ -203,6 +209,36 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 			throw new ApiException(400, "INVALID_TOKEN", "Token de confirmacao obrigatorio.");
 		}
 		String tokenHash = hashToken(token.trim());
+		// Cadastro em duas etapas: o link confirma o e-mail E cria a conta (que ainda nao existia).
+		var pending = pendingSignups.findByTokenHash(tokenHash);
+		if (pending.isPresent()) {
+			PendingSignup signup = pending.get();
+			Instant now = clock.instant();
+			if (signup.isExpired(now)) {
+				// Nao apagamos aqui: a transacao vai reverter com o 410. O pendente vencido e
+				// removido na proxima limpeza oportunista (novo cadastro ou reenvio).
+				throw new ApiException(410, "TOKEN_EXPIRED", "Link de confirmacao expirado. Peca um novo.");
+			}
+			// Corrida rara: a mesma pessoa pode ter criado a conta por outro caminho nesse meio-tempo.
+			if (userProfileRepository.existsByEmail(signup.email()) || credentialRepository.existsByEmail(signup.email())) {
+				pendingSignups.deleteByEmail(signup.email());
+				throw new ApiException(409, "EMAIL_ALREADY_REGISTERED", "Email ja cadastrado.");
+			}
+			String userId = "user_" + UUID.randomUUID().toString().replace("-", "");
+			String username = uniqueUsername(signup.name(), signup.email());
+			// Nao existe papel no schema; o headline fica vazio ate o usuario preencher.
+			UserProfile profile = UserProfile.create(userId, username, signup.email(), signup.name(), null,
+				signup.createdAt());
+			profile.acceptTerms(now);
+			// ECA Digital: a idade vem da data declarada no cadastro, validada no servidor.
+			profile.declareBirthDate(signup.birthDate(), now);
+			// O e-mail acabou de ser provado: a conta nasce verificada e ja emite sessao.
+			profile.markEmailVerified(now);
+			userProfileRepository.save(profile);
+			credentialRepository.save(userId, signup.email(), signup.passwordHash());
+			pendingSignups.deleteByEmail(signup.email());
+			return createResponse(profile, null);
+		}
 		EmailVerificationToken verification = emailVerificationTokenRepository.findByToken(tokenHash)
 			.orElseThrow(() -> new ApiException(404, "INVALID_TOKEN", "Link de confirmacao invalido."));
 		if (verification.isUsed()) {
@@ -242,6 +278,13 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 				}
 				issueVerificationToken(profile, now);
 			});
+		// Cadastro de duas etapas: ainda nao ha conta, mas o pendente pode reenviar o link.
+		pendingSignups.findByEmail(normalizedEmail).ifPresent(pending -> {
+			Instant now = clock.instant();
+			String rawToken = newVerificationToken();
+			pendingSignups.save(pending.reissued(hashToken(rawToken), now.plus(VERIFICATION_TOKEN_TTL)));
+			emailService.sendVerificationEmail(pending.email(), pending.name(), rawToken);
+		});
 	}
 
 	@Override

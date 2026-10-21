@@ -17,6 +17,9 @@ interface SpringDataJobApplicationJpaRepository extends JpaRepository<JobApplica
 
 	int countByJobId(String jobId);
 
+	/** Candidaturas ainda em APPLIED (o empregador nunca deu retorno) — item 7 do backlog. */
+	int countByJobIdAndStatus(String jobId, com.socialcoisa.rede.jobs.domain.JobApplicationStatus status);
+
 	List<JobApplicationJpaEntity> findByJobIdOrderByAppliedAtDesc(String jobId, Pageable pageable);
 
 	/** As candidaturas de uma pessoa (a tela "minhas candidaturas", com estado e retorno). */

@@ -5,6 +5,7 @@ import java.time.ZoneId;
 
 import org.springframework.stereotype.Component;
 
+import com.socialcoisa.rede.age.application.port.out.ParentalLinkRepository;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.shared.age.AgePolicyReader;
 
@@ -19,9 +20,11 @@ class AgePolicyAdapter implements AgePolicyReader {
 	private static final ZoneId BRAZIL = ZoneId.of("America/Sao_Paulo");
 
 	private final UserProfileRepository profiles;
+	private final ParentalLinkRepository parentalLinks;
 
-	AgePolicyAdapter(UserProfileRepository profiles) {
+	AgePolicyAdapter(UserProfileRepository profiles, ParentalLinkRepository parentalLinks) {
 		this.profiles = profiles;
+		this.parentalLinks = parentalLinks;
 	}
 
 	@Override
@@ -33,5 +36,10 @@ class AgePolicyAdapter implements AgePolicyReader {
 	public boolean isMinor(String userId) {
 		LocalDate today = LocalDate.now(BRAZIL);
 		return profiles.findById(userId).map(profile -> profile.isMinorOn(today)).orElse(false);
+	}
+
+	@Override
+	public boolean parentalConsentActive(String userId) {
+		return parentalLinks.findActiveByMinor(userId).isPresent();
 	}
 }
