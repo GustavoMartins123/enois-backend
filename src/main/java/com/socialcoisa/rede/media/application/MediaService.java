@@ -37,6 +37,13 @@ public class MediaService implements CreateMediaUploadUseCase, GetMediaAssetUseC
 	/** Janela do upload direto ao S3 e da limpeza do asset pendente (arquivos de ate 500MB). */
 	private static final Duration UPLOAD_WINDOW = Duration.ofMinutes(60);
 
+	/** Tipos que podem ser servidos pelo CDN. HTML/SVG/JS ativo ficam de fora de propósito. */
+	private static final java.util.Set<String> ALLOWED_MIME_TYPES = java.util.Set.of(
+		"image/jpeg", "image/png", "image/gif", "image/webp", "image/avif",
+		"video/mp4", "video/webm", "video/quicktime",
+		"audio/mpeg", "audio/ogg", "audio/wav", "audio/webm",
+		"application/pdf");
+
 	private final MediaAssetRepository mediaAssetRepository;
 	private final MediaDeletionJobRepository mediaDeletionJobRepository;
 	private final StorageUrlFactory storageUrlFactory;
@@ -161,6 +168,15 @@ public class MediaService implements CreateMediaUploadUseCase, GetMediaAssetUseC
 		}
 		if (!StringUtils.hasText(command.mimeType())) {
 			throw new ApiException(400, "INVALID_MIME_TYPE", "Tipo de midia obrigatorio.");
+		}
+		String mime = command.mimeType().trim().toLowerCase(java.util.Locale.ROOT);
+		int semicolon = mime.indexOf(';');
+		if (semicolon >= 0) {
+			mime = mime.substring(0, semicolon).trim();
+		}
+		if (!ALLOWED_MIME_TYPES.contains(mime)) {
+			throw new ApiException(400, "MEDIA_TYPE_NOT_ALLOWED",
+				"Tipo de arquivo nao permitido. Envie imagem, video, audio ou PDF.");
 		}
 		if (command.size() <= 0) {
 			throw new ApiException(400, "INVALID_MEDIA_SIZE", "Tamanho da midia deve ser maior que zero.");

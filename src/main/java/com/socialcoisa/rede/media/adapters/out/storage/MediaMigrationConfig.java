@@ -45,8 +45,9 @@ class MediaMigrationConfig {
 	}
 
 	@Bean
-	MediaSourceDownloader mediaSourceDownloader() {
-		return new HttpMediaSourceDownloader();
+	MediaSourceDownloader mediaSourceDownloader(
+			com.socialcoisa.rede.shared.security.OutboundUrlGuard urlGuard) {
+		return new HttpMediaSourceDownloader(urlGuard);
 	}
 
 	@Bean

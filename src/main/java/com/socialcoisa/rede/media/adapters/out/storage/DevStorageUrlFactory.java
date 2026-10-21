@@ -17,7 +17,8 @@ class DevStorageUrlFactory implements StorageUrlFactory {
 
 	@Override
 	public String objectKey(String mediaId, String fileName) {
-		return "dev/" + mediaId + "/" + UriUtils.encodePathSegment(fileName, java.nio.charset.StandardCharsets.UTF_8);
+		String safe = fileName.replaceAll("(^|/)\\.{1,2}(/|$)", "$1_$2");
+		return "dev/" + mediaId + "/" + UriUtils.encodePathSegment(safe, java.nio.charset.StandardCharsets.UTF_8);
 	}
 
 	@Override

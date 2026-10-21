@@ -161,4 +161,25 @@ class MediaControllerTests {
 		JsonNode node = objectMapper.readTree(deletedMedia.getResponse().getContentAsString());
 		assertThat(node.get("deleteStatus").asText()).isIn("REQUESTED", "CDN_PURGED", "OBJECT_DELETED");
 	}
+
+	@Test
+	void rejectsActiveContentTypesEvenWhenTheyClaimToBeImages() throws Exception {
+		var session = auth.authenticate("user_media_mime");
+
+		for (String mime : List.of("text/html", "image/svg+xml", "application/javascript")) {
+			String payload = objectMapper.writeValueAsString(Map.of(
+				"fileName", "arquivo.html",
+				"mimeType", mime,
+				"size", 1024,
+				"purpose", "POST_IMAGE"));
+
+			mockMvc.perform(post("/media/uploads")
+					.header("X-Session-Token", session.token())
+					.header("Idempotency-Key", "media-mime-" + mime)
+					.contentType(MediaType.APPLICATION_JSON)
+					.content(payload))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("MEDIA_TYPE_NOT_ALLOWED"));
+		}
+	}
 }

@@ -50,7 +50,11 @@ class S3StorageUrlFactory implements StorageUrlFactory {
 		// codificar o nome inteiro viraria `media%2F<uuid>%2F...` dentro da CHAVE, e a URL pública
 		// (que decodifica) passaria a apontar para outra chave. Codifica segmento a segmento.
 		String encoded = java.util.Arrays.stream(fileName.split("/", -1))
-			.map(segment -> UriUtils.encodePathSegment(segment, StandardCharsets.UTF_8))
+			.map(segment -> {
+				// "." e ".." não são nomes: CDNs costumam normalizar o caminho e mudariam a chave.
+				String safe = segment.equals(".") || segment.equals("..") ? "_" : segment;
+				return UriUtils.encodePathSegment(safe, StandardCharsets.UTF_8);
+			})
 			.collect(java.util.stream.Collectors.joining("/"));
 		return prefix + mediaId + "/" + encoded;
 	}

@@ -16,16 +16,26 @@ import com.socialcoisa.rede.media.application.port.out.MediaSourceDownloader;
 /** Baixa o original do provedor atual para um arquivo temporario; o chamador apaga. */
 class HttpMediaSourceDownloader implements MediaSourceDownloader {
 
+	private final com.socialcoisa.rede.shared.security.OutboundUrlGuard urlGuard;
+
+	HttpMediaSourceDownloader(com.socialcoisa.rede.shared.security.OutboundUrlGuard urlGuard) {
+		this.urlGuard = urlGuard;
+	}
+
 	/** Teto de seguranca: maior que o maior upload aceito, pequeno o bastante para nao encher o disco. */
 	private static final long MAX_BYTES = 512L * 1024 * 1024;
 
 	private final HttpClient http = HttpClient.newBuilder()
 		.connectTimeout(Duration.ofSeconds(10))
-		.followRedirects(HttpClient.Redirect.NORMAL)
+		// Sem redirects: um 302 para 169.254.169.254 burlaria a checagem do host de origem.
+		.followRedirects(HttpClient.Redirect.NEVER)
 		.build();
 
 	@Override
 	public Path download(String sourceUrl) {
+		if (!urlGuard.safe(sourceUrl)) {
+			throw new IllegalStateException("origem de midia nao permitida");
+		}
 		Path temp = null;
 		try {
 			HttpRequest request = HttpRequest.newBuilder(URI.create(sourceUrl))
