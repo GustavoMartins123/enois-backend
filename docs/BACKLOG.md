@@ -102,6 +102,7 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
 11. **API `/api/v1` + OpenAPI validado no CI** — alias versionado dos endpoints existentes + DTOs
     explícitos + erros/paginação padronizados; springdoc já plugado. *Aceite:* OpenAPI bate com os
     endpoints (falha o CI se divergir); v1 responde igual v0.
+    *(no ROADMAP são dois itens: 1 = a API v1, 2 = o OpenAPI no CI.)*
 12. **[x] ENTREGUE 2026-10-21 — Portal de docs no app + matriz de escopos.** A página pública
     `/developers` (`src/routes/developers.tsx` + `src/constants/developers-api.ts`) traz a
     matriz da API com o escopo de cada endpoint (`public` / `auth` / `admin`, renderizado na
@@ -133,6 +134,7 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
     `GameUrlGuardTests`, `AiTriageGuardTests`). **Faltam:** mass assignment (escrita de campo de
     terceiro no corpo) e "automação social por caminho alternativo". O passo de CI fica com o raposo
     (Actions é dele).
+    *(no ROADMAP são dois itens: 4 = a CI de segurança, 5 = os testes adversariais.)*
 
 ## BLOQUEADO por dependência externa (não é código meu)
 15. **Portal `developers.enois.ia.br`** — exige DNS, TLS, hospedagem, roteamento e pipeline.
