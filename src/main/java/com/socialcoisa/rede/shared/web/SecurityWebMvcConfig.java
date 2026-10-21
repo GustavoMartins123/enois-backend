@@ -9,13 +9,17 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 class SecurityWebMvcConfig implements WebMvcConfigurer {
 
 	private final AdminRouteInterceptor adminRouteInterceptor;
+	private final WriteRouteInterceptor writeRouteInterceptor;
 
-	SecurityWebMvcConfig(AdminRouteInterceptor adminRouteInterceptor) {
+	SecurityWebMvcConfig(AdminRouteInterceptor adminRouteInterceptor,
+			WriteRouteInterceptor writeRouteInterceptor) {
 		this.adminRouteInterceptor = adminRouteInterceptor;
+		this.writeRouteInterceptor = writeRouteInterceptor;
 	}
 
 	@Override
 	public void addInterceptors(InterceptorRegistry registry) {
 		registry.addInterceptor(adminRouteInterceptor).addPathPatterns("/admin/**");
+		registry.addInterceptor(writeRouteInterceptor).addPathPatterns("/**");
 	}
 }
