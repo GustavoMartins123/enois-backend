@@ -17,12 +17,16 @@ dependência externa, está marcado como **BLOQUEADO** (não é código meu).
 4. **CI de segurança** — hoje a esteira não roda teste, lint nem secret-scanning
    (`.github/workflows/build-and-push.yml` só constrói e publica a imagem). Falta: SCA, SAST e
    secret-scanning com política de bloqueio, sem desligar checagem.
-5. **Testes adversariais — parcial.** Já coberto: anônimo x privado (`GroupSecurityTests`),
-   token expirado/revogado (`OAuthHardeningTests`, `EmailVerificationFlowTests`), payload gigante
-   (`MediaUploadAuthTests` com o teto de 500MB, `InlineMediaTests`), XSS em HTML/capa
-   (`SafeHtmlAttackTests`, `GameUrlGuardTests`, `AiTriageGuardTests`), importador não sobrescreve
-   vaga da comunidade (`CommunitySubmissionImportGuardTests`). **Falta:** mass assignment
-   (escrita de campo de terceiro no corpo) e "automação social por caminho alternativo".
+5. **Testes adversariais — completo (2026-10-21).** Coberto: anônimo x privado
+   (`GroupSecurityTests`), token expirado/revogado (`OAuthHardeningTests`,
+   `EmailVerificationFlowTests`), payload gigante (`MediaUploadAuthTests` com o teto de 500MB,
+   `InlineMediaTests`), XSS em HTML/capa (`SafeHtmlAttackTests`, `GameUrlGuardTests`,
+   `AiTriageGuardTests`), importador não sobrescreve vaga da comunidade
+   (`CommunitySubmissionImportGuardTests`), **mass assignment** (`MassAssignmentTests` — o corpo
+   manda autor/data/contadores e o servidor ignora) e **automação social por caminho
+   alternativo** (`AutomatedWritePathsTests` — as 253 rotas de escrita exigem sessão, e a
+   allowlist de fluxos públicos do `WriteRouteInterceptor` é comparada com o catálogo esperado).
+   O que sobra de segurança é a **esteira** (item 4), que é do raposo.
 
 ## Concluído (no ar) — cada item conferido no código em 2026-10-21
 - **Vaga com valor obrigatório, período e faixa + descrição.** `JobService.java:512`
