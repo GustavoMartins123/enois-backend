@@ -90,8 +90,9 @@ class CommunityPagePostTests {
 		var author = auth.authenticate("user_com_page3");
 		String communityId = createCommunity(author, "Comunidade da pagina no limite");
 
-		// Acima do teto de 20 mil caracteres do campo: 400 com codigo proprio, nunca um 409 generico.
-		String html = "<div>" + "<p>paragrafo de teste com tamanho realista</p>".repeat(460) + "</div>";
+		// Acima do teto do campo: 400 com codigo proprio, nunca um 409 generico.
+		String html = "<div><p>" + "a".repeat(com.socialcoisa.rede.shared.html.SafeHtml.MAX_PAGE_HTML)
+			+ "</p></div>";
 
 		publishPage(author, communityId, html, "com-page-limit")
 			.andExpect(status().isBadRequest())
