@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Locale;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.StringUtils;
@@ -71,6 +72,8 @@ class AuthController {
 	private final com.socialcoisa.rede.identity.application.NewDeviceNotifier newDeviceNotifier;
 	private final com.socialcoisa.rede.shared.security.IpBlockReader ipBlockReader;
 	private final com.socialcoisa.rede.shared.security.ClientIpResolver ipResolver;
+	/** Cadastros abertos? Desligado, o POST /auth/signup responde 403 SIGNUP_DISABLED. */
+	private final boolean signupEnabled;
 
 	AuthController(SignupUseCase signupUseCase, VerifyEmailUseCase verifyEmailUseCase,
 			TwoFactorLoginUseCase twoFactorLoginUseCase, TwoFactorUseCase twoFactorUseCase,
@@ -89,7 +92,8 @@ class AuthController {
 			com.socialcoisa.rede.identity.adapters.out.TurnstileValidator turnstile,
 			com.socialcoisa.rede.identity.application.NewDeviceNotifier newDeviceNotifier,
 			com.socialcoisa.rede.shared.security.IpBlockReader ipBlockReader,
-			com.socialcoisa.rede.shared.security.ClientIpResolver ipResolver) {
+			com.socialcoisa.rede.shared.security.ClientIpResolver ipResolver,
+			@Value("${rede.auth.signup-enabled:true}") boolean signupEnabled) {
 		this.signupUseCase = signupUseCase;
 		this.verifyEmailUseCase = verifyEmailUseCase;
 		this.twoFactorLoginUseCase = twoFactorLoginUseCase;
@@ -111,6 +115,7 @@ class AuthController {
 		this.newDeviceNotifier = newDeviceNotifier;
 		this.ipBlockReader = ipBlockReader;
 		this.ipResolver = ipResolver;
+		this.signupEnabled = signupEnabled;
 	}
 
 	/** Bloqueio de IP pela moderacao (V115): nenhum fluxo de autenticacao emite sessao de IP banido. */
@@ -130,6 +135,12 @@ class AuthController {
 			jakarta.servlet.http.HttpServletRequest request) {
 		String ip = ipResolver.resolve(request);
 		exigeIpNaoBloqueado(ip);
+		// Portao de cadastros: a operacao pode fechar a criacao de contas (a Mel pediu em
+		// 2026-10-20). Antes de Turnstile/throttle: nao adianta o cliente resolver captcha.
+		if (!signupEnabled) {
+			throw new ApiException(403, "SIGNUP_DISABLED",
+				"Os cadastros estao fechados no momento. Se voce ja tem conta, entre normalmente.");
+		}
 		// Honeypot: bots preenchem o campo "website" que humanos nunca veem.
 		// Resposta fake (201) para nao dar dica ao atacante.
 		if (body.website() != null && !body.website().isBlank()) {

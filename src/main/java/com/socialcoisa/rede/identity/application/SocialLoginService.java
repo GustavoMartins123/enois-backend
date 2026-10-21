@@ -63,6 +63,8 @@ public class SocialLoginService implements OAuthUseCase {
 	private final OAuthProperties oAuthProperties;
 	private final com.socialcoisa.rede.linkedin.application.LinkedInIntegrationService linkedin;
 	private final Clock clock;
+	/** Cadastros abertos? Desligado, provedor so ENTRA em conta existente, nunca cria uma nova. */
+	private final boolean signupEnabled;
 	private final SecureRandom secureRandom = new SecureRandom();
 
 	public SocialLoginService(@Value("${rede.auth.access-token-ttl-minutes:60}") int accessTokenTtlMinutes,
@@ -76,7 +78,8 @@ public class SocialLoginService implements OAuthUseCase {
 			PasswordHasher passwordHasher,
 			OAuthProperties oAuthProperties,
 			com.socialcoisa.rede.linkedin.application.LinkedInIntegrationService linkedin,
-			Clock clock) {
+			Clock clock,
+			@Value("${rede.auth.signup-enabled:true}") boolean signupEnabled) {
 		this.accessTokenTtl = Duration.ofMinutes(accessTokenTtlMinutes);
 		this.refreshTokenTtl = Duration.ofDays(refreshTokenTtlDays);
 		this.tokenValidators = tokenValidators;
@@ -89,6 +92,7 @@ public class SocialLoginService implements OAuthUseCase {
 		this.oAuthProperties = oAuthProperties;
 		this.linkedin = linkedin;
 		this.clock = clock;
+		this.signupEnabled = signupEnabled;
 	}
 
 	@Override
@@ -281,6 +285,12 @@ public class SocialLoginService implements OAuthUseCase {
 
 	private String createAccountForProvider(OAuthProvider provider, TokenValidationResult validation,
 			String appleUserPayload) {
+		// Login de quem JA tem conta continua; o que fecha aqui e a criacao de conta nova pelo
+		// provedor (mesmo portao do POST /auth/signup).
+		if (!signupEnabled) {
+			throw new ApiException(403, "SIGNUP_DISABLED",
+				"Os cadastros estao fechados no momento. Se voce ja tem conta, entre com e-mail e senha.");
+		}
 		String email = normalizeEmail(validation.email());
 		if (!StringUtils.hasText(email)) {
 			throw new ApiException(409, "OAUTH_EMAIL_REQUIRED",
