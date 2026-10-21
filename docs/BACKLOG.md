@@ -180,6 +180,18 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   queima o token e a pessoa vê "link inválido" ao clicar de verdade — o backend não tem como
   saber que ele já foi usado, porque o pendente é apagado na confirmação.
 
+- **[x] ENTREGUE 2026-10-21 — O "quem sou eu" vinha do cache sem inscrição: a rede, os
+  comentários e os grupos tinham o mesmo defeito da caixa de entrada.** A regra era
+  `getCurrentUserId()` ler o **cache** da query `["me"]` sem se inscrever nela: só quem assina a
+  query redesenha quando ela chega, e a inscrição fica na árvore do cabeçalho — as páginas
+  continuavam com o id do primeiro desenho.
+  *Medido com o `/me` atrasado de propósito* (Chrome headless, sessão real contra backend
+  local): em `/rede`, o **pedido de conexão que a própria pessoa enviou caía na seção
+  "RECEBIDAS", com os botões "Rejeitar" e "Aceitar"** — dava para aceitar o próprio pedido. Em
+  `/grupos`, o próprio post só mostrava "excluir" depois de outra consulta redesenhar; nos
+  comentários, o próprio comentário era tratado como de terceiro até a próxima redesenhadura.
+  *Corrigido:* as três telas (e o item de comentário) passam a se inscrever na query do `/me`.
+  Não sobrou nenhuma leitura avulsa do cache no front. Front: `33f2b1c6`.
 - **[x] ENTREGUE 2026-10-21 — A caixa de entrada mostrava a própria pessoa no lugar do
   parceiro.** A tela de mensagens resolve o "outro participante" com `getCurrentUserId()`, que lia
   o **cache** da query `["me"]` sem se inscrever nela — e a página usa o `AppContainer` comum (não
