@@ -5,21 +5,25 @@ Cada item é feito **numa passada**, compilando, com testes verdes e publicado (
 Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu).
 
 ## Fácil (1 arquivo/poucos pontos)
-1. **Tag "vulgo"/aka no perfil** — campo "conhecido como" (`aka`, varchar 60) no perfil, exibido ao
-   lado do nome. Backend: migração + domínio + view + validação de tamanho. Front: campo no editar
-   perfil (com contador) e exibição no perfil/card.
-   *Aceite:* salvar com/sem aka; aparece no perfil; limite respeitado.
-2. **Arquivar conversa (ver arquivadas / restaurar)** — complementa o `hidden_at` já entregue:
-   endpoint `POST /conversations/{id}/unhide` + lista de "Arquivadas" e ação "Restaurar".
-   *Aceite:* arquivar some da caixa; restaurar volta; não afeta o outro participante.
-3. **Apagar mensagens dentro da conversa** — marcar por usuário (`message_hidden(user_id, message_id)`),
-   endpoints em massa e seleção na thread (mesmo padrão do inbox: selecionar + selecionar tudo).
-   *Aceite:* apagar some só para quem apagou; paginação continua coerente.
+1. **[x] ENTREGUE (verificado no código em 2026-10-20) — Tag "vulgo"/aka no perfil.**
+   `UserProfile.aka` (coluna `aka`, varchar 60) no domínio e no perfil público; front com o
+   campo no editar perfil (com contador) e a exibição no perfil/card.
+   *Aceite cumprido:* salva com/sem aka, aparece no perfil, limite respeitado.
+2. **[x] ENTREGUE (verificado no código em 2026-10-20) — Arquivar conversa (ver arquivadas /
+   restaurar).** `GET /conversations/archived` + `POST /conversations/unhide` no backend
+   (`MessagingContractController`), com a aba "Arquivadas" e a ação "Restaurar" no front.
+   *Aceite cumprido:* arquivar some da caixa, restaurar volta, não afeta o outro participante.
+3. **[x] ENTREGUE (verificado no código em 2026-10-20) — Apagar mensagens dentro da conversa.**
+   `message_hidden(user_id, message_id)` com `POST /conversations/{id}/messages/hide` em massa
+   e a seleção na thread no front.
+   *Aceite cumprido:* apagar some só para quem apagou e a paginação continua coerente (a
+   leitura filtra no banco).
 
 ## Médio
-4. **Áudio nos comentários** — anexo de comentário (gravação pelo microfone → upload de mídia +
-   player) e/ou embed de YouTube/Spotify (GIF e embeds **já entregues**).
-   *Aceite:* gravar, enviar, tocar; recarregar mantém o anexo; sem autoplay.
+4. **[x] ENTREGUE (verificado no código em 2026-10-20) — Áudio nos comentários.** Gravação
+   pelo microfone no composer de comentário (`MediaRecorder`, teto de 3 min) → upload de mídia →
+   player sem autoplay; GIF e embeds já entregues antes.
+   *Aceite cumprido:* gravar, enviar, tocar; recarregar mantém o anexo; sem autoplay.
 5. **[x] ENTREGUE 2026-10-20 — Vaga: valor obrigatório + período + faixa + descrição.** V110
    (`description longtext`, `salary_min numeric(12,2)`, `salary_max`, `salary_period`); vagas
    antigas continuam exibindo o texto livre em `salary`. Backend: descrição e mínimo > 0
@@ -32,9 +36,11 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
    validada na bancada MariaDB (aplicada 2x + insert com as colunas novas).
 
 ## Médio-grande
-6. **Feedback por candidato** — `JobApplicationStatus {APPLIED, IN_REVIEW, NEXT_STAGE, REJECTED}` +
-   `status/feedback/reviewed_at` + `PATCH /jobs/{jobId}/applications/{id}` (REJECTED exige motivo) +
-   notificação (DM + e-mail). *Aceite:* avançar/reprovar com motivo; candidato notificado.
+6. **[x] ENTREGUE (verificado no código em 2026-10-20) — Feedback por candidato.**
+   `JobApplicationStatus {APPLIED, IN_REVIEW, ADVANCED, NOT_SELECTED}` com `feedback` e
+   `reviewed_at` no domínio, `PATCH /jobs/{jobId}/applications/{id}` e o diálogo de retorno no
+   front (o motivo é obrigatório ao recusar).
+   *Aceite cumprido:* avançar/recusar com motivo; o candidato é notificado (DM e e-mail).
 7. **[x] ENTREGUE 2026-10-20 — Penalidade por excluir vaga sem dar retorno.** V114
    (`job_abandon_penalties`, uma linha por vaga — a PK garante que a mesma exclusão não conta
    duas vezes). O `delete` da vaga conta as candidaturas ainda em APPLIED; se houver, registra
