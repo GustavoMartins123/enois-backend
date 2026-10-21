@@ -128,7 +128,8 @@ class ExternalJobSubmissionServiceTests {
 	void onlyTheAuthorDeletesTheSubmission() {
 		ExternalJob mine = new ExternalJob("ext_com_1", ExternalJobSubmissionService.COMMUNITY_PLATFORM, "community_1",
 			"Backend", "Acme", null, null, null, "https://acme.test/vaga", java.time.Instant.now(),
-			java.time.Instant.now(), ExternalJob.FOUND, "https://acme.test/vaga", null, USER);
+			java.time.Instant.now(), ExternalJob.FOUND, "https://acme.test/vaga", null, USER, null, null, null,
+			null);
 		when(repository.findById("ext_com_1")).thenReturn(Optional.of(mine));
 
 		assertThatThrownBy(() -> service.remove(OTHER, "ext_com_1"))

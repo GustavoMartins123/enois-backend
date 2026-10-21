@@ -101,7 +101,9 @@ public class LinkedinImportService {
 
 		List<ExperiencePreview> experiences = new ArrayList<>();
 		for (Map<String, String> row : rows(csvs.getOrDefault("Positions.csv", ""))) {
-			String title = row.get("position title");
+			// A coluna mudou de nome no export: "Position Title" (antigo) → "Title" (atual). Sem o
+			// fallback, TODA experiência importada vinha sem cargo.
+			String title = firstFilled(row, "position title", "title");
 			String company = row.get("company name");
 			if (!StringUtils.hasText(title) && !StringUtils.hasText(company)) {
 				continue;
@@ -120,8 +122,10 @@ public class LinkedinImportService {
 			}
 			String start = parseDate(row.get("start date"));
 			String end = parseDate(row.get("end date"));
-			education.add(new EducationPreview(school, orNull(row.get("degree")), orNull(row.get("field of study")),
-				orNull(row.get("notes")), start, end, end == null));
+			// Mesmo caso do cargo: "Degree" (antigo) → "Degree Name" (atual).
+			education.add(new EducationPreview(school, orNull(firstFilled(row, "degree", "degree name")),
+				orNull(firstFilled(row, "field of study", "field name")), orNull(row.get("notes")), start, end,
+				end == null));
 		}
 
 		List<CertificationPreview> certifications = new ArrayList<>();
@@ -131,7 +135,7 @@ public class LinkedinImportService {
 				continue;
 			}
 			certifications.add(new CertificationPreview(name, orNull(row.get("authority")), null,
-				parseDate(row.get("time period")), null, orNull(row.get("url"))));
+				parseDate(firstFilled(row, "time period", "started on")), null, orNull(row.get("url"))));
 		}
 
 		List<ProjectPreview> projects = new ArrayList<>();
@@ -267,14 +271,25 @@ public class LinkedinImportService {
 		return fields;
 	}
 
+	/**
+	 * Data ISO completa ("YYYY-MM-DD") — que é o que a API do perfil recebe (`LocalDate`).
+	 *
+	 * O LinkedIn só informa mês/ano nas experiências, então o dia é o 1º: é a data que a pessoa vê
+	 * e edita depois. Devolver "2020-01" (como antes) fazia o SAVE da importação falhar com
+	 * "requisição inválida" — o JSON não vira `LocalDate`.
+	 */
 	private String parseDate(String raw) {
 		if (!StringUtils.hasText(raw)) {
 			return null;
 		}
 		String value = raw.trim();
-		// "2020-01" já é o formato do app.
-		if (value.matches("\\d{4}-\\d{2}")) {
+		// Data já completa (o export tem alguns "YYYY-MM-DD").
+		if (value.matches("\\d{4}-\\d{2}-\\d{2}")) {
 			return value;
+		}
+		// "2020-01" (formato de export antigo): 1º dia do mês.
+		if (value.matches("\\d{4}-\\d{2}")) {
+			return value + "-01";
 		}
 		// "Jan 2020" / "jan de 2020" / "janeiro de 2020"
 		var matcher = java.util.regex.Pattern
@@ -282,7 +297,18 @@ public class LinkedinImportService {
 		if (matcher.matches()) {
 			int month = monthNumber(matcher.group(1));
 			if (month > 0) {
-				return "%s-%02d".formatted(matcher.group(2), month);
+				return "%s-%02d-01".formatted(matcher.group(2), month);
+			}
+		}
+		return null;
+	}
+
+	/** O primeiro valor preenchido entre as colunas (o LinkedIn renomeia cabeçalhos entre exports). */
+	private String firstFilled(Map<String, String> row, String... columns) {
+		for (String column : columns) {
+			String value = row.get(column);
+			if (StringUtils.hasText(value)) {
+				return value;
 			}
 		}
 		return null;
@@ -514,9 +540,9 @@ public class LinkedinImportService {
 		}
 		String inicio = parseDate(m.group(1).trim());
 		if (inicio == null) {
-			// Ano solto ("2015 - 2019", comum em formação): mês vira janeiro na entrada e
-			// dezembro na saída, para a faixa não encolher.
-			inicio = m.group(1).trim().matches("\\d{4}") ? m.group(1).trim() + "-01" : null;
+			// Ano solto ("2015 - 2019", comum em formação): janeiro na entrada e dezembro na saída,
+			// para a faixa não encolher — em ISO completo, que é o que a API do perfil aceita.
+			inicio = m.group(1).trim().matches("\\d{4}") ? m.group(1).trim() + "-01-01" : null;
 		}
 		if (inicio == null) {
 			return null;
@@ -526,7 +552,7 @@ public class LinkedinImportService {
 		boolean atual = ladoFim.matches("(?i)(o momento|presente|atualmente|present|now|current.*)");
 		String fim = atual ? null : parseDate(ladoFim);
 		if (!atual && fim == null && ladoFim.matches("\\d{4}")) {
-			fim = ladoFim + "-12";
+			fim = ladoFim + "-12-01";
 		}
 		if (!atual && fim == null && ladoFim.matches("(?i)(o momento|presente|present)")) {
 			atual = true;

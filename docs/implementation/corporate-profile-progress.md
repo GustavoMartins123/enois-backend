@@ -1,5 +1,12 @@
 # PERFIL PROFISSIONAL — PROGRESSO VIVO
 
+> **ESTADO FINAL (2026-10-20): plano CONCLUÍDO e publicado na `main` dos dois
+> repositórios (backend `20d8094`, frontend `f6a921d`). Não existe próxima tarefa:
+> nenhuma execução automática deve alterar código, testes ou documentos deste plano.**
+> Só resta a pergunta aberta à dona (formato/rota já resolvidos; visibilidade do feed
+> corporativo) e os itens externos de infraestrutura (CORS do bucket S3, CDN/ACM,
+> aprovação do produto de publicação no LinkedIn), que não são código deste repositório.
+
 > Checklist de execução. Marcar com data + resumo do que foi feito + onde (arquivos).
 > Ao concluir uma tarefa, atualizar este arquivo NO MESMO commit.
 
@@ -201,8 +208,17 @@
 
 ## Fase 16 — Gate final
 
-- [ ] Revisão cruzada; validation.md completo; push nos dois repositórios (única vez);
-  remover a automação de 40 minutos.
+- [x] 2026-10-20 — Revisão cruzada dos commits do plano (68 arquivos no backend, 38 no
+  front): nenhum segredo, `.env` ou arquivo temporário; nenhum teste desativado.
+- [x] 2026-10-20 — Gate em worktree isolado: `enois/main` mesclado sem conflitos e a
+  suíte completa rodada NO MERGE → **581 testes, 0 falhas, 0 erros, 1 ignorado,
+  BUILD SUCCESS** (a linha do main já trazia os testes novos de jogos/mensagens).
+- [x] 2026-10-20 — Frontend no gate: `origin/main` mesclado no worktree; conflitos em
+  `texts.ts` e `link-previews.tsx` resolvidos preservando OS DOIS lados (as chaves da
+  personalização/perfil profissional + as correções de GIF/pontuação do main);
+  `npx vite build` ok, `npx vitest run` **105 verdes**, `tsc` no baseline de 9 erros.
+- [x] 2026-10-20 — Push único para `main` nos dois repositórios (backend e frontend).
+- [x] 2026-10-20 — Automação de 40 minutos removida.
 
 
 ---

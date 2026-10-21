@@ -23,7 +23,13 @@ public final class ContentTaxonomy {
 		"TECNOLOGIA", "ENGENHARIA", "DESIGN", "PRODUTO", "LIDERANCA", "CARREIRA", "FREELANCE", "OUTROS",
 		// Refinamento (2026-10-20): o que a plataforma realmente abriga.
 		"GAMES", "ART", "MUSIC", "EDUCACAO", "CIENCIA", "EMPREENDER", "FINANCAS", "MARKETING",
-		"RH", "DADOS");
+		"RH", "DADOS",
+		// Ampliação (2026-10-20): a rede não é só de tecnologia. Entram os assuntos que as
+		// pessoas publicam e querem filtrar fora do mundo dev — humor, saúde, casa, pets,
+		// família, política, fé, moda. Comunidades e posts antigos seguem válidos.
+		"FUN", "QUALIDADE_VIDA", "SAUDE", "VIAGEM", "COMIDA", "ESPORTES", "CINEMA", "LIVROS",
+		"FOTOGRAFIA", "CASA", "PETS", "PARENTALIDADE", "RELACIONAMENTOS", "MODA", "POLITICA",
+		"RELIGIAO");
 	/** Os oito originais, para não reclassificar nada que já existe. */
 	public static final List<String> ORIGINAL_TOPICS = List.of(
 		"TECNOLOGIA", "ENGENHARIA", "DESIGN", "PRODUTO", "LIDERANCA", "CARREIRA", "FREELANCE", "OUTROS");

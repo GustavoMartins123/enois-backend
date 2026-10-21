@@ -134,8 +134,13 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 			.toList();
 	}
 
+	/**
+	 * O "ranking" público é a vitrine de QUEM ACABOU DE CHEGAR (mudança de 2026-10-20): os perfis
+	 * mais recentes primeiro, e o rótulo na tela diz isso. A credibilidade continua sendo o número
+	 * do perfil e o critério da busca — ela não ordena mais esta lista.
+	 */
 	public List<UserProfileView> getRanking(int limit) {
-		return repository.findTopByReputation(limit).stream()
+		return repository.findNewestProfiles(limit).stream()
 			.map(UserProfileView::from)
 			.toList();
 	}

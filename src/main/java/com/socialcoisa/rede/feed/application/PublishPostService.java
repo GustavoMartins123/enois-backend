@@ -41,6 +41,8 @@ public class PublishPostService implements PublishPostUseCase {
 	private final com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate;
 	private final PostCommunityReader postCommunityReader;
 	private final com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles;
+	/** Avisa quem escuta fora daqui (automod de spam), DEPOIS do commit. */
+	private final org.springframework.context.ApplicationEventPublisher events;
 
 	public PublishPostService(PostRepository postRepository, ArticleRepository articleRepository,
 			IdGenerator idGenerator, Clock clock,
@@ -50,7 +52,8 @@ public class PublishPostService implements PublishPostUseCase {
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository,
 			com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate,
 			PostCommunityReader postCommunityReader,
-			com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles) {
+			com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles,
+			org.springframework.context.ApplicationEventPublisher events) {
 		this.postRepository = postRepository;
 		this.articleRepository = articleRepository;
 		this.idGenerator = idGenerator;
@@ -63,6 +66,7 @@ public class PublishPostService implements PublishPostUseCase {
 		this.sanctionGate = sanctionGate;
 		this.postCommunityReader = postCommunityReader;
 		this.corporateProfiles = corporateProfiles;
+		this.events = events;
 	}
 
 	@Override
@@ -136,6 +140,9 @@ public class PublishPostService implements PublishPostUseCase {
 		}
 		feedDistributionService.distribute(saved);
 		outboxEventRepository.append("PostPublished", saved.id().value(), "{\"postId\":\"" + saved.id().value() + "\"}");
+		// O automod de spam roda fora desta transação (listener AFTER_COMMIT + executor): flood,
+		// repetição e posts muito curtos passam pela IA sem depender de denúncia.
+		events.publishEvent(new PostPublishedEvent(saved.id().value(), saved.authorId().value()));
 		notifyMentions(command.mentionedUserIds(), command.authorId().value(), saved.id().value(), "post");
 		UserProfile author = userProfileRepository.findById(command.authorId().value()).orElse(null);
 		if (author != null) {
