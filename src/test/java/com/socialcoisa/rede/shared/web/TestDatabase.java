@@ -151,6 +151,26 @@ public final class TestDatabase {
 		}
 	}
 
+	/**
+	 * Troca o token de um cadastro pendente por um valor que o teste conhece (o banco guarda o
+	 * hash do token; o token cru so existe no e-mail).
+	 */
+	public static void setPendingSignupToken(String email, String rawToken) {
+		require().update("update pending_signups set token_hash = ? where email = ?", sha256(rawToken), email);
+	}
+
+	/** Vence o link de um cadastro pendente (para testar o 410 sem esperar o TTL). */
+	public static void expirePendingSignup(String email) {
+		require().update("update pending_signups set expires_at = ? where email = ?",
+			Instant.now().minusSeconds(60), email);
+	}
+
+	public static int pendingSignupsByEmail(String email) {
+		Integer count = require().queryForObject("select count(*) from pending_signups where email = ?",
+			Integer.class, email);
+		return count == null ? 0 : count;
+	}
+
 	private static JdbcTemplate require() {
 		if (jdbcTemplate == null) {
 			throw new IllegalStateException("TestDatabase nao foi inicializado (TestDatabaseSupport ausente).");
