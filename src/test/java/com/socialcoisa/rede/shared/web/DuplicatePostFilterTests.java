@@ -29,7 +29,12 @@ class DuplicatePostFilterTests {
 				filter.doFilter(request(), first, (req, res) -> {
 					executions.incrementAndGet();
 					started.countDown();
-					release.await(3, TimeUnit.SECONDS);
+					try {
+						release.await(3, TimeUnit.SECONDS);
+					}
+					catch (InterruptedException interrupted) {
+						Thread.currentThread().interrupt();
+					}
 					var http = (jakarta.servlet.http.HttpServletResponse) res;
 					http.setStatus(201);
 					http.setContentType("application/json");
