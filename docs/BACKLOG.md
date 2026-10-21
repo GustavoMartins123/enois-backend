@@ -314,6 +314,44 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   `@tanstack` foram travadas na que o lock ja resolvia (react-start 1.168.22, react-router
   1.170.13, router-plugin 1.168.16) e o `npm install` puro voltou a resolver.
   Front: `847adfc8` (branch `fix/lint-higiene-front`).
+- **[x] ENTREGUE 2026-10-21 — O manifesto do PWA tinha dois donos, e o vivo era o congelado.**
+  `/manifest.webmanifest` (o arquivo que o navegador lê para montar o pedido de instalação do
+  app) era servido por **duas** fontes: o arquivo estatico `public/manifest.webmanifest` e a
+  rota `src/routes/manifest[.]webmanifest.ts`. O estatico ganha (o servidor responde `public/`
+  antes de chegar na rota), entao a rota era **codigo morto** — foi la que o texto novo da
+  identidade foi escrito na passagem anterior e nunca chegava no navegador. Em producao o
+  manifesto ainda dizia "Rede profissional para conexões autenticas: vagas, mentoria,
+  comunidades e eventos", com `categories` "business"/"productivity" e os icones da outra
+  familia. Agora a rota foi apagada, o arquivo estatico e o dono unico, a frase vem de
+  `texts.pwa.manifestDescription` e as categorias sao "social"/"lifestyle"/"games".
+  O novo `src/pwa-manifest.test.ts` (6 verificacoes) amarra o JSON: a descricao tem de ser a
+  mesma do `texts.ts`, nenhum icone apontado pode faltar no disco, o tamanho declarado tem de
+  bater com o nome do arquivo e a cor de fundo do splash tem de ser o token `--background` do
+  app (o `--background` e `#faf9ff`; a rota morta usava `#f9f8ff`, que e o `--surface-1`).
+  *Verificado:* `Page.getAppManifest` no Chrome headless devolve **0 erros** e a descricao nova;
+  `curl` de producao confirma que o estatico e o que responde.
+- **[x] ENTREGUE 2026-10-21 — As superficies de entrada ainda falavam em rede profissional.**
+  A varredura das telas que a pessoa ve na entrada (login, reset de senha, convite de instalar
+  o app, rodape, manifesto) achou a frase antiga em tres lugares: a descricao de SEO do login
+  ("comece sua jornada profissional na Einois"), o copyright do rodape ("Rede profissional
+  gratuita e humana") e o manifesto do PWA. E achou **6 deslizes de artigo da marca**: a marca e
+  "**o** Einois" (135 usos no front contra 6 no feminino), mas o reset de senha dizia "sua conta
+  na Einois" e o convite de instalar dizia "Instale o app da Einois". Agora: "Acesse sua conta ou
+  entre para o Einois, uma rede humana feita por gente", "© {ano} Einois · Rede humana gratuita",
+  "Defina uma nova senha para sua conta no Einois" e "Instale o app do Einois".
+  O `src/texts.test.ts` ganhou duas travas: "nao chama o Einois de rede profissional" (a frase
+  inteira, porque "perfil profissional" continua existindo — e e a feature do alter ego
+  corporativo) e "usa o artigo masculino da marca".
+  *Verificado:* `vitest` 342/342, `tsc --noEmit` sem erro, `eslint` limpo, `vite build` ok, e o
+  HTML do SSR do login ja entrega a descricao nova.
+- **[ ] A PRECISA SER ENTREGUE — O preview de rede social das rotas continua genérico.** Só 4
+  rotas definem `og:title`/`og:description` (landing, post, Apoiar, root). As outras 12 que têm
+  `description` (login, reset, sobre, termos, privacidade, diretrizes, feed, blogs, developers,
+  perfil profissional, projetos, responsável) sao compartilhadas com a copia do site inteiro
+  ("Einois · Rede humana" / "Construa relações de verdade, não apenas conexões"), então o
+  preview de quem abre o link no WhatsApp ou no X não é da página. Falta decidir se a
+  `description` de cada rota vira tambem `og:description` (com o titulo proprio da rota) ou se o
+  root deixa de impor og:title.
 
 ## Regras que valem para tudo
 - **Proibido automatizar a criação/publicação de posts** (IA/bots/integrações/endpoints alternativos/
