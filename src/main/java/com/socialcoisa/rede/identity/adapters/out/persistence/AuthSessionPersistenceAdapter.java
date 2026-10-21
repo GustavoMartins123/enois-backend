@@ -3,9 +3,11 @@ package com.socialcoisa.rede.identity.adapters.out.persistence;
 import java.time.Instant;
 import java.util.Optional;
 
+import org.slf4j.MDC;
 import org.springframework.stereotype.Repository;
 
 import com.socialcoisa.rede.identity.application.port.out.AuthSessionRepository;
+import com.socialcoisa.rede.shared.web.RequestObservabilityFilter;
 
 @Repository
 class AuthSessionPersistenceAdapter implements AuthSessionRepository {
@@ -19,8 +21,11 @@ class AuthSessionPersistenceAdapter implements AuthSessionRepository {
 	@Override
 	public void save(String token, String refreshToken, String userId, Instant createdAt, Instant expiresAt,
 			Instant refreshExpiresAt, String ip) {
+		// ponytail: callers other than password login (e-mail verify, 2FA, OAuth, refresh) pass null;
+		// the request IP from the MDC fills it in one place instead of threading ip through every use case.
+		String sessionIp = ip != null ? ip : MDC.get(RequestObservabilityFilter.MDC_CLIENT_IP);
 		repository.save(new AuthSessionJpaEntity(token, refreshToken, userId, createdAt, expiresAt, refreshExpiresAt,
-			ip));
+			sessionIp));
 	}
 
 	@Override

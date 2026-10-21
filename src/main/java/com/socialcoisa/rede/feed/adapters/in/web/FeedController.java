@@ -215,8 +215,8 @@ class FeedController {
 		payload.put("tags", request.tags() == null ? List.of() : request.tags());
 		payload.put("type", request.type() == null ? "" : request.type());
 		payload.put("topic", request.topic() == null ? "" : request.topic());
-		// Imagem no meio do texto: a edicao nao mexe nos anexos, entao o marcador precisa
-		// referenciar uma midia que o post JA tem.
+		// Imagem no meio do texto: a edição não mexe nos anexos (eles continuam os do post),
+		// então o marcador precisa referenciar uma mídia que o post JÁ tem.
 		com.socialcoisa.rede.shared.text.InlineMedia.validate(request.content(),
 			postRepository.findById(new PostId(postId)).map(p -> p.mediaIds()).orElse(java.util.List.of()));
 		String hash = idempotency.hash(payload);
@@ -276,7 +276,7 @@ class FeedController {
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String postId, @RequestBody CommentOnPostRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		// Imagem no meio do texto no comentario tambem (mesmo caminho do post).
+		// Imagem no meio do texto no comentário também (mesmo caminho do post).
 		com.socialcoisa.rede.shared.text.InlineMedia.validate(request.content(), request.mediaIds());
 		Map<String, Object> payload = new LinkedHashMap<>();
 		payload.put("postId", postId);

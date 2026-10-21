@@ -58,11 +58,14 @@ public class AdminGuard {
 	}
 
 	private boolean isAdmin(UserProfile profile) {
-		String email = profile.email();
+		return isAdmin(profile.email(), profile.username());
+	}
+
+	/** Mesma allowlist, para identificadores já carregados (ex.: triagem de contas suspeitas). */
+	public boolean isAdmin(String email, String username) {
 		if (email != null && adminEmails.contains(email.toLowerCase(Locale.ROOT))) {
 			return true;
 		}
-		String username = profile.username();
 		return username != null && adminUsernames.contains(username.toLowerCase(Locale.ROOT));
 	}
 }

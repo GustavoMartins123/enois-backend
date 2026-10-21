@@ -66,6 +66,28 @@ class ProfileController {
 		return getMeUseCase.getMe(user.id().value());
 	}
 
+	/** Estado de idade do usuario logado (ECA Digital) — sem expor a data de nascimento. */
+	@GetMapping("/me/age-state")
+	com.socialcoisa.rede.profile.application.ProfileService.AgeStateView ageState(
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		return profileService.ageState(user.id().value());
+	}
+
+	/** Regularizacao da base: declara (ou corrige) a data de nascimento. */
+	@PostMapping("/me/birth-date")
+	com.socialcoisa.rede.profile.application.ProfileService.AgeStateView declareBirthDate(
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestBody BirthDateRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		return profileService.declareBirthDate(user.id().value(), request.birthDate());
+	}
+
+	public record BirthDateRequest(String birthDate) {
+	}
+
 	@GetMapping("/users/{username}")
 	Object user(@PathVariable String username) {
 		return getUserProfileUseCase.getByUsername(username);

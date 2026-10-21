@@ -4,6 +4,7 @@ import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Base64;
 import java.util.Locale;
 import java.util.UUID;
@@ -97,6 +98,7 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 	@Transactional
 	public SignupResult signup(SignupCommand command) {
 		validateSignup(command);
+		LocalDate birthDate = parseBirthDate(command.birthDate());
 		String email = command.email().trim().toLowerCase(Locale.ROOT);
 		if (userProfileRepository.existsByEmail(email) || credentialRepository.existsByEmail(email)) {
 			throw new ApiException(409, "EMAIL_ALREADY_REGISTERED", "Email ja cadastrado.");
@@ -107,11 +109,41 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		// Nao existe papel no schema; o headline deve ficar vazio ate o usuario preencher.
 		UserProfile profile = UserProfile.create(userId, username, email, command.name().trim(), null, now);
 		profile.acceptTerms(now);
+		// ECA Digital: a data de nascimento e obrigatoria no cadastro e a idade e calculada AQUI,
+		// nunca no cliente. As protecoes de menor partem deste valor.
+		profile.declareBirthDate(birthDate, now);
 		UserProfile saved = userProfileRepository.save(profile);
 		credentialRepository.save(saved.id(), email, passwordHasher.hash(command.password()));
 		// A conta fica pendente ate confirmar o e-mail: nenhuma sessao e emitida aqui.
 		boolean emailSent = issueVerificationToken(saved, now);
 		return new SignupResult(normalizedEmail(saved), true, emailSent);
+	}
+
+	/**
+	 * Valida a data de nascimento declarada (ECA Digital): formato ISO, data real, nao-futura e
+	 * idade plausivel (0 a 120 anos). Recusa null — cadastro sem data nao existe mais.
+	 */
+	static LocalDate parseBirthDate(String value) {
+		if (value == null || value.isBlank()) {
+			throw new ApiException(400, "BIRTH_DATE_REQUIRED",
+				"Informe a data de nascimento para criar a conta.");
+		}
+		LocalDate date;
+		try {
+			date = LocalDate.parse(value.trim());
+		}
+		catch (Exception e) {
+			throw new ApiException(400, "INVALID_BIRTH_DATE", "Data de nascimento invalida (use aaaa-mm-dd).");
+		}
+		LocalDate today = LocalDate.now(java.time.ZoneId.of("America/Sao_Paulo"));
+		if (date.isAfter(today)) {
+			throw new ApiException(400, "INVALID_BIRTH_DATE", "A data de nascimento nao pode ser no futuro.");
+		}
+		int age = java.time.Period.between(date, today).getYears();
+		if (age < 0 || age > 120) {
+			throw new ApiException(400, "INVALID_BIRTH_DATE", "A data de nascimento nao parece real.");
+		}
+		return date;
 	}
 
 	@Override

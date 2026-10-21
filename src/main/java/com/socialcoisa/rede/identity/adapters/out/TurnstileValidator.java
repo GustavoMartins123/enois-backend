@@ -27,11 +27,28 @@ public class TurnstileValidator {
 	private static final String VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
 	private final String secretKey;
+	private final String siteKey;
 	private final HttpClient httpClient;
 
-	public TurnstileValidator(@Value("${rede.turnstile.secret-key:}") String secretKey) {
+	public TurnstileValidator(@Value("${rede.turnstile.secret-key:}") String secretKey,
+			@Value("${rede.turnstile.site-key:}") String siteKey) {
 		this.secretKey = secretKey;
+		this.siteKey = siteKey;
 		this.httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+	}
+
+	/** A proteção externa está configurada? Sem isso, o cadastro usa o desafio próprio. */
+	public boolean isConfigured() {
+		return secretKey != null && !secretKey.isBlank();
+	}
+
+	public String siteKey() {
+		return siteKey;
+	}
+
+	/** Configurado E com site key: é o que o front consegue renderizar. */
+	public boolean isAvailable() {
+		return isConfigured() && siteKey != null && !siteKey.isBlank();
 	}
 
 	/**
