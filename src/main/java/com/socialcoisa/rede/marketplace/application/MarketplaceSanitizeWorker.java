@@ -57,8 +57,14 @@ public class MarketplaceSanitizeWorker {
 		sanitizeNow();
 	}
 
-	/** Mesma rotina, chamável pelo endpoint administrativo (diagnóstico e limpeza sob demanda). */
-	@Transactional
+	/**
+	 * Mesma rotina, chamável pelo endpoint administrativo (diagnóstico e limpeza sob demanda).
+	 *
+	 * SEM @Transactional no método inteiro de propósito: cada sanitizeListing tem a própria
+	 * transação. Com uma transação única, a primeira listagem que falhasse marcava a transação
+	 * como rollback-only e o lote inteiro era descartado no commit — as "Probe Escrow" nunca
+	 * saíam do catálogo.
+	 */
 	public int sanitizeNow() {
 		int removed = 0;
 		for (MarketplaceListing listing : marketplace.allListings(500)) {
