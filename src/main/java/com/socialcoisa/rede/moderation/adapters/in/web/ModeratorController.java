@@ -13,8 +13,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.socialcoisa.rede.games.application.GameService;
 import com.socialcoisa.rede.games.domain.Game;
+import com.socialcoisa.rede.moderation.application.BulkBanService;
 import com.socialcoisa.rede.moderation.application.ModeratorService;
 import com.socialcoisa.rede.moderation.application.SanctionProposalService;
+import com.socialcoisa.rede.moderation.application.SuspiciousUserService;
 import com.socialcoisa.rede.moderation.domain.ModerationVoteType;
 import com.socialcoisa.rede.moderation.domain.ModeratorApplicationStatus;
 import com.socialcoisa.rede.moderation.domain.SanctionType;
@@ -40,6 +42,8 @@ class ModeratorController {
 
 	private final ModeratorService moderators;
 	private final SanctionProposalService sanctionProposals;
+	private final SuspiciousUserService suspiciousUsers;
+	private final BulkBanService bulkBans;
 	private final com.socialcoisa.rede.moderation.application.IpBlockService ipBlocks;
 	private final GameService games;
 	private final ServiceOfferService serviceOffers;
@@ -48,11 +52,14 @@ class ModeratorController {
 	private final AdminGuard adminGuard;
 
 	ModeratorController(ModeratorService moderators, SanctionProposalService sanctionProposals,
+			SuspiciousUserService suspiciousUsers, BulkBanService bulkBans,
 			com.socialcoisa.rede.moderation.application.IpBlockService ipBlocks,
 			GameService games, ServiceOfferService serviceOffers, UserProfileRepository profiles,
 			CurrentUserResolver currentUserResolver, AdminGuard adminGuard) {
 		this.moderators = moderators;
 		this.sanctionProposals = sanctionProposals;
+		this.suspiciousUsers = suspiciousUsers;
+		this.bulkBans = bulkBans;
 		this.ipBlocks = ipBlocks;
 		this.games = games;
 		this.serviceOffers = serviceOffers;
@@ -250,6 +257,32 @@ class ModeratorController {
 	public record BlockIpRequest(String ip, String reason) {
 	}
 
+	/**
+	 * Contas recentes ranqueadas por sinais objetivos (nome em série, e-mail não confirmado,
+	 * perfil vazio, denúncias contra). Não bane ninguém: é a fila de validação humana.
+	 */
+	@GetMapping("/admin/users/suspicious")
+	SuspiciousUserService.SuspiciousUsersView suspicious(
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader("X-Session-Token") String sessionToken,
+			@RequestParam(defaultValue = "100") int limit,
+			@RequestParam(defaultValue = "30") int days) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		adminGuard.requireAdmin(user);
+		return suspiciousUsers.list(limit, days);
+	}
+
+	/** Banimento em lote: cada conta passa pelo fluxo normal de sanção, com resultado por item. */
+	@PostMapping("/admin/users/bulk-ban")
+	BulkBanService.BulkBanResult bulkBan(
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader("X-Session-Token") String sessionToken,
+			@RequestBody BulkBanRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		adminGuard.requireAdmin(user);
+		return bulkBans.ban(user.id().value(), request.usernames(), request.type(), request.reason());
+	}
+
 	@GetMapping("/moderation/sanction-proposals")
 	List<SanctionProposalService.ProposalView> sanctionProposals(
 			@RequestHeader(value = "X-User-Id", required = false) String userId,
@@ -399,6 +432,9 @@ class ModeratorController {
 	}
 
 	record SanctionRequest(SanctionType type, String reason) {
+	}
+
+	record BulkBanRequest(List<String> usernames, SanctionType type, String reason) {
 	}
 
 	record SanctionProposalRequest(String username, SanctionType type, String reason) {
