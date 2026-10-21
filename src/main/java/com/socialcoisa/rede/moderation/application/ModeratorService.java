@@ -60,6 +60,7 @@ public class ModeratorService {
 	private final UserProfileRepository profiles;
 	private final AuthSessionRepository sessions;
 	private final com.socialcoisa.rede.feed.application.port.in.PurgeAuthorContentUseCase contentPurge;
+	private final com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate;
 	private final Clock clock;
 	private final int minReputation;
 	private final int voteQuorum;
@@ -69,6 +70,7 @@ public class ModeratorService {
 			SanctionRepository sanctions, ReputationService reputationService, ReportedContentAuthorReader contentAuthors,
 			NotificationService notifications, UserProfileRepository profiles, AuthSessionRepository sessions,
 			com.socialcoisa.rede.feed.application.port.in.PurgeAuthorContentUseCase contentPurge,
+			com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate,
 			Clock clock,
 			@Value("${rede.moderation.moderator-min-reputation:200}") int minReputation,
 			@Value("${rede.moderation.vote-quorum:3}") int voteQuorum) {
@@ -84,6 +86,7 @@ public class ModeratorService {
 		this.profiles = profiles;
 		this.sessions = sessions;
 		this.contentPurge = contentPurge;
+		this.sanctionGate = sanctionGate;
 		this.clock = clock;
 		this.minReputation = minReputation;
 		this.voteQuorum = Math.max(1, voteQuorum);
@@ -229,6 +232,11 @@ public class ModeratorService {
 	public List<PanelReportView> panelReports(String moderatorId, int limit) {
 		return reports.findByStatus(ReportStatus.PENDING, limit).stream().map(report -> {
 			ModerationService.ReportReview review = moderationService.review(report.id());
+			// Autor já banido: a denúncia não precisa de votação (o saneamento periódico a
+			// encerra). Some do painel para não poluir a fila.
+			if (review.authorId() != null && sanctionGate.banned(review.authorId())) {
+				return null;
+			}
 			List<ModerationVote> all = votes.findByReport(report.id());
 			int punish = (int) all.stream().filter(v -> v.vote() == ModerationVoteType.PUNISH).count();
 			int dismiss = (int) all.stream().filter(v -> v.vote() == ModerationVoteType.DISMISS).count();
@@ -239,7 +247,7 @@ public class ModeratorService {
 				report.reason().name(), report.description(), report.createdAt().toString(),
 				review.reporter(), review.authorId(), review.author(), review.content(), punish, dismiss,
 				mine == null ? null : mine.vote().name(), voteQuorum);
-		}).toList();
+		}).filter(java.util.Objects::nonNull).toList();
 	}
 
 	@Transactional
