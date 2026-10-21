@@ -349,9 +349,12 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 		// elegidos van primero, el resto sigue cronológico. Nada se elimina del feed.
 		Collection<String> liked = readerPreferences.likedTopics(query.userId().value());
 		if (!liked.isEmpty() && visible.size() > 1) {
+			// topic() is null for posts without a topic, and liked is immutable: contains(null) throws.
+			// Only the date is reversed (newest first); the boost keeps liked topics on top.
 			visible = visible.stream()
-				.sorted(java.util.Comparator.comparing((Post post) -> liked.contains(post.topic()) ? 0 : 1)
-					.thenComparing(Post::createdAt).reversed())
+				.sorted(java.util.Comparator
+					.comparing((Post post) -> post.topic() != null && liked.contains(post.topic()) ? 0 : 1)
+					.thenComparing(Post::createdAt, java.util.Comparator.reverseOrder()))
 				.toList();
 		}
 		visible = visible.stream().limit(limit).toList();
