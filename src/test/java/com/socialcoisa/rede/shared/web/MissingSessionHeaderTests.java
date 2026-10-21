@@ -30,5 +30,10 @@ class MissingSessionHeaderTests {
 		mockMvc.perform(get("/moderation/me"))
 			.andExpect(status().isUnauthorized())
 			.andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
+
+		// Token inválido também é barrado pelo interceptor de /admin antes do controller.
+		mockMvc.perform(get("/admin/users/suspicious").header("X-Session-Token", "invalido"))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
 	}
 }
