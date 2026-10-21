@@ -18,6 +18,10 @@ interface SpringDataMessageJpaRepository extends JpaRepository<MessageJpaEntity,
 
 	Optional<MessageJpaEntity> findTopByConversationIdOrderByCreatedAtDesc(String conversationId);
 
+	Optional<MessageJpaEntity>
+		findFirstByConversationIdAndSenderIdAndTextAndCreatedAtAfterOrderByCreatedAtDesc(
+			String conversationId, String senderId, String text, java.time.Instant since);
+
 	/** Mensagens da conversa SEM as que este leitor apagou para si (filtro no banco: a paginacao
 	 *  continua coerente, e nao sobra buraco na pagina). */
 	@Query("""
