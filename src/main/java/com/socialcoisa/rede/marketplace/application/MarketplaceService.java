@@ -13,6 +13,7 @@ import org.springframework.util.StringUtils;
 
 import com.socialcoisa.rede.coin.application.CoinService;
 import com.socialcoisa.rede.marketplace.application.port.out.MarketplaceRepository;
+import com.socialcoisa.rede.marketplace.domain.MarketplaceItem;
 import com.socialcoisa.rede.marketplace.domain.MarketplaceListing;
 import com.socialcoisa.rede.marketplace.domain.MarketplacePurchase;
 import com.socialcoisa.rede.shared.web.ApiException;
@@ -30,11 +31,15 @@ public class MarketplaceService {
 	public static final long MIN_PRICE = CoinService.FAIS(50L);
 
 	private final MarketplaceRepository listings;
+	private final com.socialcoisa.rede.marketplace.application.port.out.MarketplaceItemRepository items;
 	private final CoinService coins;
 	private final Clock clock;
 
-	public MarketplaceService(MarketplaceRepository listings, CoinService coins, Clock clock) {
+	public MarketplaceService(MarketplaceRepository listings,
+			com.socialcoisa.rede.marketplace.application.port.out.MarketplaceItemRepository items,
+			CoinService coins, Clock clock) {
 		this.listings = listings;
+		this.items = items;
 		this.coins = coins;
 		this.clock = clock;
 	}
@@ -66,6 +71,50 @@ public class MarketplaceService {
 			return java.util.Optional.empty();
 		}
 		return java.util.Optional.of(publish(sellerId, itemKind, itemId, title, description, price));
+	}
+
+	/**
+	 * Publica um item de CONTEÚDO (template, banner, página, post, blog ou serviço): o texto/HTML
+	 * fica em marketplace_items e é entregue ao comprador. Tema continua pelo fluxo da galeria.
+	 */
+	@Transactional
+	public MarketplaceListing publishItem(String sellerId, String itemKind, String title, String description,
+			String content, long price) {
+		MarketplaceListing.ItemKind kind = parseKind(itemKind);
+		if (kind == MarketplaceListing.ItemKind.THEME) {
+			throw new ApiException(400, "USE_THEME_FLOW",
+				"Para vender um tema, use a Aparência (o pacote precisa da galeria).");
+		}
+		if (!StringUtils.hasText(title) || title.trim().length() < 3) {
+			throw new ApiException(400, "TITLE_REQUIRED", "O título precisa de pelo menos 3 caracteres.");
+		}
+		if (kind != MarketplaceListing.ItemKind.SERVICE && !StringUtils.hasText(content)) {
+			throw new ApiException(400, "CONTENT_REQUIRED", "Cole o conteúdo que o comprador vai receber.");
+		}
+		Instant now = clock.instant();
+		MarketplaceItem item = items.save(MarketplaceItem.create(sellerId, kind, title, description, content, now));
+		return publish(sellerId, kind.name(), item.id(), title, description, price);
+	}
+
+	/** Conteúdo comprado (o comprador é o único que pode abrir). */
+	@Transactional(readOnly = true)
+	public PurchasedItem contentForPurchase(String purchaseId, String buyerId) {
+		MarketplacePurchase purchase = purchase(purchaseId);
+		if (!purchase.ownedBy(buyerId)) {
+			throw new ApiException(403, "NOT_THE_BUYER", "Só quem comprou abre este conteúdo.");
+		}
+		MarketplaceListing listing = listings.findListingById(purchase.listingId())
+			.orElseThrow(() -> new ApiException(404, "LISTING_NOT_FOUND", "Listagem não encontrada."));
+		if (listing.itemKind() == MarketplaceListing.ItemKind.THEME) {
+			// Tema instala pela galeria; o front usa o itemId para buscar o pacote.
+			return new PurchasedItem(listing.itemKind(), listing.title(), listing.itemId(), null);
+		}
+		MarketplaceItem item = items.findById(listing.itemId())
+			.orElseThrow(() -> new ApiException(404, "ITEM_NOT_FOUND", "Conteúdo não encontrado."));
+		return new PurchasedItem(listing.itemKind(), item.title(), item.id(), item.content());
+	}
+
+	public record PurchasedItem(MarketplaceListing.ItemKind kind, String title, String itemId, String content) {
 	}
 
 	@Transactional
@@ -137,7 +186,50 @@ public class MarketplaceService {
 	}
 
 	public List<MarketplaceListing> catalog(int limit) {
-		return listings.findActive(limit);
+		return catalog(limit, null, null);
+	}
+
+	/** Todas as listagens, para a limpeza de resquícios do ataque. */
+	public List<MarketplaceListing> allListings(int limit) {
+		return listings.findAll(limit);
+	}
+
+	/**
+	 * Remove uma listagem com reembolso do que estiver no escrow. Usado na limpeza dos resquícios:
+	 * um tema que não existe mais (ou que não pertence a quem listou) não fica à venda.
+	 */
+	@Transactional
+	public boolean sanitizeListing(MarketplaceListing listing) {
+		if (listing.status() != MarketplaceListing.Status.ACTIVE) {
+			return false;
+		}
+		Instant now = clock.instant();
+		for (MarketplacePurchase purchase : listings.findHeldByListing(listing.id())) {
+			try {
+				coins.escrowRefund(purchase.buyerId(), purchase.price(), escrowRef(purchase),
+					"Reembolso: listagem removida na limpeza do marketplace");
+				listings.savePurchase(purchase.refund(now));
+			}
+			catch (RuntimeException ignored) {
+				// se o reembolso falhar, a listagem ainda sai do ar; o suporte trata o valor.
+			}
+		}
+		listings.saveListing(listing.remove(now));
+		return true;
+	}
+
+	/** Catálogo com busca (título/descrição) e filtro de categoria; sem nada, devolve tudo. */
+	public List<MarketplaceListing> catalog(int limit, String q, String kind) {
+		String needle = q == null ? null : q.trim().toLowerCase(Locale.ROOT);
+		String wantedKind = kind == null || kind.isBlank() ? null : kind.trim().toUpperCase(Locale.ROOT);
+		return listings.findActive(Math.max(limit, 200)).stream()
+			.filter(listing -> wantedKind == null || listing.itemKind().name().equals(wantedKind))
+			.filter(listing -> needle == null || needle.isEmpty()
+				|| listing.title().toLowerCase(Locale.ROOT).contains(needle)
+				|| (listing.description() != null
+					&& listing.description().toLowerCase(Locale.ROOT).contains(needle)))
+			.limit(limit)
+			.toList();
 	}
 
 	public List<MarketplaceListing> mine(String sellerId) {
@@ -147,6 +239,20 @@ public class MarketplaceService {
 	/** Compras de quem comprou (o painel do escrow: confirmar ou pedir reembolso). */
 	public List<MarketplacePurchase> purchasesByBuyer(String buyerId) {
 		return listings.findPurchasesByBuyer(buyerId);
+	}
+
+	/** Compras com a categoria e o título da listagem, para agrupar em "Minhas compras". */
+	@Transactional(readOnly = true)
+	public List<PurchaseDetail> purchasesDetailed(String buyerId) {
+		return listings.findPurchasesByBuyer(buyerId).stream().map(purchase -> {
+			MarketplaceListing listing = listings.findListingById(purchase.listingId()).orElse(null);
+			return new PurchaseDetail(purchase, listing == null ? null : listing.itemKind(),
+				listing == null ? null : listing.title(), listing == null ? null : listing.itemId());
+		}).toList();
+	}
+
+	public record PurchaseDetail(MarketplacePurchase purchase, MarketplaceListing.ItemKind kind, String title,
+			String itemId) {
 	}
 
 	/** Vendas de quem vendeu (o painel do escrow: acompanhar as liberações). */

@@ -42,8 +42,32 @@ class MarketplaceController {
 	}
 
 	@GetMapping("/marketplace")
-	List<ListingView> catalog(@RequestParam(defaultValue = "60") int limit) {
-		return views(marketplace.catalog(limit));
+	List<ListingView> catalog(@RequestParam(defaultValue = "60") int limit,
+			@RequestParam(required = false) String q,
+			@RequestParam(required = false) String kind) {
+		return views(marketplace.catalog(limit, q, kind));
+	}
+
+	/** Publica qualquer conteúdo (template, banner, página, post, blog ou serviço). */
+	@PostMapping("/marketplace/items")
+	Map<String, Object> publishItem(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestBody PublishItemRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		MarketplaceListing listing = marketplace.publishItem(user.id().value(), request.kind(), request.title(),
+			request.description(), request.content(), request.price());
+		return Map.of("id", listing.id(), "status", listing.status().name());
+	}
+
+	/** Conteúdo de uma compra (só o comprador): usado pelo editor de "Minhas compras". */
+	@GetMapping("/marketplace/purchases/{purchaseId}/content")
+	Map<String, Object> purchasedContent(@PathVariable String purchaseId,
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		var purchased = marketplace.contentForPurchase(purchaseId, user.id().value());
+		return Map.of("kind", purchased.kind().name(), "title", purchased.title(), "itemId", purchased.itemId(),
+			"content", purchased.content() == null ? "" : purchased.content());
 	}
 
 	@GetMapping("/marketplace/mine")
@@ -57,14 +81,16 @@ class MarketplaceController {
 	List<PurchaseView> myPurchases(@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		return marketplace.purchasesByBuyer(user.id().value()).stream().map(PurchaseView::from).toList();
+		return marketplace.purchasesDetailed(user.id().value()).stream().map(PurchaseView::from).toList();
 	}
 
 	@GetMapping("/marketplace/vendas")
 	List<PurchaseView> mySales(@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		return marketplace.salesBySeller(user.id().value()).stream().map(PurchaseView::from).toList();
+		return marketplace.salesBySeller(user.id().value()).stream()
+			.map(p -> PurchaseView.from(p, null, null, null))
+			.toList();
 	}
 
 	@PostMapping("/marketplace")
@@ -119,11 +145,22 @@ class MarketplaceController {
 	}
 
 	record PurchaseView(String id, String listingId, String buyerId, String sellerId, long price, String state,
-			String createdAt, String decidedAt) {
-		static PurchaseView from(MarketplacePurchase p) {
+			String createdAt, String decidedAt, String itemKind, String title, String itemId) {
+		static PurchaseView from(MarketplacePurchase p, String itemKind, String title, String itemId) {
 			return new PurchaseView(p.id(), p.listingId(), p.buyerId(), p.sellerId(), p.price(), p.state().name(),
-				p.createdAt().toString(), p.decidedAt() == null ? null : p.decidedAt().toString());
+				p.createdAt().toString(), p.decidedAt() == null ? null : p.decidedAt().toString(), itemKind, title,
+				itemId);
 		}
+
+		static PurchaseView from(MarketplaceService.PurchaseDetail detail) {
+			MarketplacePurchase p = detail.purchase();
+			return new PurchaseView(p.id(), p.listingId(), p.buyerId(), p.sellerId(), p.price(), p.state().name(),
+				p.createdAt().toString(), p.decidedAt() == null ? null : p.decidedAt().toString(),
+				detail.kind() == null ? null : detail.kind().name(), detail.title(), detail.itemId());
+		}
+	}
+
+	record PublishItemRequest(String kind, String title, String description, String content, long price) {
 	}
 
 	/** Listagens com o nome de quem publicou (o card mostra "por @fulano"). */

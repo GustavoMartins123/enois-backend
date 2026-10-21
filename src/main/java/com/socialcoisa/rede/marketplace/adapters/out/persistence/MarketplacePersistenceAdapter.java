@@ -24,6 +24,8 @@ interface SpringDataMarketplaceListingRepository
 
 	List<MarketplaceListingJpaEntity> findByStatusOrderByCreatedAtDesc(String status, Pageable pageable);
 
+	List<MarketplaceListingJpaEntity> findAllByOrderByCreatedAtDesc(Pageable pageable);
+
 	List<MarketplaceListingJpaEntity> findBySellerIdOrderByCreatedAtDesc(String sellerId);
 }
 
@@ -40,6 +42,8 @@ interface SpringDataMarketplacePurchaseRepository
 	List<MarketplacePurchaseJpaEntity> findByBuyerIdOrderByCreatedAtDesc(String buyerId);
 
 	List<MarketplacePurchaseJpaEntity> findBySellerIdOrderByCreatedAtDesc(String sellerId);
+
+	List<MarketplacePurchaseJpaEntity> findByListingIdAndState(String listingId, String state);
 }
 
 @Repository
@@ -77,6 +81,20 @@ class MarketplacePersistenceAdapter implements MarketplaceRepository {
 	public List<MarketplaceListing> findActive(int limit) {
 		return listings.findByStatusOrderByCreatedAtDesc(MarketplaceListing.Status.ACTIVE.name(),
 			Pageable.ofSize(Math.min(limit, PAGE))).stream().map(MarketplaceListingJpaEntity::toDomain).toList();
+	}
+
+	@Override
+	public List<MarketplaceListing> findAll(int limit) {
+		return listings.findAllByOrderByCreatedAtDesc(Pageable.ofSize(Math.min(limit, PAGE))).stream()
+			.map(MarketplaceListingJpaEntity::toDomain)
+			.toList();
+	}
+
+	@Override
+	public List<MarketplacePurchase> findHeldByListing(String listingId) {
+		return purchases.findByListingIdAndState(listingId, MarketplacePurchase.State.HELD.name()).stream()
+			.map(MarketplacePurchaseJpaEntity::toDomain)
+			.toList();
 	}
 
 	@Override
