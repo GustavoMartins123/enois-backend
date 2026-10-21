@@ -22,14 +22,20 @@ import jakarta.servlet.http.HttpServletRequest;
 @Component
 public class ClientIpResolver {
 
-	private static final int MAX_HEADER = 300;
 	private static final int MAX_IP = 45;
 
 	public String resolve(HttpServletRequest request) {
 		String forwarded = request.getHeader("X-Forwarded-For");
-		String candidate = lastHop(forwarded);
-		if (isPlausible(candidate)) {
-			return candidate;
+		if (StringUtils.hasText(forwarded)) {
+			// Behind the ALB the header is always there. If its last hop is not an IP, fall to the
+			// connection address, never to X-Real-IP: the ALB passes that header through untouched,
+			// so the client would pick its own key (bypassing rate limits and IP blocks).
+			String candidate = lastHop(forwarded);
+			if (isPlausible(candidate)) {
+				return candidate;
+			}
+			String remote = request.getRemoteAddr();
+			return isPlausible(remote) ? remote.trim() : "desconhecido";
 		}
 		String real = request.getHeader("X-Real-IP");
 		if (isPlausible(real)) {
@@ -39,11 +45,12 @@ public class ClientIpResolver {
 		return isPlausible(remote) ? remote.trim() : "desconhecido";
 	}
 
-	/** O último item da lista — o que o nosso balanceador acrescentou. */
+	/**
+	 * O último item da lista — o que o nosso balanceador acrescentou. No length cap on the whole
+	 * header: the client can pad the forged prefix, and the ALB still appends the real IP at the end.
+	 * The hop itself is bounded by {@link #isPlausible}.
+	 */
 	private String lastHop(String header) {
-		if (!StringUtils.hasText(header) || header.length() > MAX_HEADER) {
-			return null;
-		}
 		int lastComma = header.lastIndexOf(',');
 		return lastComma < 0 ? header.trim() : header.substring(lastComma + 1).trim();
 	}
