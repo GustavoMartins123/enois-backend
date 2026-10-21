@@ -2,12 +2,14 @@ package com.socialcoisa.rede.marketplace.application;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.socialcoisa.rede.marketplace.application.port.out.MarketplaceItemRepository;
 import com.socialcoisa.rede.marketplace.domain.MarketplaceListing;
+import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.shared.sanctions.SanctionGateReader;
 import com.socialcoisa.rede.themes.application.port.out.ThemeGalleryRepository;
 
@@ -28,15 +30,24 @@ public class MarketplaceSanitizeWorker {
 	private final ThemeGalleryRepository themes;
 	private final MarketplaceItemRepository items;
 	private final SanctionGateReader sanctionGate;
+	private final UserProfileRepository profiles;
+	private final java.util.List<String> suspiciousPatterns;
 	private final MarketplaceGalleryImportWorker galleryImport;
 
 	public MarketplaceSanitizeWorker(MarketplaceService marketplace, ThemeGalleryRepository themes,
-			MarketplaceItemRepository items, SanctionGateReader sanctionGate,
+			MarketplaceItemRepository items, SanctionGateReader sanctionGate, UserProfileRepository profiles,
+			@Value("${rede.security.suspicious.name-patterns:probe}") String patterns,
 			MarketplaceGalleryImportWorker galleryImport) {
 		this.marketplace = marketplace;
 		this.themes = themes;
 		this.items = items;
 		this.sanctionGate = sanctionGate;
+		this.profiles = profiles;
+		this.suspiciousPatterns = java.util.Arrays.stream(patterns.split(","))
+			.map(String::trim)
+			.filter(pattern -> !pattern.isEmpty())
+			.map(pattern -> pattern.toLowerCase(java.util.Locale.ROOT))
+			.toList();
 		this.galleryImport = galleryImport;
 	}
 
@@ -66,9 +77,26 @@ public class MarketplaceSanitizeWorker {
 		}
 	}
 
+	private boolean hasSuspiciousName(String sellerId) {
+		if (suspiciousPatterns.isEmpty()) {
+			return false;
+		}
+		return profiles.findById(sellerId)
+			.map(profile -> {
+				String typed = (profile.name() + " " + profile.username()).toLowerCase(java.util.Locale.ROOT);
+				return suspiciousPatterns.stream().anyMatch(typed::contains);
+			})
+			.orElse(false);
+	}
+
 	private boolean isOrphan(MarketplaceListing listing) {
 		// Vendedor banido (contas do ataque): a listagem cai, com reembolso do escrow.
 		if (listing.sellerId() != null && sanctionGate.banned(listing.sellerId())) {
+			return true;
+		}
+		// Contas de teste/ataque reconhecidas pelo mesmo padrão da triagem de suspeitos
+		// ("probe"): os temas "Probe Escrow" não podem continuar à venda.
+		if (listing.sellerId() != null && hasSuspiciousName(listing.sellerId())) {
 			return true;
 		}
 		if (listing.itemKind() == MarketplaceListing.ItemKind.THEME) {
