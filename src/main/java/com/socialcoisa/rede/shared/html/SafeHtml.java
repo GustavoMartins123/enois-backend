@@ -54,7 +54,11 @@ public final class SafeHtml {
 	 * Teto do HTML de um card de projeto. O mesmo número da bio e da página: um teto
 	 * único para "HTML colado" continua sendo o mais fácil de explicar e de conferir.
 	 */
-	public static final int MAX_PROJECT_HTML = 20_000;
+	/**
+	 * Teto do HTML do card de projeto. Mesmo motivo do teto da pagina: um SVG colado passa de
+	 * 20 mil caracteres e era recusado antes do sanitizador olhar as tags.
+	 */
+	public static final int MAX_PROJECT_HTML = 200_000;
 
 	/** Teto do HTML de blog (tema do cantinho ou post em HTML): o mesmo do resto, sem excecao. */
 	public static final int MAX_BLOG_HTML = 20_000;
