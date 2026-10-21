@@ -95,8 +95,16 @@ public class MarketplaceSanitizeWorker {
 			return true;
 		}
 		// Contas de teste/ataque reconhecidas pelo mesmo padrão da triagem de suspeitos
-		// ("probe"): os temas "Probe Escrow" não podem continuar à venda.
+		// ("probe"), no NOME do vendedor ou no TÍTULO da listagem.
 		if (listing.sellerId() != null && hasSuspiciousName(listing.sellerId())) {
+			return true;
+		}
+		if (suspiciousPatterns.stream()
+			.anyMatch(pattern -> listing.title().toLowerCase(java.util.Locale.ROOT).contains(pattern))) {
+			return true;
+		}
+		// Vendedor excluído: a conta não existe mais, então a listagem não pode continuar.
+		if (listing.sellerId() != null && profiles.findById(listing.sellerId()).isEmpty()) {
 			return true;
 		}
 		if (listing.itemKind() == MarketplaceListing.ItemKind.THEME) {
