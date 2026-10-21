@@ -44,24 +44,24 @@ class JdbcModerationLearningAdapter implements ModerationLearningRepository {
 	@Override
 	public Map<String, Integer> weights() {
 		Map<String, Integer> weights = new HashMap<>();
-		jdbc.query("select signal, weight from moderation_signal_weights",
-			rs -> { weights.put(rs.getString("signal"), rs.getInt("weight")); });
+		jdbc.query("select signal_key, weight from moderation_signal_weights",
+			rs -> { weights.put(rs.getString("signal_key"), rs.getInt("weight")); });
 		return Map.copyOf(weights);
 	}
 
 	@Override
 	public void upsertWeight(String signal, int weight, int samples, Instant now) {
-		Integer current = jdbc.query("select samples from moderation_signal_weights where signal = ?",
+		Integer current = jdbc.query("select samples from moderation_signal_weights where signal_key = ?",
 			rs -> rs.next() ? rs.getInt(1) : null, signal);
 		if (current == null) {
 			jdbc.update("""
-				insert into moderation_signal_weights (signal, weight, samples, updated_at)
+				insert into moderation_signal_weights (signal_key, weight, samples, updated_at)
 				values (?, ?, ?, ?)
 				""", signal, weight, samples, Timestamp.from(now));
 		}
 		else {
 			jdbc.update("""
-				update moderation_signal_weights set weight = ?, samples = ?, updated_at = ? where signal = ?
+				update moderation_signal_weights set weight = ?, samples = ?, updated_at = ? where signal_key = ?
 				""", weight, samples, Timestamp.from(now), signal);
 		}
 	}

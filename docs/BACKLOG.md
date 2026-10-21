@@ -155,6 +155,22 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
 17. **LinkedIn** — app aprovado (`w_member_social`); sem isso, sem publicação legítima.
 18. **Sanitizar usuários/posts de teste em produção** — sem acesso ao banco e sem endpoint admin.
 
+- **[x] ENTREGUE 2026-10-21 — A migração V140 (pré-triagem de moderação) não rodava no
+  MariaDB: o pod da produção não subia.** A migração criava a tabela
+  `moderation_signal_weights` com uma coluna chamada **`signal`**, que é **palavra reservada no
+  MariaDB**: o `CREATE TABLE` devolvia 1064 e o mesmo aconteceria em qualquer `SELECT`/`INSERT` com
+  esse nome. O H2 dos testes aceita, então **a suíte passava e o banco real não** — o defeito só
+  apareceu quando o deploy da imagem com a V140 chegou ao cluster (o pod antigo continuava
+  servindo, o novo não subia).
+  *Corrigido:* a coluna virou **`signal_key`** (a migração nunca tinha sido aplicada em nenhum
+  MariaDB — ela quebrava —, então renomear não quebra checksum de ninguém) e as queries do
+  `JdbcModerationLearningAdapter` apontam para o nome novo. *Verificado na bancada MariaDB 11.4:*
+  a cadeia inteira de migrações (139 tabelas) aplica numa base nova **e** a V140 sozinha aplica
+  2x sem erro; os testes de moderação passam (16/16).
+  *Fica em aberto:* a esteira do backend **não roda teste nem migra nada** — por isso um SQL que
+  quebra só no MariaDB passa pelo H2 e só aparece em produção. Falta um job de CI com um
+  container MariaDB aplicando as migrações (o do front, o `ci.yml`, já roda lint, typecheck e
+  vitest).
 ## Higiene do backend (entregue 2026-10-21)
 - **[x] ENTREGUE 2026-10-21 — A suíte voltou a ficar verde, e 2 das 9 falhas eram defeitos do
   app (não dos testes).** O cadastro em duas etapas (V134, 2026-10-20) deixou 5 classes de teste
