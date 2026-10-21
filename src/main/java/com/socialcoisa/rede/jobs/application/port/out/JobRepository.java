@@ -30,6 +30,9 @@ public interface JobRepository {
 
 	int countApplications(String jobId);
 
+	/** Candidaturas ainda em APPLIED (sem nenhum retorno do empregador) — usado ao excluir. */
+	int countUnansweredApplications(String jobId);
+
 	/** Para listas: ids em que o usuario se candidatou/salvou, em consultas em lote. */
 	java.util.Set<String> findAppliedJobIds(String userId, java.util.Collection<String> jobIds);
 

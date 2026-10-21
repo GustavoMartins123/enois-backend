@@ -251,9 +251,11 @@ class JobApplicationFlowTests {
 	}
 
 	private String jobBody(String fieldsJson) throws Exception {
+		// A vaga nova exige descrição e valor (item 5 do backlog).
 		return """
 				{"title":"Pessoa Desenvolvedora","company":"Acme","location":"Remoto","type":"CLT","level":"PLENO",
-				 "currency":"BRL","skills":["Java"],"communityAgreement":true,"applicationFields":%s}"""
+				 "currency":"BRL","salaryMin":"1500","salaryPeriod":"MONTH","description":"Vaga de teste com valor.",
+				 "skills":["Java"],"communityAgreement":true,"applicationFields":%s}"""
 			.formatted(fieldsJson);
 	}
 

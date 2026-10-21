@@ -1,5 +1,6 @@
 package com.socialcoisa.rede.jobs.application;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.util.List;
 import java.util.Map;
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import com.socialcoisa.rede.jobs.application.port.out.JobAbandonPenaltyRepository;
 import com.socialcoisa.rede.jobs.application.port.out.JobApplicationDelivery;
 import com.socialcoisa.rede.jobs.application.port.out.JobApplicationStatusNotifier;
 import com.socialcoisa.rede.jobs.application.port.out.JobRepository;
@@ -33,7 +35,14 @@ public class JobService {
 	/** Moedas aceitas na faixa salarial. BRL e o padrao. */
 	public static final java.util.Set<String> SUPPORTED_CURRENCIES = java.util.Set.of("BRL", "USD", "EUR");
 
+	/** Períodos aceitos no valor da vaga nova. Mês é o padrão. */
+	public static final java.util.Set<String> SUPPORTED_SALARY_PERIODS = java.util.Set
+		.of("HOUR", "DAY", "MONTH", "YEAR");
+
 	private static final int MAX_SALARY_LENGTH = 120;
+
+	/** Teto da descrição da vaga: o suficiente para explicá-la, sem virar página. */
+	private static final int MAX_DESCRIPTION_LENGTH = 5000;
 
 	/** Simbolos que o autor costuma digitar e que a exibicao remonta a partir da moeda. */
 	private static final java.util.regex.Pattern CURRENCY_SYMBOLS = java.util.regex.Pattern
@@ -46,6 +55,7 @@ public class JobService {
 	private final com.socialcoisa.rede.profile.application.port.out.ProfileExtensionRepository extensionRepository;
 	private final JobApplicationDelivery delivery;
 	private final JobApplicationStatusNotifier statusNotifier;
+	private final JobAbandonPenaltyRepository abandonPenalties;
 	private final tools.jackson.databind.ObjectMapper objectMapper;
 	private final Clock clock;
 	private final UserRateLimiter userRateLimiter;
@@ -56,6 +66,7 @@ public class JobService {
 			com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles,
 			com.socialcoisa.rede.profile.application.port.out.ProfileExtensionRepository extensionRepository,
 			JobApplicationDelivery delivery, JobApplicationStatusNotifier statusNotifier,
+			JobAbandonPenaltyRepository abandonPenalties,
 			tools.jackson.databind.ObjectMapper objectMapper, Clock clock,
 			UserRateLimiter userRateLimiter, BehavioralTimingGuard behavioralTimingGuard) {
 		this.repository = repository;
@@ -65,6 +76,7 @@ public class JobService {
 		this.extensionRepository = extensionRepository;
 		this.delivery = delivery;
 		this.statusNotifier = statusNotifier;
+		this.abandonPenalties = abandonPenalties;
 		this.objectMapper = objectMapper;
 		this.clock = clock;
 		this.userRateLimiter = userRateLimiter;
@@ -73,7 +85,8 @@ public class JobService {
 
 	@Transactional
 	public Job create(String title, String company, String logo, String location, String type, String level,
-			String salary, String currency, List<String> skills, List<JobFieldInput> fields, String userId,
+			String salary, String currency, String salaryMin, String salaryMax, String salaryPeriod,
+			String description, List<String> skills, List<JobFieldInput> fields, String userId,
 			boolean communityAgreement) {
 		validate(title, company, type, level);
 		int reputation = reputationService.reputationOf(userId);
@@ -86,26 +99,34 @@ public class JobService {
 			throw new ApiException(400, "COMMUNITY_RULES_NOT_ACCEPTED",
 				"E preciso declarar que a vaga e real e esta de acordo com as regras da comunidade.");
 		}
+		// Valor e descrição são OBRIGATÓRIOS na vaga nova (item 5 do backlog): sem eles a vaga
+		// não salva — ninguém perde tempo com uma vaga que não diz o que é nem quanto paga.
+		SalaryRange range = validateSalary(description, salaryMin, salaryMax, salaryPeriod);
 		String id = "job_" + UUID.randomUUID().toString().replace("-", "");
 		Job job = Job.create(id, title, company, logo, location, type, level, normalizeSalary(salary),
-			normalizeCurrency(currency), skills, normalizeFields(id, fields), userId, clock.instant(), clock.instant());
+			normalizeCurrency(currency), range.min(), range.max(), range.period(), range.description(), skills,
+			normalizeFields(id, fields), userId, clock.instant(), clock.instant());
 		repository.save(job);
 		return job;
 	}
 
 	@Transactional
 	public Job update(String jobId, String title, String company, String logo, String location, String type, String level,
-			String salary, String currency, List<String> skills, List<JobFieldInput> fields, String userId) {
+			String salary, String currency, String salaryMin, String salaryMax, String salaryPeriod,
+			String description, List<String> skills, List<JobFieldInput> fields, String userId) {
 		validate(title, company, type, level);
 		Job existing = repository.findById(jobId)
 			.orElseThrow(() -> new ApiException(404, "JOB_NOT_FOUND", "Vaga nao encontrada."));
 		if (!existing.postedBy().equals(userId)) {
 			throw new ApiException(403, "NOT_OWNER", "Voce nao pode editar uma vaga que nao criou.");
 		}
+		// A edição segue a mesma regra da criação: valor e descrição obrigatórios.
+		SalaryRange range = validateSalary(description, salaryMin, salaryMax, salaryPeriod);
 		// Editar NAO mexe no ciclo de vida: status e closedAt vem do registro atual, nunca do
 		// corpo da requisicao — senao bastava mandar status=OPEN para reabrir uma vaga encerrada.
 		Job updated = Job.restore(jobId, title, company, logo, location, type, level, normalizeSalary(salary),
-			normalizeCurrency(currency), skills, normalizeFields(jobId, fields), userId, existing.communityAgreedAt(),
+			normalizeCurrency(currency), range.min(), range.max(), range.period(), range.description(), skills,
+			normalizeFields(jobId, fields), userId, existing.communityAgreedAt(),
 			existing.status(), existing.closedAt(), existing.postedAt(), clock.instant());
 		repository.save(updated);
 		return updated;
@@ -169,14 +190,26 @@ public class JobService {
 		return moved;
 	}
 
+	/**
+	 * Exclui a vaga. Candidaturas ainda em APPLIED (o empregador nunca deu retorno) geram
+	 * REGISTRO de penalidade no componente de integridade da credibilidade — uma linha por
+	 * vaga, com teto no cálculo. Quem respondeu todas (IN_REVIEW/ADVANCED/NOT_SELECTED) não
+	 * é penalizado: a regra é "sem resposta reduz credibilidade; com resposta, não".
+	 */
+	public record DeleteResult(String jobId, int unanswered, boolean penalized) {
+	}
+
 	@Transactional
-	public void delete(String jobId, String userId) {
+	public DeleteResult delete(String jobId, String userId) {
 		Job existing = repository.findById(jobId)
 			.orElseThrow(() -> new ApiException(404, "JOB_NOT_FOUND", "Vaga nao encontrada."));
 		if (!existing.postedBy().equals(userId)) {
 			throw new ApiException(403, "NOT_OWNER", "Voce nao pode excluir uma vaga que nao criou.");
 		}
+		int unanswered = repository.countUnansweredApplications(jobId);
+		boolean penalized = unanswered > 0 && abandonPenalties.record(jobId, userId, unanswered);
 		repository.deleteById(jobId);
+		return new DeleteResult(jobId, unanswered, penalized);
 	}
 
 	/**
@@ -461,6 +494,66 @@ public class JobService {
 		if (!StringUtils.hasText(level)) {
 			throw new ApiException(400, "INVALID_JOB", "Nivel da vaga e obrigatorio.");
 		}
+	}
+
+	/** Valor estruturado da vaga nova: descrição obrigatória, mínimo > 0, faixa coerente. */
+	private SalaryRange validateSalary(String description, String salaryMin, String salaryMax,
+			String salaryPeriod) {
+		if (!StringUtils.hasText(description)) {
+			throw new ApiException(400, "DESCRIPTION_REQUIRED",
+				"Descreva a vaga: o que a pessoa vai fazer e como será o trabalho.");
+		}
+		if (description.trim().length() > MAX_DESCRIPTION_LENGTH) {
+			throw new ApiException(400, "DESCRIPTION_TOO_LONG",
+				"A descrição da vaga deve ter no máximo " + MAX_DESCRIPTION_LENGTH + " caracteres.");
+		}
+		BigDecimal min = parseAmount(salaryMin);
+		if (min == null || min.signum() <= 0) {
+			throw new ApiException(400, "SALARY_REQUIRED",
+				"Declare o valor da vaga: um número maior que zero.");
+		}
+		BigDecimal max = parseAmount(salaryMax);
+		if (max != null && max.compareTo(min) < 0) {
+			throw new ApiException(400, "INVALID_SALARY_RANGE",
+				"O teto da faixa não pode ser menor que o valor mínimo.");
+		}
+		String period = StringUtils.hasText(salaryPeriod) ? salaryPeriod.trim().toUpperCase(java.util.Locale.ROOT)
+			: "MONTH";
+		if (!SUPPORTED_SALARY_PERIODS.contains(period)) {
+			throw new ApiException(400, "INVALID_SALARY_PERIOD",
+				"O período do valor deve ser hora, dia, mês ou ano.");
+		}
+		return new SalaryRange(min, max, period, description.trim());
+	}
+
+	/**
+	 * Converte o que o autor digitou em número, aceitando os formatos brasileiros: "1500",
+	 * "1.500", "1.500,50" e "R$ 1.500". Ponto sozinho com 3 dígitos após é separador de milhar,
+	 * não decimal — "1.500" é mil e quinhentos, não um e meio.
+	 */
+	private static BigDecimal parseAmount(String value) {
+		if (!StringUtils.hasText(value)) {
+			return null;
+		}
+		String cleaned = value.replaceAll("[^0-9.,]", "");
+		if (cleaned.isEmpty()) {
+			return null;
+		}
+		if (cleaned.contains(",") && cleaned.contains(".")) {
+			cleaned = cleaned.replace(".", "").replace(',', '.');
+		} else if (cleaned.contains(",")) {
+			cleaned = cleaned.replace(',', '.');
+		} else if (cleaned.matches("\\d{1,3}(\\.\\d{3})+")) {
+			cleaned = cleaned.replace(".", "");
+		}
+		try {
+			return new BigDecimal(cleaned);
+		} catch (NumberFormatException e) {
+			return null;
+		}
+	}
+
+	record SalaryRange(BigDecimal min, BigDecimal max, String period, String description) {
 	}
 
 	/**

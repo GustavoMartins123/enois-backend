@@ -90,7 +90,19 @@ class JobServiceTests {
 				}
 			},
 			extensionRepository, delivery,
-			statusNotifier, new tools.jackson.databind.ObjectMapper(), Clock.systemUTC(),
+			statusNotifier,
+			new com.socialcoisa.rede.jobs.application.port.out.JobAbandonPenaltyRepository() {
+				@Override
+				public boolean record(String jobId, String userId, int unanswered) {
+					return true;
+				}
+
+				@Override
+				public int countByUser(String userId) {
+					return 0;
+				}
+			},
+			new tools.jackson.databind.ObjectMapper(), Clock.systemUTC(),
 			new com.socialcoisa.rede.shared.security.UserRateLimiter(Clock.systemUTC(), noopPublisher,
 				10, 60, 30, 60, 100, 30, 60, 1),
 			new com.socialcoisa.rede.shared.security.BehavioralTimingGuard(Clock.systemUTC(), noopPublisher));
@@ -101,7 +113,8 @@ class JobServiceTests {
 		when(reputationService.reputationOf(USER)).thenReturn(300);
 
 		Job job = service.create("Pessoa Desenvolvedora", "Acme", null, "Remoto", "CLT", "PLENO",
-			"R$ 8.000 – R$ 12.000", "brl", List.of("Java"), List.of(), USER, true);
+			"R$ 8.000 – R$ 12.000", "brl", "1500", null, "MONTH", "Vaga de teste com valor.",
+			List.of("Java"), List.of(), USER, true);
 
 		assertThat(job.salary()).isEqualTo("8.000 – 12.000");
 		assertThat(job.currency()).isEqualTo("BRL");
@@ -113,7 +126,8 @@ class JobServiceTests {
 		when(reputationService.reputationOf(USER)).thenReturn(300);
 
 		Job job = service.create("Backend Engineer", "Acme", null, "Remote", "PJ", "SENIOR",
-			"US$ 90,000/year", "usd", List.of("Go"), List.of(), USER, true);
+			"US$ 90,000/year", "usd", "90000", null, "YEAR", "Vaga de teste com valor.",
+			List.of("Go"), List.of(), USER, true);
 
 		assertThat(job.salary()).isEqualTo("90,000/year");
 		assertThat(job.currency()).isEqualTo("USD");
@@ -123,8 +137,8 @@ class JobServiceTests {
 	void defaultsToBrlWhenCurrencyIsOmitted() {
 		when(reputationService.reputationOf(USER)).thenReturn(300);
 
-		Job job = service.create("Suporte", "Acme", null, "São Paulo", "CLT", "JUNIOR", null, null, List.of(),
-			List.of(), USER, true);
+		Job job = service.create("Suporte", "Acme", null, "São Paulo", "CLT", "JUNIOR", null, null,
+			"1500", null, "MONTH", "Vaga de teste com valor.", List.of(), List.of(), USER, true);
 
 		assertThat(job.currency()).isEqualTo("BRL");
 		assertThat(job.salary()).isNull();
@@ -134,8 +148,8 @@ class JobServiceTests {
 	void refusesToPublishWithoutTheCommunityAgreement() {
 		when(reputationService.reputationOf(USER)).thenReturn(300);
 
-		assertThatThrownBy(() -> service.create("Vaga", "Acme", null, null, "CLT", "PLENO", null, "BRL", List.of(),
-			List.of(), USER, false))
+		assertThatThrownBy(() -> service.create("Vaga", "Acme", null, null, "CLT", "PLENO", null, "BRL",
+			"1500", null, "MONTH", "Vaga de teste com valor.", List.of(), List.of(), USER, false))
 			.isInstanceOf(ApiException.class)
 			.hasMessageContaining("regras da comunidade");
 	}
@@ -144,8 +158,8 @@ class JobServiceTests {
 	void refusesUnsupportedCurrency() {
 		when(reputationService.reputationOf(USER)).thenReturn(300);
 
-		assertThatThrownBy(() -> service.create("Vaga", "Acme", null, null, "CLT", "PLENO", "1000", "BTC", List.of(),
-			List.of(), USER, true))
+		assertThatThrownBy(() -> service.create("Vaga", "Acme", null, null, "CLT", "PLENO", "1000", "BTC",
+			"1500", null, "MONTH", "Vaga de teste com valor.", List.of(), List.of(), USER, true))
 			.isInstanceOf(ApiException.class)
 			.hasMessageContaining("Moeda nao suportada");
 	}
@@ -154,8 +168,8 @@ class JobServiceTests {
 	void keepsTheReputationGate() {
 		when(reputationService.reputationOf(USER)).thenReturn(JobService.MIN_REPUTATION_TO_CREATE_JOB);
 
-		assertThatThrownBy(() -> service.create("Vaga", "Acme", null, null, "CLT", "PLENO", null, "BRL", List.of(),
-			List.of(), USER, true))
+		assertThatThrownBy(() -> service.create("Vaga", "Acme", null, null, "CLT", "PLENO", null, "BRL",
+			"1500", null, "MONTH", "Vaga de teste com valor.", List.of(), List.of(), USER, true))
 			.isInstanceOf(ApiException.class)
 			.hasMessageContaining("reputacao");
 	}
@@ -165,6 +179,7 @@ class JobServiceTests {
 	private Job openJob() {
 		java.time.Instant now = java.time.Instant.now();
 		return Job.create("job_1", "Backend", "Acme", null, "Remoto", "CLT", "SENIOR", null, "BRL",
+			new java.math.BigDecimal("1500"), null, "MONTH", "Vaga de teste com valor.",
 			List.of("Java"), List.of(), USER, now, now);
 	}
 
@@ -207,7 +222,7 @@ class JobServiceTests {
 		when(repository.findById("job_1")).thenReturn(java.util.Optional.of(closed));
 
 		Job updated = service.update("job_1", "Backend II", "Acme", null, "Remoto", "CLT", "SENIOR", null, "BRL",
-			List.of("Java"), List.of(), USER);
+			"1500", null, "MONTH", "Vaga de teste com valor.", List.of("Java"), List.of(), USER);
 
 		assertThat(updated.status()).isEqualTo(JobStatus.CLOSED);
 		assertThat(updated.closedAt()).isEqualTo(closed.closedAt());

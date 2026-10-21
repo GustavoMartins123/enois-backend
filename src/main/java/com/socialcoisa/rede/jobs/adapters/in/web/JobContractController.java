@@ -103,7 +103,8 @@ class JobContractController {
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		Job job = jobService.create(body.title(), body.company(), body.logo(), body.location(), body.type(), body.level(),
-			body.salary(), body.currency(), body.skills(), toFieldInputs(body.applicationFields()), user.id().value(),
+			body.salary(), body.currency(), body.salaryMin(), body.salaryMax(), body.salaryPeriod(),
+			body.description(), body.skills(), toFieldInputs(body.applicationFields()), user.id().value(),
 			body.communityAgreement());
 		return ResponseEntity.status(HttpStatus.CREATED).body(toView(job, user.id().value(), false, false, 0));
 	}
@@ -299,8 +300,8 @@ class JobContractController {
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		Job job = jobService.update(jobId, body.title(), body.company(), body.logo(), body.location(), body.type(),
-			body.level(), body.salary(), body.currency(), body.skills(), toFieldInputs(body.applicationFields()),
-			user.id().value());
+			body.level(), body.salary(), body.currency(), body.salaryMin(), body.salaryMax(), body.salaryPeriod(),
+			body.description(), body.skills(), toFieldInputs(body.applicationFields()), user.id().value());
 		return ResponseEntity.ok(toView(job, user.id().value(), false, false, jobService.applicationsCount(job.id())));
 	}
 
@@ -381,12 +382,17 @@ class JobContractController {
 	}
 
 	@DeleteMapping("/{jobId}")
-	ResponseEntity<Void> delete(@PathVariable String jobId,
+	ResponseEntity<DeleteResultView> delete(@PathVariable String jobId,
 			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		jobService.delete(jobId, user.id().value());
-		return ResponseEntity.noContent().build();
+		JobService.DeleteResult result = jobService.delete(jobId, user.id().value());
+		// O aviso volta na resposta: quem excluiu com candidatos sem resposta precisa saber
+		// na hora que a credibilidade é afetada (item 7 do backlog).
+		return ResponseEntity.ok(new DeleteResultView(result.jobId(), result.unanswered(), result.penalized()));
+	}
+
+	record DeleteResultView(String jobId, int unanswered, boolean penalized) {
 	}
 
 	/**
@@ -462,7 +468,9 @@ class JobContractController {
 					!owner && appliedIds.contains(job.id()), savedIds.contains(job.id()), owner,
 					owner ? counts.getOrDefault(job.id(), 0) : 0, authorOf(job), fieldViews(job),
 					job.status().name(), job.closedAt() != null ? job.closedAt().toString() : null,
-					"INTERNAL", null, null, null, null, null, null, null, null);
+					"INTERNAL", null, null, null,
+					job.description(), formatAmount(job.salaryMin()), formatAmount(job.salaryMax()),
+					job.salaryPeriod(), salaryLabel(job));
 			})
 			.toList();
 		String nextCursor = jobs.size() == limit
@@ -516,7 +524,23 @@ class JobContractController {
 			job.salary(), job.currency(), job.skills(), job.postedAt() != null ? job.postedAt().toString() : null, 0,
 			applied, saved, viewer != null && viewer.equals(job.postedBy()), applicationsCount, authorOf(job),
 			fieldViews(job), job.status().name(), job.closedAt() != null ? job.closedAt().toString() : null,
-			"INTERNAL", null, null, null, null, null, null, null, null);
+			"INTERNAL", null, null, null,
+			job.description(), formatAmount(job.salaryMin()), formatAmount(job.salaryMax()),
+			job.salaryPeriod(), salaryLabel(job));
+	}
+
+	/** Faixa da vaga nova em pt-BR: "R$ 1.500 / mês" ou "de R$ 1.500 até R$ 2.000 / mês". */
+	private String salaryLabel(Job job) {
+		if (job.salaryMin() == null) {
+			return null;
+		}
+		String symbol = currencySymbol(job.currency());
+		String min = symbol + " " + formatAmount(job.salaryMin());
+		if (job.salaryMax() != null) {
+			return "de " + min + " até " + symbol + " " + formatAmount(job.salaryMax()) + " / "
+				+ periodLabel(job.salaryPeriod());
+		}
+		return min + " / " + periodLabel(job.salaryPeriod());
 	}
 
 	/** Faixa da vaga externa cadastrada à mão ("de R$ 1.500 até R$ 2.000 / mês"). */
@@ -524,30 +548,25 @@ class JobContractController {
 		if (!org.springframework.util.StringUtils.hasText(job.salaryMin())) {
 			return null;
 		}
-		String symbol = extSymbol(job.currency());
-		String min = symbol + " " + extAmount(job.salaryMin());
+		String symbol = currencySymbol(job.currency());
+		String min = symbol + " " + amountText(job.salaryMin());
 		if (org.springframework.util.StringUtils.hasText(job.salaryMax())) {
-			return "de " + min + " até " + symbol + " " + extAmount(job.salaryMax()) + " / "
-				+ extPeriod(job.salaryPeriod());
+			return "de " + min + " até " + symbol + " " + amountText(job.salaryMax()) + " / "
+				+ periodLabel(job.salaryPeriod());
 		}
-		return min + " / " + extPeriod(job.salaryPeriod());
+		return min + " / " + periodLabel(job.salaryPeriod());
 	}
 
-	private static String extAmount(String value) {
+	private static String amountText(String value) {
 		try {
-			java.text.NumberFormat nf = java.text.NumberFormat
-				.getNumberInstance(new java.util.Locale("pt", "BR"));
-			java.math.BigDecimal amount = new java.math.BigDecimal(value.trim().replace(",", "."));
-			nf.setMaximumFractionDigits(amount.stripTrailingZeros().scale() <= 0 ? 0 : 2);
-			nf.setMinimumFractionDigits(amount.stripTrailingZeros().scale() <= 0 ? 0 : 2);
-			return nf.format(amount);
+			return formatAmount(new java.math.BigDecimal(value.trim().replace(",", ".")));
 		}
 		catch (RuntimeException invalid) {
 			return value.trim();
 		}
 	}
 
-	private static String extSymbol(String currency) {
+	private static String currencySymbol(String currency) {
 		return switch (currency == null ? "BRL" : currency.toUpperCase(java.util.Locale.ROOT)) {
 			case "USD" -> "US$";
 			case "EUR" -> "€";
@@ -555,7 +574,23 @@ class JobContractController {
 		};
 	}
 
-	private static String extPeriod(String period) {
+	/** Inteiro sem centavos ("1.500"); com centavos, sempre dois dígitos ("2.500,50"). */
+	private static String formatAmount(java.math.BigDecimal value) {
+		if (value == null) {
+			return null;
+		}
+		java.text.NumberFormat nf = java.text.NumberFormat
+			.getNumberInstance(new java.util.Locale("pt", "BR"));
+		if (value.stripTrailingZeros().scale() <= 0) {
+			nf.setMaximumFractionDigits(0);
+		} else {
+			nf.setMinimumFractionDigits(2);
+			nf.setMaximumFractionDigits(2);
+		}
+		return nf.format(value);
+	}
+
+	private static String periodLabel(String period) {
 		return switch (period == null ? "MONTH" : period) {
 			case "HOUR" -> "hora";
 			case "DAY" -> "dia";
@@ -594,8 +629,11 @@ class JobContractController {
 			String salary, String currency, List<String> skills, String postedAt, int matchScore, boolean applied,
 			boolean saved, boolean owner, int applicationsCount, AuthorView author, List<ApplicationFieldView>
 			applicationFields, String status, String closedAt, String sourceType, String sourceUrl,
-			String sourcePlatform, String applyEmail, String description, String salaryMin, String salaryMax,
-			String salaryPeriod, String salaryLabel) {
+			String sourcePlatform, String applyEmail,
+			// Valor estruturado da vaga nova (item 5 do backlog). `salaryLabel` já vem pronto
+			// ("R$ 1.500 / mês" ou "de R$ 1.500 até R$ 2.000 / mês"); vagas antigas trazem só
+			// o texto livre em `salary` e nulos aqui.
+			String description, String salaryMin, String salaryMax, String salaryPeriod, String salaryLabel) {
 	}
 
 	/** Quem publicou a vaga, com o que sustenta a credibilidade dele. */
@@ -607,7 +645,8 @@ class JobContractController {
 	}
 
 	record CreateJobRequest(String title, String company, String logo, String location, String type, String level,
-			String salary, String currency, List<String> skills, boolean communityAgreement,
+			String salary, String currency, String salaryMin, String salaryMax, String salaryPeriod,
+			String description, List<String> skills, boolean communityAgreement,
 			List<ApplicationFieldRequest> applicationFields) {
 	}
 

@@ -1,5 +1,12 @@
 # PERFIL PROFISSIONAL — PROGRESSO VIVO
 
+> **ESTADO FINAL (2026-10-20): plano CONCLUÍDO e publicado na `main` dos dois
+> repositórios (backend `20d8094`, frontend `f6a921d`). Não existe próxima tarefa:
+> nenhuma execução automática deve alterar código, testes ou documentos deste plano.**
+> Só resta a pergunta aberta à dona (formato/rota já resolvidos; visibilidade do feed
+> corporativo) e os itens externos de infraestrutura (CORS do bucket S3, CDN/ACM,
+> aprovação do produto de publicação no LinkedIn), que não são código deste repositório.
+
 > Checklist de execução. Marcar com data + resumo do que foi feito + onde (arquivos).
 > Ao concluir uma tarefa, atualizar este arquivo NO MESMO commit.
 
