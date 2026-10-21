@@ -21,7 +21,12 @@ import jakarta.servlet.http.HttpServletResponse;
 class WriteRouteInterceptor implements HandlerInterceptor {
 
 	/** Fluxos que existem justamente para quem ainda não tem sessão. */
-	private static final List<String> PUBLIC_WRITES = List.of(
+	/**
+	 * Pacote visivel de proposito: o teste que varre TODAS as rotas de escrita
+	 * (AutomatedWritePathsTests) compara esta lista com o catalogo esperado — se alguem abrir
+	 * mais um fluxo publico sem querer, o teste quebra.
+	 */
+	static final List<String> PUBLIC_WRITES = List.of(
 		"/auth/signup",
 		"/auth/login",
 		"/auth/refresh",
