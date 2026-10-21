@@ -67,7 +67,12 @@ public class ReportPreTriageService {
 			String authorId = contentAuthors.authorOf(report.targetType().name(), report.targetId()).orElse(null);
 			UserProfile author = authorId == null ? null : profiles.findById(authorId).orElse(null);
 			Score score = score(report, content, author);
-			report.attachPreTriage(toJson(score), score.score(), clock.instant());
+			Instant now = clock.instant();
+			report.attachPreTriage(toJson(score), score.score(), now);
+			if (score.score() < minScoreForAi) {
+				// Sai da fila da IA sem chamada: fica resolvida para a revisão humana.
+				report.attachAiTriage("{\"action\":\"HUMAN_REVIEW\",\"source\":\"pre-triage\"}", now);
+			}
 			reports.save(report);
 			scored++;
 		}
