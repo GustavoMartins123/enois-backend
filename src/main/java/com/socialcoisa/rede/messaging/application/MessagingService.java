@@ -94,7 +94,7 @@ public class MessagingService {
 	public Message sendMessage(String conversationId, String senderId, String text,
 			java.util.List<String> mediaIds) {
 		// ECA Digital: sem data de nascimento declarada, nao envia mensagem (tela de regularizacao).
-		ageGate.requireDeclared(senderId);
+		ageGate.requireCanWrite(senderId);
 		userRateLimiter.require(senderId, UserRateLimiter.SEND_MESSAGE);
 		behavioralTimingGuard.record(senderId);
 		Conversation conversation = repository.findConversationById(conversationId)

@@ -96,7 +96,7 @@ public class PublishPostService implements PublishPostUseCase {
 	@Transactional
 	public PostView publish(PublishPostCommand command) {
 		// ECA Digital: sem data de nascimento declarada, nenhuma publicacao sai (tela de regularizacao).
-		agePolicy.requireDeclared(command.authorId().value());
+		agePolicy.requireCanWrite(command.authorId().value());
 		if (sanctionGate.restricted(command.authorId().value())) {
 			throw new ApiException(403, "ACCOUNT_RESTRICTED",
 				"Sua conta esta restrita por moderacao. Voce pode recorrer na pagina Penalidades.");
