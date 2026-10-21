@@ -135,9 +135,14 @@ public class CommunityService {
 	/** Exclui a comunidade. So o dono; remove os vinculos de membros para nao deixar referencia orfa. */
 	@Transactional
 	public void deleteCommunity(String communityId, String userId) {
+		deleteCommunity(communityId, userId, false);
+	}
+
+	/** Admin pode excluir comunidade de terceiros (moderacao de ataque/spam, ECA Digital). */
+	public void deleteCommunity(String communityId, String userId, boolean adminOverride) {
 		Community community = repository.findById(communityId)
 			.orElseThrow(() -> new ApiException(404, "COMMUNITY_NOT_FOUND", "Comunidade nao encontrada."));
-		if (!community.createdBy().equals(userId)) {
+		if (!adminOverride && !community.createdBy().equals(userId)) {
 			throw new ApiException(403, "FORBIDDEN", "So o dono pode excluir a comunidade.");
 		}
 		repository.removeAllMembers(communityId);

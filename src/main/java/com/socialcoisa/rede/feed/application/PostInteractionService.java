@@ -51,6 +51,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 	private final BlockedUsersReader blockedUsersReader;
 	private final com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseCase validateMediaOwnership;
 	private final com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate;
+	private final com.socialcoisa.rede.shared.age.AgeGate agePolicy;
 	private final com.socialcoisa.rede.coin.application.CoinService coins;
 	private final NewAccountCooldown newAccountCooldown;
 	/** Rate limit por usuário e dedup de conteúdo (PR #28). */
@@ -71,7 +72,8 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 			NewAccountCooldown newAccountCooldown,
 			UserRateLimiter userRateLimiter,
 			ContentDuplicationGuard duplicationGuard,
-			BehavioralTimingGuard behavioralTimingGuard) {
+			BehavioralTimingGuard behavioralTimingGuard,
+			com.socialcoisa.rede.shared.age.AgeGate agePolicy) {
 		this.postRepository = postRepository;
 		this.commentRepository = commentRepository;
 		this.postInteractionRepository = postInteractionRepository;
@@ -83,6 +85,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 		this.blockedUsersReader = blockedUsersReader;
 		this.validateMediaOwnership = validateMediaOwnership;
 		this.sanctionGate = sanctionGate;
+		this.agePolicy = agePolicy;
 		this.coins = coins;
 		this.newAccountCooldown = newAccountCooldown;
 		this.userRateLimiter = userRateLimiter;
@@ -93,6 +96,8 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 	@Override
 	@Transactional
 	public CommentView comment(CommentOnPostCommand command) {
+		// ECA Digital: sem data de nascimento declarada, nao comenta (tela de regularizacao).
+		agePolicy.requireDeclared(command.authorId().value());
 		if (sanctionGate.restricted(command.authorId().value())) {
 			throw new ApiException(403, "ACCOUNT_RESTRICTED",
 				"Sua conta esta restrita por moderacao. Voce pode recorrer na pagina Penalidades.");

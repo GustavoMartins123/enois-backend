@@ -142,7 +142,7 @@ class AuthController {
 		String hash = idempotency.hash(body);
 		return idempotency.execute(scope, "POST", "/api/auth/signup", idempotencyKey, hash, () -> new CommandResponse(201,
 			signupUseCase.signup(new SignupCommand(body.name(), "USER", body.email(), body.password(),
-				body.acceptedTerms()))));
+				body.acceptedTerms(), body.birthDate()))));
 	}
 
 	/**

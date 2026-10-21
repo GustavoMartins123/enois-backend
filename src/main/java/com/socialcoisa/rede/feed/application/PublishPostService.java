@@ -44,6 +44,7 @@ public class PublishPostService implements PublishPostUseCase {
 	private final NotificationService notificationService;
 	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository;
 	private final com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate;
+	private final com.socialcoisa.rede.shared.age.AgeGate agePolicy;
 	private final PostCommunityReader postCommunityReader;
 	private final com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles;
 	/** Avisa quem escuta fora daqui (automod de spam), DEPOIS do commit. */
@@ -63,6 +64,7 @@ public class PublishPostService implements PublishPostUseCase {
 			NotificationService notificationService,
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository,
 			com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate,
+			com.socialcoisa.rede.shared.age.AgeGate agePolicy,
 			PostCommunityReader postCommunityReader,
 			com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles,
 			org.springframework.context.ApplicationEventPublisher events,
@@ -80,6 +82,7 @@ public class PublishPostService implements PublishPostUseCase {
 		this.notificationService = notificationService;
 		this.userProfileRepository = userProfileRepository;
 		this.sanctionGate = sanctionGate;
+		this.agePolicy = agePolicy;
 		this.postCommunityReader = postCommunityReader;
 		this.corporateProfiles = corporateProfiles;
 		this.events = events;
@@ -92,6 +95,8 @@ public class PublishPostService implements PublishPostUseCase {
 	@Override
 	@Transactional
 	public PostView publish(PublishPostCommand command) {
+		// ECA Digital: sem data de nascimento declarada, nenhuma publicacao sai (tela de regularizacao).
+		agePolicy.requireDeclared(command.authorId().value());
 		if (sanctionGate.restricted(command.authorId().value())) {
 			throw new ApiException(403, "ACCOUNT_RESTRICTED",
 				"Sua conta esta restrita por moderacao. Voce pode recorrer na pagina Penalidades.");
