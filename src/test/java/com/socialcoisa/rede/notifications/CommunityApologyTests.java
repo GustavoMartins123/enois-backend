@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.socialcoisa.rede.coin.application.CoinService;
@@ -44,9 +45,18 @@ class CommunityApologyTests {
 	@Autowired
 	private ObjectMapper objectMapper;
 
+	@Autowired
+	private JdbcTemplate jdbc;
+
 	@Test
 	void grantsTheBonusAndNotifiesEachAccountOnce() throws Exception {
 		var auth = new TestAuthHelper(mockMvc, objectMapper);
+		// O worker e agendado (primeira rodada em 90s) e a suite dura mais que isso: se o
+		// comunicado ja saiu, o announce() volta sem dar o bonus e o teste quebra por ordem de
+		// execucao. Aqui o marcador volta ao inicio para o teste ser sempre o mesmo.
+		jdbc.update("delete from system_announcements where announcement_key = ?",
+			CommunityApologyWorker.ANNOUNCEMENT_KEY);
+
 		var pessoaA = auth.authenticate("apology_community_a");
 		var pessoaB = auth.authenticate("apology_community_b");
 
