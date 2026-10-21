@@ -28,6 +28,13 @@ import com.socialcoisa.rede.shared.web.StatusResponse;
 public class MediaService implements CreateMediaUploadUseCase, GetMediaAssetUseCase, RequestMediaDeletionUseCase,
 		RequestPostMediaDeletionUseCase, ValidateMediaOwnershipUseCase {
 
+	/**
+	 * Teto de uma midia: 500MB por arquivo. O S3 aceita bem mais (o PUT assinado vai direto do
+	 * browser para o bucket, sem passar pelo pod), entao o limite aqui e do produto, nao do
+	 * transporte. Quem recusar e o proprio servico, com mensagem clara.
+	 */
+	public static final long MAX_MEDIA_BYTES = 500L * 1024L * 1024L;
+
 	private final MediaAssetRepository mediaAssetRepository;
 	private final MediaDeletionJobRepository mediaDeletionJobRepository;
 	private final StorageUrlFactory storageUrlFactory;
@@ -156,8 +163,9 @@ public class MediaService implements CreateMediaUploadUseCase, GetMediaAssetUseC
 		if (command.size() <= 0) {
 			throw new ApiException(400, "INVALID_MEDIA_SIZE", "Tamanho da midia deve ser maior que zero.");
 		}
-		if (command.size() > 50L * 1024L * 1024L) {
-			throw new ApiException(400, "MEDIA_TOO_LARGE", "Midia deve ter no maximo 50MB.");
+		if (command.size() > MAX_MEDIA_BYTES) {
+			throw new ApiException(400, "MEDIA_TOO_LARGE",
+				"Mídia deve ter no máximo " + (MAX_MEDIA_BYTES / (1024L * 1024L)) + "MB.");
 		}
 	}
 
