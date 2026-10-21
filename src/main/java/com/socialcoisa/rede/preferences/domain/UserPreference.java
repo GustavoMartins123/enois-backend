@@ -11,5 +11,5 @@ import java.util.List;
  * experiência continua igual à de antes da extensão.
  */
 public record UserPreference(String userId, String themeId, String likedTopics, String blockedTopics,
-		String disabledModules, Instant updatedAt) {
+		String disabledModules, boolean nightRestReminder, Instant updatedAt) {
 }

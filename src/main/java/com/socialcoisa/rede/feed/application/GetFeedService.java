@@ -55,6 +55,7 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 	private final CursorCodec cursorCodec;
 	private final BlockedUsersReader blockedUsersReader;
 	private final PostCommunityReader postCommunityReader;
+	private final com.socialcoisa.rede.feed.application.port.out.CommunityChannelReader communityChannelReader;
 	private final SubscribedBlogAuthorsReader subscribedBlogAuthors;
 	private final com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles;
 	private final com.socialcoisa.rede.feed.application.port.out.ReaderPreferencesReader readerPreferences;
@@ -65,6 +66,7 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 			ConnectionGraphRepository connectionGraphRepository, UserProfileRepository userProfileRepository,
 			PostInteractionRepository postInteractionRepository, CommentRepository commentRepository,
 			CursorCodec cursorCodec, BlockedUsersReader blockedUsersReader, PostCommunityReader postCommunityReader,
+			com.socialcoisa.rede.feed.application.port.out.CommunityChannelReader communityChannelReader,
 			SubscribedBlogAuthorsReader subscribedBlogAuthors,
 			com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles,
 			com.socialcoisa.rede.feed.application.port.out.ReaderPreferencesReader readerPreferences) {
@@ -78,6 +80,7 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 		this.cursorCodec = cursorCodec;
 		this.blockedUsersReader = blockedUsersReader;
 		this.postCommunityReader = postCommunityReader;
+		this.communityChannelReader = communityChannelReader;
 		this.subscribedBlogAuthors = subscribedBlogAuthors;
 		this.corporateProfiles = corporateProfiles;
 		this.readerPreferences = readerPreferences;
@@ -166,6 +169,34 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 			.filter(java.util.Objects::nonNull)
 			.toList();
 		return new FeedPage(ordered, null);
+	}
+
+	/**
+	 * Feed de um canal privado: só membros da comunidade. O post de canal nunca aparece nos outros
+	 * feeds (as consultas deles filtram `channel_id is null`).
+	 */
+	@Transactional(readOnly = true)
+	public FeedPage getChannelFeed(String communityId, String channelId, Instant before, int limit,
+			UserId currentUserId) {
+		limit = normalizeLimit(limit);
+		before = before == null ? DEFAULT_BEFORE : before;
+		String viewerId = currentUserId == null ? null : currentUserId.value();
+		PostCommunityReader.CommunityRef community = postCommunityReader.byIds(List.of(communityId), viewerId)
+			.get(communityId);
+		if (community == null) {
+			throw new com.socialcoisa.rede.shared.web.ApiException(404, "COMMUNITY_NOT_FOUND",
+				"Comunidade nao encontrada.");
+		}
+		if (!community.joined()) {
+			throw new com.socialcoisa.rede.shared.web.ApiException(403, "NOT_A_MEMBER",
+				"Os canais sao privados: so quem participa da comunidade pode ver.");
+		}
+		var channel = communityChannelReader.byId(channelId)
+			.filter(found -> found.communityId().equals(communityId))
+			.orElseThrow(() -> new com.socialcoisa.rede.shared.web.ApiException(404, "CHANNEL_NOT_FOUND",
+				"Canal nao encontrado nesta comunidade."));
+		List<Post> posts = postRepository.findActiveByChannel(channel.id(), before, limit);
+		return page(enrich(posts, currentUserId), posts, limit);
 	}
 
 	@Transactional(readOnly = true)

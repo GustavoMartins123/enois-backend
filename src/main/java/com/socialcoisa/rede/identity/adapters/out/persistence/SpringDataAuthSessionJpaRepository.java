@@ -14,6 +14,12 @@ interface SpringDataAuthSessionJpaRepository extends JpaRepository<AuthSessionJp
 	Optional<AuthSessionJpaEntity> findByRefreshToken(String refreshToken);
 
 	@Modifying
+	@Query(value = "update auth_sessions set token = :tokenHash, refresh_token = :refreshHash where token = :rawToken",
+		nativeQuery = true)
+	int rehash(@Param("rawToken") String rawToken, @Param("tokenHash") String tokenHash,
+			@Param("refreshHash") String refreshHash);
+
+	@Modifying
 	@Query("UPDATE AuthSessionJpaEntity s SET s.revokedAt = :now WHERE s.userId = :userId AND s.revokedAt IS NULL")
 	void revokeAllByUser(@Param("userId") String userId, @Param("now") Instant now);
 

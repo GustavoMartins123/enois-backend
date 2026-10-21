@@ -34,6 +34,9 @@ public interface PostRepository {
 
 	List<Post> findActiveByCommunity(String communityId, Instant before, int limit);
 
+	/** Posts de um canal privado — só o feed do canal chama (nunca os feeds gerais). */
+	List<Post> findActiveByChannel(String channelId, Instant before, int limit);
+
 	/** Feed "Tudo": exclui BLOG (conteúdo no blog) e BUSINESS (assina o feed corporativo). */
 	List<Post> findActiveAll(Instant before, int limit);
 

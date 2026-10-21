@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.socialcoisa.rede.communities.application.CommunityChannelService;
 import com.socialcoisa.rede.communities.application.CommunityService;
 import com.socialcoisa.rede.communities.domain.Community;
 import com.socialcoisa.rede.communities.domain.CommunityMember;
@@ -45,17 +46,20 @@ class CommunityContractController {
 	private final CommunityService communityService;
 	private final UserProfileRepository userProfileRepository;
 	private final GetFeedService getFeedService;
+	private final com.socialcoisa.rede.communities.application.CommunityChannelService channelService;
 	private final CursorCodec cursorCodec;
 
 	CommunityContractController(IdempotencyApplicationService idempotency, CurrentUserResolver currentUserResolver,
 			CommunityService communityService, UserProfileRepository userProfileRepository,
 			GetFeedService getFeedService, CursorCodec cursorCodec,
+			com.socialcoisa.rede.communities.application.CommunityChannelService channelService,
 			com.socialcoisa.rede.shared.web.AdminGuard adminGuard) {
 		this.idempotency = idempotency;
 		this.currentUserResolver = currentUserResolver;
 		this.communityService = communityService;
 		this.userProfileRepository = userProfileRepository;
 		this.getFeedService = getFeedService;
+		this.channelService = channelService;
 		this.cursorCodec = cursorCodec;
 		this.adminGuard = adminGuard;
 	}
@@ -266,6 +270,38 @@ class CommunityContractController {
 			})
 			.toList();
 		return new PageResponse<>(items, null);
+	}
+
+	/** Canais privados: qualquer membro lê e cria; quem não participa recebe 403. */
+	@GetMapping("/{communityId}/channels")
+	List<CommunityChannelService.ChannelView> channels(@PathVariable String communityId,
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		return channelService.list(communityId, user.id().value());
+	}
+
+	@PostMapping("/{communityId}/channels")
+	CommunityChannelService.ChannelView createChannel(@PathVariable String communityId,
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestBody CreateChannelRequest body) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		return channelService.create(communityId, user.id().value(), body.name(), body.topic(), body.description());
+	}
+
+	@GetMapping("/{communityId}/channels/{channelId}/posts")
+	FeedPage channelFeed(@PathVariable String communityId, @PathVariable String channelId,
+			@RequestParam(required = false) String cursor,
+			@RequestParam(defaultValue = "20") int limit,
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		Instant before = cursorCodec.decode(cursor).orElse(null);
+		return getFeedService.getChannelFeed(communityId, channelId, before, limit, user.id());
+	}
+
+	record CreateChannelRequest(String name, String topic, String description) {
 	}
 
 	@GetMapping("/{communityId}/feed")
