@@ -132,8 +132,19 @@ class PostPersistenceAdapter implements PostRepository {
 	}
 
 	@Override
+	public List<Post> findActiveByChannel(String channelId, Instant before, int limit) {
+		if (channelId == null || channelId.isBlank()) {
+			return List.of();
+		}
+		return repository.findByChannelIdAndStatusAndCreatedAtBeforeOrderByCreatedAtDesc(channelId.trim(),
+				PostStatus.ACTIVE, before, PageRequest.of(0, limit)).stream()
+			.map(PostJpaEntity::toDomain)
+			.toList();
+	}
+
+	@Override
 	public List<Post> findActiveByType(PostType type, Instant before, int limit) {
-		return repository.findByTypeAndStatusAndCreatedAtBeforeOrderByCreatedAtDesc(type, PostStatus.ACTIVE, before,
+		return repository.findByTypeAndStatusAndChannelIdIsNullAndCreatedAtBeforeOrderByCreatedAtDesc(type, PostStatus.ACTIVE, before,
 			PageRequest.of(0, limit)).stream()
 			.map(PostJpaEntity::toDomain)
 			.toList();
@@ -144,7 +155,7 @@ class PostPersistenceAdapter implements PostRepository {
 		if (communityId == null || communityId.isBlank()) {
 			return List.of();
 		}
-		return repository.findByCommunityIdAndStatusAndCreatedAtBeforeOrderByCreatedAtDesc(communityId.trim(),
+		return repository.findByCommunityIdAndStatusAndChannelIdIsNullAndCreatedAtBeforeOrderByCreatedAtDesc(communityId.trim(),
 			PostStatus.ACTIVE, before, PageRequest.of(0, limit)).stream()
 			.map(PostJpaEntity::toDomain)
 			.toList();
