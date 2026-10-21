@@ -39,6 +39,13 @@ class PendingSignupJpaEntity {
 	@Column(name = "created_at", nullable = false)
 	private Instant createdAt;
 
+	/** Envios do link dentro da janela (o limite de reenvio). */
+	@Column(name = "resend_count", nullable = false)
+	private int resendCount;
+
+	@Column(name = "last_sent_at")
+	private Instant lastSentAt;
+
 	protected PendingSignupJpaEntity() {
 	}
 
@@ -52,10 +59,13 @@ class PendingSignupJpaEntity {
 		entity.tokenHash = domain.tokenHash();
 		entity.expiresAt = domain.expiresAt();
 		entity.createdAt = domain.createdAt();
+		entity.resendCount = domain.resendCount();
+		entity.lastSentAt = domain.lastSentAt();
 		return entity;
 	}
 
 	PendingSignup toDomain() {
-		return new PendingSignup(id, email, name, birthDate, passwordHash, tokenHash, expiresAt, createdAt);
+		return new PendingSignup(id, email, name, birthDate, passwordHash, tokenHash, expiresAt, createdAt,
+			resendCount, lastSentAt);
 	}
 }

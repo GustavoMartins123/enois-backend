@@ -87,13 +87,15 @@ class EmailVerificationFlowTests {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.emailVerified").value(true));
 
-		// Uso unico: o mesmo link nao confirma duas vezes.
+		// Uso unico: o mesmo link nao confirma duas vezes. No cadastro de duas etapas o pendente
+		// some quando o link e usado, entao a segunda vez responde 404 INVALID_TOKEN (o 409
+		// TOKEN_ALREADY_USED era do fluxo de conta ja criada, que guarda o token usado).
 		mockMvc.perform(post("/auth/email/verify")
 				.header("Idempotency-Key", "verify-2")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(objectMapper.writeValueAsString(Map.of("token", token))))
-			.andExpect(status().isConflict())
-			.andExpect(jsonPath("$.code").value("TOKEN_ALREADY_USED"));
+			.andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.code").value("INVALID_TOKEN"));
 
 		// Depois de confirmado, o login normal funciona.
 		mockMvc.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
@@ -114,9 +116,11 @@ class EmailVerificationFlowTests {
 			.andExpect(status().isNotFound())
 			.andExpect(jsonPath("$.code").value("INVALID_TOKEN"));
 
-		String userId = TestDatabase.userIdByEmail(email).orElseThrow();
-		String expiredToken = "verify_expirado-" + System.nanoTime();
-		TestDatabase.insertVerificationToken(expiredToken, userId, Instant.now().minusSeconds(60), Instant.now().minusSeconds(7200));
+		// Token vencido: no cadastro de duas etapas o link e o do PENDENTE (a conta ainda nao
+		// existe). O token cru e o que o e-mail levou; o banco guarda o hash, entao o teste
+		// conhece o valor que o e-mail stubado capturou.
+		String expiredToken = sentTokens.get(0);
+		TestDatabase.expirePendingSignup(email);
 
 		mockMvc.perform(post("/auth/email/verify")
 				.header("Idempotency-Key", "verify-expired")
@@ -162,7 +166,9 @@ class EmailVerificationFlowTests {
 					"role", "USER",
 					"email", email,
 					"password", "Test1234!",
-					"acceptedTerms", true))))
+					"acceptedTerms", true,
+					// Obrigatoria no cadastro desde a regra do ECA (400 BIRTH_DATE_REQUIRED sem ela).
+					"birthDate", "1990-05-10"))))
 			.andExpect(status().isCreated())
 			.andReturn();
 	}

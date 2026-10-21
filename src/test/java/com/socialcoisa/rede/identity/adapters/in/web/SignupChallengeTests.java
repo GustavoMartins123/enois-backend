@@ -108,6 +108,8 @@ class SignupChallengeTests {
 		body.put("email", prefix + "@test.com");
 		body.put("password", "Test1234!");
 		body.put("acceptedTerms", true);
+		// Obrigatoria no cadastro desde a regra do ECA (400 BIRTH_DATE_REQUIRED sem ela).
+		body.put("birthDate", "1990-05-10");
 		return body;
 	}
 

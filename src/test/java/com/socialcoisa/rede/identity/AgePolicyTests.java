@@ -23,6 +23,7 @@ import com.socialcoisa.rede.network.application.port.out.ConnectionRepository;
 import com.socialcoisa.rede.network.domain.ConnectionStatus;
 import com.socialcoisa.rede.network.domain.UserConnection;
 import com.socialcoisa.rede.shared.web.TestAuthHelper;
+import com.socialcoisa.rede.shared.web.TestDatabase;
 
 /**
  * Política de idade (ECA Digital, Lei 15.211/2025): a data de nascimento é obrigatória no
@@ -110,7 +111,9 @@ class AgePolicyTests {
 		String minorToken = login("age_menor_ok");
 		mockMvc.perform(get("/me/age-state").header("X-Session-Token", minorToken))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.state").value("MINOR_DECLARED"))
+			// O estado do menor e MINOR_CONSENT_PENDING: com a supervisao parental (V137) a conta
+			// do menor espera o consentimento do responsavel (MINOR_SUPERVISED quando ja tem).
+			.andExpect(jsonPath("$.state").value("MINOR_CONSENT_PENDING"))
 			.andExpect(jsonPath("$.minor").value(true));
 	}
 
@@ -185,18 +188,26 @@ class AgePolicyTests {
 				.header("Idempotency-Key", "age-dm-msg-2")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(objectMapper.writeValueAsString(Map.of("text", "oi, colega de turma!"))))
-			.andExpect(status().isOk());
+			// A criacao da mensagem responde 201 (Created) — o teste ainda esperava 200.
+			.andExpect(status().isCreated());
 	}
 
+	/**
+	 * Entra na conta: no cadastro de DUAS etapas a conta so nasce quando o e-mail e confirmado,
+	 * entao o login direto da 401. Aqui o link e confirmado com um token conhecido (o mesmo
+	 * truque do TestAuthHelper) e a sessao vem da resposta da confirmacao.
+	 */
 	private String login(String username) throws Exception {
-		MvcResult result = mockMvc.perform(post("/auth/login")
-				.header("Idempotency-Key", "age-login-" + username)
+		String email = username + "@test.com";
+		String confirmToken = "token-teste-" + username;
+		TestDatabase.setPendingSignupToken(email, confirmToken);
+		MvcResult confirmed = mockMvc.perform(post("/auth/email/verify")
+				.header("Idempotency-Key", "age-verify-" + username)
 				.contentType(MediaType.APPLICATION_JSON)
-				.content(objectMapper.writeValueAsString(Map.of(
-					"email", username + "@test.com", "password", "Test1234!"))))
+				.content(objectMapper.writeValueAsString(Map.of("token", confirmToken))))
 			.andExpect(status().isOk())
 			.andReturn();
-		return objectMapper.readTree(result.getResponse().getContentAsString()).get("token").asText();
+		return objectMapper.readTree(confirmed.getResponse().getContentAsString()).get("token").asText();
 	}
 
 }

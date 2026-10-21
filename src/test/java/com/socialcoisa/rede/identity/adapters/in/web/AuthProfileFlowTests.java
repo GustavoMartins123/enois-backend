@@ -39,7 +39,10 @@ class AuthProfileFlowTests {
 			"role", "Product Manager",
 			"email", "ana.flow@example.com",
 			"password", "senha-segura",
-			"acceptedTerms", true));
+			"acceptedTerms", true,
+			// A data de nascimento e obrigatoria no cadastro (regra do ECA: menor precisa de
+			// responsavel) — sem ela o backend recusa com 400 BIRTH_DATE_REQUIRED.
+			"birthDate", "1990-05-10"));
 
 		// O cadastro nasce pendente: devolve para onde o link foi enviado, sem sessao.
 		MvcResult signup = mockMvc.perform(post("/auth/signup")
@@ -73,9 +76,17 @@ class AuthProfileFlowTests {
 			.andExpect(status().isForbidden())
 			.andExpect(jsonPath("$.code").value("EMAIL_NOT_VERIFIED"));
 
-		// Confirmacao do e-mail (o token real tem teste proprio em EmailVerificationFlowTests).
+		// Confirmacao do e-mail: no cadastro de DUAS etapas a conta nasce na confirmacao do link
+		// (o token real tem teste proprio em EmailVerificationFlowTests). Aqui o token do
+		// pendente e conhecido pelo teste, entao o link e usado de verdade.
+		String confirmToken = "token-teste-auth-profile";
+		TestDatabase.setPendingSignupToken("ana.flow@example.com", confirmToken);
+		mockMvc.perform(post("/auth/email/verify")
+				.header("Idempotency-Key", "auth-verify-flow-1")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("token", confirmToken))))
+			.andExpect(status().isOk());
 		String userId = TestDatabase.userIdByEmail("ana.flow@example.com").orElseThrow();
-		TestDatabase.markEmailVerified(userId, java.time.Instant.now());
 
 		MvcResult login = mockMvc.perform(post("/auth/login")
 				.header("Idempotency-Key", "auth-login-flow-2")

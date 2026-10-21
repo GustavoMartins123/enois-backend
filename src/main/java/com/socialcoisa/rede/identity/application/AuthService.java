@@ -116,10 +116,12 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		pendingSignups.deleteByEmail(email);
 		String rawToken = newVerificationToken();
 		String name = command.name().trim();
+		// O e-mail do cadastro conta como o 1o envio da janela: sobram 2 reenvios, como no
+		// fluxo de conta ja criada.
 		PendingSignup pending = new PendingSignup(
 			"pending_" + UUID.randomUUID().toString().replace("-", ""),
 			email, name, birthDate, passwordHasher.hash(command.password()),
-			hashToken(rawToken), now.plus(VERIFICATION_TOKEN_TTL), now);
+			hashToken(rawToken), now.plus(VERIFICATION_TOKEN_TTL), now, 1, now);
 		pendingSignups.save(pending);
 		boolean emailSent = emailService.sendVerificationEmail(email, name, rawToken);
 		return new SignupResult(email, true, emailSent);
@@ -157,8 +159,17 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 	public LoginResult login(LoginCommand command) {
 		validateLogin(command);
 		String email = command.email().trim().toLowerCase(Locale.ROOT);
-		StoredCredential credential = credentialRepository.findByEmail(email)
-			.orElseThrow(() -> new ApiException(401, "INVALID_CREDENTIALS", "Email ou senha invalidos."));
+		StoredCredential credential = credentialRepository.findByEmail(email).orElseThrow(() -> {
+			// Cadastro de duas etapas: a conta ainda NAO existe, mas a pessoa ja se cadastrou e a
+			// senha dela esta certa. Responder "senha invalida" seria mentira (e a pessoa nao
+			// entenderia o que fazer) — o certo e pedir a confirmacao do e-mail.
+			var pending = pendingSignups.findByEmail(email);
+			if (pending.isPresent() && !pending.get().isExpired(clock.instant())) {
+				return new ApiException(403, "EMAIL_NOT_VERIFIED",
+					"Confirme o e-mail que enviamos para ativar a conta.");
+			}
+			return new ApiException(401, "INVALID_CREDENTIALS", "Email ou senha invalidos.");
+		});
 		if (!passwordHasher.matches(command.password(), credential.passwordHash())) {
 			throw new ApiException(401, "INVALID_CREDENTIALS", "Email ou senha invalidos.");
 		}
@@ -278,11 +289,17 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 				}
 				issueVerificationToken(profile, now);
 			});
-		// Cadastro de duas etapas: ainda nao ha conta, mas o pendente pode reenviar o link.
+		// Cadastro de duas etapas: ainda nao ha conta, mas o pendente pode reenviar o link — com o
+		// MESMO teto do fluxo de conta (3 envios por hora). Sem o contador, o reenvio nao tinha
+		// limite: dava para spammar a caixa de quem se cadastrou.
 		pendingSignups.findByEmail(normalizedEmail).ifPresent(pending -> {
 			Instant now = clock.instant();
+			if (pending.sendsWithin(now, VERIFICATION_RESEND_WINDOW) >= VERIFICATION_RESEND_LIMIT) {
+				throw new ApiException(429, "TOO_MANY_REQUESTS",
+					"Limite de reenvios atingido. Tente novamente mais tarde.");
+			}
 			String rawToken = newVerificationToken();
-			pendingSignups.save(pending.reissued(hashToken(rawToken), now.plus(VERIFICATION_TOKEN_TTL)));
+			pendingSignups.save(pending.resent(hashToken(rawToken), now.plus(VERIFICATION_TOKEN_TTL), now));
 			emailService.sendVerificationEmail(pending.email(), pending.name(), rawToken);
 		});
 	}

@@ -62,10 +62,14 @@ class ThemeGalleryTests {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$[?(@.id == '" + themeId + "')].name").value("Tema Bonito"));
 
-		mockMvc.perform(post("/temas/galeria/" + themeId + "/install"))
+		// Instalar e denunciar sao ESCRITA: o interceptor fail-closed exige sessao (o teste ainda
+		// chamava sem token e recebia 401).
+		mockMvc.perform(post("/temas/galeria/" + themeId + "/install")
+				.header("X-Session-Token", author.token()))
 			.andExpect(status().isOk());
 
-		mockMvc.perform(post("/temas/galeria/" + themeId + "/report"))
+		mockMvc.perform(post("/temas/galeria/" + themeId + "/report")
+				.header("X-Session-Token", author.token()))
 			.andExpect(status().isOk());
 
 		// Pacote invalido (url no lugar de cor) e rejeitado na porta.

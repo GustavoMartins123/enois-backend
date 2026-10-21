@@ -155,6 +155,31 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
 17. **LinkedIn** — app aprovado (`w_member_social`); sem isso, sem publicação legítima.
 18. **Sanitizar usuários/posts de teste em produção** — sem acesso ao banco e sem endpoint admin.
 
+## Higiene do backend (entregue 2026-10-21)
+- **[x] ENTREGUE 2026-10-21 — A suíte voltou a ficar verde, e 2 das 9 falhas eram defeitos do
+  app (não dos testes).** O cadastro em duas etapas (V134, 2026-10-20) deixou 5 classes de teste
+  desatualizadas e, no caminho, **abriu dois buracos no código de produção**:
+  1. **Login de cadastro pendente respondia "senha inválida".** Quem se cadastrava e clicava em
+     "Entrar" antes de confirmar recebia 401 `INVALID_CREDENTIALS` — a senha estava certa, a conta
+     só ainda não existia. Agora o backend responde **403 `EMAIL_NOT_VERIFIED`**, mandando
+     confirmar o e-mail (`AuthService.login`).
+  2. **O reenvio do link de confirmação não tinha teto.** O fluxo de conta já criada conta os
+     envios e recusa o 4º dentro da janela; o cadastro de duas etapas reenviava **sem limite** —
+     dava para spammar a caixa de quem se cadastrou. Agora vale o mesmo teto (3 envios por hora,
+     contando o e-mail do cadastro): **V138** (`pending_signups.resend_count` +
+     `last_sent_at`), validado na bancada MariaDB (aplicada 2x, sem erro).
+  *Os testes desatualizados foram atualizados (não desligados):* `birthDate` no corpo do
+  cadastro (obrigatório desde a regra do ECA), confirmação do e-mail antes do login, o estado do
+  menor passou a `MINOR_CONSENT_PENDING` (supervisão parental, V137), a criação de mensagem
+  responde 201 e o link usado uma segunda vez responde 404 `INVALID_TOKEN` (no fluxo de duas
+  etapas o pendente some quando o link é usado).
+  *Verificado:* as 5 classes que estavam vermelhas (`AgePolicyTests`, `AuthProfileFlowTests`,
+  `EmailVerificationFlowTests`, `SignupChallengeTests`, `ThemeGalleryTests`) passam — 14/14.
+  *Fica em aberto (para a próxima rodada):* o front consome o link de confirmação **no
+  carregamento** da página, então um scanner de e-mail (Safe Links e afins) que busca o link
+  queima o token e a pessoa vê "link inválido" ao clicar de verdade — o backend não tem como
+  saber que ele já foi usado, porque o pendente é apagado na confirmação.
+
 ## Higiene do front (entregue 2026-10-21)
 - **[x] ENTREGUE 2026-10-21 — A tela de entrada parou de afirmar o que o produto não tem.**
   O painel de marca do login (e do reset de senha, que tinha o mesmo bloco) trazia **números
