@@ -267,6 +267,17 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   posts que a pessoa ainda não tocou (3 → 2 depois de uma reação ✓).
   Front: `fix/lint-higiene-front`; back: `e6073d2`+ (esta entrega).
 
+- **[x] ENTREGUE 2026-10-21 — A identidade nova chegou a todas as surfaces do produto.** A landing
+  passou a se apresentar como **rede humana** (e não mais como rede profissional), mas a frase
+  antiga continuava em mais seis lugares, e eram os que a pessoa vê fora do site: o **e-mail de
+  confirmação de e-mail** (o primeiro e-mail de todo mundo), o **e-mail de recuperação de
+  senha**, o **e-mail do consentimento do responsável**, o **cartão de compartilhamento** de
+  publicação (a meta que aparece no WhatsApp e no Twitter), a **descrição dos Termos de Uso** e o
+  **motivo do limite de idade** nos Termos ("por se tratar de uma rede profissional" — a regra
+  de 18+ continua, o motivo não depende mais da identidade antiga). Verificado: nenhum texto de
+  tela ou e-mail do produto diz mais "rede profissional" (restaram só usos técnicos: perfil
+  corporativo, objetivos profissionais no perfil, termos de limitação de responsabilidade).
+  Front: `cb9b38aa` + esta rodada; back: templates dos e-mails.
 ## Higiene do front (entregue 2026-10-21)
 - **[x] ENTREGUE 2026-10-21 — A tela de entrada parou de afirmar o que o produto não tem.**
   O painel de marca do login (e do reset de senha, que tinha o mesmo bloco) trazia **números
