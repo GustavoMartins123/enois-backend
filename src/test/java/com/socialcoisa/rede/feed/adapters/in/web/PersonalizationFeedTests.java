@@ -131,4 +131,41 @@ class PersonalizationFeedTests {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.items[?(@.id == '" + postId + "')]").isNotEmpty());
 	}
+
+	/**
+	 * Liked topic boosts the For You feed even when the page also holds a post without a topic:
+	 * the immutable liked list threw on contains(null) (500), and the reversed comparator sent the
+	 * liked posts to the bottom.
+	 */
+	@Test
+	void likedTopicComesFirstInForYouAlongsidePostsWithoutTopic() throws Exception {
+		var author = auth.authenticate("persfeed_liked");
+		String communityId = createCommunity(author, "PersFeed Liked Tech", "TECNOLOGIA");
+		String likedPost = publishInCommunity(author, communityId, "Post de tecnologia (mais antigo).");
+		MvcResult untopic = mockMvc.perform(post("/feed/posts")
+				.header("X-Session-Token", author.token())
+				.header("Idempotency-Key", "untopic-" + System.nanoTime())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(java.util.Map.of(
+					"type", "INSIGHT", "content", "Post sem assunto (mais novo).", "tags", java.util.List.of(),
+					"mediaIds", java.util.List.of()))))
+			.andExpect(status().isCreated())
+			.andReturn();
+		String untopicPost = objectMapper.readTree(untopic.getResponse().getContentAsString()).get("id").asText();
+
+		mockMvc.perform(put("/me/preferences")
+				.header("X-Session-Token", author.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(java.util.Map.of(
+					"likedTopics", java.util.List.of("TECNOLOGIA")))))
+			.andExpect(status().isOk());
+
+		MvcResult feed = mockMvc.perform(get("/feed").param("tab", "FOR_YOU").header("X-Session-Token", author.token()))
+			.andExpect(status().isOk())
+			.andReturn();
+		java.util.List<String> ids = new java.util.ArrayList<>();
+		objectMapper.readTree(feed.getResponse().getContentAsString()).path("items")
+			.forEach(item -> ids.add(item.path("id").asText()));
+		org.assertj.core.api.Assertions.assertThat(ids).containsSubsequence(likedPost, untopicPost);
+	}
 }
