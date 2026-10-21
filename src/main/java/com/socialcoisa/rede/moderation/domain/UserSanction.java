@@ -44,7 +44,15 @@ public record UserSanction(String id, String userId, String reportId, SanctionTy
 
 	/** Recurso negado: restricao vira BAN permanente. */
 	public UserSanction escalateToBan() {
-		return new UserSanction(id, userId, reportId, SanctionType.BAN, reason, SanctionStatus.ACTIVE, createdAt,
+		return escalateTo(SanctionType.BAN, reason);
+	}
+
+	/**
+	 * Escala a sancao ativa para um ban, mantendo o MESMO id. Criar outra linha deixaria duas
+	 * sancoes ACTIVE para o usuario e a mais recente mascararia a anterior em findActiveByUser.
+	 */
+	public UserSanction escalateTo(SanctionType type, String reason) {
+		return new UserSanction(id, userId, reportId, type, reason, SanctionStatus.ACTIVE, createdAt,
 			removedAt, removedBy);
 	}
 }

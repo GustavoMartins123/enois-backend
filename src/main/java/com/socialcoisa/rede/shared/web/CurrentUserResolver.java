@@ -2,6 +2,7 @@ package com.socialcoisa.rede.shared.web;
 
 import java.time.Clock;
 
+import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -29,6 +30,9 @@ public class CurrentUserResolver {
 		}
 		String resolvedUserId = authSessionRepository.findActiveUserId(sessionToken.trim(), clock.instant())
 			.orElseThrow(() -> new ApiException(401, "UNAUTHENTICATED", "Sessao invalida ou expirada."));
+		// Set before the verification check so a 403 EMAIL_NOT_VERIFIED is still attributed to the
+		// user. RequestObservabilityFilter logs it on the access line and clears it.
+		MDC.put(RequestObservabilityFilter.MDC_USER_ID, resolvedUserId);
 		return requireVerifiedIdentity(new CurrentUser(new UserId(resolvedUserId)));
 	}
 
