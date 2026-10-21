@@ -27,9 +27,10 @@ public class TestAuthHelper {
 	/**
 	 * Cria a conta e devolve uma sessao valida.
 	 *
-	 * O cadastro nasce pendente de confirmacao de e-mail e so emite sessao depois do link. Como o
-	 * token so existe no e-mail enviado, aqui confirmamos o e-mail direto no banco e entramos pelo
-	 * login normal; o fluxo real de confirmacao tem teste proprio (EmailVerificationFlowTests).
+	 * O cadastro e em duas etapas desde 2026-10-21: o POST /auth/signup so guarda o pendente e a
+	 * conta nasce na confirmacao do e-mail. Como o token cru so existe no e-mail, aqui trocamos o
+	 * hash do pendente por um valor conhecido (TestDatabase) e chamamos o MESMO endpoint de
+	 * verificacao que o link usaria — a conta nasce verificada e a resposta ja traz a sessao.
 	 */
 	public AuthSession authenticate(String userId) throws Exception {
 		String email = userId + "@test.com";
@@ -48,18 +49,19 @@ public class TestAuthHelper {
 				.content(payload))
 			.andExpect(status().isCreated());
 
-		String createdUserId = TestDatabase.userIdByEmail(email)
-			.orElseThrow(() -> new IllegalStateException("usuario nao criado: " + email));
-		TestDatabase.markEmailVerified(createdUserId, java.time.Instant.now());
+		String rawToken = "verify-" + userId;
+		TestDatabase.setPendingSignupToken(email, rawToken);
 
-		MvcResult login = mockMvc.perform(post("/auth/login")
-				.header("Idempotency-Key", "login-" + userId)
+		MvcResult verified = mockMvc.perform(post("/auth/email/verify")
+				.header("Idempotency-Key", "verify-" + userId)
 				.contentType(MediaType.APPLICATION_JSON)
-				.content(objectMapper.writeValueAsString(Map.of("email", email, "password", "Test1234!"))))
+				.content(objectMapper.writeValueAsString(Map.of("token", rawToken))))
 			.andExpect(status().isOk())
 			.andReturn();
 
-		JsonNode node = objectMapper.readTree(login.getResponse().getContentAsString());
+		String createdUserId = TestDatabase.userIdByEmail(email)
+			.orElseThrow(() -> new IllegalStateException("usuario nao criado: " + email));
+		JsonNode node = objectMapper.readTree(verified.getResponse().getContentAsString());
 		return new AuthSession(node.get("token").asText(), node.get("refreshToken").asText(), createdUserId);
 	}
 }
