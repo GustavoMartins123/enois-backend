@@ -10,6 +10,9 @@ public interface MarketplaceRepository {
 
 	MarketplaceListing saveListing(MarketplaceListing listing);
 
+	/** Remove a listagem de vez (a marca REMOVED colide com o índice único por status). */
+	void deleteListing(String id);
+
 	Optional<MarketplaceListing> findListingById(String id);
 
 	Optional<MarketplaceListing> findActiveByItem(String itemKind, String itemId);

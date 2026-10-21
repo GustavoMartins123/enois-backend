@@ -214,7 +214,9 @@ public class MarketplaceService {
 				// se o reembolso falhar, a listagem ainda sai do ar; o suporte trata o valor.
 			}
 		}
-		listings.saveListing(listing.remove(now));
+		// DELETE em vez de status REMOVED: o índice único (item_kind, item_id, status) recusa
+		// uma segunda linha REMOVED do mesmo item, e era isso que derrubava o saneamento.
+		listings.deleteListing(listing.id());
 		return true;
 	}
 

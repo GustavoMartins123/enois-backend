@@ -26,6 +26,8 @@ interface SpringDataMarketplaceListingRepository
 
 	List<MarketplaceListingJpaEntity> findAllByOrderByCreatedAtDesc(Pageable pageable);
 
+	void deleteById(String id);
+
 	List<MarketplaceListingJpaEntity> findBySellerIdOrderByCreatedAtDesc(String sellerId);
 }
 
@@ -64,6 +66,11 @@ class MarketplacePersistenceAdapter implements MarketplaceRepository {
 	@Override
 	public MarketplaceListing saveListing(MarketplaceListing listing) {
 		return listings.save(MarketplaceListingJpaEntity.from(listing)).toDomain();
+	}
+
+	@Override
+	public void deleteListing(String id) {
+		listings.deleteById(id);
 	}
 
 	@Override
