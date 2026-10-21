@@ -12,6 +12,7 @@ import jakarta.persistence.Table;
 class JobAbandonPenaltyJpaEntity {
 
 	@Id
+	@Column(name = "job_id", nullable = false)
 	String jobId;
 
 	@Column(name = "user_id", nullable = false)

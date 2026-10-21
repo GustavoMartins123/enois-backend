@@ -106,6 +106,35 @@ class PendingSignupFlowTests {
 	}
 
 	@Test
+	void signingUpAgainReplacesThePendingInsteadOfFailing() throws Exception {
+		String email = "pendente.repetido@example.com";
+
+		mockMvc.perform(post("/auth/signup")
+				.header("Idempotency-Key", "pending-again-1")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(signupPayload(email)))
+			.andExpect(status().isCreated());
+
+		TestDatabase.setPendingSignupToken(email, "token-antes-do-reenvio");
+
+		// Refazer o cadastro com o mesmo e-mail NAO pode dar 409: substitui o pendente.
+		mockMvc.perform(post("/auth/signup")
+				.header("Idempotency-Key", "pending-again-2")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(signupPayload(email)))
+			.andExpect(status().isCreated());
+
+		assertThat(TestDatabase.pendingSignupsByEmail(email)).isEqualTo(1);
+		// O link anterior deixou de valer.
+		mockMvc.perform(post("/auth/email/verify")
+				.header("Idempotency-Key", "pending-again-verify-old")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("token", "token-antes-do-reenvio"))))
+			.andExpect(status().isNotFound());
+		assertThat(TestDatabase.userIdByEmail(email)).isEmpty();
+	}
+
+	@Test
 	void signupForAnEmailThatAlreadyHasAnAccountIsRefused() throws Exception {
 		String email = "pendente.ja-existe@example.com";
 

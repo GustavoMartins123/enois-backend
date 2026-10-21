@@ -97,7 +97,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 	@Transactional
 	public CommentView comment(CommentOnPostCommand command) {
 		// ECA Digital: sem data de nascimento declarada, nao comenta (tela de regularizacao).
-		agePolicy.requireDeclared(command.authorId().value());
+		agePolicy.requireCanWrite(command.authorId().value());
 		if (sanctionGate.restricted(command.authorId().value())) {
 			throw new ApiException(403, "ACCOUNT_RESTRICTED",
 				"Sua conta esta restrita por moderacao. Voce pode recorrer na pagina Penalidades.");

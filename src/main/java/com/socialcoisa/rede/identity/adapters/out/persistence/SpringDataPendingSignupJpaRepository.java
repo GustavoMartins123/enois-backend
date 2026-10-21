@@ -14,6 +14,14 @@ interface SpringDataPendingSignupJpaRepository extends JpaRepository<PendingSign
 
 	Optional<PendingSignupJpaEntity> findByEmail(String email);
 
+	/**
+	 * Delete imediato (bulk) por e-mail: o cadastro novo precisa apagar o pendente anterior ANTES
+	 * do insert, senao o indice unico de e-mail estoura no flush.
+	 */
+	@Modifying(clearAutomatically = true, flushAutomatically = true)
+	@Query("delete from PendingSignupJpaEntity p where p.email = :email")
+	int deleteByEmailValue(@Param("email") String email);
+
 	@Modifying(clearAutomatically = true, flushAutomatically = true)
 	@Query("delete from PendingSignupJpaEntity p where p.expiresAt < :now")
 	int deleteExpiredBefore(@Param("now") Instant now);

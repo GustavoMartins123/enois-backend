@@ -1,6 +1,7 @@
 package com.socialcoisa.rede.media.adapters.in.web;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.Map;
@@ -51,6 +52,35 @@ class MediaUploadAuthTests {
 				.content(objectMapper.writeValueAsString(Map.of(
 					"fileName", "media/abc/foto.jpg", "mimeType", "image/jpeg", "size", 1024,
 					"purpose", "AVATAR"))))
+			.andExpect(status().isCreated());
+	}
+
+	@Test
+	void fileAboveTheLimitIsRejectedWithAClearMessage() throws Exception {
+		var session = auth.authenticate("media_upload_grande");
+		// 501MB: passa do teto de 500MB do serviço.
+		mockMvc.perform(post("/media/uploads")
+				.header("X-Session-Token", session.token())
+				.header("Idempotency-Key", "media-up-grande")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of(
+					"fileName", "media/abc/video.mp4", "mimeType", "video/mp4",
+					"size", 501L * 1024L * 1024L, "purpose", "POST_VIDEO"))))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("MEDIA_TOO_LARGE"))
+			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("500MB")));
+	}
+
+	@Test
+	void fileUpToTheLimitIsAccepted() throws Exception {
+		var session = auth.authenticate("media_upload_no_limite");
+		mockMvc.perform(post("/media/uploads")
+				.header("X-Session-Token", session.token())
+				.header("Idempotency-Key", "media-up-no-limite")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of(
+					"fileName", "media/abc/video.mp4", "mimeType", "video/mp4",
+					"size", 500L * 1024L * 1024L, "purpose", "POST_VIDEO"))))
 			.andExpect(status().isCreated());
 	}
 
