@@ -34,11 +34,9 @@ class ThemeGalleryController {
 	}
 
 	@GetMapping("/temas/galeria/{themeId}")
-	Map<String, Object> get(@PathVariable String themeId) {
-		ThemePackage theme = gallery.get(themeId);
-		return Map.of("id", theme.id(), "name", theme.name(), "description", theme.description() == null ? "" : theme.description(),
-			"package", theme.packageJson(), "modeDefault", theme.modeDefault(), "installs", theme.installs(),
-			"createdAt", theme.createdAt().toString());
+	ThemeGalleryView get(@PathVariable String themeId) {
+		// Mesmo nome de campo da listagem (`packageJson`): a preview do marketplace lê daqui.
+		return ThemeGalleryView.from(gallery.get(themeId));
 	}
 
 	@PostMapping("/temas/galeria")
