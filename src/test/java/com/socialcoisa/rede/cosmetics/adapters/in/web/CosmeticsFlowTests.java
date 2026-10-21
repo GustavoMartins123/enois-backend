@@ -6,6 +6,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -18,6 +20,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import tools.jackson.databind.ObjectMapper;
 
 import com.socialcoisa.rede.shared.web.TestAuthHelper;
+import com.socialcoisa.rede.shared.web.TestDatabase;
 
 /**
  * A loja de cosméticos (plano C3): comprar moldura de avatar com faíscas (débito direto,
@@ -44,6 +47,7 @@ class CosmeticsFlowTests {
 		MvcResult catalog = mockMvc.perform(get("/loja"))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$[?(@.id == 'moldura-violeta')].priceMf").value(5_000))
+			.andExpect(jsonPath("$[?(@.id == 'moldura-buraco-negro')].priceMf").value(10_000))
 			.andReturn();
 
 		// A compra direta: 5.000 mf saem (105.000 -> 100.000).
@@ -76,28 +80,57 @@ class CosmeticsFlowTests {
 			.andExpect(jsonPath("$.equipped").value(false));
 	}
 
-	@Test
-	void animatedFrameAppearsOnPostAndComment() throws Exception {
-		var buyer = auth("moldura_feed_buyer");
-		mockMvc.perform(get("/carteira").header("X-Session-Token", buyer.token())).andExpect(status().isOk());
-		mockMvc.perform(post("/loja/moldura-aurora/comprar").header("X-Session-Token", buyer.token())).andExpect(status().isOk());
-		mockMvc.perform(post("/loja/moldura-aurora/equipar").header("X-Session-Token", buyer.token())).andExpect(status().isOk());
+        @ParameterizedTest
+        @ValueSource(strings = { "moldura-aurora", "moldura-tempestade", "moldura-inferno",
+                "moldura-buraco-negro", "moldura-orbita", "moldura-glacial", "moldura-toxica" })
+        void animatedFrameAppearsOnPostAndComment(String frame) throws Exception {
+                var buyer = auth("frame_" + frame.substring("moldura-".length()).replace('-', '_'));
+                mockMvc.perform(get("/carteira").header("X-Session-Token", buyer.token())).andExpect(status().isOk());
+                mockMvc.perform(get("/loja"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$[?(@.id == '" + frame + "')].priceMf")
+                                .value("moldura-aurora".equals(frame) ? 5_000 : 10_000));
+                mockMvc.perform(post("/loja/" + frame + "/comprar").header("X-Session-Token", buyer.token()))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.owned").value(true));
+                mockMvc.perform(post("/loja/" + frame + "/equipar").header("X-Session-Token", buyer.token())).andExpect(status().isOk());
 		MvcResult published = mockMvc.perform(post("/feed/posts")
 			.header("X-Session-Token", buyer.token()).header("Idempotency-Key", "frame-post")
 			.contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(Map.of(
 				"type", "INSIGHT", "content", "Uma publicacao com moldura", "tags", List.of(), "mediaIds", List.of()))))
-			.andExpect(status().isCreated()).andExpect(jsonPath("$.authorAvatarFrame").value("moldura-aurora")).andReturn();
+                        .andExpect(status().isCreated()).andExpect(jsonPath("$.authorAvatarFrame").value(frame)).andReturn();
 		String postId = objectMapper.readTree(published.getResponse().getContentAsString()).get("id").asText();
 		mockMvc.perform(post("/feed/posts/" + postId + "/comments")
 			.header("X-Session-Token", buyer.token()).header("Idempotency-Key", "frame-comment")
 			.contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(Map.of(
 				"content", "Comentario com moldura", "mediaIds", List.of(), "mentionedUserIds", List.of()))))
-			.andExpect(status().isCreated()).andExpect(jsonPath("$.authorAvatarFrame").value("moldura-aurora"));
+                        .andExpect(status().isCreated()).andExpect(jsonPath("$.authorAvatarFrame").value(frame));
 		mockMvc.perform(get("/feed/posts/" + postId + "/comments").header("X-Session-Token", buyer.token()))
-			.andExpect(status().isOk()).andExpect(jsonPath("$.items[0].authorAvatarFrame").value("moldura-aurora"));
+                        .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].authorAvatarFrame").value(frame));
 	}
 
 	private TestAuthHelper.AuthSession auth(String name) throws Exception {
-		return new TestAuthHelper(mockMvc, objectMapper).authenticate(name);
+		String email = name + "@test.com";
+		mockMvc.perform(post("/auth/signup")
+				.header("Idempotency-Key", "cosmetics-signup-" + name)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of(
+						"name", name, "email", email, "password", "Test1234!",
+						"acceptedTerms", true, "birthDate", "1990-05-10"))))
+			.andExpect(status().isCreated());
+
+		// A upstream cria a conta apenas na confirmacao: usamos o mesmo fluxo no teste da loja.
+		String verificationToken = "cosmetics-verify-" + name;
+		TestDatabase.setPendingSignupToken(email, verificationToken);
+		MvcResult verified = mockMvc.perform(post("/auth/email/verify")
+				.header("Idempotency-Key", "cosmetics-verify-" + name)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("token", verificationToken))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.user.emailVerified").value(true))
+			.andReturn();
+		var session = objectMapper.readTree(verified.getResponse().getContentAsString());
+		return new TestAuthHelper.AuthSession(session.get("token").asText(),
+				session.get("refreshToken").asText(), TestDatabase.userIdByEmail(email).orElseThrow());
 	}
 }
