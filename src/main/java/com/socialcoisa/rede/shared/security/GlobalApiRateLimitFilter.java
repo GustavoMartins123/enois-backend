@@ -25,8 +25,9 @@ import jakarta.servlet.http.HttpServletResponse;
  * scripts que martelam endpoints variados (os limites por usuário e por ação ficam nos guards
  * específicos; este é o teto de superfície inteira).
  *
- * <p>Chave: X-Real-IP, depois primeira entrada de X-Forward-For, depois remoteAddr. Quando não
- * há header nenhum (tráfego interno do cluster atrás do ingress), o balde fica compartilhado —
+ * <p>Key: {@link ClientIpResolver} (last X-Forwarded-For hop, the one the ALB appends). Client-sent
+ * X-Real-IP or a forged first XFF entry must not pick the bucket, or rotating it bypasses the limit.
+ * Quando não há header nenhum (tráfego interno do cluster atrás do ingress), o balde fica compartilhado —
  * e ganha um limite multiplicado para não estrangular humanos se o ingress não mandar headers.
  * Endpoints de sonda (actuator) passam fora: derrubar o health check derruba o pod.
  */
@@ -41,13 +42,15 @@ public class GlobalApiRateLimitFilter extends OncePerRequestFilter {
 
 	private final Map<String, Deque<Long>> hits = new ConcurrentHashMap<>();
 	private final Clock clock;
+	private final ClientIpResolver clientIpResolver;
 	private final int perMinute;
 	private final int sharedMultiplier;
 
-	public GlobalApiRateLimitFilter(Clock clock,
+	public GlobalApiRateLimitFilter(Clock clock, ClientIpResolver clientIpResolver,
 			@Value("${rede.rate.global-per-minute:300}") int perMinute,
 			@Value("${rede.rate.global-shared-multiplier:50}") int sharedMultiplier) {
 		this.clock = clock;
+		this.clientIpResolver = clientIpResolver;
 		this.perMinute = perMinute;
 		this.sharedMultiplier = Math.max(1, sharedMultiplier);
 	}
@@ -65,16 +68,9 @@ public class GlobalApiRateLimitFilter extends OncePerRequestFilter {
 			chain.doFilter(request, response);
 			return;
 		}
-		String realIp = request.getHeader("X-Real-IP");
-		String forwarded = request.getHeader("X-Forwarded-For");
-		boolean hasHeader = StringUtils.hasText(realIp) || StringUtils.hasText(forwarded);
-		String key = ClientIp.extract(realIp, forwarded);
-		if (!hasHeader) {
-			String remote = request.getRemoteAddr();
-			if (StringUtils.hasText(remote)) {
-				key = remote;
-			}
-		}
+		boolean hasHeader = StringUtils.hasText(request.getHeader("X-Forwarded-For"))
+			|| StringUtils.hasText(request.getHeader("X-Real-IP"));
+		String key = clientIpResolver.resolve(request);
 		int limit = hasHeader ? perMinute : perMinute * sharedMultiplier;
 
 		long now = clock.millis();

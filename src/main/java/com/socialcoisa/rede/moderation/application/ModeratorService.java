@@ -3,6 +3,7 @@ package com.socialcoisa.rede.moderation.application;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -15,6 +16,7 @@ import com.socialcoisa.rede.moderation.application.port.out.ModerationVoteReposi
 import com.socialcoisa.rede.moderation.application.port.out.ModeratorApplicationRepository;
 import com.socialcoisa.rede.moderation.application.port.out.ReportRepository;
 import com.socialcoisa.rede.moderation.application.port.out.ReportedContentAuthorReader;
+import com.socialcoisa.rede.moderation.application.port.out.SanctionRepository;
 import com.socialcoisa.rede.moderation.domain.ModerationVote;
 import com.socialcoisa.rede.moderation.domain.ModerationVoteType;
 import com.socialcoisa.rede.moderation.domain.ModeratorApplication;
@@ -51,6 +53,7 @@ public class ModeratorService {
 	private final ReportRepository reports;
 	private final ModerationService moderationService;
 	private final SanctionService sanctionService;
+	private final SanctionRepository sanctions;
 	private final ReputationService reputationService;
 	private final ReportedContentAuthorReader contentAuthors;
 	private final NotificationService notifications;
@@ -63,7 +66,7 @@ public class ModeratorService {
 
 	public ModeratorService(ModeratorApplicationRepository applications, ModerationVoteRepository votes,
 			ReportRepository reports, ModerationService moderationService, SanctionService sanctionService,
-			ReputationService reputationService, ReportedContentAuthorReader contentAuthors,
+			SanctionRepository sanctions, ReputationService reputationService, ReportedContentAuthorReader contentAuthors,
 			NotificationService notifications, UserProfileRepository profiles, AuthSessionRepository sessions,
 			com.socialcoisa.rede.feed.application.port.in.PurgeAuthorContentUseCase contentPurge,
 			Clock clock,
@@ -74,6 +77,7 @@ public class ModeratorService {
 		this.reports = reports;
 		this.moderationService = moderationService;
 		this.sanctionService = sanctionService;
+		this.sanctions = sanctions;
 		this.reputationService = reputationService;
 		this.contentAuthors = contentAuthors;
 		this.notifications = notifications;
@@ -315,17 +319,25 @@ public class ModeratorService {
 			throw new ApiException(400, "CANNOT_SANCTION_SELF", "Você não pode punir a própria conta.");
 		}
 		String reference = "admin:" + adminId;
-		if (type == SanctionType.PERMABAN) {
-			UserSanction sanction = UserSanction.permaBan("sanc_" + randomId(), target.id(), reference,
-				cleanReason, Instant.now(clock));
-			sanctionService.banAuthor(sanction, target.id(), adminId, sessions);
-		}
-		else if (type == SanctionType.BAN) {
-			UserSanction sanction = UserSanction.create("sanc_" + randomId(), target.id(), reference,
-				cleanReason, Instant.now(clock));
+		Optional<UserSanction> active = sanctions.findActiveByUser(target.id());
+		if (type != SanctionType.RESTRICTION) {
+			if (active.isPresent() && active.get().isBan()) {
+				return new SanctionResult(target.id(), target.username(), type.name(), "ALREADY_BANNED");
+			}
+			// Reaproveita a restrição ativa (mesmo id) em vez de criar uma segunda sanção ACTIVE.
+			UserSanction sanction = active
+				.map(existing -> existing.escalateTo(type, cleanReason))
+				.orElseGet(() -> type == SanctionType.PERMABAN
+					? UserSanction.permaBan("sanc_" + randomId(), target.id(), reference, cleanReason,
+						Instant.now(clock))
+					: UserSanction.create("sanc_" + randomId(), target.id(), reference, cleanReason,
+						Instant.now(clock)));
 			sanctionService.banAuthor(sanction, target.id(), adminId, sessions);
 		}
 		else {
+			if (active.isPresent() && active.get().isBan()) {
+				return new SanctionResult(target.id(), target.username(), type.name(), "ALREADY_BANNED");
+			}
 			sanctionService.restrictUser(target.id(), reference, cleanReason);
 		}
 		return new SanctionResult(target.id(), target.username(), type.name(), "ACTIVE");

@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Locale;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.StringUtils;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.socialcoisa.rede.identity.adapters.out.oauth.OAuthProperties;
 import com.socialcoisa.rede.identity.application.AuthResponse;
 import com.socialcoisa.rede.identity.application.LoginCommand;
+import com.socialcoisa.rede.identity.application.SignupChallengeService;
 import com.socialcoisa.rede.identity.application.SignupCommand;
 import com.socialcoisa.rede.identity.application.port.in.ChangeEmailUseCase;
 import com.socialcoisa.rede.identity.application.port.in.ChangePasswordUseCase;
@@ -68,9 +70,12 @@ class AuthController {
 	private final com.socialcoisa.rede.identity.application.AuthThrottle throttle;
 	private final OAuthProperties oAuthProperties;
 	private final com.socialcoisa.rede.identity.adapters.out.TurnstileValidator turnstile;
+	private final com.socialcoisa.rede.identity.application.SignupChallengeService signupCaptcha;
 	private final com.socialcoisa.rede.identity.application.NewDeviceNotifier newDeviceNotifier;
 	private final com.socialcoisa.rede.shared.security.IpBlockReader ipBlockReader;
 	private final com.socialcoisa.rede.shared.security.ClientIpResolver ipResolver;
+	/** Cadastros abertos? Desligado, o POST /auth/signup responde 403 SIGNUP_DISABLED. */
+	private final boolean signupEnabled;
 
 	AuthController(SignupUseCase signupUseCase, VerifyEmailUseCase verifyEmailUseCase,
 			TwoFactorLoginUseCase twoFactorLoginUseCase, TwoFactorUseCase twoFactorUseCase,
@@ -87,9 +92,11 @@ class AuthController {
 			OAuthProperties oAuthProperties,
 			com.socialcoisa.rede.identity.application.AuthThrottle throttle,
 			com.socialcoisa.rede.identity.adapters.out.TurnstileValidator turnstile,
+			com.socialcoisa.rede.identity.application.SignupChallengeService signupCaptcha,
 			com.socialcoisa.rede.identity.application.NewDeviceNotifier newDeviceNotifier,
 			com.socialcoisa.rede.shared.security.IpBlockReader ipBlockReader,
-			com.socialcoisa.rede.shared.security.ClientIpResolver ipResolver) {
+			com.socialcoisa.rede.shared.security.ClientIpResolver ipResolver,
+			@Value("${rede.auth.signup-enabled:true}") boolean signupEnabled) {
 		this.signupUseCase = signupUseCase;
 		this.verifyEmailUseCase = verifyEmailUseCase;
 		this.twoFactorLoginUseCase = twoFactorLoginUseCase;
@@ -108,9 +115,11 @@ class AuthController {
 		this.throttle = throttle;
 		this.oAuthProperties = oAuthProperties;
 		this.turnstile = turnstile;
+		this.signupCaptcha = signupCaptcha;
 		this.newDeviceNotifier = newDeviceNotifier;
 		this.ipBlockReader = ipBlockReader;
 		this.ipResolver = ipResolver;
+		this.signupEnabled = signupEnabled;
 	}
 
 	/** Bloqueio de IP pela moderacao (V115): nenhum fluxo de autenticacao emite sessao de IP banido. */
@@ -119,6 +128,35 @@ class AuthController {
 			throw new ApiException(403, "IP_BLOCKED",
 				"Este endereco de rede esta bloqueado pela moderacao. Fale com o suporte se for um erro.");
 		}
+	}
+
+	/**
+	 * Configuração pública do captcha: o front decide entre o widget do Turnstile e o desafio
+	 * próprio sem precisar de variável VITE_* no build. Só a chave pública do site sai daqui.
+	 */
+	@GetMapping("/config")
+	AuthConfig config() {
+		String mode;
+		String siteKey;
+		if (turnstile.isAvailable()) {
+			mode = "TURNSTILE";
+			siteKey = turnstile.siteKey();
+		}
+		else if (signupCaptcha.isEnabled()) {
+			mode = "CHALLENGE";
+			siteKey = null;
+		}
+		else {
+			mode = "NONE";
+			siteKey = null;
+		}
+		return new AuthConfig(mode, siteKey);
+	}
+
+	/** Desafio de soma para o cadastro (usado quando não há Turnstile configurado). */
+	@GetMapping("/signup-challenge")
+	SignupChallengeService.Challenge signupChallenge() {
+		return signupCaptcha.issue();
 	}
 
 	@PostMapping("/signup")
@@ -130,19 +168,33 @@ class AuthController {
 			jakarta.servlet.http.HttpServletRequest request) {
 		String ip = ipResolver.resolve(request);
 		exigeIpNaoBloqueado(ip);
+		// Portao de cadastros: a operacao pode fechar a criacao de contas (a Mel pediu em
+		// 2026-10-20). Antes de Turnstile/throttle: nao adianta o cliente resolver captcha.
+		if (!signupEnabled) {
+			throw new ApiException(403, "SIGNUP_DISABLED",
+				"Os cadastros estao fechados no momento. Se voce ja tem conta, entre normalmente.");
+		}
 		// Honeypot: bots preenchem o campo "website" que humanos nunca veem.
 		// Resposta fake (201) para nao dar dica ao atacante.
 		if (body.website() != null && !body.website().isBlank()) {
 			return ResponseEntity.status(201)
 				.body("{\"email\":\"" + body.email() + "\",\"verificationRequired\":true,\"emailSent\":true}");
 		}
-		turnstile.require(body.turnstileToken());
 		throttle.exigeSignupPermitido(ip, deviceFingerprint);
 		String scope = authScope(body.email());
 		String hash = idempotency.hash(body);
-		return idempotency.execute(scope, "POST", "/api/auth/signup", idempotencyKey, hash, () -> new CommandResponse(201,
-			signupUseCase.signup(new SignupCommand(body.name(), "USER", body.email(), body.password(),
-				body.acceptedTerms(), body.birthDate()))));
+		return idempotency.execute(scope, "POST", "/api/auth/signup", idempotencyKey, hash, () -> {
+			// Dentro do idempotente: repetir a MESMA requisição devolve a resposta em cache sem
+			// queimar um captcha novo (Turnstile e desafio são de uso único).
+			if (turnstile.isAvailable()) {
+				turnstile.require(body.turnstileToken());
+			}
+			else {
+				signupCaptcha.require(body.challengeId(), body.challengeAnswer());
+			}
+			return new CommandResponse(201, signupUseCase.signup(new SignupCommand(body.name(), "USER",
+				body.email(), body.password(), body.acceptedTerms(), body.birthDate())));
+		});
 	}
 
 	/**
@@ -179,7 +231,9 @@ class AuthController {
 			jakarta.servlet.http.HttpServletRequest httpRequest) {
 		String ip = ipResolver.resolve(httpRequest);
 		exigeIpNaoBloqueado(ip);
-		turnstile.require(body.turnstileToken());
+		if (turnstile.isAvailable()) {
+			turnstile.require(body.turnstileToken());
+		}
 		String scope = authScope(body.email());
 		String hash = idempotency.hash(body);
 		throttle.exigeLoginPermitido(body.email());
@@ -505,6 +559,9 @@ class AuthController {
 	}
 
 	record DeleteAccountRequest(String password) {
+	}
+
+	record AuthConfig(String captchaMode, String turnstileSiteKey) {
 	}
 
 	private String authScope(String email) {
