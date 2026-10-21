@@ -131,9 +131,22 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
     testes negativos, já existem: anônimo x privado (`GroupSecurityTests`), token expirado/revogado
     (`OAuthHardeningTests`, `EmailVerificationFlowTests`), payload gigante (`MediaUploadAuthTests` com
     o teto de 500MB, `InlineMediaTests`), XSS/HTML não confiável (`SafeHtmlAttackTests`,
-    `GameUrlGuardTests`, `AiTriageGuardTests`). **Faltam:** mass assignment (escrita de campo de
     terceiro no corpo) e "automação social por caminho alternativo". O passo de CI fica com o raposo
     (Actions é dele).
+    *2026-10-21 — os DOIS cenários que faltavam foram implementados e passam:*
+    - **mass assignment** — `MassAssignmentTests` (4): o corpo manda `authorId`, `authorUsername`,
+      `userId`, `createdBy`, `ownerId` e até contadores, e a autoria, a data e os contadores
+      continuam sendo os do servidor e da sessão; a quarta prova é "acesso a terceiro por id":
+      mídia de outra conta na publicação alheia é recusada com 403 `MEDIA_OWNER_MISMATCH`. O app
+      **não tem** o buraco — o teste é a trava para ele voltar.
+    - **automação social por caminho alternativo** — `AutomatedWritePathsTests` (2): varre as
+      **253 rotas de escrita** do backend (extraídas do próprio código fonte, não de uma lista
+      escrita à mão) e exige 401 em todas sem sessão, menos os 14 fluxos públicos de entrada; e
+      compara a allowlist do `WriteRouteInterceptor` com o catálogo esperado — se alguém abrir mais
+      um fluxo público (webhook, caminho de bot), o teste quebra. Provado nos dois sentidos: o
+      teste **falha** quando `/feed/posts` entra na allowlist.
+    *O que continua aberto neste item:* a esteira em si (secret-scanning, SCA, SAST) — Actions é do
+    raposo.
     *(no ROADMAP são dois itens: 4 = a CI de segurança, 5 = os testes adversariais.)*
 
 ## BLOQUEADO por dependência externa (não é código meu)
