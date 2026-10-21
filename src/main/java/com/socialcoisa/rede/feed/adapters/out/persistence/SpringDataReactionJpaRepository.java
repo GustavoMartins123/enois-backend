@@ -25,5 +25,14 @@ interface SpringDataReactionJpaRepository extends JpaRepository<ReactionJpaEntit
 
 	List<ReactionJpaEntity> findByPostIdInAndUserId(Collection<String> postIds, String userId);
 
-	List<ReactionJpaEntity> findByPostIdOrderByCreatedAtDesc(String postId);
+	List<ReactionJpaEntity> findByPostIdAndCreatedAtBeforeOrderByCreatedAtDesc(String postId, java.time.Instant before,
+		org.springframework.data.domain.Pageable page);
+
+	/** Rows of (postId, reactionType, count). `excluded` must not be empty (NOT IN () is invalid SQL). */
+	@org.springframework.data.jpa.repository.Query(
+		"SELECT r.postId, r.reactionType, COUNT(r) FROM ReactionJpaEntity r "
+		+ "WHERE r.postId IN :postIds AND r.userId NOT IN :excluded GROUP BY r.postId, r.reactionType")
+	List<Object[]> countByPostIdsGroupedByType(
+		@org.springframework.data.repository.query.Param("postIds") Collection<String> postIds,
+		@org.springframework.data.repository.query.Param("excluded") Collection<String> excluded);
 }
