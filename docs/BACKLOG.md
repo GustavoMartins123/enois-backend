@@ -76,9 +76,29 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
    idem; sem marcador não valida nada). Sem marcador = anexo no fim, como sempre.
 
 ## Grande
-10. **Importador de vagas plugável** — porta `JobImportSource` + `imported_jobs` (unique `(source,
-   external_id)`) + dedupe/normalização + revisão antes de publicar (respeita identidade + ≥150).
-   Fontes só com API/feed oficial. **Sem scraping.** *Aceite:* importar e deduplicar; bloqueio sem os requisitos.
+10. **[x] ENTREGUE 2026-10-21 — Importador de vagas plugável.** O plano previa a porta
+    `JobImportSource` + tabela `imported_jobs` com `unique (source, external_id)`; no código a
+    porta tem exatamente esse nome e a tabela chama `external_jobs` (mesma chave de unicidade,
+    V40) — a mesma que abriga também a vaga que a comunidade cola de outro site, para a listagem,
+    o filtro por plataforma, a busca e a dedupe não terem dois códigos paralelos.
+    *O que está feito:* porta `JobImportSource` (`jobs/application/port/out/`) com duas fontes
+    oficiais — `JobRadarJobSource` e `OpenJobApiSource` (`jobs/adapters/out/imports/`), **sem
+    scraping** (nenhuma delas toca a API privada da SPA); `ExternalJobImportService` deduplica por
+    (plataforma, id externo) **e** globalmente pela URL canônica, não sobrescreve a vaga que a
+    comunidade cadastrou, importa em lotes de 200 (transação curta por bloco) e isola a falha de
+    uma fonte; `ExternalJobRefreshScheduler` faz a carga no boot (em segundo plano) e o refresh
+    diário; a listagem é `GET /jobs?source=EXTERNAL` e o front tem a aba "EXTERNAL" com filtro por
+    plataforma (`routes/vagas.tsx:149`).
+    *Aceite cumprido:* importar e deduplicar — `ExternalJobImportServiceTests`
+    (`importsIntoItsOwnTableAndDoesNotDuplicateOnRerun`) e `CommunitySubmissionImportGuardTests`
+    (a vaga da comunidade não é reescrita pela importação); bloqueio sem os requisitos — a fonte
+    fora do ar não derruba as demais (`available()` por fonte, `catch` só na chamada externa) e
+    quem cadastra vaga na comunidade passa pelo mesmo gate das vagas internas (reputação > 150 +
+    `COMMUNITY_RULES_NOT_ACCEPTED`).
+    *Nota de escopo:* a "revisão antes de publicar" do plano se aplica a quem **publica** vaga
+    (`JobPublishingPolicy`: reputação > 150 e identidade verificada quando a exigência está
+    ligada). A vaga importada é listagem de terceiro (o botão vai para o link de origem), não
+    publicação de membro — por isso ela não passa por aquele gate.
 11. **API `/api/v1` + OpenAPI validado no CI** — alias versionado dos endpoints existentes + DTOs
     explícitos + erros/paginação padronizados; springdoc já plugado. *Aceite:* OpenAPI bate com os
     endpoints (falha o CI se divergir); v1 responde igual v0.
@@ -105,6 +125,14 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
 14. **CI de segurança + testes adversariais** — secret-scanning, SCA, SAST com política de bloqueio;
     testes negativos (anônimo x privado, id de terceiro, mass assignment, token expirado, payload
     gigante, automação social por caminho alternativo). *Aceite:* gates verdes sem desligar checagem.
+    *Estado em 2026-10-21:* a **esteira não roda nada disso** — `.github/workflows/build-and-push.yml`
+    só constrói e publica a imagem (nem teste Java, nem lint do front, nem secret-scanning). Dos
+    testes negativos, já existem: anônimo x privado (`GroupSecurityTests`), token expirado/revogado
+    (`OAuthHardeningTests`, `EmailVerificationFlowTests`), payload gigante (`MediaUploadAuthTests` com
+    o teto de 500MB, `InlineMediaTests`), XSS/HTML não confiável (`SafeHtmlAttackTests`,
+    `GameUrlGuardTests`, `AiTriageGuardTests`). **Faltam:** mass assignment (escrita de campo de
+    terceiro no corpo) e "automação social por caminho alternativo". O passo de CI fica com o raposo
+    (Actions é dele).
 
 ## BLOQUEADO por dependência externa (não é código meu)
 15. **Portal `developers.enois.ia.br`** — exige DNS, TLS, hospedagem, roteamento e pipeline.

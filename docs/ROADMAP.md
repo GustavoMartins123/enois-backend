@@ -5,39 +5,62 @@
 Cada frente é entregue **uma por passada**, compilando, com testes verdes e publicada. Onde há
 dependência externa, está marcado como **BLOQUEADO** (não é código meu).
 
-## Em andamento / próximas (sem bloqueio)
-1. **Vaga com valor obrigatório, período e faixa + descrição** *(pedido mais recente)*
-   - Modelo: `description` (obrigatório), `salary` = valor mínimo (obrigatório, numérico > 0),
-     `salaryMax` (opcional — faixa), `salaryPeriod` (`HOUR|DAY|MONTH|YEAR`, obrigatório), `currency`.
-   - Backend: migração + domínio + entidade + validação (`DESCRIPTION_REQUIRED`, `SALARY_REQUIRED`,
-     `INVALID_SALARY_RANGE`) + `JobView.salaryLabel` ("R$ 5.000 / mês" ou "de R$ 4.000 até R$ 6.000 / mês").
-   - Frontend: formulário (descrição com contador, valor obrigatório, seletor de período, faixa) +
-     página da vaga com descrição completa e o salário com período.
-   - Atenção: tornar o valor obrigatório **quebra** os testes que hoje criam vaga sem valor — atualizar
-     os testes na mesma passada.
-2. **Feedback por candidato nas vagas** — `JobApplicationStatus {APPLIED, IN_REVIEW, NEXT_STAGE,
-   REJECTED}` + `status/feedback/reviewed_at`; `PATCH /jobs/{jobId}/applications/{id}` (REJECTED exige
-   motivo); notifica o candidato (DM + e-mail).
-3. **Penalidade por excluir vaga sem dar feedback** — débito de credibilidade (ledger/ReputationService),
-   com teto; aviso no painel antes de excluir.
-4. **Currículo em PDF** — campo no perfil (upload PDF validado) + anexar/atualizar na candidatura; o
-   empregador recebe o link no snapshot.
-5. **Áudio nos comentários** — anexo de comentário (gravação pelo microfone → upload como mídia +
-   player; ou embed YouTube/Spotify). *(GIF Giphy/Tenor, Spotify e embeds já entregues.)*
-6. **Importador de vagas plugável** — porta `JobImportSource` + `imported_jobs` (unique
-   `(source, external_id)`), só fontes com API/feed oficial. **Sem scraping.**
-7. **Tag de "vulgo"/aka** — campo de "conhecido como" no perfil, exibido junto do nome.
-8. **Arquivar conversa** (ver as arquivadas/restaurar) — complemento do "apagar para mim" já entregue.
-9. **Apagar mensagens dentro da conversa** — seleção por mensagem (mesmo padrão do inbox).
+## Em aberto (sem bloqueio) — conferido no código em 2026-10-21
+1. **API `/api/v1` versionada** — NÃO existe: o back não tem alias versionado (grep por `api/v1`
+   só acha URLs de terceiros). Falta: alias dos endpoints existentes + DTOs explícitos + erros e
+   paginação padronizados.
+2. **OpenAPI validado no CI** — o springdoc está plugado (`springdoc.api-docs.path=/api/openapi.json`,
+   ligado por `SPRINGDOC_ENABLED`, desligado por padrão), mas a **esteira só constrói a imagem**:
+   não há passo que gere e compare o OpenAPI. Falta: o passo (o workflow é do raposo).
+3. **Registro de aplicações de terceiros (OAuth + PKCE, escopos, revogação)** — não existe
+   (nenhuma tabela/porta de `oauth_client`). Exige decisão de produto/segurança antes.
+4. **CI de segurança** — hoje a esteira não roda teste, lint nem secret-scanning
+   (`.github/workflows/build-and-push.yml` só constrói e publica a imagem). Falta: SCA, SAST e
+   secret-scanning com política de bloqueio, sem desligar checagem.
+5. **Testes adversariais — parcial.** Já coberto: anônimo x privado (`GroupSecurityTests`),
+   token expirado/revogado (`OAuthHardeningTests`, `EmailVerificationFlowTests`), payload gigante
+   (`MediaUploadAuthTests` com o teto de 500MB, `InlineMediaTests`), XSS em HTML/capa
+   (`SafeHtmlAttackTests`, `GameUrlGuardTests`, `AiTriageGuardTests`), importador não sobrescreve
+   vaga da comunidade (`CommunitySubmissionImportGuardTests`). **Falta:** mass assignment
+   (escrita de campo de terceiro no corpo) e "automação social por caminho alternativo".
 
-## API pública, documentação e segurança (programa grande)
-10. **API `/api/v1`** versionada (alias dos endpoints existentes) + DTOs explícitos + erros/paginação
-    padronizados. 11. **OpenAPI validado no CI** (springdoc já plugado via `SPRINGDOC_ENABLED`). 12. **Portal de docs no app** + matriz de escopos. 13. **Registro de aplicações de terceiros** (id,
-    escopos, credenciais próprias, revogação) — precisa decidir o modelo OAuth (produto/segurança). 14. **CI de segurança** — secret-scanning, SCA, SAST, com política de bloqueio (sem desligar checagem). 15. **Testes adversariais** (anônimo x privado, acesso a terceiros por id, mass assignment,
-    token expirado/revogado, payload gigante, automação social por caminho alternativo). 16. **`SECURITY.md`** — **entregue**.
-17. **Portal `developers.enois.ia.br`** — **BLOQUEADO**: exige DNS/TLS/hospedagem/roteamento (não é código meu).
-
-## Concluído (no ar)
+## Concluído (no ar) — cada item conferido no código em 2026-10-21
+- **Vaga com valor obrigatório, período e faixa + descrição.** `JobService.java:512`
+  (`SALARY_REQUIRED`), `DESCRIPTION_REQUIRED`, `INVALID_SALARY_RANGE`, `INVALID_SALARY_PERIOD`;
+  `JobView.salaryLabel` ("R$ 1.500 / mês"); migração V110; front com valor mínimo obrigatório,
+  teto, seletor de período e descrição (`components/job-edit-dialog.tsx`, `routes/vagas.tsx`);
+  testes `JobSalaryTests` (7).
+- **Feedback por candidato.** `JobApplicationStatus {APPLIED, IN_REVIEW, ADVANCED, NOT_SELECTED}`,
+  `feedback` + `reviewedAt` (`JobApplication.java:23-24`), `PATCH /jobs/{jobId}/applications/{id}`
+  (`JobContractController.java:342`) e o diálogo de retorno no front.
+- **Penalidade por excluir vaga sem dar retorno.** V114 (`job_abandon_penalties`), o `delete`
+  devolve `{unanswered, penalized}` e `ReputationService.java:104` desconta 25, 75, 150 (teto
+  próprio); `JobAbandonPenaltyTests` (3).
+- **Currículo em PDF.** `resume_url` (`UserProfileJpaEntity.java:135`), upload pelo
+  `profile-resume-dialog.tsx` (PDF, teto de 5MB, purpose `RESUME`) e congelamento na candidatura
+  (`candidate_snapshot`, `JobApplication.java:17`, V25).
+- **Áudio nos comentários.** Gravação no composer (`post-comments.tsx:80-118`, `MediaRecorder`,
+  teto de 180s), player sem autoplay (`<audio controls>`, linha 364) e o backend aceitando
+  `mediaIds` no comentário (`FeedController.java:289`).
+- **Importador de vagas plugável.** Porta `JobImportSource` + duas fontes oficiais
+  (`JobRadarJobSource`, `OpenJobApiSource` — sem scraping), `ExternalJobImportService` com dedupe
+  por (plataforma, id externo) e por URL canônica, importação em lotes de 200 e falha de uma fonte
+  isolada, `ExternalJobRefreshScheduler` (carga no boot + diária), V40 com
+  `unique (platform, external_id)`, listagem `GET /jobs?source=EXTERNAL` e aba "EXTERNAL" no front
+  (`routes/vagas.tsx:149`); testes `ExternalJobImportServiceTests` e
+  `CommunitySubmissionImportGuardTests`.
+- **Tag de "vulgo"/aka.** `UserProfile.aka` (`UserProfile.java:34`) com a coluna `aka`, exibido no
+  perfil e no card, com o campo no editar perfil.
+- **Arquivar conversa.** `GET /conversations/archived` (`MessagingContractController.java:259`) e
+  `POST /conversations/unhide` (linha 285), com a aba "Arquivadas" e a ação "Restaurar" no front.
+- **Apagar mensagens dentro da conversa.** `POST /conversations/{id}/messages/hide`
+  (`MessagingContractController.java:146`) com a tabela `message_hidden` (V67) e a seleção na
+  thread no front.
+- **Portal de docs no app + matriz de escopos.** `/developers` pública, com o escopo de cada
+  endpoint (público / sessão / admin) e os casos de uso em curl; **os 132 pares (método, caminho)
+  conferem com os mappings do backend** e os exemplos são sintéticos (teste de regressão).
+- **Portal `developers.enois.ia.br`** — **BLOQUEADO**: exige DNS/TLS/hospedagem/roteamento (não é
+  código meu). O app da rota (`/developers`) já está no ar; falta o domínio.
 - Auditoria BUG-01..15; MELHORIA-01 (toasts + desfazer de post); limites 1200/800; caixa de entrada
   paginada + abas Vagas/Pessoas; favoritar comunidade; núcleo de identidade + Login gov.br (plugável,
   desligado sem credencial); notificação/reação de comentário (estado persistido); resposta a resposta;

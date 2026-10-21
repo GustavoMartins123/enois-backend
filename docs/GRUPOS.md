@@ -70,10 +70,10 @@ Enquanto houver pendência real, a automação fica viva.
 > Atualize esta seção a cada execução: `- [x] feito — <o que> — <onde> (commit <hash>)`.
 
 > **Plano CONCLUÍDO em 2026-10-19.** Não há mais nenhum item aberto. A automação de 30 minutos
-> (`automation-423f2e18-213d-4b4e-9698-1252869e9bd2`) **não pôde ser removida por esta sessão**:
-> a ferramenta `CronDelete` não está disponível (só `CronList`) e o Computer Use responde
-> "unavailable" neste ambiente. Remover pela página de Automações do app. Enquanto ela existir,
-> cada execução deve apenas confirmar este estado — nada a implementar.
+> (`automation-423f2e18-213d-4b4e-9698-1252869e9bd2`) **já foi removida** — conferido em 2026-10-21
+> pelo `CronList`, que hoje só mostra a auditoria do Énóis ("Auditar e corrigir o Énois a cada 40
+> minutos", `automation-3796fc81`). A nota antiga ("o `CronDelete` não está disponível") era do
+> ambiente daquela sessão: hoje a ferramenta existe e o registro foi limpo.
 
 ### Etapa 1 — Auditoria
 - [x] Mapear a arquitetura real: feed, comunidades, autenticação, persistência, mídia,
