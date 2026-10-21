@@ -12,6 +12,14 @@ interface SpringDataReportJpaRepository extends JpaRepository<ReportJpaEntity, S
 
 	List<ReportJpaEntity> findByStatusAndAiTriagedAtIsNullOrderByCreatedAtAsc(ReportStatus status, Pageable pageable);
 
+	List<ReportJpaEntity> findByStatusAndPreTriagedAtIsNullOrderByCreatedAtAsc(ReportStatus status, Pageable pageable);
+
+	long countByTargetTypeAndTargetIdAndCreatedAtAfter(TargetType targetType, String targetId,
+			java.time.Instant since);
+
+	List<ReportJpaEntity> findByStatusAndTargetTypeAndPreTriageScoreGreaterThanEqualOrderByPreTriageScoreDesc(
+			ReportStatus status, TargetType targetType, int minScore, Pageable pageable);
+
 	List<ReportJpaEntity> findByStatusOrderByCreatedAtDesc(ReportStatus status);
 
 	List<ReportJpaEntity> findByReporterIdOrderByCreatedAtDesc(String reporterId, Pageable pageable);

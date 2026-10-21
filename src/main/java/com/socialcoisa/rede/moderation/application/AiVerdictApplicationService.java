@@ -24,12 +24,14 @@ public class AiVerdictApplicationService {
 
 	private final ReportRepository reports;
 	private final SanctionService sanctions;
+	private final ModerationLearningService learning;
 	private final ObjectMapper objectMapper;
 
 	public AiVerdictApplicationService(ReportRepository reports, SanctionService sanctions,
-			ObjectMapper objectMapper) {
+			ModerationLearningService learning, ObjectMapper objectMapper) {
 		this.reports = reports;
 		this.sanctions = sanctions;
+		this.learning = learning;
 		this.objectMapper = objectMapper;
 	}
 
@@ -52,6 +54,7 @@ public class AiVerdictApplicationService {
 					motive = verdict.path("categoria").asString();
 				}
 				if (sanctions.applyForReport(report, motive)) {
+					learning.record(report, "AUTO_PENALIZE", "AI", "ai-triage");
 					applied++;
 				}
 			}

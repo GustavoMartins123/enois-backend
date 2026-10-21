@@ -18,10 +18,15 @@ public class Report {
 	/** Palpite estruturado do agente de IA (JSON validado). Nao e prova nem acao. */
 	private String aiTriage;
 	private Instant aiTriagedAt;
+	/** Sinais determinísticos calculados ANTES de gastar uma chamada de IA. */
+	private String preTriage;
+	private Integer preTriageScore;
+	private Instant preTriagedAt;
 
 	private Report(String id, String reporterId, TargetType targetType, String targetId, ReportReason reason,
 			String description, ReportStatus status, Instant createdAt, String reviewedBy, Instant reviewedAt,
-			String resolutionNote, String aiTriage, Instant aiTriagedAt) {
+			String resolutionNote, String aiTriage, Instant aiTriagedAt, String preTriage, Integer preTriageScore,
+			Instant preTriagedAt) {
 		this.id = id;
 		this.reporterId = reporterId;
 		this.targetType = targetType;
@@ -35,25 +40,36 @@ public class Report {
 		this.resolutionNote = resolutionNote;
 		this.aiTriage = aiTriage;
 		this.aiTriagedAt = aiTriagedAt;
+		this.preTriage = preTriage;
+		this.preTriageScore = preTriageScore;
+		this.preTriagedAt = preTriagedAt;
 	}
 
 	public static Report create(String id, String reporterId, TargetType targetType, String targetId,
 			ReportReason reason, String description, Instant createdAt) {
 		return new Report(id, reporterId, targetType, targetId, reason, description, ReportStatus.PENDING, createdAt,
-			null, null, null, null, null);
+			null, null, null, null, null, null, null, null);
 	}
 
 	public static Report restore(String id, String reporterId, TargetType targetType, String targetId,
 			ReportReason reason, String description, ReportStatus status, Instant createdAt, String reviewedBy,
-			Instant reviewedAt, String resolutionNote, String aiTriage, Instant aiTriagedAt) {
+			Instant reviewedAt, String resolutionNote, String aiTriage, Instant aiTriagedAt, String preTriage,
+			Integer preTriageScore, Instant preTriagedAt) {
 		return new Report(id, reporterId, targetType, targetId, reason, description, status, createdAt, reviewedBy,
-			reviewedAt, resolutionNote, aiTriage, aiTriagedAt);
+			reviewedAt, resolutionNote, aiTriage, aiTriagedAt, preTriage, preTriageScore, preTriagedAt);
 	}
 
 	/** Guarda o palpite estruturado do agente de IA (JSON ja validado pelo backend). */
 	public void attachAiTriage(String triageJson, Instant at) {
 		this.aiTriage = triageJson;
 		this.aiTriagedAt = at;
+	}
+
+	/** Guarda os sinais objetivos e o score; não é decisão, é o gate para chamar (ou não) a IA. */
+	public void attachPreTriage(String json, int score, Instant at) {
+		this.preTriage = json;
+		this.preTriageScore = score;
+		this.preTriagedAt = at;
 	}
 
 	public void approve(String reviewerId, String note) {
@@ -89,4 +105,7 @@ public class Report {
 	public String resolutionNote() { return resolutionNote; }
 	public String aiTriage() { return aiTriage; }
 	public Instant aiTriagedAt() { return aiTriagedAt; }
+	public String preTriage() { return preTriage; }
+	public Integer preTriageScore() { return preTriageScore; }
+	public Instant preTriagedAt() { return preTriagedAt; }
 }

@@ -58,6 +58,7 @@ import com.socialcoisa.rede.idempotency.application.IdempotencyApplicationServic
 import com.socialcoisa.rede.shared.web.ApiException;
 import com.socialcoisa.rede.shared.web.CurrentUser;
 import com.socialcoisa.rede.shared.web.CurrentUserResolver;
+import com.socialcoisa.rede.moderation.application.HoneypotGuard;
 import com.socialcoisa.rede.shared.web.CursorCodec;
 
 @RestController
@@ -89,6 +90,7 @@ class FeedController {
 	private final BlockedUsersReader blockedUsersReader;
 	private final Clock clock;
 	private final com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseCase mediaOwnershipValidator;
+	private final HoneypotGuard honeypots;
 
 	FeedController(PublishPostUseCase publishPostUseCase, GetFeedUseCase getFeedUseCase, GetPostUseCase getPostUseCase,
 			GetProfilePostsUseCase getProfilePostsUseCase, DeletePostUseCase deletePostUseCase,
@@ -100,7 +102,8 @@ class FeedController {
 			PostInteractionRepository postInteractionRepository, CommentRepository commentRepository,
 			com.socialcoisa.rede.feed.application.port.out.PostRepository postRepository,
 			CursorCodec cursorCodec, BlockedUsersReader blockedUsersReader, Clock clock,
-			com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseCase mediaOwnershipValidator) {
+			com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseCase mediaOwnershipValidator,
+			HoneypotGuard honeypots) {
 		this.publishPostUseCase = publishPostUseCase;
 		this.getFeedUseCase = getFeedUseCase;
 		this.getPostUseCase = getPostUseCase;
@@ -123,6 +126,7 @@ class FeedController {
 		this.blockedUsersReader = blockedUsersReader;
 		this.clock = clock;
 		this.mediaOwnershipValidator = mediaOwnershipValidator;
+		this.honeypots = honeypots;
 	}
 
 	@PostMapping("/feed/posts")
@@ -131,6 +135,10 @@ class FeedController {
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@RequestBody PublishPostRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		if (honeypots.triggered(user.id().value(), request.website(), "post")) {
+			return ResponseEntity.status(201)
+				.body("{\"id\":\"post_" + java.util.UUID.randomUUID().toString().replace("-", "") + "\"}");
+		}
 		// Imagem no meio do texto: todo marcador {{media:id}} precisa referenciar anexo do autor.
 		com.socialcoisa.rede.shared.text.InlineMedia.validate(request.content(), request.mediaIds());
 		String hash = idempotency.hash(request);
@@ -276,6 +284,10 @@ class FeedController {
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String postId, @RequestBody CommentOnPostRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		if (honeypots.triggered(user.id().value(), request.website(), "comment")) {
+			return ResponseEntity.status(201)
+				.body("{\"id\":\"comment_" + java.util.UUID.randomUUID().toString().replace("-", "") + "\"}");
+		}
 		// Imagem no meio do texto no comentário também (mesmo caminho do post).
 		com.socialcoisa.rede.shared.text.InlineMedia.validate(request.content(), request.mediaIds());
 		Map<String, Object> payload = new LinkedHashMap<>();
