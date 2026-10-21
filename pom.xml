@@ -158,6 +158,13 @@
 			<artifactId>jsoup</artifactId>
 			<version>${jsoup.version}</version>
 		</dependency>
+		<!-- Leitura do texto de curriculos em PDF (importacao via curriculo). So extracao de
+		     texto — nada de renderizacao nem formulario: o arquivo e tratado como documento. -->
+		<dependency>
+			<groupId>org.apache.pdfbox</groupId>
+			<artifactId>pdfbox</artifactId>
+			<version>3.0.8</version>
+		</dependency>
 		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>
