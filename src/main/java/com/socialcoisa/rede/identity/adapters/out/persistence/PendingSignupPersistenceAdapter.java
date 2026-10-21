@@ -34,7 +34,7 @@ class PendingSignupPersistenceAdapter implements PendingSignupRepository {
 
 	@Override
 	public void deleteByEmail(String email) {
-		repository.findByEmail(email).ifPresent(repository::delete);
+		repository.deleteByEmailValue(email);
 	}
 
 	@Override
