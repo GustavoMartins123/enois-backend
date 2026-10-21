@@ -20,8 +20,8 @@ import jakarta.servlet.http.HttpServletResponse;
 /**
  * Aplica o limite por IP nas rotas de identidade — cadastro, entrada, senha, e-mail e segundo fator.
  *
- * Por que um filtro e não uma anotação em cada endpoint: assim **não dá para esquecer**. Rota nova
- * dentro de `/auth` entra na proteção pela regra de caminho, e o teste cobre o mapa de rotas.
+ * As regras de caminho centralizam a protecao, sem uma cota compartilhada por todos os clientes.
+ * Novas operacoes de identidade devem entrar neste mapa; OAuth cobre tambem GET e DELETE.
  *
  * A resposta é 429 com o mesmo formato de erro do resto da API, sem dizer quantas tentativas faltam
  * nem qual é o teto — informar o teto ajuda quem está atacando a calibrar o ataque.
@@ -30,18 +30,26 @@ import jakarta.servlet.http.HttpServletResponse;
 @Order(2)
 class IdentityRateLimitFilter extends OncePerRequestFilter {
 
-	/** Caminho → ação do limitador. Só POST: é o que cria conta, gasta senha ou dispara e-mail. */
-	private static final Map<String, String> RULES = Map.of(
-		"/auth/signup", IpRateLimiter.SIGNUP,
-		"/auth/login", IpRateLimiter.LOGIN,
-		"/auth/password/forgot", IpRateLimiter.PASSWORD,
-		"/auth/password/reset", IpRateLimiter.PASSWORD,
-		"/auth/email/resend", IpRateLimiter.EMAIL,
-		"/auth/2fa/resend", IpRateLimiter.EMAIL,
-		"/auth/2fa/email/request", IpRateLimiter.EMAIL,
-		"/auth/2fa/verify", IpRateLimiter.TWO_FACTOR,
-		"/auth/2fa/email/confirm", IpRateLimiter.TWO_FACTOR,
-		"/auth/2fa/totp/enable", IpRateLimiter.TWO_FACTOR);
+	/** Regras POST por caminho; as operacoes OAuth de caminho variavel sao resolvidas abaixo. */
+	private static final Map<String, String> RULES = Map.ofEntries(
+		Map.entry("/auth/signup", IpRateLimiter.SIGNUP),
+		Map.entry("/auth/login", IpRateLimiter.LOGIN),
+		Map.entry("/auth/password/forgot", IpRateLimiter.PASSWORD),
+		Map.entry("/auth/password/reset", IpRateLimiter.PASSWORD),
+		Map.entry("/auth/password/change", IpRateLimiter.PASSWORD),
+		Map.entry("/auth/email/resend", IpRateLimiter.EMAIL),
+		Map.entry("/auth/email/verify", IpRateLimiter.EMAIL),
+		Map.entry("/auth/email/change", IpRateLimiter.EMAIL),
+		Map.entry("/auth/2fa/resend", IpRateLimiter.EMAIL),
+		Map.entry("/auth/2fa/email/request", IpRateLimiter.EMAIL),
+		Map.entry("/auth/2fa/verify", IpRateLimiter.TWO_FACTOR),
+		Map.entry("/auth/2fa/email/confirm", IpRateLimiter.TWO_FACTOR),
+		Map.entry("/auth/2fa/email/disable", IpRateLimiter.TWO_FACTOR),
+		Map.entry("/auth/2fa/totp/setup", IpRateLimiter.TWO_FACTOR),
+		Map.entry("/auth/2fa/totp/enable", IpRateLimiter.TWO_FACTOR),
+		Map.entry("/auth/2fa/totp/disable", IpRateLimiter.TWO_FACTOR),
+		Map.entry("/auth/refresh", IpRateLimiter.LOGIN),
+		Map.entry("/auth/account/delete", IpRateLimiter.PASSWORD));
 
 	private final IpRateLimiter limiter;
 	private final ClientIpResolver ipResolver;
@@ -64,15 +72,18 @@ class IdentityRateLimitFilter extends OncePerRequestFilter {
 
 	/** A rota da regra, já sem o prefixo de contexto (`/api` em produção, vazio nos testes). */
 	private String actionFor(HttpServletRequest request) {
-		if (!"POST".equalsIgnoreCase(request.getMethod())) {
-			return null;
-		}
 		String path = request.getRequestURI();
 		String context = request.getContextPath();
 		if (context != null && !context.isEmpty() && path.startsWith(context)) {
 			path = path.substring(context.length());
 		}
 		String normalized = path.length() > 1 && path.endsWith("/") ? path.substring(0, path.length() - 1) : path;
+		if ("GET".equalsIgnoreCase(request.getMethod())
+				&& normalized.matches("/auth/oauth/[^/]+/(?:start|callback)")) return IpRateLimiter.LOGIN;
+		if ("DELETE".equalsIgnoreCase(request.getMethod())
+				&& normalized.matches("/auth/oauth/[^/]+/link")) return IpRateLimiter.LOGIN;
+		if (!"POST".equalsIgnoreCase(request.getMethod())) return null;
+		if (normalized.matches("/auth/oauth/[^/]+/(?:token|callback|link)")) return IpRateLimiter.LOGIN;
 		return RULES.get(normalized);
 	}
 

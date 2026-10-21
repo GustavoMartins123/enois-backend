@@ -6,11 +6,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.InvalidDataAccessApiUsageException;
+import org.springframework.dao.ConcurrencyFailureException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestHeaderException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
@@ -50,7 +52,8 @@ public class GlobalExceptionHandler {
 	// InvalidDataAccessApiUsageException cobre, por exemplo, PageRequest com size < 1 (limit=0).
 	@ExceptionHandler({ MethodArgumentNotValidException.class,
 			HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class,
-			IllegalArgumentException.class, InvalidDataAccessApiUsageException.class })
+			IllegalArgumentException.class, InvalidDataAccessApiUsageException.class,
+			MissingServletRequestParameterException.class })
 	ResponseEntity<ErrorResponse> handleBadRequest(Exception exception) {
 		return ResponseEntity.badRequest()
 			.body(new ErrorResponse("BAD_REQUEST", "Requisicao invalida.", Instant.now()));
@@ -64,6 +67,12 @@ public class GlobalExceptionHandler {
 		LOGGER.warn("data_integrity_violation: {}", rootMessage(exception));
 		return ResponseEntity.status(409)
 			.body(new ErrorResponse("CONFLICT", "Operacao conflita com o estado atual dos dados.", Instant.now()));
+	}
+
+	@ExceptionHandler({ ConcurrencyFailureException.class, jakarta.persistence.OptimisticLockException.class })
+	ResponseEntity<ErrorResponse> handleConcurrentWrite(Exception exception) {
+		return ResponseEntity.status(409).body(new ErrorResponse("CONCURRENT_WRITE",
+			"Outra operacao alterou estes dados. Tente novamente.", Instant.now()));
 	}
 
 	/** A mensagem mais especifica da cadeia: o "Data too long for column ..." mora no fim dela. */

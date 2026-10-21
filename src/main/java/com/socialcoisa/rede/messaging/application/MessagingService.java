@@ -29,11 +29,13 @@ public class MessagingService {
 	private final com.socialcoisa.rede.shared.age.AgePolicyReader agePolicy;
 	private final com.socialcoisa.rede.shared.age.AgeGate ageGate;
 	private final com.socialcoisa.rede.network.application.port.out.ConnectionRepository connections;
+	private final com.socialcoisa.rede.shared.blocks.BlockedUsersReader blocks;
 
 	public MessagingService(MessagingRepository repository, NotificationService notificationService, Clock clock,
 			UserRateLimiter userRateLimiter, BehavioralTimingGuard behavioralTimingGuard,
 			com.socialcoisa.rede.shared.age.AgePolicyReader agePolicy, com.socialcoisa.rede.shared.age.AgeGate ageGate,
-			com.socialcoisa.rede.network.application.port.out.ConnectionRepository connections) {
+			com.socialcoisa.rede.network.application.port.out.ConnectionRepository connections,
+			com.socialcoisa.rede.shared.blocks.BlockedUsersReader blocks) {
 		this.repository = repository;
 		this.notificationService = notificationService;
 		this.clock = clock;
@@ -42,10 +44,16 @@ public class MessagingService {
 		this.agePolicy = agePolicy;
 		this.ageGate = ageGate;
 		this.connections = connections;
+		this.blocks = blocks;
 	}
 
 	@Transactional
 	public Conversation createConversation(String kind, String title, List<String> participantIds, String createdBy) {
+		participantIds = participantIds.stream().distinct().toList();
+		for (String recipient : participantIds) {
+			requireContactAllowed(createdBy, recipient);
+			if (!"DIRECT".equalsIgnoreCase(kind)) requireMinorConnection(createdBy, recipient);
+		}
 		if (!participantIds.contains(createdBy)) {
 			participantIds = new ArrayList<>(participantIds);
 			participantIds.add(createdBy);
@@ -63,7 +71,7 @@ public class MessagingService {
 	 * Conversa direta entre dois usuarios: devolve a existente ou cria (com os dois como
 	 * participantes). Usada, por exemplo, para entregar uma candidatura na DM de quem publicou.
 	 */
-	@Transactional
+	@Transactional(noRollbackFor = ContactRestrictedException.class)
 	public String directConversationBetween(String userA, String userB) {
 		return directConversationBetween(userA, userB, "DIRECT");
 	}
@@ -72,8 +80,9 @@ public class MessagingService {
 	 * Conversa direta marcada com a origem. A candidatura de vaga usa kind = "JOB" para o inbox
 	 * poder separar as conversas de vaga das conversas com pessoas.
 	 */
-	@Transactional
+	@Transactional(noRollbackFor = ContactRestrictedException.class)
 	public String directConversationBetween(String userA, String userB, String kind) {
+		requireContactAllowed(userA, userB);
 		var existing = repository.findDirectBetween(userA, userB);
 		if (existing.isPresent()) {
 			return existing.get().id();
@@ -85,12 +94,12 @@ public class MessagingService {
 		return id;
 	}
 
-	@Transactional
+	@Transactional(noRollbackFor = ContactRestrictedException.class)
 	public Message sendMessage(String conversationId, String senderId, String text) {
 		return sendMessage(conversationId, senderId, text, java.util.List.of());
 	}
 
-	@Transactional
+	@Transactional(noRollbackFor = ContactRestrictedException.class)
 	public Message sendMessage(String conversationId, String senderId, String text,
 			java.util.List<String> mediaIds) {
 		// ECA Digital: sem data de nascimento declarada, nao envia mensagem (tela de regularizacao).
@@ -139,14 +148,7 @@ public class MessagingService {
 	 * Desconhecidos nao abrem conversa com menor — o primeiro vetor de contato abusivo fica fechado.
 	 */
 	private void protegeMenorDestinatario(String conversationId, String senderId) {
-		// A restrição vale para conversa DIRETA entre pessoas: em grupos e canais, o menor escolheu
-		// participar (e a moderação cobre o conteúdo).
-		String kind = repository.findConversationById(conversationId)
-			.map(conversation -> conversation.kind())
-			.orElse("DIRECT");
-		if (!"DIRECT".equalsIgnoreCase(kind)) {
-			return;
-		}
+		// O cliente escolhe o kind e os participantes: GROUP/JOB nao comprovam consentimento.
 		List<com.socialcoisa.rede.messaging.domain.ConversationParticipant> participants = repository
 			.findParticipantsByConversation(conversationId);
 		for (com.socialcoisa.rede.messaging.domain.ConversationParticipant participant : participants) {
@@ -154,13 +156,22 @@ public class MessagingService {
 			if (recipientId.equals(senderId)) {
 				continue;
 			}
-			if (!agePolicy.isMinor(recipientId)) {
-				continue;
-			}
-			if (!connections.existsActiveConnection(senderId, recipientId)) {
-				throw new ApiException(403, "MINOR_DM_RESTRICTED",
-					"Para proteger usuarios menores de idade, so e possivel conversar com eles apos uma conexao aceita.");
-			}
+			requireContactAllowed(senderId, recipientId);
+			requireMinorConnection(senderId, recipientId);
+		}
+	}
+
+	private void requireContactAllowed(String senderId, String recipientId) {
+		if (blocks.hiddenIdsFor(senderId).contains(recipientId)) {
+			throw new ContactRestrictedException("CONTACT_BLOCKED", "Contato indisponivel entre estas contas.");
+		}
+	}
+
+	private void requireMinorConnection(String senderId, String recipientId) {
+		if (!senderId.equals(recipientId) && agePolicy.isMinor(recipientId)
+				&& !connections.existsActiveConnection(senderId, recipientId)) {
+			throw new ContactRestrictedException("MINOR_DM_RESTRICTED",
+				"Para proteger usuarios menores de idade, so e possivel conversar com eles apos uma conexao aceita.");
 		}
 	}
 

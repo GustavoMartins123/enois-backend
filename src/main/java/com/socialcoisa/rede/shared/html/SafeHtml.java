@@ -69,10 +69,19 @@ public final class SafeHtml {
 	// paginas animadas) casava no "behavior:" e a declaracao inteira era descartada.
 	private static final Pattern STYLE_DANGEROUS = Pattern.compile(
 		"(?is)[^;{}]*(?:expression\\s*\\(|javascript\\s*:\\s*|vbscript\\s*:|-moz-binding\\s*:"
+			+ "|(?:-webkit-)?image-set\\s*\\(|image\\s*\\(|src\\s*\\("
 			+ "|(?<![a-zA-Z-])behavior\\s*:)[^;}]*;?");
 	private static final Pattern STYLE_URL = Pattern.compile("(?is)url\\s*\\(\\s*(['\"]?)([^'\")]*)\\1\\s*\\)");
 	private static final Pattern STYLE_ATTRIBUTE = Pattern.compile("(?is)\\sstyle\\s*=\\s*(\"([^\"]*)\"|'([^']*)')");
 	private static final Pattern STYLE_ELEMENT = Pattern.compile("(?is)<style\\b[^>]*>(.*?)</style>");
+	private static final Pattern CSS_ESCAPE = Pattern.compile(
+		"\\\\(?:([0-9a-fA-F]{1,6})(?:\\r\\n|[\\t\\n\\r\\f ])?|([^\\n\\r\\f])|(?:\\r\\n|[\\n\\r\\f]))");
+	private static final java.util.Set<String> SAFE_ANIMATED_ATTRIBUTES = java.util.Set.of(
+		"x", "y", "x1", "y1", "x2", "y2", "cx", "cy", "r", "rx", "ry", "d", "points",
+		"width", "height", "opacity", "fill", "fill-opacity", "stroke", "stroke-opacity",
+		"stroke-width", "stroke-dasharray", "stroke-dashoffset", "transform", "color",
+		"font-size", "letter-spacing", "rotate", "dx", "dy", "visibility", "display",
+		"stop-color", "stop-opacity", "offset");
 
 	/** Tag de embed de terceiro (quadro/objeto) com o endereco numa das duas formas usadas. */
 	private static final Pattern EMBED_TAG = Pattern
@@ -195,6 +204,7 @@ public final class SafeHtml {
 		Document clean = new Cleaner(PAGE_ALLOWLIST).clean(Jsoup.parse(withMarkers));
 		clean.outputSettings().prettyPrint(false);
 		normalizeAutoplay(clean);
+		hardenSvgAnimations(clean);
 
 		String markup = hardenSvgReferences(hardenLinks(dropUnknownIframes(clean.body().html().trim())));
 		String result = (css.isEmpty() ? "" : "<style>" + css + "</style>") + sanitizeStyleAttributes(markup);
@@ -321,7 +331,17 @@ public final class SafeHtml {
 		if (!StringUtils.hasText(css)) {
 			return "";
 		}
-		String out = css.replace("<", "");
+		// Check the tokens the CSS parser sees, including escaped identifiers and comments.
+		String out = CSS_ESCAPE.matcher(css).replaceAll(match -> {
+			if (match.group(1) != null) {
+				int codePoint = Integer.parseInt(match.group(1), 16);
+				if (codePoint == 0 || !Character.isValidCodePoint(codePoint)
+						|| codePoint >= 0xD800 && codePoint <= 0xDFFF) codePoint = 0xFFFD;
+				return Matcher.quoteReplacement(decodedCssChar(codePoint));
+			}
+			return Matcher.quoteReplacement(match.group(2) == null ? "" : decodedCssChar(match.group(2).codePointAt(0)));
+		});
+		out = out.replaceAll("(?s)/\\*.*?(?:\\*/|$)", "").replace("<", "");
 		out = STYLE_IMPORT.matcher(out).replaceAll("");
 		out = STYLE_DANGEROUS.matcher(out).replaceAll("");
 		out = STYLE_URL.matcher(out).replaceAll(match -> {
@@ -333,6 +353,32 @@ public final class SafeHtml {
 			return target.startsWith("data:") ? match.group(0) : "";
 		});
 		return out.trim();
+	}
+
+	/**
+	 * Decoded escapes expose keywords to the filters, but syntax characters stay escaped: a decoded
+	 * backslash would start a new escape (`\5c 75rl(` -> `\75rl(` = `url(`), and decoded quotes or
+	 * newlines would break the author's strings (`content:"\A"`).
+	 */
+	private static String decodedCssChar(int codePoint) {
+		if (codePoint == '\\' || codePoint == '"' || codePoint == '\'' || codePoint < 0x20 || codePoint == 0x7F) {
+			return "\\" + Integer.toHexString(codePoint) + " ";
+		}
+		return new String(Character.toChars(codePoint));
+	}
+
+	private static void hardenSvgAnimations(Document clean) {
+		for (Element animation : clean.select("animate, animateTransform, animateMotion, set")) {
+			String attribute = animation.attr("attributeName").toLowerCase(Locale.ROOT);
+			if (!"animatemotion".equalsIgnoreCase(animation.tagName())
+					&& !SAFE_ANIMATED_ATTRIBUTES.contains(attribute)) {
+				animation.remove();
+				continue;
+			}
+			for (String value : java.util.List.of("from", "to", "by", "values")) {
+				if (animation.hasAttr(value)) animation.attr(value, sanitizeCss(animation.attr(value)));
+			}
+		}
 	}
 
 	private static String sanitizeStyleAttributes(String markup) {

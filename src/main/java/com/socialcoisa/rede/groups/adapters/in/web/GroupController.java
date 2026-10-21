@@ -69,6 +69,7 @@ class GroupController {
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestParam(required = false) String query,
 			@RequestParam(required = false) String cursor, @RequestParam(defaultValue = "20") int limit) {
+		limit = Math.max(1, Math.min(limit, 50)); // Same maximum as GroupService.list, including the cursor.
 		CurrentUser viewer = resolveSafely(userId, sessionToken);
 		Instant before = cursorCodec.decode(cursor).orElse(null);
 		List<Group> groups = groupService.list(query, before, limit);

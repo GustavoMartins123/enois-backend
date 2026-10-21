@@ -182,7 +182,7 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 
 	/** Conclui o login com o codigo do segundo fator (ou um codigo de recuperacao). */
 	@Override
-	@Transactional
+	@Transactional(noRollbackFor = InvalidTwoFactorCodeException.class)
 	public AuthResponse verifyTwoFactor(String challengeId, String code) {
 		if (!StringUtils.hasText(challengeId)) {
 			throw new ApiException(400, "TWO_FACTOR_CHALLENGE_NOT_FOUND", "Informe o desafio do login.");

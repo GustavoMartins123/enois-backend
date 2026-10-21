@@ -143,17 +143,6 @@ public class PostSpamAutomodService {
 
 		Instant now = clock.instant();
 
-		// Freio por autor: flood não pode virar N análises na fila (a chamada da IA tem custo e
-		// demora). A análise anterior acabou de olhar os mesmos posts; esperar não perde evidência.
-		Instant ultima = ultimaAvaliacao.get(userId);
-		if (ultima != null && ultima.plusSeconds(minIntervalMinutes * 60L).isAfter(now)) {
-			return new Outcome("THROTTLED", 0, null);
-		}
-		if (ultimaAvaliacao.size() > MAX_THROTTLE_ENTRIES) {
-			ultimaAvaliacao.clear();
-		}
-		ultimaAvaliacao.put(userId, now);
-
 		// Conta já sancionada (restrita/banida) não é reanalisada: a sanção está de pé e a
 		// restrição já impede publicar de novo.
 		if (sanctions.activeSanctionOf(userId).isPresent()) {
@@ -183,6 +172,18 @@ public class PostSpamAutomodService {
 		if (!flood && !repeticao && !floodCurto) {
 			return new Outcome("NO_SIGNAL", 0, null);
 		}
+		// Only an actual signal consumes the AI interval. Reserve it atomically per author.
+		if (ultimaAvaliacao.size() > MAX_THROTTLE_ENTRIES) {
+			ultimaAvaliacao.entrySet().removeIf(entry ->
+				!entry.getValue().plusSeconds(minIntervalMinutes * 60L).isAfter(now));
+		}
+		var acquired = new java.util.concurrent.atomic.AtomicBoolean();
+		ultimaAvaliacao.compute(userId, (id, last) -> {
+			if (last != null && last.plusSeconds(minIntervalMinutes * 60L).isAfter(now)) return last;
+			acquired.set(true);
+			return now;
+		});
+		if (!acquired.get()) return new Outcome("THROTTLED", 0, null);
 
 		// Candidatos = o que a evidência aponta. Inclui os ANTERIORES (busca retroativa dentro da
 		// janela de análise), não só o post que disparou o gatilho.

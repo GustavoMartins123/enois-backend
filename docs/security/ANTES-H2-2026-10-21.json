@@ -1,0 +1,229 @@
+{
+  "totals": {
+    "tests": 1588,
+    "passed": 1556,
+    "failures": 32,
+    "errors": 0,
+    "skipped": 0
+  },
+  "classes": [
+    {
+      "class": "com.socialcoisa.rede.media.adapters.out.storage.S3UploadConstraintAuditTests",
+      "tests": 1,
+      "failures": 1,
+      "errors": 0,
+      "skipped": 0,
+      "failed_cases": [
+        {
+          "test": "theUploadSizeLimitMustBeBoundToThePresignedPutInsteadOfTrustingTheDeclaredSize",
+          "type": "java.lang.AssertionError"
+        }
+      ],
+      "passed": 0
+    },
+    {
+      "class": "com.socialcoisa.rede.securityaudit.AuthenticationStateAuditTests",
+      "tests": 3,
+      "failures": 3,
+      "errors": 0,
+      "skipped": 0,
+      "failed_cases": [
+        {
+          "test": "failedEmailSetupAttemptsMustAlsoSurviveTheRejectedTransaction",
+          "type": "org.opentest4j.AssertionFailedError"
+        },
+        {
+          "test": "aTwoFactorChallengeMustOnlyIssueOneSessionUnderConcurrentReplay",
+          "type": "org.opentest4j.AssertionFailedError"
+        },
+        {
+          "test": "failedTwoFactorLoginAttemptsMustSurviveTheRejectedTransaction",
+          "type": "org.opentest4j.AssertionFailedError"
+        }
+      ],
+      "passed": 0
+    },
+    {
+      "class": "com.socialcoisa.rede.securityaudit.BusinessRuleAdversarialTests",
+      "tests": 11,
+      "failures": 8,
+      "errors": 0,
+      "skipped": 0,
+      "failed_cases": [
+        {
+          "test": "restrictedAuthorsMustNotReplaceTheirPublicPostThroughTheEditRoute",
+          "type": "org.opentest4j.AssertionFailedError"
+        },
+        {
+          "test": "blockingSomeoneMustStopMessagesInAnAlreadyExistingConversation",
+          "type": "org.opentest4j.AssertionFailedError"
+        },
+        {
+          "test": "blockedAccountsMustNotWriteCommentsOnTheVictimsPosts",
+          "type": "java.lang.AssertionError"
+        },
+        {
+          "test": "choosingAnAdministratorUsernameDuringSignupMustNotGrantAdministratorPrivileges",
+          "type": "org.opentest4j.AssertionFailedError"
+        },
+        {
+          "test": "choosingGroupKindMustNotLetAStrangerForceContactWithAMinor",
+          "type": "org.opentest4j.AssertionFailedError"
+        },
+        {
+          "test": "genericConversationCreationMustNotBypassTheDirectConversationBlock",
+          "type": "org.opentest4j.AssertionFailedError"
+        },
+        {
+          "test": "renamingYourOwnProfileMustNotGrantAdministratorPrivileges",
+          "type": "org.opentest4j.AssertionFailedError"
+        },
+        {
+          "test": "blockedMentionsMustNotCreateNotificationsOrPushEventsForTheVictim",
+          "type": "org.opentest4j.AssertionFailedError"
+        }
+      ],
+      "passed": 3
+    },
+    {
+      "class": "com.socialcoisa.rede.securityaudit.EconomyIntegrityAuditTests",
+      "tests": 5,
+      "failures": 1,
+      "errors": 0,
+      "skipped": 0,
+      "failed_cases": [
+        {
+          "test": "concurrentRetriesOfOneTransferMustOnlyDebitOnceAndNeverReturnServerErrors",
+          "type": "java.lang.AssertionError"
+        }
+      ],
+      "passed": 4
+    },
+    {
+      "class": "com.socialcoisa.rede.securityaudit.PublishingAbuseAuditTests",
+      "tests": 7,
+      "failures": 2,
+      "errors": 0,
+      "skipped": 0,
+      "failed_cases": [
+        {
+          "test": "aRejectedArticleMustNotPreventItsAuthorFromCorrectingAndPublishingIt",
+          "type": "org.opentest4j.AssertionFailedError"
+        },
+        {
+          "test": "duplicatePagesMustNotBypassDedupByOmittingTheOptionalTitle",
+          "type": "org.opentest4j.AssertionFailedError"
+        }
+      ],
+      "passed": 5
+    },
+    {
+      "class": "com.socialcoisa.rede.securityaudit.RouteAuthorizationAuditTests",
+      "tests": 1541,
+      "failures": 12,
+      "errors": 0,
+      "skipped": 0,
+      "failed_cases": [
+        {
+          "test": "privateAndOperationalReadsRejectFourUnauthenticatedIdentities()[221]",
+          "type": "org.opentest4j.AssertionFailedError"
+        },
+        {
+          "test": "privateAndOperationalReadsRejectFourUnauthenticatedIdentities()[222]",
+          "type": "org.opentest4j.AssertionFailedError"
+        },
+        {
+          "test": "privateAndOperationalReadsRejectFourUnauthenticatedIdentities()[223]",
+          "type": "org.opentest4j.AssertionFailedError"
+        },
+        {
+          "test": "privateAndOperationalReadsRejectFourUnauthenticatedIdentities()[224]",
+          "type": "org.opentest4j.AssertionFailedError"
+        },
+        {
+          "test": "publicReadInputErrorsMustNotBecomeInternalServerErrors()[100]",
+          "type": "java.lang.AssertionError"
+        },
+        {
+          "test": "publicReadInputErrorsMustNotBecomeInternalServerErrors()[101]",
+          "type": "java.lang.AssertionError"
+        },
+        {
+          "test": "publicReadInputErrorsMustNotBecomeInternalServerErrors()[102]",
+          "type": "java.lang.AssertionError"
+        },
+        {
+          "test": "publicReadInputErrorsMustNotBecomeInternalServerErrors()[127]",
+          "type": "java.lang.AssertionError"
+        },
+        {
+          "test": "publicReadInputErrorsMustNotBecomeInternalServerErrors()[139]",
+          "type": "java.lang.AssertionError"
+        },
+        {
+          "test": "publicReadInputErrorsMustNotBecomeInternalServerErrors()[223]",
+          "type": "java.lang.AssertionError"
+        },
+        {
+          "test": "publicReadInputErrorsMustNotBecomeInternalServerErrors()[224]",
+          "type": "java.lang.AssertionError"
+        },
+        {
+          "test": "publicReadInputErrorsMustNotBecomeInternalServerErrors()[225]",
+          "type": "java.lang.AssertionError"
+        }
+      ],
+      "passed": 1529
+    },
+    {
+      "class": "com.socialcoisa.rede.securityaudit.SharedAuthenticationQuotaAuditTests",
+      "tests": 1,
+      "failures": 1,
+      "errors": 0,
+      "skipped": 0,
+      "failed_cases": [
+        {
+          "test": "oneClientsInvalidLoginsMustNotDisableAnotherClientsValidLogin",
+          "type": "org.opentest4j.AssertionFailedError"
+        }
+      ],
+      "passed": 0
+    },
+    {
+      "class": "com.socialcoisa.rede.securityaudit.SpamDetectionTimingAuditTests",
+      "tests": 1,
+      "failures": 1,
+      "errors": 0,
+      "skipped": 0,
+      "failed_cases": [
+        {
+          "test": "aHarmlessFirstPostMustNotSilenceDetectionOfTheFollowingBurst",
+          "type": "java.lang.AssertionError"
+        }
+      ],
+      "passed": 0
+    },
+    {
+      "class": "com.socialcoisa.rede.securityaudit.StoredHtmlSecurityAuditTests",
+      "tests": 18,
+      "failures": 3,
+      "errors": 0,
+      "skipped": 0,
+      "failed_cases": [
+        {
+          "test": "neitherCreationNorEditingCanStoreActivePayloads(String, String)[16]",
+          "type": "java.lang.AssertionError"
+        },
+        {
+          "test": "neitherCreationNorEditingCanStoreActivePayloads(String, String)[17]",
+          "type": "java.lang.AssertionError"
+        },
+        {
+          "test": "neitherCreationNorEditingCanStoreActivePayloads(String, String)[18]",
+          "type": "java.lang.AssertionError"
+        }
+      ],
+      "passed": 15
+    }
+  ]
+}

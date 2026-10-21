@@ -39,16 +39,22 @@ public class EditPostService implements EditPostUseCase {
 	private final AuditLogRepository auditLogRepository;
 	private final UserProfileRepository userProfileRepository;
 	private final Clock clock;
+	private final com.socialcoisa.rede.shared.age.AgeGate ageGate;
+	private final com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctions;
 
 	public EditPostService(PostRepository postRepository, ArticleRepository articleRepository,
 			FeedCacheRepository feedCacheRepository,
-			AuditLogRepository auditLogRepository, UserProfileRepository userProfileRepository, Clock clock) {
+			AuditLogRepository auditLogRepository, UserProfileRepository userProfileRepository, Clock clock,
+			com.socialcoisa.rede.shared.age.AgeGate ageGate,
+			com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctions) {
 		this.postRepository = postRepository;
 		this.articleRepository = articleRepository;
 		this.feedCacheRepository = feedCacheRepository;
 		this.auditLogRepository = auditLogRepository;
 		this.userProfileRepository = userProfileRepository;
 		this.clock = clock;
+		this.ageGate = ageGate;
+		this.sanctions = sanctions;
 	}
 
 	@Override
@@ -61,6 +67,11 @@ public class EditPostService implements EditPostUseCase {
 		}
 		if (!post.isActive()) {
 			throw new ApiException(404, "POST_NOT_FOUND", "Post nao encontrado.");
+		}
+		ageGate.requireCanWrite(command.userId().value());
+		if (sanctions.restricted(command.userId().value())) {
+			throw new ApiException(403, "ACCOUNT_RESTRICTED",
+				"Sua conta esta restrita por moderacao. Voce pode recorrer na pagina Penalidades.");
 		}
 		// A CATEGORIA e editavel (pedido via suporte): nulo mantem, preenchido troca — e as regras
 		// de conteudo passam a ser as do tipo NOVO, iguais as da criacao.

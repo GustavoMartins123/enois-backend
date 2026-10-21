@@ -51,7 +51,8 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 			.map(this::populateCounts)
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
 		// A bio em HTML so vai na leitura (ver OwnProfileView.withBioHtml).
-		return OwnProfileView.from(profile).withBioHtml(profile.bioHtml()).withBannerHtml(profile.bannerHtml());
+		return OwnProfileView.from(profile).withBioHtml(SafeHtml.sanitizeProfileHtml(profile.bioHtml()))
+			.withBannerHtml(SafeHtml.sanitizeProfileHtml(profile.bannerHtml()));
 	}
 
 	@Override
@@ -61,7 +62,8 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 			.map(this::populateCounts)
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
 		agendarMigracaoDeMidia(profile);
-		return UserProfileView.from(profile).withBioHtml(profile.bioHtml()).withBannerHtml(profile.bannerHtml());
+		return UserProfileView.from(profile).withBioHtml(SafeHtml.sanitizeProfileHtml(profile.bioHtml()))
+			.withBannerHtml(SafeHtml.sanitizeProfileHtml(profile.bannerHtml()));
 	}
 
 	/** Liga/desliga a secao de ranking na tela de perfil (preferencia de quem le). */
@@ -81,7 +83,8 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 		UserProfile profile = repository.findById(userId)
 			.map(this::populateCounts)
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
-		return UserProfileView.from(profile).withBioHtml(profile.bioHtml()).withBannerHtml(profile.bannerHtml());
+		return UserProfileView.from(profile).withBioHtml(SafeHtml.sanitizeProfileHtml(profile.bioHtml()))
+			.withBannerHtml(SafeHtml.sanitizeProfileHtml(profile.bannerHtml()));
 	}
 
 	/**

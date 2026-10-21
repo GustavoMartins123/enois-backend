@@ -1,0 +1,118 @@
+{
+  "browser": "149.0.7827.102",
+  "network": "all HTTP requests intercepted",
+  "results": [
+    {
+      "fixture": "svg-set-url-create",
+      "mode": "sanitizer-alone",
+      "animatedHref": "javascript:window.auditExecuted=1",
+      "linkTarget": "_blank",
+      "background": "none",
+      "scriptExecuted": false,
+      "interceptedOutboundRequests": [],
+      "browserMessages": []
+    },
+    {
+      "fixture": "svg-set-url-create",
+      "mode": "page-csp",
+      "animatedHref": "javascript:window.auditExecuted=1",
+      "linkTarget": "_blank",
+      "background": "none",
+      "scriptExecuted": false,
+      "interceptedOutboundRequests": [],
+      "browserMessages": [
+        "Running the JavaScript URL violates the following Content Security Policy directive 'script-src 'none''. Either the 'unsafe-inline' keyword, a hash ('sha256-...'), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked."
+      ]
+    },
+    {
+      "fixture": "svg-set-url-create",
+      "mode": "inline-sandbox-and-csp",
+      "animatedHref": "javascript:window.auditExecuted=1",
+      "linkTarget": "_blank",
+      "background": "none",
+      "scriptExecuted": false,
+      "interceptedOutboundRequests": [],
+      "browserMessages": [
+        "Running the JavaScript URL violates the following Content Security Policy directive 'default-src 'none''. Either the 'unsafe-inline' keyword, a hash ('sha256-...'), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. Note also that 'script-src' was not explicitly set, so 'default-src' is used as a fallback. The action has been blocked."
+      ]
+    },
+    {
+      "fixture": "svg-animate-url-create",
+      "mode": "sanitizer-alone",
+      "animatedHref": "https://example.invalid/",
+      "linkTarget": "_blank",
+      "background": "none",
+      "scriptExecuted": false,
+      "interceptedOutboundRequests": [
+        "https://example.invalid/"
+      ],
+      "browserMessages": []
+    },
+    {
+      "fixture": "svg-animate-url-create",
+      "mode": "page-csp",
+      "animatedHref": "https://example.invalid/",
+      "linkTarget": "_blank",
+      "background": "none",
+      "scriptExecuted": false,
+      "interceptedOutboundRequests": [
+        "https://example.invalid/"
+      ],
+      "browserMessages": []
+    },
+    {
+      "fixture": "svg-animate-url-create",
+      "mode": "inline-sandbox-and-csp",
+      "animatedHref": "https://example.invalid/",
+      "linkTarget": "_blank",
+      "background": "none",
+      "scriptExecuted": false,
+      "interceptedOutboundRequests": [
+        "https://example.invalid/"
+      ],
+      "browserMessages": []
+    },
+    {
+      "fixture": "css-escaped-function-create",
+      "mode": "sanitizer-alone",
+      "animatedHref": null,
+      "linkTarget": null,
+      "background": "url(\"https://audit.invalid/pixel\")",
+      "scriptExecuted": false,
+      "interceptedOutboundRequests": [
+        "https://audit.invalid/pixel"
+      ],
+      "browserMessages": [
+        "Failed to load resource: net::ERR_FAILED"
+      ]
+    },
+    {
+      "fixture": "css-escaped-function-create",
+      "mode": "page-csp",
+      "animatedHref": null,
+      "linkTarget": null,
+      "background": "url(\"https://audit.invalid/pixel\")",
+      "scriptExecuted": false,
+      "interceptedOutboundRequests": [
+        "https://audit.invalid/pixel"
+      ],
+      "browserMessages": [
+        "Failed to load resource: net::ERR_FAILED"
+      ]
+    },
+    {
+      "fixture": "css-escaped-function-create",
+      "mode": "inline-sandbox-and-csp",
+      "animatedHref": null,
+      "linkTarget": null,
+      "background": "url(\"https://audit.invalid/pixel\")",
+      "scriptExecuted": false,
+      "interceptedOutboundRequests": [
+        "https://audit.invalid/pixel"
+      ],
+      "browserMessages": [
+        "Failed to load resource: net::ERR_FAILED"
+      ]
+    }
+  ]
+}

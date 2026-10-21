@@ -1,8 +1,12 @@
 # Énóis Security & Trust — auditoria e plano
 
-Plano vivo do sistema antifraude. **Estado: auditoria inicial feita; implementação das fases ainda
-não começou** (a rodada de 2026-10-18 foi interrompida no limite de contexto). Ao retomar, leia este
-arquivo primeiro e siga a ordem das fases.
+Auditoria local de 21/10/2026: [resultados, evidências e prioridades](security/AUDITORIA-2026-10-21.md)
+e [matriz das 419 rotas](security/ROTAS-2026-10-21.md).
+As [correções e evidências posteriores](security/CORRECOES-2026-10-21.md) estão implementadas
+na branch `fix/seguranca-regras-negocio`. O plano histórico abaixo foi preservado.
+
+Plano histórico do sistema antifraude. O estado abaixo precede a auditoria e as correções de
+21/10/2026; consultar o relatório acima para o que já foi implementado.
 
 ## 1. O que JÁ existe (não recriar)
 

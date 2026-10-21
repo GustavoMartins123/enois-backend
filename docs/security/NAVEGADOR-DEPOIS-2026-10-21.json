@@ -1,0 +1,102 @@
+{
+  "browser": "149.0.7827.102",
+  "network": "all HTTP requests intercepted",
+  "results": [
+    {
+      "fixture": "svg-set-url-create",
+      "mode": "sanitizer-alone",
+      "animatedHref": "",
+      "linkTarget": "_blank",
+      "background": "none",
+      "scriptExecuted": false,
+      "interceptedOutboundRequests": [],
+      "browserMessages": []
+    },
+    {
+      "fixture": "svg-set-url-create",
+      "mode": "page-csp",
+      "animatedHref": "",
+      "linkTarget": "_blank",
+      "background": "none",
+      "scriptExecuted": false,
+      "interceptedOutboundRequests": [],
+      "browserMessages": []
+    },
+    {
+      "fixture": "svg-set-url-create",
+      "mode": "inline-sandbox-and-csp",
+      "animatedHref": "",
+      "linkTarget": "_blank",
+      "background": "none",
+      "scriptExecuted": false,
+      "interceptedOutboundRequests": [],
+      "browserMessages": []
+    },
+    {
+      "fixture": "svg-animate-url-create",
+      "mode": "sanitizer-alone",
+      "animatedHref": "https://example.invalid/",
+      "linkTarget": "_blank",
+      "background": "none",
+      "scriptExecuted": false,
+      "interceptedOutboundRequests": [
+        "https://example.invalid/"
+      ],
+      "browserMessages": []
+    },
+    {
+      "fixture": "svg-animate-url-create",
+      "mode": "page-csp",
+      "animatedHref": "https://example.invalid/",
+      "linkTarget": "_blank",
+      "background": "none",
+      "scriptExecuted": false,
+      "interceptedOutboundRequests": [
+        "https://example.invalid/"
+      ],
+      "browserMessages": []
+    },
+    {
+      "fixture": "svg-animate-url-create",
+      "mode": "inline-sandbox-and-csp",
+      "animatedHref": "https://example.invalid/",
+      "linkTarget": "_blank",
+      "background": "none",
+      "scriptExecuted": false,
+      "interceptedOutboundRequests": [
+        "https://example.invalid/"
+      ],
+      "browserMessages": []
+    },
+    {
+      "fixture": "css-escaped-function-create",
+      "mode": "sanitizer-alone",
+      "animatedHref": null,
+      "linkTarget": null,
+      "background": "none",
+      "scriptExecuted": false,
+      "interceptedOutboundRequests": [],
+      "browserMessages": []
+    },
+    {
+      "fixture": "css-escaped-function-create",
+      "mode": "page-csp",
+      "animatedHref": null,
+      "linkTarget": null,
+      "background": "none",
+      "scriptExecuted": false,
+      "interceptedOutboundRequests": [],
+      "browserMessages": []
+    },
+    {
+      "fixture": "css-escaped-function-create",
+      "mode": "inline-sandbox-and-csp",
+      "animatedHref": null,
+      "linkTarget": null,
+      "background": "none",
+      "scriptExecuted": false,
+      "interceptedOutboundRequests": [],
+      "browserMessages": []
+    }
+  ]
+}

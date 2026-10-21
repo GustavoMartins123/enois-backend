@@ -107,6 +107,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 		behavioralTimingGuard.record(command.authorId().value());
 		duplicationGuard.require(command.authorId().value(), command.content());
 		Post post = activePost(command.postId());
+		requireContactAllowed(command.authorId().value(), post);
 		List<String> mediaIds = normalizeCommentMedia(command.mediaIds(), command.authorId());
 		String content = normalizeContent(command.content(), !mediaIds.isEmpty());
 		String parentCommentId = normalizeParentComment(command.parentCommentId(), post.id());
@@ -201,6 +202,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 			throw new ApiException(400, "INVALID_REACTION_TYPE", "Tipo de reacao obrigatorio.");
 		}
 		Post post = activePost(command.postId());
+		requireContactAllowed(command.userId().value(), post);
 		var outcome = postInteractionRepository.addReaction(newId("reaction"), post.id(), command.userId(),
 			command.type(), clock.instant());
 		// Trocar o tipo da reacao (REPLACED) NAO mexe no total: a pessoa ja estava contada. Antes,
@@ -305,6 +307,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 	@Transactional
 	public PostActionResult share(PostActionCommand command) {
 		Post post = activePost(command.postId());
+		requireContactAllowed(command.userId().value(), post);
 		boolean added = postInteractionRepository.addShare(newId("post_share"), post.id(), command.userId(),
 			clock.instant());
 		if (added) {
@@ -313,6 +316,12 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 			outboxEventRepository.append("PostShared", post.id().value(), "{\"postId\":\"" + post.id().value() + "\"}");
 		}
 		return new PostActionResult(post.id().value(), added ? "SHARED" : "ALREADY_SHARED", post.counters());
+	}
+
+	private void requireContactAllowed(String actorId, Post post) {
+		if (blockedUsersReader.hiddenIdsFor(actorId).contains(post.authorId().value())) {
+			throw new ApiException(403, "CONTACT_BLOCKED", "Interacao indisponivel entre estas contas.");
+		}
 	}
 
 	private Post activePost(PostId postId) {

@@ -162,6 +162,7 @@ Variáveis (todas opcionais; o padrão é desligado):
 | `REDE_MEDIA_MIGRATION_INITIAL_DELAY_MS` | `45000` | espera depois do boot |
 
 Progresso: `GET /api/media/migration` (contagens agregadas e o último erro; sem ids/URLs).
+Exige `X-Session-Token` de administrador: 401 sem sessão válida, 403 para conta comum.
 O asset só conta em `s3Active` quando o `cdn_url` já aponta para o S3; `s3Copied` inclui a cópia
 verificada que ainda não foi relinkada.
 
@@ -181,7 +182,10 @@ objeto→S3; nada quebra enquanto isso porque o ImageKit segue servindo.
 ## Onde está o código
 
 - `media/adapters/out/storage/S3StorageUrlFactory` — endereço dos objetos (sem rede, só composição).
-- `media/adapters/out/storage/S3UploadSigner` — URL assinada (15 min, mesmo prazo da janela do asset).
+- `media/adapters/out/storage/S3UploadSigner` — URL assinada (60 min, mesmo prazo da janela do asset).
+  A assinatura vincula `Content-Type` e `Content-Length` ao tipo e tamanho declarados. O browser
+  calcula o tamanho ao enviar o arquivo; clientes HTTP devem mandar exatamente esse tamanho.
+  A verificação local usa credenciais fictícias e o SDK, sem substituir validação do bucket real.
 - `media/adapters/out/storage/S3StorageConfig` — liga tudo isso só quando `REDE_MEDIA_STORAGE=s3`.
 - `media/application/MediaService#createUpload` — devolve `provider` para o front decidir o caminho.
 - front: `use-media-upload` escolhe entre `PUT` assinado (S3) e o multipart do ImageKit.

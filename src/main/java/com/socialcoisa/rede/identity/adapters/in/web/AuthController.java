@@ -160,7 +160,6 @@ class AuthController {
 	}
 
 	@PostMapping("/signup")
-	@RateLimiter(name = "auth")
 	ResponseEntity<String> signup(@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@RequestHeader(value = "X-Forwarded-For", required = false) String forwardedFor,
 			@RequestHeader(value = "X-Device-Fingerprint", required = false) String deviceFingerprint,
@@ -203,7 +202,6 @@ class AuthController {
 	 * proprios para a tela explicar o que aconteceu.
 	 */
 	@PostMapping("/email/verify")
-	@RateLimiter(name = "auth")
 	ResponseEntity<AuthResponse> verifyEmail(@RequestBody VerifyEmailRequest request) {
 		return ResponseEntity.ok(verifyEmailUseCase.verifyEmail(request.token()));
 	}
@@ -224,7 +222,6 @@ class AuthController {
 	 * (`twoFactorRequired`), e a sessao sai em {@code /auth/2fa/verify}.
 	 */
 	@PostMapping("/login")
-	@RateLimiter(name = "auth")
 	ResponseEntity<String> login(@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@RequestHeader(value = "X-Device-Fingerprint", required = false) String deviceFingerprint,
 			@RequestBody LoginRequest body,
@@ -260,7 +257,6 @@ class AuthController {
 
 	/** Conclui o login com o codigo do segundo fator (ou com um codigo de recuperacao). */
 	@PostMapping("/2fa/verify")
-	@RateLimiter(name = "auth")
 	ResponseEntity<AuthResponse> verifyTwoFactor(
 			@RequestHeader(value = "X-Device-Fingerprint", required = false) String deviceFingerprint,
 			@RequestBody VerifyTwoFactorRequest body,
@@ -298,7 +294,6 @@ class AuthController {
 	}
 
 	@GetMapping("/oauth/{provider}/start")
-	@RateLimiter(name = "auth")
 	Object oauthStart(@PathVariable String provider) {
 		OAuthProvider oauthProvider = parseProvider(provider);
 		return oAuthUseCase.start(oauthProvider);
@@ -309,7 +304,6 @@ class AuthController {
 	 * callback que usar esse state vincula em vez de entrar.
 	 */
 	@PostMapping("/oauth/{provider}/link")
-	@RateLimiter(name = "auth")
 	Object oauthStartLink(@PathVariable String provider, @RequestHeader(value = "X-Session-Token", required = false) String token) {
 		OAuthProvider oauthProvider = parseProvider(provider);
 		String userId = requireUserId(token);
@@ -326,14 +320,12 @@ class AuthController {
 
 	/** Comeca a configuracao do aplicativo authenticator (segredo pendente + URI otpauth). */
 	@PostMapping("/2fa/totp/setup")
-	@RateLimiter(name = "auth")
 	TwoFactorUseCase.TotpSetup startTotpSetup(
 			@RequestHeader(value = "X-Session-Token", required = false) String token) {
 		return twoFactorUseCase.startTotpSetup(requireUserId(token));
 	}
 
 	@PostMapping("/2fa/totp/enable")
-	@RateLimiter(name = "auth")
 	Map<String, Object> enableTotp(@RequestHeader(value = "X-Session-Token", required = false) String token,
 			@RequestBody TwoFactorCodeRequest request) {
 		List<String> backupCodes = twoFactorUseCase.enableTotp(requireUserId(token), request.code());
@@ -342,7 +334,6 @@ class AuthController {
 
 	/** Desativar exige a senha: uma sessao roubada nao pode desligar o segundo fator sozinha. */
 	@PostMapping("/2fa/totp/disable")
-	@RateLimiter(name = "auth")
 	StatusResponse disableTotp(@RequestHeader(value = "X-Session-Token", required = false) String token,
 			@RequestBody PasswordConfirmationRequest request) {
 		twoFactorUseCase.disableTotp(requireUserId(token), request.password());
@@ -359,7 +350,6 @@ class AuthController {
 	}
 
 	@PostMapping("/2fa/email/confirm")
-	@RateLimiter(name = "auth")
 	StatusResponse confirmEmailOtp(@RequestHeader(value = "X-Session-Token", required = false) String token,
 			@RequestBody TwoFactorCodeRequest request) {
 		twoFactorUseCase.confirmEmailOtpSetup(requireUserId(token), request.code());
@@ -367,7 +357,6 @@ class AuthController {
 	}
 
 	@PostMapping("/2fa/email/disable")
-	@RateLimiter(name = "auth")
 	StatusResponse disableEmailOtp(@RequestHeader(value = "X-Session-Token", required = false) String token,
 			@RequestBody PasswordConfirmationRequest request) {
 		twoFactorUseCase.disableEmailOtp(requireUserId(token), request.password());
@@ -381,7 +370,6 @@ class AuthController {
 	}
 
 	@DeleteMapping("/oauth/{provider}/link")
-	@RateLimiter(name = "auth")
 	Object oauthUnlink(@PathVariable String provider, @RequestHeader(value = "X-Session-Token", required = false) String token) {
 		OAuthProvider oauthProvider = parseProvider(provider);
 		oAuthUseCase.unlink(requireUserId(token), oauthProvider);
@@ -394,7 +382,6 @@ class AuthController {
 	 * o envia com SameSite=Lax.
 	 */
 	@GetMapping("/oauth/{provider}/callback")
-	@RateLimiter(name = "auth")
 	Object oauthCallback(@PathVariable String provider, @RequestParam(required = false) String code,
 			@RequestParam(required = false) String state, @RequestParam(required = false) String error) {
 		// Este callback e uma NAVIGACAO do browser (o provedor redireciona para ca). Qualquer
@@ -417,7 +404,6 @@ class AuthController {
 	 * Apple envia o callback via POST (response_mode=form_post), com code/state/user no corpo.
 	 */
 	@PostMapping("/oauth/{provider}/callback")
-	@RateLimiter(name = "auth")
 	Object oauthCallbackPost(@PathVariable String provider, @RequestParam(required = false) String code,
 			@RequestParam(required = false) String state,
 			@RequestParam(required = false, name = "id_token") String idToken,
@@ -480,7 +466,6 @@ class AuthController {
 	}
 
 	@PostMapping("/oauth/{provider}/token")
-	@RateLimiter(name = "auth")
 	Object oauthToken(@PathVariable String provider, @RequestBody OAuthTokenRequest request) {
 		OAuthProvider oauthProvider = parseProvider(provider);
 		// O `state` (obtido em /oauth/{provider}/start) amarra o id_token ao pedido: sem ele o token
@@ -538,7 +523,6 @@ class AuthController {
 	}
 
 	@PostMapping("/password/change")
-	@RateLimiter(name = "auth")
 	Object changePassword(@RequestHeader(value = "X-Session-Token", required = false) String token,
 			@RequestBody ChangePasswordRequest request) {
 		changePasswordUseCase.changePassword(token, request.currentPassword(), request.newPassword());

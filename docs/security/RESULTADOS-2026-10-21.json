@@ -1,0 +1,2224 @@
+{
+  "date": "2026-10-21",
+  "base_commit": "a6a7b10",
+  "branch": "test/auditoria-seguranca-regras-negocio",
+  "scope": {
+    "registered_routes": 419,
+    "controllers": 55,
+    "private_read_routes": 73,
+    "public_read_routes_with_input_probes": 79,
+    "environment": "Java 25; isolated Docker containers; synthetic accounts only",
+    "production_requests": 0,
+    "compile_passed": true
+  },
+  "baseline": {
+    "totals": {
+      "tests": 671,
+      "failures": 18,
+      "errors": 4,
+      "skipped": 1,
+      "passed": 648
+    },
+    "classes": [
+      {
+        "class": "com.socialcoisa.rede.RedeApplicationTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.age.adapters.in.web.ParentalSupervisionFlowTests",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.blog.adapters.in.web.BlogFlowTests",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.blog.adapters.in.web.BlogNewsletterTests",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.blog.application.BlogUnsubscribeTokenTests",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.coin.adapters.in.web.CoinFlowTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.coin.dispute.CoinDisputeFlowTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.communities.CommunityPinTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.communities.adapters.in.web.CommunityBannerHtmlTests",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.communities.adapters.in.web.CommunityDescriptionTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.communities.adapters.in.web.CommunityFavoritesTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.communities.adapters.in.web.CommunityOwnershipTests",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.communities.adapters.in.web.CommunitySearchTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.companies.adapters.in.web.CompanyFlowTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.corporate.CorporateImportConsentTests",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.corporate.CorporateImportPersistenceTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.corporate.adapters.in.web.CorporateIdentitySecurityTests",
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.corporate.adapters.out.persistence.CorporateProfilePersistenceTests",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.corporate.domain.CorporateProfileTests",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.cosmetics.adapters.in.web.CosmeticsFlowTests",
+        "tests": 8,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.dailygames.DailyGamePayoutTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.dailygames.DailyGameRewardsSettlementTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.dailygames.DailyMazeServiceTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.dailygames.DailyWordServiceTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.dailygames.blocks.BlocksEngineTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.events.adapters.in.web.EventSanitizationTests",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.events.adapters.in.web.EventScheduleTests",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.events.application.EventSanitizationWindowTests",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.feed.UserContentPurgeServiceTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.feed.adapters.in.web.ArticlePostsTests",
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.feed.adapters.in.web.BadgesEverywhereTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.feed.adapters.in.web.BusinessFeedSeparationTests",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.feed.adapters.in.web.CommentMediaTests",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.feed.adapters.in.web.CommentReactionStateTests",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.feed.adapters.in.web.CommunityOnPostTests",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.feed.adapters.in.web.CommunityPagePostTests",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.feed.adapters.in.web.EditPostTests",
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.feed.adapters.in.web.FeedControllerTests",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.feed.adapters.in.web.ForYouCommunityFilterTests",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.feed.adapters.in.web.InlineMediaTests",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.feed.adapters.in.web.MomentExpiryTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.feed.adapters.in.web.PageContentTests",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.feed.adapters.in.web.PersonalizationFeedTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.feed.adapters.in.web.PostContentLimitsTests",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 1,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.feed.adapters.in.web.PostPageTests",
+        "tests": 8,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.feed.adapters.in.web.PostPublishingPolicyTests",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.feed.adapters.in.web.PostReactionsAndReplyTests",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.feed.adapters.in.web.PostSealTests",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.feed.adapters.in.web.PublicPostReadTests",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.feed.adapters.in.web.RestorePostTests",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.feed.adapters.in.web.ScheduledPostTests",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.feed.adapters.in.web.TopicCategorizationTests",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.feed.adapters.out.moderation.ReportedContentAdapterTests",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.feed.application.PagePreviewCardServiceTests",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.feed.domain.PostAuthorIdentityTests",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.feed.domain.PostContentLimitsTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.games.adapters.in.web.GameBoostTests",
+        "tests": 1,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          {
+            "name": "boostPutsGameFirstAndOnePerWeek",
+            "type": "failure",
+            "message": "Status expected:<200> but was:<400>"
+          }
+        ]
+      },
+      {
+        "class": "com.socialcoisa.rede.games.adapters.in.web.GameCollectionTests",
+        "tests": 1,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          {
+            "name": "createReadAndHide",
+            "type": "failure",
+            "message": "Status expected:<200> but was:<400>"
+          }
+        ]
+      },
+      {
+        "class": "com.socialcoisa.rede.games.adapters.in.web.GameFlowTests",
+        "tests": 4,
+        "failures": 2,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          {
+            "name": "rejectRequiresNoteAndCreatorSeesReason",
+            "type": "failure",
+            "message": "Status expected:<200> but was:<400>"
+          },
+          {
+            "name": "submitReviewPublishFlow",
+            "type": "failure",
+            "message": "Status expected:<200> but was:<400>"
+          }
+        ]
+      },
+      {
+        "class": "com.socialcoisa.rede.games.adapters.in.web.GameIdentityTests",
+        "tests": 1,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          {
+            "name": "identityTokenIsSingleUseAndSpendIsConfirmedAndIdempotent",
+            "type": "failure",
+            "message": "Status expected:<200> but was:<400>"
+          }
+        ]
+      },
+      {
+        "class": "com.socialcoisa.rede.games.adapters.in.web.GameShareTests",
+        "tests": 1,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          {
+            "name": "sharePublishesPostWithGameTagAndDailyCap",
+            "type": "failure",
+            "message": "Status expected:<200> but was:<400>"
+          }
+        ]
+      },
+      {
+        "class": "com.socialcoisa.rede.games.adapters.in.web.GameSocialTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.games.adapters.in.web.GameStoreCustomizationTests",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.games.adapters.in.web.GamesPlatformTests",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.games.application.GameUrlGuardTests",
+        "tests": 8,
+        "failures": 0,
+        "errors": 3,
+        "skipped": 0,
+        "failed_cases": [
+          {
+            "name": "aceitaAcentoNoCaminhoEmVezDeRecusar",
+            "type": "error",
+            "message": "Não foi possível resolver o endereço do jogo."
+          },
+          {
+            "name": "aceitaHttpsSimples",
+            "type": "error",
+            "message": "Não foi possível resolver o endereço do jogo."
+          },
+          {
+            "name": "aceitaCaractereEspecialNaQuery",
+            "type": "error",
+            "message": "Não foi possível resolver o endereço do jogo."
+          }
+        ]
+      },
+      {
+        "class": "com.socialcoisa.rede.gifs.adapters.in.web.GifSearchTests",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.gifs.adapters.in.web.GifSearchUnavailableTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.gifs.adapters.out.providers.GifProvidersMappingTests",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.groups.GroupCommunityIsolationTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.groups.GroupDiscussionTests",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.groups.GroupDomainTests",
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.groups.GroupFeedTests",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.groups.GroupFlowTests",
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.groups.GroupIdentityTests",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.groups.GroupModerationTests",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.groups.GroupNotificationsTests",
+        "tests": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.groups.GroupPermissionsTests",
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.groups.GroupPinnedPostTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.groups.GroupPlatformTests",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.groups.GroupReportsTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.groups.GroupSecurityTests",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.identity.AgePolicyTests",
+        "tests": 5,
+        "failures": 2,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          {
+            "name": "minorIsFlaggedByTheBackendAndAdultIsNot",
+            "type": "failure",
+            "message": "Status expected:<200> but was:<401>"
+          },
+          {
+            "name": "strangerCannotMessageMinorButConnectionCan",
+            "type": "failure",
+            "message": "Status expected:<200> but was:<201>"
+          }
+        ]
+      },
+      {
+        "class": "com.socialcoisa.rede.identity.adapters.in.web.AuthProfileFlowTests",
+        "tests": 1,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          {
+            "name": "signsUpLogsInUpdatesProfileAndPublishesWithSession",
+            "type": "failure",
+            "message": "Status expected:<201> but was:<400>"
+          }
+        ]
+      },
+      {
+        "class": "com.socialcoisa.rede.identity.adapters.in.web.AuthThrottleTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.identity.adapters.in.web.EmailVerificationFlowTests",
+        "tests": 4,
+        "failures": 4,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          {
+            "name": "accountOnlyWorksAfterTheEmailIsConfirmed",
+            "type": "failure",
+            "message": "Status expected:<201> but was:<400>"
+          },
+          {
+            "name": "rejectsUnknownAndExpiredTokens",
+            "type": "failure",
+            "message": "Status expected:<201> but was:<400>"
+          },
+          {
+            "name": "signupResponseNeverCarriesCredentials",
+            "type": "failure",
+            "message": "Status expected:<201> but was:<400>"
+          },
+          {
+            "name": "resendIsRateLimitedAndDoesNotRevealWhetherTheEmailExists",
+            "type": "failure",
+            "message": "Status expected:<201> but was:<400>"
+          }
+        ]
+      },
+      {
+        "class": "com.socialcoisa.rede.identity.adapters.in.web.FirstPasswordTests",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.identity.adapters.in.web.OAuthHardeningTests",
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.identity.adapters.in.web.PendingSignupFlowTests",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.identity.adapters.in.web.SessionRefreshTests",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.identity.adapters.in.web.SignupChallengeTests",
+        "tests": 1,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          {
+            "name": "challengeIsRequiredAndCannotBeReused",
+            "type": "failure",
+            "message": "Status expected:<201> but was:<400>"
+          }
+        ]
+      },
+      {
+        "class": "com.socialcoisa.rede.identity.adapters.in.web.SignupDisabledTests",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.identity.adapters.in.web.TwoFactorFlowTests",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.identity.application.IdentityVerificationServiceTests",
+        "tests": 8,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.importlinkedin.LinkedinImportServiceTests",
+        "tests": 10,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.importlinkedin.LinkedinImportUploadLimitTests",
+        "tests": 2,
+        "failures": 0,
+        "errors": 1,
+        "skipped": 0,
+        "failed_cases": [
+          {
+            "name": "aFileAboveTheConfiguredLimitGetsAClearError",
+            "type": "error",
+            "message": "I/O error on POST request for \"http://localhost:35671/me/import/linkedin\": Broken pipe"
+          }
+        ]
+      },
+      {
+        "class": "com.socialcoisa.rede.jobs.adapters.in.web.ExternalJobSubmissionWebTests",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.jobs.adapters.in.web.ExternalJobsListingTests",
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.jobs.adapters.in.web.JobAbandonPenaltyTests",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.jobs.adapters.in.web.JobApplicationFlowTests",
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.jobs.adapters.in.web.JobCorporateApplicationTests",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.jobs.adapters.in.web.JobSalaryTests",
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.jobs.adapters.in.web.JobSearchContractTests",
+        "tests": 11,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.jobs.adapters.in.web.OwnJobAppliedFlagTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.jobs.adapters.out.imports.JobRadarJobSourceTests",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.jobs.application.CommunitySubmissionImportGuardTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.jobs.application.ExternalJobImportServiceTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.jobs.application.ExternalJobSubmissionServiceTests",
+        "tests": 8,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.jobs.application.GlobalDedupeTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.jobs.application.JobServiceTests",
+        "tests": 20,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.jobs.domain.ExternalJobEmailTests",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.linkedin.LinkedInIntegrationTests",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.linkedin.application.LinkedInIntegrationServiceTests",
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.linkedin.application.LinkedInShareOutboxEventHandlerTests",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.marketplace.adapters.in.web.MarketplaceFlowTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.media.adapters.in.web.MediaControllerTests",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.media.adapters.in.web.MediaPublicReadTests",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.media.adapters.in.web.MediaUploadAuthTests",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.media.adapters.in.web.MediaUploadsDisabledTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.media.adapters.out.persistence.LazyMigrationPersistenceTests",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.media.adapters.out.storage.S3StorageModeTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.media.adapters.out.storage.S3StorageUrlFactoryTests",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.media.adapters.out.storage.StorageDefaultTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.media.application.LazyUrlMigrationServiceTests",
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.media.application.MediaMigrationServiceTests",
+        "tests": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.mentoring.adapters.in.web.MentorProfileTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.messaging.adapters.in.web.DirectConversationTests",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.messaging.adapters.in.web.HiddenMessagesTests",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.messaging.adapters.in.web.HideConversationsTests",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.messaging.adapters.in.web.MessageMediaTests",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.messaging.adapters.in.web.MessagePaginationTests",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.messaging.adapters.in.web.MessagingContractControllerTests",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.moderation.ReputationFairnessTests",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.moderation.adapters.in.web.BulkBanAndSuspiciousTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.moderation.adapters.in.web.ModeratorAppointmentAndSanctionTests",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.moderation.adapters.in.web.ModeratorEligibilityTests",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.moderation.adapters.in.web.ModeratorPanelTests",
+        "tests": 3,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          {
+            "name": "moderatorReviewsGameSubmission",
+            "type": "failure",
+            "message": "Status expected:<200> but was:<400>"
+          }
+        ]
+      },
+      {
+        "class": "com.socialcoisa.rede.moderation.adapters.in.web.MyReportsTests",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.moderation.adapters.in.web.SanctionFlowTests",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.moderation.ai.AiTriageGuardTests",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.moderation.ai.ModerationAiServiceTests",
+        "tests": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.moderation.application.PostSpamAutomodTests",
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.network.adapters.in.web.BlockContractTests",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.network.adapters.in.web.NetworkContractControllerTests",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.notifications.MediaRecoveryApologyTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.notifications.adapters.in.web.NotificationContractControllerTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.preferences.adapters.in.web.PersonalizationSecurityTests",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.preferences.adapters.in.web.PersonalizationSurfaceAuditTests",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.preferences.adapters.in.web.PersonalizationTests",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.preferences.adapters.in.web.ThemeControllerTests",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.profile.adapters.in.web.IdentityDisplayTests",
+        "tests": 8,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.profile.adapters.in.web.ProfileAkaTests",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.profile.adapters.in.web.ProfileBadgeTests",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.profile.adapters.in.web.ProfileBannerHtmlTests",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.profile.adapters.in.web.ProfileBioHtmlTests",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.profile.adapters.in.web.ProfileControllerTests",
+        "tests": 8,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.profile.adapters.in.web.ProfileResumeTests",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.profile.adapters.in.web.ProfileTextFieldsLengthTests",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.profile.application.ReputationServiceTests",
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.projects.adapters.in.web.UserProjectsTests",
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.push.adapters.in.web.PushControllerTests",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.push.application.PushNotificationListenerTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.search.adapters.in.web.SearchContractControllerTests",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.services.adapters.in.web.ServiceOfferTests",
+        "tests": 6,
+        "failures": 2,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          {
+            "name": "linkValidationBlocksInsecureAndPrivateTargets",
+            "type": "failure",
+            "message": "Status expected:<200> but was:<400>"
+          },
+          {
+            "name": "submitThenApproveThenCatalogThenGuestReads",
+            "type": "failure",
+            "message": "Status expected:<200> but was:<400>"
+          }
+        ]
+      },
+      {
+        "class": "com.socialcoisa.rede.services.adapters.in.web.ServicesFlowTests",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.shared.html.SafeHtmlAttackTests",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.shared.html.SafeHtmlTests",
+        "tests": 21,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.shared.persistence.FlywayMigrationConfigTests",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.shared.search.BooleanQueryTests",
+        "tests": 11,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.shared.security.ClientIpSpoofingTests",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.shared.security.IdentityRateLimitTests",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.shared.security.PostRateLimitTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.shared.security.TotpAndCipherTests",
+        "tests": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.shared.text.PlainTextTests",
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.shared.web.ContractControllerTests",
+        "tests": 8,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.shared.web.MissingSessionHeaderTests",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.shared.web.PiiMaskTests",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.shared.web.RequestObservabilityFilterTests",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.stats.adapters.in.web.CommunityStatsTests",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.support.adapters.in.web.SupportCategoriesTests",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "class": "com.socialcoisa.rede.themes.adapters.in.web.ThemeGalleryTests",
+        "tests": 3,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          {
+            "name": "publishListInstallAndReport",
+            "type": "failure",
+            "message": "Status expected:<200> but was:<401>"
+          }
+        ]
+      }
+    ]
+  },
+  "h2_final": {
+    "totals": {
+      "tests": 1588,
+      "failures": 32,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 1556
+    },
+    "classes": [
+      {
+        "class": "com.socialcoisa.rede.media.adapters.out.storage.S3UploadConstraintAuditTests",
+        "tests": 1,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          {
+            "name": "theUploadSizeLimitMustBeBoundToThePresignedPutInsteadOfTrustingTheDeclaredSize",
+            "type": "failure",
+            "message": "[Sem tamanho assinado, o cliente pode declarar 1 KB e usar o PUT para outro tamanho; politica externa do bucket precisa de verificacao separada] \nExpecting actual:\n  \"content-type;host\"\nto contain:\n  \"content-length\""
+          }
+        ]
+      },
+      {
+        "class": "com.socialcoisa.rede.securityaudit.AuthenticationStateAuditTests",
+        "tests": 3,
+        "failures": 3,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          {
+            "name": "failedEmailSetupAttemptsMustAlsoSurviveTheRejectedTransaction",
+            "type": "failure",
+            "message": "[Setup de segundo fator tambem precisa persistir erros] \nexpected: 5\n but was: 0"
+          },
+          {
+            "name": "aTwoFactorChallengeMustOnlyIssueOneSessionUnderConcurrentReplay",
+            "type": "failure",
+            "message": "[Um desafio de uso unico nao pode gerar varias sessoes concorrentes] \nexpected: 1L\n but was: 6L"
+          },
+          {
+            "name": "failedTwoFactorLoginAttemptsMustSurviveTheRejectedTransaction",
+            "type": "failure",
+            "message": "[O rollback do erro nao pode apagar o contador de tentativas] \nexpected: 5\n but was: 0"
+          }
+        ]
+      },
+      {
+        "class": "com.socialcoisa.rede.securityaudit.BusinessRuleAdversarialTests",
+        "tests": 11,
+        "failures": 8,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          {
+            "name": "restrictedAuthorsMustNotReplaceTheirPublicPostThroughTheEditRoute",
+            "type": "failure",
+            "message": "[Editar nao deve contornar a proibicao de publicar conteudo] \nexpected: 403\n but was: 200"
+          },
+          {
+            "name": "blockingSomeoneMustStopMessagesInAnAlreadyExistingConversation",
+            "type": "failure",
+            "message": "[Enviar na conversa antiga deve respeitar bloqueio] \nexpected: 403\n but was: 201"
+          },
+          {
+            "name": "blockedAccountsMustNotWriteCommentsOnTheVictimsPosts",
+            "type": "failure",
+            "message": "[Saber o ID nao autoriza contatar quem bloqueou] \nExpecting actual:\n  201\nto be in:\n  [403, 404]"
+          },
+          {
+            "name": "choosingAnAdministratorUsernameDuringSignupMustNotGrantAdministratorPrivileges",
+            "type": "failure",
+            "message": "[Uma conta nova nao pode assumir uma identidade administrativa apenas pelo nome] \nexpected: 403\n but was: 200"
+          },
+          {
+            "name": "choosingGroupKindMustNotLetAStrangerForceContactWithAMinor",
+            "type": "failure",
+            "message": "[O destinatario menor nao escolheu nem aceitou participar deste grupo] \nexpected: 403\n but was: 201"
+          },
+          {
+            "name": "genericConversationCreationMustNotBypassTheDirectConversationBlock",
+            "type": "failure",
+            "message": "[Criacao generica deve impor o mesmo bloqueio] \nexpected: 403\n but was: 201"
+          },
+          {
+            "name": "renamingYourOwnProfileMustNotGrantAdministratorPrivileges",
+            "type": "failure",
+            "message": "[Um campo editavel do perfil nao pode conceder privilegio administrativo] \nexpected: 403\n but was: 200"
+          },
+          {
+            "name": "blockedMentionsMustNotCreateNotificationsOrPushEventsForTheVictim",
+            "type": "failure",
+            "message": "[Filtrar somente a leitura nao impede gravacao ou envio de push] \nexpected: 0\n but was: 1"
+          }
+        ]
+      },
+      {
+        "class": "com.socialcoisa.rede.securityaudit.EconomyIntegrityAuditTests",
+        "tests": 5,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          {
+            "name": "concurrentRetriesOfOneTransferMustOnlyDebitOnceAndNeverReturnServerErrors",
+            "type": "failure",
+            "message": "Expecting ArrayList:\n  [200, 500, 500, 500, 500, 500, 200, 200, 200, 200, 200, 200]\nto contain only:\n  [200, 409]\nelement(s) not found:\n  [409]\nand element(s) not expected:\n  [500, 500, 500, 500, 500]"
+          }
+        ]
+      },
+      {
+        "class": "com.socialcoisa.rede.securityaudit.PublishingAbuseAuditTests",
+        "tests": 7,
+        "failures": 2,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          {
+            "name": "aRejectedArticleMustNotPreventItsAuthorFromCorrectingAndPublishingIt",
+            "type": "failure",
+            "message": "[A tentativa recusada nao deve reservar o texto: {\"code\":\"DUPLICATE_CONTENT\",\"message\":\"Voce ja publicou este conteudo recentemente.\",\"timestamp\":\"2026-10-21T11:44:15.490208460Z\"}] \nexpected: 201\n but was: 409"
+          },
+          {
+            "name": "duplicatePagesMustNotBypassDedupByOmittingTheOptionalTitle",
+            "type": "failure",
+            "message": "[O mesmo HTML de pagina nao deve escapar da deduplicacao] \nexpected: 409\n but was: 201"
+          }
+        ]
+      },
+      {
+        "class": "com.socialcoisa.rede.securityaudit.RouteAuthorizationAuditTests",
+        "tests": 1541,
+        "failures": 12,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          {
+            "name": "privateAndOperationalReadsRejectFourUnauthenticatedIdentities()[221]",
+            "type": "failure",
+            "message": "[GET /media/migration [anonymous] {\"enabled\":false,\"flipEnabled\":false,\"total\":0,\"imagekit\":0,\"s3Copied\":0,\"s3Active\":0,\"errors\":0,\"lastError\":null}] \nexpected: 401\n but was: 200"
+          },
+          {
+            "name": "privateAndOperationalReadsRejectFourUnauthenticatedIdentities()[222]",
+            "type": "failure",
+            "message": "[GET /media/migration [forged-user-id] {\"enabled\":false,\"flipEnabled\":false,\"total\":0,\"imagekit\":0,\"s3Copied\":0,\"s3Active\":0,\"errors\":0,\"lastError\":null}] \nexpected: 401\n but was: 200"
+          },
+          {
+            "name": "privateAndOperationalReadsRejectFourUnauthenticatedIdentities()[223]",
+            "type": "failure",
+            "message": "[GET /media/migration [invalid-token] {\"enabled\":false,\"flipEnabled\":false,\"total\":0,\"imagekit\":0,\"s3Copied\":0,\"s3Active\":0,\"errors\":0,\"lastError\":null}] \nexpected: 401\n but was: 200"
+          },
+          {
+            "name": "privateAndOperationalReadsRejectFourUnauthenticatedIdentities()[224]",
+            "type": "failure",
+            "message": "[GET /media/migration [expired-token] {\"enabled\":false,\"flipEnabled\":false,\"total\":0,\"imagekit\":0,\"s3Copied\":0,\"s3Active\":0,\"errors\":0,\"lastError\":null}] \nexpected: 401\n but was: 200"
+          },
+          {
+            "name": "publicReadInputErrorsMustNotBecomeInternalServerErrors()[100]",
+            "type": "failure",
+            "message": "[GET /games/ratings [zero-limit] {\"code\":\"INTERNAL_ERROR\",\"message\":\"Erro interno inesperado.\",\"timestamp\":\"2026-10-21T11:44:19.209591848Z\"}] \nExpecting actual:\n  500\nnot to be equal to:\n  500"
+          },
+          {
+            "name": "publicReadInputErrorsMustNotBecomeInternalServerErrors()[101]",
+            "type": "failure",
+            "message": "[GET /games/ratings [negative-limit] {\"code\":\"INTERNAL_ERROR\",\"message\":\"Erro interno inesperado.\",\"timestamp\":\"2026-10-21T11:44:19.212711014Z\"}] \nExpecting actual:\n  500\nnot to be equal to:\n  500"
+          },
+          {
+            "name": "publicReadInputErrorsMustNotBecomeInternalServerErrors()[102]",
+            "type": "failure",
+            "message": "[GET /games/ratings [malformed-cursor] {\"code\":\"INTERNAL_ERROR\",\"message\":\"Erro interno inesperado.\",\"timestamp\":\"2026-10-21T11:44:19.214062597Z\"}] \nExpecting actual:\n  500\nnot to be equal to:\n  500"
+          },
+          {
+            "name": "publicReadInputErrorsMustNotBecomeInternalServerErrors()[127]",
+            "type": "failure",
+            "message": "[GET /groups [zero-limit] {\"code\":\"INTERNAL_ERROR\",\"message\":\"Erro interno inesperado.\",\"timestamp\":\"2026-10-21T11:44:19.252885095Z\"}] \nExpecting actual:\n  500\nnot to be equal to:\n  500"
+          },
+          {
+            "name": "publicReadInputErrorsMustNotBecomeInternalServerErrors()[139]",
+            "type": "failure",
+            "message": "[GET /jobs [zero-limit] {\"code\":\"INTERNAL_ERROR\",\"message\":\"Erro interno inesperado.\",\"timestamp\":\"2026-10-21T11:44:19.273530589Z\"}] \nExpecting actual:\n  500\nnot to be equal to:\n  500"
+          },
+          {
+            "name": "publicReadInputErrorsMustNotBecomeInternalServerErrors()[223]",
+            "type": "failure",
+            "message": "[GET /users/search [zero-limit] {\"code\":\"INTERNAL_ERROR\",\"message\":\"Erro interno inesperado.\",\"timestamp\":\"2026-10-21T11:44:19.395858962Z\"}] \nExpecting actual:\n  500\nnot to be equal to:\n  500"
+          },
+          {
+            "name": "publicReadInputErrorsMustNotBecomeInternalServerErrors()[224]",
+            "type": "failure",
+            "message": "[GET /users/search [negative-limit] {\"code\":\"INTERNAL_ERROR\",\"message\":\"Erro interno inesperado.\",\"timestamp\":\"2026-10-21T11:44:19.397216199Z\"}] \nExpecting actual:\n  500\nnot to be equal to:\n  500"
+          },
+          {
+            "name": "publicReadInputErrorsMustNotBecomeInternalServerErrors()[225]",
+            "type": "failure",
+            "message": "[GET /users/search [malformed-cursor] {\"code\":\"INTERNAL_ERROR\",\"message\":\"Erro interno inesperado.\",\"timestamp\":\"2026-10-21T11:44:19.398554990Z\"}] \nExpecting actual:\n  500\nnot to be equal to:\n  500"
+          }
+        ]
+      },
+      {
+        "class": "com.socialcoisa.rede.securityaudit.SharedAuthenticationQuotaAuditTests",
+        "tests": 1,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          {
+            "name": "oneClientsInvalidLoginsMustNotDisableAnotherClientsValidLogin",
+            "type": "failure",
+            "message": "[Outro IP e credenciais corretas nao podem perder o login por cota global: {\"code\":\"RATE_LIMITED\",\"message\":\"Limite de requisicoes excedido.\",\"timestamp\":\"2026-10-21T11:44:22.129790791Z\"}] \nexpected: 200\n but was: 429"
+          }
+        ]
+      },
+      {
+        "class": "com.socialcoisa.rede.securityaudit.SpamDetectionTimingAuditTests",
+        "tests": 1,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          {
+            "name": "aHarmlessFirstPostMustNotSilenceDetectionOfTheFollowingBurst",
+            "type": "failure",
+            "message": "[A primeira avaliacao sem sinal nao deve impedir reconhecer o limiar de flood] \nExpecting actual:\n  \"THROTTLED\"\nnot to be equal to:\n  \"THROTTLED\""
+          }
+        ]
+      },
+      {
+        "class": "com.socialcoisa.rede.securityaudit.StoredHtmlSecurityAuditTests",
+        "tests": 18,
+        "failures": 3,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          {
+            "name": "neitherCreationNorEditingCanStoreActivePayloads(String, String)[16]",
+            "type": "failure",
+            "message": "[svg-set-url create executable URL via to] \nExpecting actual:\n  \"javascript:window.auditexecuted=1\"\nnot to start with:\n  \"javascript:\""
+          },
+          {
+            "name": "neitherCreationNorEditingCanStoreActivePayloads(String, String)[17]",
+            "type": "failure",
+            "message": "[svg-animate-url create executable URL via to] \nExpecting actual:\n  \"javascript:window.auditexecuted=1\"\nnot to start with:\n  \"javascript:\""
+          },
+          {
+            "name": "neitherCreationNorEditingCanStoreActivePayloads(String, String)[18]",
+            "type": "failure",
+            "message": "[css-escaped-function create invisible remote CSS load] \nExpecting actual:\n  \"<style>p{background:u\\72l(https://audit.invalid/pixel)}</style><p>conteudo legitimo preservado</p>\"\nnot to contain:\n  \"audit.invalid\""
+          }
+        ]
+      }
+    ]
+  },
+  "mariadb_final": {
+    "totals": {
+      "tests": 1588,
+      "failures": 33,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 1555
+    },
+    "classes": [
+      {
+        "class": "com.socialcoisa.rede.media.adapters.out.storage.S3UploadConstraintAuditTests",
+        "tests": 1,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          {
+            "name": "theUploadSizeLimitMustBeBoundToThePresignedPutInsteadOfTrustingTheDeclaredSize",
+            "type": "failure",
+            "message": "[Sem tamanho assinado, o cliente pode declarar 1 KB e usar o PUT para outro tamanho; politica externa do bucket precisa de verificacao separada] \nExpecting actual:\n  \"content-type;host\"\nto contain:\n  \"content-length\""
+          }
+        ]
+      },
+      {
+        "class": "com.socialcoisa.rede.securityaudit.AuthenticationStateAuditTests",
+        "tests": 3,
+        "failures": 3,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          {
+            "name": "failedEmailSetupAttemptsMustAlsoSurviveTheRejectedTransaction",
+            "type": "failure",
+            "message": "[Setup de segundo fator tambem precisa persistir erros] \nexpected: 5\n but was: 0"
+          },
+          {
+            "name": "aTwoFactorChallengeMustOnlyIssueOneSessionUnderConcurrentReplay",
+            "type": "failure",
+            "message": "Expecting all elements of:\n  [500, 500, 200, 500, 500, 500]\nto match given predicate but these elements did not:\n  [500, 500, 500, 500, 500]"
+          },
+          {
+            "name": "failedTwoFactorLoginAttemptsMustSurviveTheRejectedTransaction",
+            "type": "failure",
+            "message": "[O rollback do erro nao pode apagar o contador de tentativas] \nexpected: 5\n but was: 0"
+          }
+        ]
+      },
+      {
+        "class": "com.socialcoisa.rede.securityaudit.BusinessRuleAdversarialTests",
+        "tests": 11,
+        "failures": 8,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          {
+            "name": "restrictedAuthorsMustNotReplaceTheirPublicPostThroughTheEditRoute",
+            "type": "failure",
+            "message": "[Editar nao deve contornar a proibicao de publicar conteudo] \nexpected: 403\n but was: 200"
+          },
+          {
+            "name": "blockingSomeoneMustStopMessagesInAnAlreadyExistingConversation",
+            "type": "failure",
+            "message": "[Enviar na conversa antiga deve respeitar bloqueio] \nexpected: 403\n but was: 201"
+          },
+          {
+            "name": "blockedAccountsMustNotWriteCommentsOnTheVictimsPosts",
+            "type": "failure",
+            "message": "[Saber o ID nao autoriza contatar quem bloqueou] \nExpecting actual:\n  201\nto be in:\n  [403, 404]"
+          },
+          {
+            "name": "choosingAnAdministratorUsernameDuringSignupMustNotGrantAdministratorPrivileges",
+            "type": "failure",
+            "message": "[Uma conta nova nao pode assumir uma identidade administrativa apenas pelo nome] \nexpected: 403\n but was: 200"
+          },
+          {
+            "name": "choosingGroupKindMustNotLetAStrangerForceContactWithAMinor",
+            "type": "failure",
+            "message": "[O destinatario menor nao escolheu nem aceitou participar deste grupo] \nexpected: 403\n but was: 201"
+          },
+          {
+            "name": "genericConversationCreationMustNotBypassTheDirectConversationBlock",
+            "type": "failure",
+            "message": "[Criacao generica deve impor o mesmo bloqueio] \nexpected: 403\n but was: 201"
+          },
+          {
+            "name": "renamingYourOwnProfileMustNotGrantAdministratorPrivileges",
+            "type": "failure",
+            "message": "[Um campo editavel do perfil nao pode conceder privilegio administrativo] \nexpected: 403\n but was: 200"
+          },
+          {
+            "name": "blockedMentionsMustNotCreateNotificationsOrPushEventsForTheVictim",
+            "type": "failure",
+            "message": "[Filtrar somente a leitura nao impede gravacao ou envio de push] \nexpected: 0\n but was: 1"
+          }
+        ]
+      },
+      {
+        "class": "com.socialcoisa.rede.securityaudit.EconomyIntegrityAuditTests",
+        "tests": 5,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          {
+            "name": "concurrentRetriesOfOneTransferMustOnlyDebitOnceAndNeverReturnServerErrors",
+            "type": "failure",
+            "message": "Expecting ArrayList:\n  [500, 500, 200, 500, 500, 500, 200, 200, 200, 200, 200, 200]\nto contain only:\n  [200, 409]\nelement(s) not found:\n  [409]\nand element(s) not expected:\n  [500, 500, 500, 500, 500]"
+          }
+        ]
+      },
+      {
+        "class": "com.socialcoisa.rede.securityaudit.PublishingAbuseAuditTests",
+        "tests": 7,
+        "failures": 3,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          {
+            "name": "aRejectedArticleMustNotPreventItsAuthorFromCorrectingAndPublishingIt",
+            "type": "failure",
+            "message": "[A tentativa recusada nao deve reservar o texto: {\"code\":\"DUPLICATE_CONTENT\",\"message\":\"Voce ja publicou este conteudo recentemente.\",\"timestamp\":\"2026-10-21T11:45:59.711652105Z\"}] \nexpected: 201\n but was: 409"
+          },
+          {
+            "name": "duplicatePagesMustNotBypassDedupByOmittingTheOptionalTitle",
+            "type": "failure",
+            "message": "[O mesmo HTML de pagina nao deve escapar da deduplicacao] \nexpected: 409\n but was: 201"
+          },
+          {
+            "name": "concurrentRequestsCannotExceedThePublicationQuota",
+            "type": "failure",
+            "message": "Expecting ArrayList:\n  [201,\n    500,\n    500,\n    500,\n    500,\n    500,\n    500,\n    500,\n    201,\n    201,\n    500,\n    500,\n    201,\n    500,\n    201,\n    500,\n    201,\n    500,\n    201,\n    201,\n    201,\n    500,\n    201,\n    429,\n    429,\n    500,\n    429,\n    429,\n    429,\n    429,\n    429,\n    429,\n    429,\n    500,\n    500,\n    429,\n    429,\n    429,\n    500,\n    429,\n    500,\n    429,\n    500,\n    429,\n    429,\n    500,\n    429,\n    500]\nto contain only:\n  [201, 429]\nbut the following element(s) were unexpected:\n  [500,\n    500,\n    500,\n    500,\n    500,\n    500,\n    500,\n    500,\n    500,\n    500,\n    500,\n    500,\n    500,\n    500,\n    500,\n    500,\n    500,\n    500,\n    500,\n    500,\n    500]"
+          }
+        ]
+      },
+      {
+        "class": "com.socialcoisa.rede.securityaudit.RouteAuthorizationAuditTests",
+        "tests": 1541,
+        "failures": 12,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          {
+            "name": "privateAndOperationalReadsRejectFourUnauthenticatedIdentities()[221]",
+            "type": "failure",
+            "message": "[GET /media/migration [anonymous] {\"enabled\":false,\"flipEnabled\":false,\"total\":0,\"imagekit\":0,\"s3Copied\":0,\"s3Active\":0,\"errors\":0,\"lastError\":null}] \nexpected: 401\n but was: 200"
+          },
+          {
+            "name": "privateAndOperationalReadsRejectFourUnauthenticatedIdentities()[222]",
+            "type": "failure",
+            "message": "[GET /media/migration [forged-user-id] {\"enabled\":false,\"flipEnabled\":false,\"total\":0,\"imagekit\":0,\"s3Copied\":0,\"s3Active\":0,\"errors\":0,\"lastError\":null}] \nexpected: 401\n but was: 200"
+          },
+          {
+            "name": "privateAndOperationalReadsRejectFourUnauthenticatedIdentities()[223]",
+            "type": "failure",
+            "message": "[GET /media/migration [invalid-token] {\"enabled\":false,\"flipEnabled\":false,\"total\":0,\"imagekit\":0,\"s3Copied\":0,\"s3Active\":0,\"errors\":0,\"lastError\":null}] \nexpected: 401\n but was: 200"
+          },
+          {
+            "name": "privateAndOperationalReadsRejectFourUnauthenticatedIdentities()[224]",
+            "type": "failure",
+            "message": "[GET /media/migration [expired-token] {\"enabled\":false,\"flipEnabled\":false,\"total\":0,\"imagekit\":0,\"s3Copied\":0,\"s3Active\":0,\"errors\":0,\"lastError\":null}] \nexpected: 401\n but was: 200"
+          },
+          {
+            "name": "publicReadInputErrorsMustNotBecomeInternalServerErrors()[100]",
+            "type": "failure",
+            "message": "[GET /games/ratings [zero-limit] {\"code\":\"INTERNAL_ERROR\",\"message\":\"Erro interno inesperado.\",\"timestamp\":\"2026-10-21T11:46:04.084058920Z\"}] \nExpecting actual:\n  500\nnot to be equal to:\n  500"
+          },
+          {
+            "name": "publicReadInputErrorsMustNotBecomeInternalServerErrors()[101]",
+            "type": "failure",
+            "message": "[GET /games/ratings [negative-limit] {\"code\":\"INTERNAL_ERROR\",\"message\":\"Erro interno inesperado.\",\"timestamp\":\"2026-10-21T11:46:04.086343612Z\"}] \nExpecting actual:\n  500\nnot to be equal to:\n  500"
+          },
+          {
+            "name": "publicReadInputErrorsMustNotBecomeInternalServerErrors()[102]",
+            "type": "failure",
+            "message": "[GET /games/ratings [malformed-cursor] {\"code\":\"INTERNAL_ERROR\",\"message\":\"Erro interno inesperado.\",\"timestamp\":\"2026-10-21T11:46:04.087949279Z\"}] \nExpecting actual:\n  500\nnot to be equal to:\n  500"
+          },
+          {
+            "name": "publicReadInputErrorsMustNotBecomeInternalServerErrors()[127]",
+            "type": "failure",
+            "message": "[GET /groups [zero-limit] {\"code\":\"INTERNAL_ERROR\",\"message\":\"Erro interno inesperado.\",\"timestamp\":\"2026-10-21T11:46:04.148403880Z\"}] \nExpecting actual:\n  500\nnot to be equal to:\n  500"
+          },
+          {
+            "name": "publicReadInputErrorsMustNotBecomeInternalServerErrors()[139]",
+            "type": "failure",
+            "message": "[GET /jobs [zero-limit] {\"code\":\"INTERNAL_ERROR\",\"message\":\"Erro interno inesperado.\",\"timestamp\":\"2026-10-21T11:46:04.176019842Z\"}] \nExpecting actual:\n  500\nnot to be equal to:\n  500"
+          },
+          {
+            "name": "publicReadInputErrorsMustNotBecomeInternalServerErrors()[223]",
+            "type": "failure",
+            "message": "[GET /users/search [zero-limit] {\"code\":\"INTERNAL_ERROR\",\"message\":\"Erro interno inesperado.\",\"timestamp\":\"2026-10-21T11:46:04.396440402Z\"}] \nExpecting actual:\n  500\nnot to be equal to:\n  500"
+          },
+          {
+            "name": "publicReadInputErrorsMustNotBecomeInternalServerErrors()[224]",
+            "type": "failure",
+            "message": "[GET /users/search [negative-limit] {\"code\":\"INTERNAL_ERROR\",\"message\":\"Erro interno inesperado.\",\"timestamp\":\"2026-10-21T11:46:04.398260304Z\"}] \nExpecting actual:\n  500\nnot to be equal to:\n  500"
+          },
+          {
+            "name": "publicReadInputErrorsMustNotBecomeInternalServerErrors()[225]",
+            "type": "failure",
+            "message": "[GET /users/search [malformed-cursor] {\"code\":\"INTERNAL_ERROR\",\"message\":\"Erro interno inesperado.\",\"timestamp\":\"2026-10-21T11:46:04.400044026Z\"}] \nExpecting actual:\n  500\nnot to be equal to:\n  500"
+          }
+        ]
+      },
+      {
+        "class": "com.socialcoisa.rede.securityaudit.SharedAuthenticationQuotaAuditTests",
+        "tests": 1,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          {
+            "name": "oneClientsInvalidLoginsMustNotDisableAnotherClientsValidLogin",
+            "type": "failure",
+            "message": "[Outro IP e credenciais corretas nao podem perder o login por cota global: {\"code\":\"RATE_LIMITED\",\"message\":\"Limite de requisicoes excedido.\",\"timestamp\":\"2026-10-21T11:46:07.995059564Z\"}] \nexpected: 200\n but was: 429"
+          }
+        ]
+      },
+      {
+        "class": "com.socialcoisa.rede.securityaudit.SpamDetectionTimingAuditTests",
+        "tests": 1,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          {
+            "name": "aHarmlessFirstPostMustNotSilenceDetectionOfTheFollowingBurst",
+            "type": "failure",
+            "message": "[A primeira avaliacao sem sinal nao deve impedir reconhecer o limiar de flood] \nExpecting actual:\n  \"THROTTLED\"\nnot to be equal to:\n  \"THROTTLED\""
+          }
+        ]
+      },
+      {
+        "class": "com.socialcoisa.rede.securityaudit.StoredHtmlSecurityAuditTests",
+        "tests": 18,
+        "failures": 3,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          {
+            "name": "neitherCreationNorEditingCanStoreActivePayloads(String, String)[16]",
+            "type": "failure",
+            "message": "[svg-set-url create executable URL via to] \nExpecting actual:\n  \"javascript:window.auditexecuted=1\"\nnot to start with:\n  \"javascript:\""
+          },
+          {
+            "name": "neitherCreationNorEditingCanStoreActivePayloads(String, String)[17]",
+            "type": "failure",
+            "message": "[svg-animate-url create executable URL via to] \nExpecting actual:\n  \"javascript:window.auditexecuted=1\"\nnot to start with:\n  \"javascript:\""
+          },
+          {
+            "name": "neitherCreationNorEditingCanStoreActivePayloads(String, String)[18]",
+            "type": "failure",
+            "message": "[css-escaped-function create invisible remote CSS load] \nExpecting actual:\n  \"<style>p{background:u\\72l(https://audit.invalid/pixel)}</style><p>conteudo legitimo preservado</p>\"\nnot to contain:\n  \"audit.invalid\""
+          }
+        ]
+      }
+    ]
+  },
+  "mariadb_configuration": {
+    "version": "11.8.9",
+    "globally_quoted_identifiers": true,
+    "migrations_applied": 122,
+    "schema_version": "137",
+    "note": "A separate first run without identifier quoting failed on notification column read; QA already enables quoting."
+  },
+  "browser": {
+    "browser": "149.0.7827.102",
+    "network": "all HTTP requests intercepted",
+    "results": [
+      {
+        "fixture": "svg-set-url-create",
+        "mode": "sanitizer-alone",
+        "animatedHref": "javascript:window.auditExecuted=1",
+        "linkTarget": "_blank",
+        "background": "none",
+        "scriptExecuted": false,
+        "interceptedOutboundRequests": [],
+        "browserMessages": []
+      },
+      {
+        "fixture": "svg-set-url-create",
+        "mode": "page-csp",
+        "animatedHref": "javascript:window.auditExecuted=1",
+        "linkTarget": "_blank",
+        "background": "none",
+        "scriptExecuted": false,
+        "interceptedOutboundRequests": [],
+        "browserMessages": [
+          "Running the JavaScript URL violates the following Content Security Policy directive 'script-src 'none''. Either the 'unsafe-inline' keyword, a hash ('sha256-...'), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked."
+        ]
+      },
+      {
+        "fixture": "svg-set-url-create",
+        "mode": "inline-sandbox-and-csp",
+        "animatedHref": "javascript:window.auditExecuted=1",
+        "linkTarget": "_blank",
+        "background": "none",
+        "scriptExecuted": false,
+        "interceptedOutboundRequests": [],
+        "browserMessages": [
+          "Running the JavaScript URL violates the following Content Security Policy directive 'default-src 'none''. Either the 'unsafe-inline' keyword, a hash ('sha256-...'), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. Note also that 'script-src' was not explicitly set, so 'default-src' is used as a fallback. The action has been blocked."
+        ]
+      },
+      {
+        "fixture": "svg-animate-url-create",
+        "mode": "sanitizer-alone",
+        "animatedHref": "https://example.invalid/",
+        "linkTarget": "_blank",
+        "background": "none",
+        "scriptExecuted": false,
+        "interceptedOutboundRequests": [
+          "https://example.invalid/"
+        ],
+        "browserMessages": []
+      },
+      {
+        "fixture": "svg-animate-url-create",
+        "mode": "page-csp",
+        "animatedHref": "https://example.invalid/",
+        "linkTarget": "_blank",
+        "background": "none",
+        "scriptExecuted": false,
+        "interceptedOutboundRequests": [
+          "https://example.invalid/"
+        ],
+        "browserMessages": []
+      },
+      {
+        "fixture": "svg-animate-url-create",
+        "mode": "inline-sandbox-and-csp",
+        "animatedHref": "https://example.invalid/",
+        "linkTarget": "_blank",
+        "background": "none",
+        "scriptExecuted": false,
+        "interceptedOutboundRequests": [
+          "https://example.invalid/"
+        ],
+        "browserMessages": []
+      },
+      {
+        "fixture": "css-escaped-function-create",
+        "mode": "sanitizer-alone",
+        "animatedHref": null,
+        "linkTarget": null,
+        "background": "url(\"https://audit.invalid/pixel\")",
+        "scriptExecuted": false,
+        "interceptedOutboundRequests": [
+          "https://audit.invalid/pixel"
+        ],
+        "browserMessages": [
+          "Failed to load resource: net::ERR_FAILED"
+        ]
+      },
+      {
+        "fixture": "css-escaped-function-create",
+        "mode": "page-csp",
+        "animatedHref": null,
+        "linkTarget": null,
+        "background": "url(\"https://audit.invalid/pixel\")",
+        "scriptExecuted": false,
+        "interceptedOutboundRequests": [
+          "https://audit.invalid/pixel"
+        ],
+        "browserMessages": [
+          "Failed to load resource: net::ERR_FAILED"
+        ]
+      },
+      {
+        "fixture": "css-escaped-function-create",
+        "mode": "inline-sandbox-and-csp",
+        "animatedHref": null,
+        "linkTarget": null,
+        "background": "url(\"https://audit.invalid/pixel\")",
+        "scriptExecuted": false,
+        "interceptedOutboundRequests": [
+          "https://audit.invalid/pixel"
+        ],
+        "browserMessages": [
+          "Failed to load resource: net::ERR_FAILED"
+        ]
+      }
+    ]
+  },
+  "interpretation": "Failed assertions are findings grouped in the Markdown report. Different failed cases can share a root cause. This is not a production-exploit or complete-security certification."
+}

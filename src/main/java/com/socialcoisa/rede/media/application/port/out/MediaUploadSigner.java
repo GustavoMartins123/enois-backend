@@ -13,7 +13,7 @@ import java.util.Map;
 public interface MediaUploadSigner {
 
 	/** Metodo, endereco e cabecalhos que o cliente precisa mandar para subir o arquivo. */
-	SignedUpload sign(String objectKey, String mimeType);
+	SignedUpload sign(String objectKey, String mimeType, long sizeBytes);
 
 	record SignedUpload(String url, String method, Map<String, String> headers, Instant expiresAt) {
 	}

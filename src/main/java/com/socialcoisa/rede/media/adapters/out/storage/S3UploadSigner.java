@@ -18,7 +18,8 @@ import com.socialcoisa.rede.media.application.port.out.MediaUploadSigner;
  *
  *  1. A assinatura inclui o `Content-Type`. Se o cliente mandar tipo diferente do assinado, o S3
  *     recusa — por isso o cabecalho vai na resposta e o front repete exatamente ele.
- *  2. O prazo e o mesmo da janela do asset (15 min), curtinho de proposito.
+ *  2. Content-Length vincula a subida ao tamanho declarado; o browser o calcula do arquivo.
+ *     O prazo e o mesmo da janela do asset (60 min).
  *  3. Nao existe credencial no cliente: quem tem permissao e o pod, que assina. O `S3Presigner`
  *     usa a cadeia padrao (IRSA do service account, no cluster).
  */
@@ -35,12 +36,14 @@ class S3UploadSigner implements MediaUploadSigner {
 	}
 
 	@Override
-	public SignedUpload sign(String objectKey, String mimeType) {
+	public SignedUpload sign(String objectKey, String mimeType, long sizeBytes) {
+		if (sizeBytes <= 0) throw new IllegalArgumentException("Upload size must be positive");
 		Duration validade = Duration.ofMinutes(60);
 		PutObjectRequest request = PutObjectRequest.builder()
 			.bucket(bucket)
 			.key(prefix + objectKey)
 			.contentType(mimeType)
+			.contentLength(sizeBytes)
 			.build();
 		PresignedPutObjectRequest presigned = presigner.presignPutObject(PutObjectPresignRequest.builder()
 			.signatureDuration(validade)

@@ -118,6 +118,7 @@ class JobContractController {
 			@RequestParam(required = false) String cursor, @RequestParam(defaultValue = "20") int limit,
 			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		limit = Math.max(1, Math.min(limit, 100));
 		// As ABAS: EXTERNAL devolve SO as externas (com filtro de agregador); INTERNAL nunca
 		// mistura. Sem `source` mantem o comportamento antigo (internas + externas na 1a pagina).
 		boolean soExternas = "EXTERNAL".equalsIgnoreCase(source);
@@ -473,7 +474,7 @@ class JobContractController {
 					job.salaryPeriod(), salaryLabel(job));
 			})
 			.toList();
-		String nextCursor = jobs.size() == limit
+		String nextCursor = !jobs.isEmpty() && jobs.size() == limit
 			? cursorCodec.encode(jobs.get(jobs.size() - 1).postedAt()) : null;
 		// Vagas externas entram DEPOIS das internas, so na 1a pagina da busca publica, e respeitando
 		// a pesquisa por titulo (elas nao tem tipo/nivel/local para filtrar).

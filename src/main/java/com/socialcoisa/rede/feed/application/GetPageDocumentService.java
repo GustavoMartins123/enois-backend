@@ -29,6 +29,8 @@ public class GetPageDocumentService implements GetPageDocumentUseCase {
 			.filter(candidate -> candidate.type() == PostType.PAGE)
 			.filter(candidate -> StringUtils.hasText(candidate.pageHtml()))
 			.orElseThrow(() -> new ApiException(404, "PAGE_NOT_FOUND", "Pagina nao encontrada."));
-		return new PageDocument(post.id().value(), post.authorId().value(), post.pageHtml());
+		// Existing rows also receive the current sanitizer when served; no data rewrite required.
+		String html = com.socialcoisa.rede.shared.html.SafeHtml.sanitizePageHtml(post.pageHtml());
+		return new PageDocument(post.id().value(), post.authorId().value(), html == null ? "" : html);
 	}
 }

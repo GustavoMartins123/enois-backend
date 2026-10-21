@@ -74,7 +74,7 @@ public class MediaService implements CreateMediaUploadUseCase, GetMediaAssetUseC
 			storageUrlFactory.provider());
 		MediaAsset saved = mediaAssetRepository.save(asset);
 		try {
-			return MediaUploadView.fromSigned(saved, signer.sign(objectKey, saved.mimeType()));
+			return MediaUploadView.fromSigned(saved, signer.sign(objectKey, saved.mimeType(), saved.size()));
 		}
 		catch (RuntimeException assinaturaFalhou) {
 			// Credencial do S3 ausente/ruim (IRSA) virava 500 generico — o operador nao tinha o

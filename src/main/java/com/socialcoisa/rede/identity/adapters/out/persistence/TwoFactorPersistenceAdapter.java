@@ -56,6 +56,20 @@ class TwoFactorPersistenceAdapter implements TwoFactorRepository {
 	}
 
 	@Override
+	public Optional<TwoFactorChallenge> findChallengeForUpdate(String id) {
+		return jdbc.query("select * from two_factor_challenges where id = ? for update", CHALLENGE_MAPPER, id)
+			.stream().findFirst();
+	}
+
+	@Override
+	public Optional<TwoFactorChallenge> findLatestChallengeForUpdate(String userId, TwoFactorMethod method) {
+		return jdbc.query("""
+			select * from two_factor_challenges where user_id = ? and method = ? and consumed_at is null
+			order by created_at desc limit 1 for update""", CHALLENGE_MAPPER, userId, method.name())
+			.stream().findFirst();
+	}
+
+	@Override
 	public Optional<TwoFactorChallenge> findLatestChallenge(String userId, TwoFactorMethod method) {
 		return jdbc.query("""
 				select * from two_factor_challenges where user_id = ? and method = ? and consumed_at is null

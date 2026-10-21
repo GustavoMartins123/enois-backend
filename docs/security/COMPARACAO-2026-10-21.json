@@ -1,0 +1,38 @@
+{
+  "base_commit": "a6a7b10",
+  "branch": "fix/seguranca-regras-negocio",
+  "baseline_problem_cases": 22,
+  "full_suite_problem_cases": 22,
+  "new_problem_cases": [],
+  "resolved_baseline_cases": [],
+  "audits": {
+    "ANTES-H2": {
+      "tests": 1588,
+      "passed": 1556,
+      "failures": 32,
+      "errors": 0,
+      "skipped": 0
+    },
+    "DEPOIS-H2": {
+      "tests": 1602,
+      "passed": 1602,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "DEPOIS-MARIADB": {
+      "tests": 1602,
+      "passed": 1602,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "DEPOIS-MARIADB-QA": {
+      "tests": 1602,
+      "passed": 1602,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  }
+}

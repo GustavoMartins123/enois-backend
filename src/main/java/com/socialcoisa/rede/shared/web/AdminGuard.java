@@ -12,28 +12,23 @@ import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.profile.domain.UserProfile;
 
 /**
- * Restringe operacoes administrativas a uma allowlist de e-mails ({@code REDE_ADMIN_EMAILS}) e de
- * usernames ({@code REDE_ADMIN_USERNAMES}) separados por virgula. O papel de admin nao existe no
- * schema, entao a autorizacao e por configuracao.
- *
- * O username entra como alternativa para o painel de moderacao: as contas donas do projeto
- * (aminadojava e mrfoxxo) precisam de admin independentemente do e-mail cadastrado. Usernames
- * podem ser renomeados; por isso a allowlist de e-mail continua valendo e a de username e
- * configuravel no cluster.
+ * Autoriza por IDs imutaveis ({@code REDE_ADMIN_USER_IDS}) ou e-mails verificados
+ * ({@code REDE_ADMIN_EMAILS}), separados por virgula. Username editavel nunca concede poder.
  */
 @Component
 public class AdminGuard {
 
 	private final UserProfileRepository profileRepository;
 	private final Set<String> adminEmails;
-	private final Set<String> adminUsernames;
+	private final Set<String> adminUserIds;
 
 	public AdminGuard(UserProfileRepository profileRepository,
 			@Value("${rede.admin.emails:}") String adminEmails,
-			@Value("${rede.admin.usernames:aminadojava,mrfoxxo}") String adminUsernames) {
+			@Value("${rede.admin.user-ids:}") String adminUserIds) {
 		this.profileRepository = profileRepository;
 		this.adminEmails = normalize(adminEmails);
-		this.adminUsernames = normalize(adminUsernames);
+		this.adminUserIds = Arrays.stream(adminUserIds.split(",")).map(String::trim)
+			.filter(item -> !item.isEmpty()).collect(Collectors.toUnmodifiableSet());
 	}
 
 	private static Set<String> normalize(String value) {
@@ -58,14 +53,13 @@ public class AdminGuard {
 	}
 
 	private boolean isAdmin(UserProfile profile) {
-		return isAdmin(profile.email(), profile.username());
+		return adminUserIds.contains(profile.id()) || (profile.emailVerified() && profile.email() != null
+			&& adminEmails.contains(profile.email().toLowerCase(Locale.ROOT)));
 	}
 
 	/** Mesma allowlist, para identificadores já carregados (ex.: triagem de contas suspeitas). */
 	public boolean isAdmin(String email, String username) {
-		if (email != null && adminEmails.contains(email.toLowerCase(Locale.ROOT))) {
-			return true;
-		}
-		return username != null && adminUsernames.contains(username.toLowerCase(Locale.ROOT));
+		// Username locates a profile; it never grants authority by itself.
+		return username != null && profileRepository.findByUsername(username).map(this::isAdmin).orElse(false);
 	}
 }

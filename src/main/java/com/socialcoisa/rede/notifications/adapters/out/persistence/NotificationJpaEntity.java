@@ -38,7 +38,8 @@ class NotificationJpaEntity {
 	@Column(name = "cta_label")
 	private String ctaLabel;
 
-	@Column(nullable = false)
+	// H2 normalizes the existing Flyway identifier to uppercase; MariaDB columns ignore case.
+	@Column(name = "`READ`", nullable = false)
 	private boolean read;
 
 	@Column(name = "created_at", nullable = false)

@@ -1,0 +1,110 @@
+{
+  "totals": {
+    "tests": 1602,
+    "passed": 1602,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "classes": [
+    {
+      "class": "com.socialcoisa.rede.media.adapters.out.storage.S3UploadConstraintAuditTests",
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "failed_cases": [],
+      "passed": 1
+    },
+    {
+      "class": "com.socialcoisa.rede.securityaudit.AdminAuthorityAuditTests",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "failed_cases": [],
+      "passed": 3
+    },
+    {
+      "class": "com.socialcoisa.rede.securityaudit.AuthenticationStateAuditTests",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "failed_cases": [],
+      "passed": 3
+    },
+    {
+      "class": "com.socialcoisa.rede.securityaudit.BusinessRuleAdversarialTests",
+      "tests": 11,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "failed_cases": [],
+      "passed": 11
+    },
+    {
+      "class": "com.socialcoisa.rede.securityaudit.EconomyIntegrityAuditTests",
+      "tests": 5,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "failed_cases": [],
+      "passed": 5
+    },
+    {
+      "class": "com.socialcoisa.rede.securityaudit.NotificationContactAuditTests",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "failed_cases": [],
+      "passed": 3
+    },
+    {
+      "class": "com.socialcoisa.rede.securityaudit.PublishingAbuseAuditTests",
+      "tests": 8,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "failed_cases": [],
+      "passed": 8
+    },
+    {
+      "class": "com.socialcoisa.rede.securityaudit.RouteAuthorizationAuditTests",
+      "tests": 1543,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "failed_cases": [],
+      "passed": 1543
+    },
+    {
+      "class": "com.socialcoisa.rede.securityaudit.SharedAuthenticationQuotaAuditTests",
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "failed_cases": [],
+      "passed": 1
+    },
+    {
+      "class": "com.socialcoisa.rede.securityaudit.SpamDetectionTimingAuditTests",
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "failed_cases": [],
+      "passed": 1
+    },
+    {
+      "class": "com.socialcoisa.rede.securityaudit.StoredHtmlSecurityAuditTests",
+      "tests": 23,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "failed_cases": [],
+      "passed": 23
+    }
+  ]
+}

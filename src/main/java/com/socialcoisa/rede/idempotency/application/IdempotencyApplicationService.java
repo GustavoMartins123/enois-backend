@@ -28,17 +28,22 @@ public class IdempotencyApplicationService {
 	private final SpringDataIdempotencyKeyRepository repository;
 	private final ObjectMapper objectMapper;
 	private final Clock clock;
+	private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
 	public IdempotencyApplicationService(SpringDataIdempotencyKeyRepository repository, ObjectMapper objectMapper,
-			Clock clock) {
+			Clock clock, org.springframework.jdbc.core.JdbcTemplate jdbc) {
 		this.repository = repository;
 		this.objectMapper = objectMapper;
 		this.clock = clock;
+		this.jdbc = jdbc;
 	}
 
 	@Transactional
 	public ResponseEntity<String> execute(UserId userId, String method, String route, String idempotencyKey,
 			String requestHash, Supplier<CommandResponse> action) {
+		// Serialize commands for an existing user before the first snapshot read. Public
+		// authentication scopes use the String overload and never acquire user/gap locks.
+		jdbc.query("select id from users where id = ? for update", (rs, row) -> rs.getString(1), userId.value());
 		return execute(userId.value(), method, route, idempotencyKey, requestHash, action);
 	}
 
@@ -61,10 +66,8 @@ public class IdempotencyApplicationService {
 			repository.saveAndFlush(created);
 		}
 		catch (DataIntegrityViolationException exception) {
-			IdempotencyKeyEntity concurrent = repository
-				.findByUserIdAndMethodAndRouteAndIdempotencyKey(userScope, method, route, key)
-				.orElseThrow(() -> exception);
-			return replayOrReject(concurrent, requestHash);
+			// A failed insert invalidates this transaction. Never query/replay inside it.
+			throw new ApiException(409, "IDEMPOTENCY_IN_PROGRESS", "Comando concorrente; tente novamente.");
 		}
 		CommandResponse response = action.get();
 		String body = writeJson(response.body());

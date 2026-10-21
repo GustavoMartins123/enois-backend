@@ -15,6 +15,12 @@ public interface TwoFactorRepository {
 
 	Optional<TwoFactorChallenge> findChallenge(String id);
 
+	/** Lock before verification/consumption so a challenge cannot issue concurrent sessions. */
+	Optional<TwoFactorChallenge> findChallengeForUpdate(String id);
+
+	Optional<TwoFactorChallenge> findLatestChallengeForUpdate(String userId,
+		com.socialcoisa.rede.identity.domain.TwoFactorMethod method);
+
 	/** Desafio mais recente do usuario por metodo (usado ao confirmar a ativacao por e-mail). */
 	Optional<TwoFactorChallenge> findLatestChallenge(String userId, com.socialcoisa.rede.identity.domain.TwoFactorMethod method);
 

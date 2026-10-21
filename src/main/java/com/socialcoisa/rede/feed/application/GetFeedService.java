@@ -152,7 +152,7 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 		// Unico lugar que devolve o corpo da pagina e o texto do artigo (ver PostView.from): e a
 		// leitura de um post so — a listagem nao carrega nem um nem outro.
 		return (enriched.isEmpty() ? PostView.from(post) : enriched.get(0))
-			.withPageHtml(post.pageHtml())
+			.withPageHtml(com.socialcoisa.rede.shared.html.SafeHtml.sanitizePageHtml(post.pageHtml()))
 			.withArticleBody(articleRepository.findBody(post.id()).orElse(null));
 	}
 

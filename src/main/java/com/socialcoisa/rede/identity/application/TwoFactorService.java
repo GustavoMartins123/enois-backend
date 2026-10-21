@@ -175,7 +175,7 @@ public class TwoFactorService implements TwoFactorUseCase {
 		}
 	}
 
-	@Transactional
+	@Transactional(noRollbackFor = InvalidTwoFactorCodeException.class)
 	@Override
 	public void confirmEmailOtpSetup(String userId, String code) {
 		if (!StringUtils.hasText(code)) {
@@ -183,9 +183,12 @@ public class TwoFactorService implements TwoFactorUseCase {
 		}
 		Instant now = clock.instant();
 		TwoFactorChallenge challenge = repository
-			.findLatestChallenge(userId, TwoFactorMethod.EMAIL)
+			.findLatestChallengeForUpdate(userId, TwoFactorMethod.EMAIL)
 			.orElseThrow(() -> new ApiException(400, "TWO_FACTOR_CHALLENGE_NOT_FOUND",
 				"Peca um novo codigo por e-mail."));
+		if (challenge.isConsumed()) {
+			throw new ApiException(409, "TWO_FACTOR_CHALLENGE_ALREADY_USED", "Este codigo ja foi usado.");
+		}
 		if (challenge.isOutOfAttempts()) {
 			throw new ApiException(429, "TOO_MANY_ATTEMPTS", "Tentativas demais. Peca um novo codigo.");
 		}
@@ -194,7 +197,7 @@ public class TwoFactorService implements TwoFactorUseCase {
 		}
 		if (!Hashes.sha256Hex(code.trim()).equals(challenge.codeHash())) {
 			repository.saveChallenge(challenge.registerFailedAttempt());
-			throw new ApiException(400, "INVALID_TWO_FACTOR_CODE", "Codigo incorreto.");
+			throw new InvalidTwoFactorCodeException();
 		}
 
 		repository.saveChallenge(challenge.consume(now));
@@ -241,7 +244,7 @@ public class TwoFactorService implements TwoFactorUseCase {
 	@Transactional
 	public void resendTwoFactorCode(String challengeId) {
 		Instant now = clock.instant();
-		TwoFactorChallenge challenge = repository.findChallenge(challengeId)
+		TwoFactorChallenge challenge = repository.findChallengeForUpdate(challengeId)
 			.orElseThrow(() -> new ApiException(404, "TWO_FACTOR_CHALLENGE_NOT_FOUND",
 				"Este login expirou. Entre com sua senha novamente."));
 		if (challenge.method() != TwoFactorMethod.EMAIL) {
@@ -266,10 +269,10 @@ public class TwoFactorService implements TwoFactorUseCase {
 	 * Aceita codigo do aplicativo (TOTP) ou um codigo de recuperacao. Erro de codigo incrementa as
 	 * tentativas do mesmo desafio: sem isso, daria para testar codigos indefinidamente.
 	 */
-	@Transactional
+	@Transactional(noRollbackFor = InvalidTwoFactorCodeException.class)
 	public String verifyChallenge(String challengeId, String code) {
 		Instant now = clock.instant();
-		TwoFactorChallenge challenge = repository.findChallenge(challengeId)
+		TwoFactorChallenge challenge = repository.findChallengeForUpdate(challengeId)
 			.orElseThrow(() -> new ApiException(404, "TWO_FACTOR_CHALLENGE_NOT_FOUND",
 				"Este login expirou. Entre com sua senha novamente."));
 		if (challenge.isConsumed()) {
@@ -302,7 +305,7 @@ public class TwoFactorService implements TwoFactorUseCase {
 				now);
 			if (!recovered) {
 				repository.saveChallenge(challenge.registerFailedAttempt());
-				throw new ApiException(400, "INVALID_TWO_FACTOR_CODE", "Codigo incorreto.");
+				throw new InvalidTwoFactorCodeException();
 			}
 		}
 

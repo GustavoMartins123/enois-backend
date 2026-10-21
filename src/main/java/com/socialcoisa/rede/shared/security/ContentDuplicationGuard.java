@@ -22,7 +22,7 @@ public class ContentDuplicationGuard {
 
 	private static final int MAX_ENTRIES = 50_000;
 
-	private final Cache<String, Boolean> seen;
+	private final Cache<String, Object> seen;
 	private final long windowMinutes;
 
 	public ContentDuplicationGuard(
@@ -48,14 +48,23 @@ public class ContentDuplicationGuard {
 		}
 		String hash = Hashes.sha256Hex(normalize(content));
 		String key = userId + "|" + hash;
-		if (seen.getIfPresent(key) != null) {
+		Object reservation = new Object();
+		if (seen.asMap().putIfAbsent(key, reservation) != null) {
 			throw new ApiException(409, "DUPLICATE_CONTENT",
 				"Voce ja publicou este conteudo recentemente.");
 		}
-		seen.put(key, Boolean.TRUE);
+		if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+			org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+				new org.springframework.transaction.support.TransactionSynchronization() {
+					@Override
+					public void afterCompletion(int status) {
+						if (status != STATUS_COMMITTED) seen.asMap().remove(key, reservation);
+					}
+				});
+		}
 	}
 
 	private static String normalize(String text) {
-		return text.strip().toLowerCase().replaceAll("\\s+", " ");
+		return (text == null ? "" : text).strip().toLowerCase(java.util.Locale.ROOT).replaceAll("\\s+", " ");
 	}
 }

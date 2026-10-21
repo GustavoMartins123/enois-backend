@@ -183,13 +183,18 @@ public class PublishPostService implements PublishPostUseCase {
 		} else {
 			topic = null;
 		}
-		if (StringUtils.hasText(command.content())) {
-			duplicationGuard.require(command.authorId().value(), command.content());
-		}
-		Post post = Post.publish(idGenerator.newPostId(), command.authorId(), command.type(), textOf(command),
-			pageHtml(command), tags, mediaIds, communityId, topic, channelId, clock.instant(), authorIdentity);
-		Post saved = postRepository.save(post);
+		String sanitizedPage = pageHtml(command);
 		String articleBody = articleBody(command);
+		String text = textOf(command);
+		// PAGE has an optional title; deduplicate its actual document even when the title changes.
+		String duplicateContent = sanitizedPage != null ? sanitizedPage
+			: articleBody != null ? text + "\n" + articleBody : text;
+		if (StringUtils.hasText(duplicateContent)) {
+			duplicationGuard.require(command.authorId().value(), duplicateContent);
+		}
+		Post post = Post.publish(idGenerator.newPostId(), command.authorId(), command.type(), text,
+			sanitizedPage, tags, mediaIds, communityId, topic, channelId, clock.instant(), authorIdentity);
+		Post saved = postRepository.save(post);
 		if (articleBody != null) {
 			// Corpo do artigo em tabela propria: nao pesa na linha que o feed le e nao viaja na
 			// listagem (ver PostView.from). Mesma transacao do post: ou nasce inteiro, ou nao nasce.

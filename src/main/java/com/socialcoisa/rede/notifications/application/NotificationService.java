@@ -19,16 +19,25 @@ public class NotificationService {
 	private final NotificationRepository repository;
 	private final ApplicationEventPublisher events;
 	private final Clock clock;
+	private final com.socialcoisa.rede.shared.blocks.BlockedUsersReader blocks;
+	private static final java.util.Set<String> ESSENTIAL_KINDS = java.util.Set.of(
+		"SANCAO", "RECURSO", "MODERACAO", "SEGURANCA", "SISTEMA", "SUPORTE");
 
-	public NotificationService(NotificationRepository repository, ApplicationEventPublisher events, Clock clock) {
+	public NotificationService(NotificationRepository repository, ApplicationEventPublisher events, Clock clock,
+			com.socialcoisa.rede.shared.blocks.BlockedUsersReader blocks) {
 		this.repository = repository;
 		this.events = events;
 		this.clock = clock;
+		this.blocks = blocks;
 	}
 
+	/** Returns null when a blocked social contact is suppressed, including its push event. */
 	@Transactional
 	public Notification create(String userId, String kind, String actorId, String title, String body, String href,
 			String ctaLabel) {
+		if (!ESSENTIAL_KINDS.contains(kind) && blocks.hiddenIdsFor(userId).contains(actorId)) {
+			return null;
+		}
 		String id = "notification_" + UUID.randomUUID().toString().replace("-", "");
 		Notification notification = Notification.create(id, userId, kind, actorId, title, body, href, ctaLabel,
 			clock.instant());
