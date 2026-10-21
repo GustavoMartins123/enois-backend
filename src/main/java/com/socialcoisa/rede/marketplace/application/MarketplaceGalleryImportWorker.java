@@ -1,10 +1,16 @@
 package com.socialcoisa.rede.marketplace.application;
 
+import java.util.List;
+import java.util.Locale;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
+import com.socialcoisa.rede.shared.sanctions.SanctionGateReader;
 import com.socialcoisa.rede.themes.application.port.out.ThemeGalleryRepository;
 
 /**
@@ -24,10 +30,22 @@ public class MarketplaceGalleryImportWorker {
 
 	private final ThemeGalleryRepository themes;
 	private final MarketplaceService marketplace;
+	private final SanctionGateReader sanctionGate;
+	private final UserProfileRepository profiles;
+	private final List<String> suspiciousPatterns;
 
-	public MarketplaceGalleryImportWorker(ThemeGalleryRepository themes, MarketplaceService marketplace) {
+	public MarketplaceGalleryImportWorker(ThemeGalleryRepository themes, MarketplaceService marketplace,
+			SanctionGateReader sanctionGate, UserProfileRepository profiles,
+			@Value("${rede.security.suspicious.name-patterns:probe}") String patterns) {
 		this.themes = themes;
 		this.marketplace = marketplace;
+		this.sanctionGate = sanctionGate;
+		this.profiles = profiles;
+		this.suspiciousPatterns = java.util.Arrays.stream(patterns.split(","))
+			.map(String::trim)
+			.filter(pattern -> !pattern.isEmpty())
+			.map(pattern -> pattern.toLowerCase(Locale.ROOT))
+			.toList();
 	}
 
 	@Scheduled(initialDelayString = "${rede.marketplace.gallery-import-initial-delay-ms:90000}",
@@ -35,6 +53,11 @@ public class MarketplaceGalleryImportWorker {
 	public void importPublishedThemes() {
 		int created = 0;
 		for (var theme : themes.findPublished(MAX_THEMES)) {
+			// Tema de conta banida, excluída ou de teste não volta a ser listado — senão o
+			// saneamento remove e este import recria na mesma rodada.
+			if (shouldSkip(theme)) {
+				continue;
+			}
 			try {
 				boolean listed = marketplace.ensureListed(theme.authorId(), "THEME", theme.id(), theme.name(),
 					theme.description(), MarketplaceService.MIN_PRICE).isPresent();
@@ -50,5 +73,19 @@ public class MarketplaceGalleryImportWorker {
 		if (created > 0) {
 			LOG.info("Marketplace: {} tema(s) da comunidade migrados para listagem.", created);
 		}
+	}
+
+	private boolean shouldSkip(com.socialcoisa.rede.themes.domain.ThemePackage theme) {
+		if (sanctionGate.banned(theme.authorId())) {
+			return true;
+		}
+		var profile = profiles.findById(theme.authorId());
+		if (profile.isEmpty()) {
+			return true;
+		}
+		String typed = (profile.get().name() + " " + profile.get().username()).toLowerCase(Locale.ROOT);
+		String title = theme.name().toLowerCase(Locale.ROOT);
+		return suspiciousPatterns.stream()
+			.anyMatch(pattern -> typed.contains(pattern) || title.contains(pattern));
 	}
 }

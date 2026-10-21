@@ -31,14 +31,30 @@ class MarketplaceController {
 	private final ThemeGalleryService gallery;
 	private final CurrentUserResolver currentUserResolver;
 	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles;
+	private final com.socialcoisa.rede.marketplace.application.MarketplaceSanitizeWorker sanitizeWorker;
+	private final com.socialcoisa.rede.shared.web.AdminGuard adminGuard;
 
 	MarketplaceController(MarketplaceService marketplace, ThemeGalleryService gallery,
 			CurrentUserResolver currentUserResolver,
-			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles) {
+			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles,
+			com.socialcoisa.rede.marketplace.application.MarketplaceSanitizeWorker sanitizeWorker,
+			com.socialcoisa.rede.shared.web.AdminGuard adminGuard) {
 		this.marketplace = marketplace;
 		this.gallery = gallery;
 		this.currentUserResolver = currentUserResolver;
 		this.profiles = profiles;
+		this.sanitizeWorker = sanitizeWorker;
+		this.adminGuard = adminGuard;
+	}
+
+	/** Limpeza sob demanda dos resquícios (admin). Devolve quantas listagens caíram. */
+	@PostMapping("/admin/marketplace/sanitize")
+	Map<String, Object> sanitize(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		adminGuard.requireAdmin(user);
+		int removed = sanitizeWorker.sanitizeNow();
+		return Map.of("removed", removed, "listings", marketplace.catalog(60).size());
 	}
 
 	@GetMapping("/marketplace")
