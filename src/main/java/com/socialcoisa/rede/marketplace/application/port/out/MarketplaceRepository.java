@@ -16,6 +16,12 @@ public interface MarketplaceRepository {
 
 	List<MarketplaceListing> findActive(int limit);
 
+	/** Todas as listagens (qualquer status), para a limpeza de resquícios. */
+	List<MarketplaceListing> findAll(int limit);
+
+	/** Compras paradas no escrow de uma listagem (reembolso na remoção). */
+	List<MarketplacePurchase> findHeldByListing(String listingId);
+
 	List<MarketplaceListing> findBySeller(String sellerId);
 
 	MarketplacePurchase savePurchase(MarketplacePurchase purchase);

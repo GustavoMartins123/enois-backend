@@ -15,7 +15,16 @@ public record MarketplaceListing(String id, String sellerId, ItemKind itemKind, 
 		String description, long price, Status status, Instant createdAt, Instant updatedAt) {
 
 	public enum ItemKind {
-		THEME
+		/** Tema da galeria (aponta para theme_gallery). */
+		THEME,
+		/** Modelo de página/post/banner com textos fáceis de trocar. */
+		TEMPLATE,
+		BANNER,
+		PAGE,
+		POST,
+		BLOG,
+		/** Serviço combinado fora da plataforma (o conteúdo descreve o que está incluído). */
+		SERVICE
 	}
 
 	public enum Status {
