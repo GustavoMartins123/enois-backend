@@ -254,4 +254,28 @@ public class MessagingService {
 		return repository.findReactionsByMessageId(messageId);
 	}
 
+	/**
+	 * Resumo das reações de VÁRIAS mensagens (contagem por tipo + a reação de quem está vendo),
+	 * em uma consulta só — o histórico não faz N+1 para desenhar os emojis.
+	 */
+	public java.util.Map<String, MessageReactionSummary> reactionSummaries(
+			java.util.Collection<String> messageIds, String viewerId) {
+		java.util.Map<String, java.util.Map<String, Integer>> counts = new java.util.LinkedHashMap<>();
+		java.util.Map<String, String> mine = new java.util.HashMap<>();
+		for (var row : repository.findReactionsByMessageIds(messageIds)) {
+			counts.computeIfAbsent(row.messageId(), key -> new java.util.LinkedHashMap<>())
+				.merge(row.type().name(), 1, Integer::sum);
+			if (viewerId != null && viewerId.equals(row.userId())) {
+				mine.put(row.messageId(), row.type().name());
+			}
+		}
+		java.util.Map<String, MessageReactionSummary> out = new java.util.HashMap<>();
+		counts.forEach((messageId, byType) -> out.put(messageId,
+			new MessageReactionSummary(byType, mine.get(messageId))));
+		return out;
+	}
+
+	public record MessageReactionSummary(java.util.Map<String, Integer> counts, String myReaction) {
+	}
+
 }

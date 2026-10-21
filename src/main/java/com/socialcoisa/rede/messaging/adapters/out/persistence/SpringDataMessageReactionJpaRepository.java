@@ -10,4 +10,6 @@ public interface SpringDataMessageReactionJpaRepository extends JpaRepository<Me
 	Optional<MessageReactionJpaEntity> findByMessageIdAndUserId(String messageId, String userId);
 
 	List<MessageReactionJpaEntity> findByMessageIdOrderByCreatedAtDesc(String messageId);
+
+	List<MessageReactionJpaEntity> findByMessageIdIn(java.util.Collection<String> messageIds);
 }

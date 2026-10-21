@@ -62,6 +62,12 @@ public interface MessagingRepository {
 	boolean removeMessageReaction(String messageId, String userId);
 	List<ReactionSummary> findReactionsByMessageId(String messageId);
 
+	/** Reações de várias mensagens numa consulta (resumo por mensagem no histórico). */
+	List<MessageReactionRow> findReactionsByMessageIds(java.util.Collection<String> messageIds);
+
+	record MessageReactionRow(String messageId, String userId, com.socialcoisa.rede.feed.domain.ReactionType type) {
+	}
+
 	record ReactionSummary(String userId, com.socialcoisa.rede.feed.domain.ReactionType type, java.time.Instant createdAt) {}
 
 	/** Todas as mensagens enviadas por um usuario — usado pelo ban cleanup. */

@@ -223,4 +223,14 @@ class MessagingPersistenceAdapter implements MessagingRepository {
 			.map(r -> new MessagingRepository.ReactionSummary(r.getUserId(), r.getReactionType(), r.getCreatedAt()))
 			.toList();
 	}
+
+	@Override
+	public List<MessagingRepository.MessageReactionRow> findReactionsByMessageIds(java.util.Collection<String> messageIds) {
+		if (messageIds == null || messageIds.isEmpty()) {
+			return List.of();
+		}
+		return messageReactionRepo.findByMessageIdIn(messageIds).stream()
+			.map(r -> new MessagingRepository.MessageReactionRow(r.getMessageId(), r.getUserId(), r.getReactionType()))
+			.toList();
+	}
 }

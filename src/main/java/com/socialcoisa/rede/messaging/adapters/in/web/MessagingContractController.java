@@ -127,9 +127,16 @@ class MessagingContractController {
 		}
 		Instant before = cursorCodec.decode(cursor).orElse(null);
 		List<Message> msgs = messagingService.getMessages(conversationId, user.id().value(), before, limit);
+		var summaries = messagingService.reactionSummaries(msgs.stream().map(Message::id).toList(),
+			user.id().value());
 		var items = msgs.stream()
-			.map(m -> new MessageView(m.id(), m.conversationId(), m.senderId(), m.text(), m.mediaIds(),
-				m.createdAt() != null ? m.createdAt().toString() : null))
+			.map(m -> {
+				var summary = summaries.get(m.id());
+				return new MessageView(m.id(), m.conversationId(), m.senderId(), m.text(), m.mediaIds(),
+					m.createdAt() != null ? m.createdAt().toString() : null,
+					summary == null ? java.util.Map.of() : summary.counts(),
+					summary == null ? null : summary.myReaction());
+			})
 			.toList();
 		// Pagina cheia => ainda ha mensagens mais antigas: o cursor aponta para a mais antiga desta pagina.
 		String nextCursor = msgs.size() == limit && !msgs.isEmpty()
@@ -180,7 +187,7 @@ class MessagingContractController {
 					request.mediaIds());
 				return new CommandResponse(201, new MessageView(msg.id(), msg.conversationId(), msg.senderId(),
 					msg.text(), msg.mediaIds(),
-					msg.createdAt() != null ? msg.createdAt().toString() : null));
+					msg.createdAt() != null ? msg.createdAt().toString() : null, java.util.Map.of(), null));
 			});
 	}
 
@@ -373,7 +380,7 @@ class MessagingContractController {
 	}
 
 	record MessageView(String id, String conversationId, String from, String text, List<String> mediaIds,
-			String time) {
+			String time, java.util.Map<String, Integer> reactions, String myReaction) {
 	}
 
 	record CreateConversationRequest(String kind, String title, List<String> participantIds) {
