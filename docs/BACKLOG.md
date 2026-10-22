@@ -450,14 +450,22 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   corporativo) e "usa o artigo masculino da marca".
   *Verificado:* `vitest` 342/342, `tsc --noEmit` sem erro, `eslint` limpo, `vite build` ok, e o
   HTML do SSR do login ja entrega a descricao nova.
-- **[ ] A PRECISA SER ENTREGUE — O preview de rede social das rotas continua genérico.** Só 4
-  rotas definem `og:title`/`og:description` (landing, post, Apoiar, root). As outras 12 que têm
-  `description` (login, reset, sobre, termos, privacidade, diretrizes, feed, blogs, developers,
-  perfil profissional, projetos, responsável) sao compartilhadas com a copia do site inteiro
-  ("Einois · Rede humana" / "Construa relações de verdade, não apenas conexões"), então o
-  preview de quem abre o link no WhatsApp ou no X não é da página. Falta decidir se a
-  `description` de cada rota vira tambem `og:description` (com o titulo proprio da rota) ou se o
-  root deixa de impor og:title.
+- **[x] ENTREGUE 2026-10-22 — O preview de rede social das rotas continua genérico: agora cada
+  página mostra a si mesma quando alguém compartilha o link.** Só 4 rotas definiam
+  `og:title`/`og:description` (landing, post, Apoiar, root). As outras 12 que têm `description`
+  (login, reset, sobre, termos, privacidade, diretrizes, feed, blogs, developers, perfil
+  profissional, projetos, responsável) eram compartilhadas com a cópia do site inteiro
+  ("Énóis · Rede humana" / "Construa relações de verdade, não apenas conexões"), então o preview
+  de quem abria o link no WhatsApp ou no X não era da página.
+  *Decidido e feito:* a `description` de cada rota vira também o `og:description`, com o título
+  próprio da rota no `og:title` (o helper `src/lib/seo.ts` — `ogMetas(titulo, descricao)`). As
+  rotas que têm imagem própria (post, blog, perfil) continuam definindo o `og:image` delas; as
+  demais herdam a do root.
+  *Teste:* `src/lib/seo.test.ts` (2) — o helper devolve o par certo e **as 12 rotas** com título e
+  descrição têm o `og:title`/`og:description` da própria página (o teste falha se uma rota
+  voltar a herdar a cópia do site).
+  *Verificado no HTML do SSR:* `/sobre` entrega `<title>Sobre o énóis · …</title>` com o
+  `og:title` e o `og:description` da própria página.
 
 ## Regras que valem para tudo
 - **Proibido automatizar a criação/publicação de posts** (IA/bots/integrações/endpoints alternativos/
