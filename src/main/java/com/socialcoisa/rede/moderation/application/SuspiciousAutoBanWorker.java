@@ -69,8 +69,10 @@ public class SuspiciousAutoBanWorker {
 		this.accountsPerIpToBlock = Math.max(2, Math.min(accountsPerIpToBlock, 100));
 	}
 
-	@Scheduled(initialDelayString = "${rede.moderation.auto-ban.initial-delay-ms:300000}",
-			fixedDelayString = "${rede.moderation.auto-ban.interval-ms:900000}")
+	// Contenção rápida: 1 min depois do boot e a cada 3 min. A varredura olha só as 500 contas
+	// mais recentes da janela, então rodar miúdo custa pouco — e o ataque não cresce por 15 min.
+	@Scheduled(initialDelayString = "${rede.moderation.auto-ban.initial-delay-ms:15000}",
+			fixedDelayString = "${rede.moderation.auto-ban.interval-ms:180000}")
 	public void run() {
 		if (!enabled) {
 			return;

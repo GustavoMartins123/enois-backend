@@ -73,6 +73,7 @@ class AuthController {
 	private final com.socialcoisa.rede.identity.application.SignupChallengeService signupCaptcha;
 	private final com.socialcoisa.rede.identity.application.NewDeviceNotifier newDeviceNotifier;
 	private final com.socialcoisa.rede.shared.security.IpBlockReader ipBlockReader;
+	private final com.socialcoisa.rede.shared.security.SignupAttackGuard signupAttackGuard;
 	private final com.socialcoisa.rede.shared.security.ClientIpResolver ipResolver;
 	/** Cadastros abertos? Desligado, o POST /auth/signup responde 403 SIGNUP_DISABLED. */
 	private final boolean signupEnabled;
@@ -95,6 +96,7 @@ class AuthController {
 			com.socialcoisa.rede.identity.application.SignupChallengeService signupCaptcha,
 			com.socialcoisa.rede.identity.application.NewDeviceNotifier newDeviceNotifier,
 			com.socialcoisa.rede.shared.security.IpBlockReader ipBlockReader,
+			com.socialcoisa.rede.shared.security.SignupAttackGuard signupAttackGuard,
 			com.socialcoisa.rede.shared.security.ClientIpResolver ipResolver,
 			@Value("${rede.auth.signup-enabled:true}") boolean signupEnabled) {
 		this.signupUseCase = signupUseCase;
@@ -118,6 +120,7 @@ class AuthController {
 		this.signupCaptcha = signupCaptcha;
 		this.newDeviceNotifier = newDeviceNotifier;
 		this.ipBlockReader = ipBlockReader;
+		this.signupAttackGuard = signupAttackGuard;
 		this.ipResolver = ipResolver;
 		this.signupEnabled = signupEnabled;
 	}
@@ -168,6 +171,9 @@ class AuthController {
 			jakarta.servlet.http.HttpServletRequest request) {
 		String ip = ipResolver.resolve(request);
 		exigeIpNaoBloqueado(ip);
+		// Contenção imediata: nome com o padrão do ataque não cria conta e o IP cai na lista
+		// (as contas "probe" de 20/10 e 22/10 nasciam em série do mesmo provedor).
+		signupAttackGuard.checkSignup(body.name(), body.email(), ip);
 		// Portao de cadastros: a operacao pode fechar a criacao de contas (a Mel pediu em
 		// 2026-10-20). Antes de Turnstile/throttle: nao adianta o cliente resolver captcha.
 		if (!signupEnabled) {

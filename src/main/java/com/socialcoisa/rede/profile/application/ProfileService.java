@@ -67,6 +67,10 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 		UserProfile profile = repository.findByUsername(username)
 			.map(this::populateCounts)
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
+		// Conta banida some da leitura publica como se nao existisse (link direto incluso).
+		if (sanctionGate.banned(profile.id())) {
+			throw new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado.");
+		}
 		agendarMigracaoDeMidia(profile);
 		return UserProfileView.from(profile).withBioHtml(profile.bioHtml()).withBannerHtml(profile.bannerHtml());
 	}

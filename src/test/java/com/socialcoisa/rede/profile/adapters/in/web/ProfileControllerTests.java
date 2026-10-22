@@ -342,6 +342,24 @@ class ProfileControllerTests {
 	 * (2026-10-22) as contas punidas continuavam aparecendo como "chegando agora".
 	 */
 	@Test
+	void bannedProfilesDisappearFromThePublicProfile() throws Exception {
+		var auth = new com.socialcoisa.rede.shared.web.TestAuthHelper(mockMvc, objectMapper);
+		String suffix = String.valueOf(System.nanoTime());
+		auth.authenticate("gone_banned_" + suffix);
+		var admin = auth.authenticate("group-admin");
+
+		mockMvc.perform(post("/admin/users/gone-banned-" + suffix + "/sanction")
+				.header("X-Session-Token", admin.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of(
+					"type", "BAN", "reason", "Cadastro em série na triagem de contas."))))
+			.andExpect(status().isOk());
+
+		mockMvc.perform(get("/users/gone-banned-" + suffix))
+			.andExpect(status().isNotFound());
+	}
+
+	@Test
 	void bannedProfilesLeaveTheRanking() throws Exception {
 		var auth = new com.socialcoisa.rede.shared.web.TestAuthHelper(mockMvc, objectMapper);
 		String suffix = String.valueOf(System.nanoTime());
