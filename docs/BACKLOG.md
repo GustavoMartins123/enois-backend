@@ -99,9 +99,28 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
     (`JobPublishingPolicy`: reputação > 150 e identidade verificada quando a exigência está
     ligada). A vaga importada é listagem de terceiro (o botão vai para o link de origem), não
     publicação de membro — por isso ela não passa por aquele gate.
-11. **API `/api/v1` + OpenAPI validado no CI** — alias versionado dos endpoints existentes + DTOs
-    explícitos + erros/paginação padronizados; springdoc já plugado. *Aceite:* OpenAPI bate com os
-    endpoints (falha o CI se divergir); v1 responde igual v0.
+11. **[x] ENTREGUE 2026-10-21 (o ALIAS) — API `/api/v1` versionada.** A API tinha um endereço só,
+    que muda junto com o produto: quem constrói um app em cima do Énóis não tinha como saber se a
+    resposta de hoje é a de amanhã. Agora existe o caminho fixado: `/api/v1/...` responde **o mesmo
+    que** `/api/...` (mesmo status, mesmo corpo, mesmo envelope de erro `{code, message, timestamp}`)
+    e `GET /api/v1` responde o **índice da versão** — a lista de endpoints montada a partir do
+    roteador de verdade (`RequestMappingHandlerMapping`), que não pode divergir das rotas. O
+    envelope de erro é o mesmo (`{code, message, timestamp}`).
+    *Como foi feito:* um filtro (`apiv1/V1AliasFilter.java`) reescreve o caminho e entrega o pedido
+    ao mesmo handler do v0 — sem controller duplicado e sem cópia da regra de negócio, então a
+    igualdade das respostas é por construção, não por promessa. O filtro roda em `@Order(0)`,
+    **antes** dos limitadores de taxa: se rodasse depois, o limitador de força bruta do login não
+    reconheceria o caminho `/v1/auth/login` e a proteção viraria uma porta dos fundos (há teste
+    fechando isso: `V1LoginRateLimitTests`).
+    *Testes:* `V1ApiAliasTests` (9) — leitura pública, leitura autenticada, escrita com sessão,
+    escrita sem sessão (continua recusada), erro, índice, caminho inexistente e "v1x" (que não é
+    versão) — e `V1LoginRateLimitTests` (1).
+    *No app:* a página pública de desenvolvedores (`/developers`) mostra a base versionada, o
+    exemplo de chamada e o que a v1 significa (front `cf6d580d`).
+    *O que NÃO está feito (e é decisão de produto):* o v1 é o **alias** do v0, não uma cópia
+    congelada — quando o v0 muda, o v1 muda junto. Congelar exige DTO próprio por endpoint e uma
+    política de depreciação do v0. A outra metade do item (**OpenAPI gerado e comparado no CI**)
+    continua com o raposo: a esteira só constrói a imagem.
     *(no ROADMAP são dois itens: 1 = a API v1, 2 = o OpenAPI no CI.)*
 12. **[x] ENTREGUE 2026-10-21 — Portal de docs no app + matriz de escopos.** A página pública
     `/developers` (`src/routes/developers.tsx` + `src/constants/developers-api.ts`) traz a
@@ -155,6 +174,24 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
 17. **LinkedIn** — app aprovado (`w_member_social`); sem isso, sem publicação legítima.
 18. **Sanitizar usuários/posts de teste em produção** — sem acesso ao banco e sem endpoint admin.
 
+- **[x] ENTREGUE 2026-10-21 — O teste de upload do LinkedIn era uma corrida: a suíte falhava
+  sozinha, sem nada mudado.** O teste sobe um Tomcat de verdade e manda um ZIP de 12 MB para
+  `/me/import/linkedin` esperando o 413 do limite de multipart (8 MB no perfil de teste). O
+  servidor recusa o upload **no meio da stream** — é assim que o multipart funciona — e o cliente
+  ainda tinha megabytes para escrever: quando a máquina estava carregada, o servidor fechava a
+  conexão antes de o cliente terminar de enviar, e o teste morria com "pipe quebrado" em vez de
+  ver o 413. O defeito é do teste, não do limite.
+  *Corrigido em duas partes.* (1) O ZIP do teste passou a ter tamanho **exato** (entrada
+  armazenada, sem compressão: o deflate do texto aleatório diminuía o arquivo, e o teste media o
+  limite errado) e a passar do limite de 8 MB por pouco. (2) O envio do arquivo que estoura o
+  limite passou a usar um **socket cru**: o corpo vai numa thread e a resposta é lida na outra,
+  porque o servidor recusa o upload **no meio da stream** e fecha a conexão — com um cliente HTTP
+  comum, o cliente ainda estava escrevendo e tomava "pipe quebrado" antes de conseguir ler o 413.
+  Agora o teste vê sempre o 413 com `FILE_TOO_LARGE` (que é o que importa: erro claro, não 500).
+  Nada foi desligado nem afrouxado: o teste continua subindo um Tomcat de verdade.
+  *Comprovado:* a suíte completa no `main` publicado, **sem nenhuma mudança minha**, falha do
+  mesmo jeito (718 testes, 1 erro, "pipe quebrado") — a corrida é do main, não do trabalho da API
+  v1. *Achado pela auditoria da API `/api/v1`* (rodada de 2026-10-21), que roda a suíte inteira.
 - **[x] ENTREGUE 2026-10-21 — A migração V140 (pré-triagem de moderação) não rodava no
   MariaDB: o pod da produção não subia.** A migração criava a tabela
   `moderation_signal_weights` com uma coluna chamada **`signal`**, que é **palavra reservada no
@@ -339,6 +376,44 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   `@tanstack` foram travadas na que o lock ja resolvia (react-start 1.168.22, react-router
   1.170.13, router-plugin 1.168.16) e o `npm install` puro voltou a resolver.
   Front: `847adfc8` (branch `fix/lint-higiene-front`).
+- **[x] ENTREGUE 2026-10-21 — O manifesto do PWA tinha dois donos, e o vivo era o congelado.**
+  `/manifest.webmanifest` (o arquivo que o navegador lê para montar o pedido de instalação do
+  app) era servido por **duas** fontes: o arquivo estatico `public/manifest.webmanifest` e a
+  rota `src/routes/manifest[.]webmanifest.ts`. O estatico ganha (o servidor responde `public/`
+  antes de chegar na rota), entao a rota era **codigo morto** — foi la que o texto novo da
+  identidade foi escrito na passagem anterior e nunca chegava no navegador. Em producao o
+  manifesto ainda dizia "Rede profissional para conexões autenticas: vagas, mentoria,
+  comunidades e eventos", com `categories` "business"/"productivity" e os icones da outra
+  familia. Agora a rota foi apagada, o arquivo estatico e o dono unico, a frase vem de
+  `texts.pwa.manifestDescription` e as categorias sao "social"/"lifestyle"/"games".
+  O novo `src/pwa-manifest.test.ts` (6 verificacoes) amarra o JSON: a descricao tem de ser a
+  mesma do `texts.ts`, nenhum icone apontado pode faltar no disco, o tamanho declarado tem de
+  bater com o nome do arquivo e a cor de fundo do splash tem de ser o token `--background` do
+  app (o `--background` e `#faf9ff`; a rota morta usava `#f9f8ff`, que e o `--surface-1`).
+  *Verificado:* `Page.getAppManifest` no Chrome headless devolve **0 erros** e a descricao nova;
+  `curl` de producao confirma que o estatico e o que responde.
+- **[x] ENTREGUE 2026-10-21 — As superficies de entrada ainda falavam em rede profissional.**
+  A varredura das telas que a pessoa ve na entrada (login, reset de senha, convite de instalar
+  o app, rodape, manifesto) achou a frase antiga em tres lugares: a descricao de SEO do login
+  ("comece sua jornada profissional na Einois"), o copyright do rodape ("Rede profissional
+  gratuita e humana") e o manifesto do PWA. E achou **6 deslizes de artigo da marca**: a marca e
+  "**o** Einois" (135 usos no front contra 6 no feminino), mas o reset de senha dizia "sua conta
+  na Einois" e o convite de instalar dizia "Instale o app da Einois". Agora: "Acesse sua conta ou
+  entre para o Einois, uma rede humana feita por gente", "© {ano} Einois · Rede humana gratuita",
+  "Defina uma nova senha para sua conta no Einois" e "Instale o app do Einois".
+  O `src/texts.test.ts` ganhou duas travas: "nao chama o Einois de rede profissional" (a frase
+  inteira, porque "perfil profissional" continua existindo — e e a feature do alter ego
+  corporativo) e "usa o artigo masculino da marca".
+  *Verificado:* `vitest` 342/342, `tsc --noEmit` sem erro, `eslint` limpo, `vite build` ok, e o
+  HTML do SSR do login ja entrega a descricao nova.
+- **[ ] A PRECISA SER ENTREGUE — O preview de rede social das rotas continua genérico.** Só 4
+  rotas definem `og:title`/`og:description` (landing, post, Apoiar, root). As outras 12 que têm
+  `description` (login, reset, sobre, termos, privacidade, diretrizes, feed, blogs, developers,
+  perfil profissional, projetos, responsável) sao compartilhadas com a copia do site inteiro
+  ("Einois · Rede humana" / "Construa relações de verdade, não apenas conexões"), então o
+  preview de quem abre o link no WhatsApp ou no X não é da página. Falta decidir se a
+  `description` de cada rota vira tambem `og:description` (com o titulo proprio da rota) ou se o
+  root deixa de impor og:title.
 
 ## Regras que valem para tudo
 - **Proibido automatizar a criação/publicação de posts** (IA/bots/integrações/endpoints alternativos/
