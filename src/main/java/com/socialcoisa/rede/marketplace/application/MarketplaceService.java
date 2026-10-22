@@ -8,7 +8,10 @@ import java.util.UUID;
 
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 
 import com.socialcoisa.rede.coin.application.CoinService;
@@ -34,14 +37,23 @@ public class MarketplaceService {
 	private final com.socialcoisa.rede.marketplace.application.port.out.MarketplaceItemRepository items;
 	private final CoinService coins;
 	private final Clock clock;
+	/**
+	 * Uma transacao por compra nos lacos (liberacao automatica, saneamento). Dentro de uma
+	 * transacao so, a excecao de UMA compra (vinda de um metodo @Transactional do CoinService)
+	 * marcava a transacao inteira para rollback mesmo capturada: o commit falhava e a rodada
+	 * desfazia todas as outras liberacoes, toda hora, enquanto a compra ruim continuasse la.
+	 */
+	private final TransactionTemplate perPurchase;
 
 	public MarketplaceService(MarketplaceRepository listings,
 			com.socialcoisa.rede.marketplace.application.port.out.MarketplaceItemRepository items,
-			CoinService coins, Clock clock) {
+			CoinService coins, Clock clock, PlatformTransactionManager transactionManager) {
 		this.listings = listings;
 		this.items = items;
 		this.coins = coins;
 		this.clock = clock;
+		this.perPurchase = new TransactionTemplate(transactionManager);
+		this.perPurchase.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
 	}
 
 	@Transactional
@@ -169,15 +181,16 @@ public class MarketplaceService {
 	 * (o criador não fica esperando para sempre). Roda por hora.
 	 */
 	@Scheduled(fixedDelay = 3_600_000, initialDelay = 600_000)
-	@Transactional
 	public void releaseExpired() {
 		Instant now = clock.instant();
 		for (MarketplacePurchase purchase : listings.findHeldOlderThan(50)) {
 			if (purchase.decisionExpired(now)) {
 				try {
-					coins.escrowRelease(purchase.sellerId(), purchase.price(), escrowRef(purchase),
-						"Venda no marketplace (liberação automática)");
-					listings.savePurchase(purchase.release(now));
+					perPurchase.executeWithoutResult(status -> {
+						coins.escrowRelease(purchase.sellerId(), purchase.price(), escrowRef(purchase),
+							"Venda no marketplace (liberação automática)");
+						listings.savePurchase(purchase.release(now));
+					});
 				} catch (RuntimeException ignored) {
 					// a próxima rodada tenta de novo; nada aqui pode derrubar o worker
 				}
@@ -206,9 +219,11 @@ public class MarketplaceService {
 		Instant now = clock.instant();
 		for (MarketplacePurchase purchase : listings.findHeldByListing(listing.id())) {
 			try {
-				coins.escrowRefund(purchase.buyerId(), purchase.price(), escrowRef(purchase),
-					"Reembolso: listagem removida na limpeza do marketplace");
-				listings.savePurchase(purchase.refund(now));
+				perPurchase.executeWithoutResult(status -> {
+					coins.escrowRefund(purchase.buyerId(), purchase.price(), escrowRef(purchase),
+						"Reembolso: listagem removida na limpeza do marketplace");
+					listings.savePurchase(purchase.refund(now));
+				});
 			}
 			catch (RuntimeException ignored) {
 				// se o reembolso falhar, a listagem ainda sai do ar; o suporte trata o valor.
@@ -224,13 +239,16 @@ public class MarketplaceService {
 	public List<MarketplaceListing> catalog(int limit, String q, String kind) {
 		String needle = q == null ? null : q.trim().toLowerCase(Locale.ROOT);
 		String wantedKind = kind == null || kind.isBlank() ? null : kind.trim().toUpperCase(Locale.ROOT);
-		return listings.findActive(Math.max(limit, 200)).stream()
+		// Janela fixa de 200 para filtrar em memoria e teto de 100 na resposta: antes era
+		// Math.max(limit, 200), e um limit enorme puxava a tabela inteira; limit negativo dava 500.
+		int size = Math.min(Math.max(limit, 1), 100);
+		return listings.findActive(200).stream()
 			.filter(listing -> wantedKind == null || listing.itemKind().name().equals(wantedKind))
 			.filter(listing -> needle == null || needle.isEmpty()
 				|| listing.title().toLowerCase(Locale.ROOT).contains(needle)
 				|| (listing.description() != null
 					&& listing.description().toLowerCase(Locale.ROOT).contains(needle)))
-			.limit(limit)
+			.limit(size)
 			.toList();
 	}
 

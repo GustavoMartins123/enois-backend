@@ -292,7 +292,12 @@ public class CoinService {
 			throw new ApiException(400, "INVALID_AMOUNT", "O preço precisa ser positivo.");
 		}
 		Instant now = clock.instant();
-		grant(ESCROW_ACCOUNT, -amount, CoinEntry.Kind.ESCROW_RELEASE, purchaseRef + ":refund",
+		// A saida do escrow usa o MESMO ref da liberacao (escrowRelease): a chave de idempotencia
+		// (kind:ref, unica por conta) fica igual nos dois caminhos, e o banco recusa o segundo.
+		// Com refs diferentes, liberar e reembolsar a mesma compra ao mesmo tempo (o comprador
+		// pedindo reembolso enquanto o job libera, ou aceitar e recusar em duas abas) pagava o
+		// vendedor E devolvia ao comprador, tirando do escrow o dinheiro de outras compras.
+		grant(ESCROW_ACCOUNT, -amount, CoinEntry.Kind.ESCROW_RELEASE, purchaseRef,
 			message == null ? "" : message, now);
 		grant(buyerAccountId, amount, CoinEntry.Kind.REFUND_IN, purchaseRef + ":refund",
 			message == null ? "" : message, now);
