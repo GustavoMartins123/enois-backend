@@ -450,6 +450,15 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   corporativo) e "usa o artigo masculino da marca".
   *Verificado:* `vitest` 342/342, `tsc --noEmit` sem erro, `eslint` limpo, `vite build` ok, e o
   HTML do SSR do login ja entrega a descricao nova.
+- **[x] ENTREGUE 2026-10-22 — As abas da caixa de entrada cortavam no celular.** Com a quinta aba
+  ("Serviços", que veio do chat de serviço), a faixa de abas da caixa de entrada ficava sem
+  respiro a 390px e cortava "Arquivadas" na borda a 360px — cortada sem nenhuma pista de que
+  havia mais. Agora a faixa quebra a linha no celular (`flex-wrap`) e as cinco abas continuam
+  visíveis em 360, 390 e 1280px.
+  *Achado pela verificação de responsividade* (Chrome headless com sessão, backend local):
+  overflow horizontal 0 e nenhuma aba cortada nas três larguras; o card de serviço também foi
+  conferido com dado real (nome do prestador, foto, preço em reais e em faíscas, os dois botões
+  lado a lado). Front: `a seguir`.
 - **[x] ENTREGUE 2026-10-22 — O preview de rede social das rotas continua genérico: agora cada
   página mostra a si mesma quando alguém compartilha o link.** Só 4 rotas definiam
   `og:title`/`og:description` (landing, post, Apoiar, root). As outras 12 que têm `description`
