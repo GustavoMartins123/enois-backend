@@ -111,7 +111,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 		String content = normalizeContent(command.content(), !mediaIds.isEmpty());
 		String parentCommentId = normalizeParentComment(command.parentCommentId(), post.id());
 		Comment comment = Comment.create(newId("comment"), post.id(), command.authorId(), parentCommentId, content,
-			mediaIds, clock.instant());
+			mediaIds, command.mediaSpoiler(), clock.instant());
 		Comment saved = commentRepository.save(comment);
 		post.addComment();
 		postRepository.save(post);

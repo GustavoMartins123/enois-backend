@@ -61,6 +61,9 @@ class CommentJpaEntity {
 	@Column(name = "media_id", nullable = false)
 	private List<String> mediaIds = new ArrayList<>();
 
+	@Column(name = "media_spoiler", nullable = false)
+	private boolean mediaSpoiler;
+
 	protected CommentJpaEntity() {
 	}
 
@@ -76,12 +79,13 @@ class CommentJpaEntity {
 		entity.editedAt = comment.editedAt();
 		entity.pinned = comment.pinned();
 		entity.mediaIds = new ArrayList<>(comment.mediaIds());
+		entity.mediaSpoiler = comment.mediaSpoiler();
 		return entity;
 	}
 
 	Comment toDomain() {
 		return new Comment(id, new PostId(postId), new UserId(authorId), parentCommentId, content,
-			mediaIds == null ? List.of() : mediaIds, createdAt, status, editedAt, pinned);
+			mediaIds == null ? List.of() : mediaIds, createdAt, status, editedAt, pinned, mediaSpoiler);
 	}
 
 	String getPostId() { return postId; }

@@ -35,6 +35,15 @@ class UserProfileJpaEntity {
 	@Column(name = "avatar_frame", length = 40)
 	private String avatarFrame;
 
+	@Column(name = "name_font", length = 32)
+	private String nameFont;
+
+	@Column(name = "name_theme", length = 24)
+	private String nameTheme;
+
+	@Column(name = "name_color", length = 7)
+	private String nameColor;
+
 	@Column(nullable = false, unique = true)
 	private String email;
 
@@ -155,6 +164,9 @@ class UserProfileJpaEntity {
 		entity.name = profile.name();
 		entity.headline = profile.headline();
 		entity.avatarFrame = profile.avatarFrame();
+		entity.nameTheme = profile.nameTheme();
+		entity.nameFont = profile.nameFont();
+		entity.nameColor = profile.nameColor();
 		entity.email = profile.email();
 		entity.company = profile.company();
 		entity.location = profile.location();
@@ -215,6 +227,7 @@ class UserProfileJpaEntity {
 		profile.hydrateBirthDate(birthDate);
 		profile.hydrateResume(resumeUrl, resumeName);
 		profile.hydrateAvatarFrame(avatarFrame);
+		profile.hydrateNameStyle(nameTheme, nameFont, nameColor);
 		profile.hydrateBadges(badges == null || badges.isBlank() ? List.of() : List.of(badges.split("\n")));
 		return profile;
 	}
