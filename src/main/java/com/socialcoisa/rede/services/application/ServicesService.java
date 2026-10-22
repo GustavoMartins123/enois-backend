@@ -40,14 +40,14 @@ public class ServicesService {
 
 	@Transactional
 	public ServiceListing publishListing(String sellerId, String category, String title, String description,
-			String deliverables, long price, int deliveryDays) {
+			String deliverables, long price, String currency, int deliveryDays) {
 		if (services.countOpenListingsBySeller(sellerId) >= MAX_OPEN_LISTINGS) {
 			throw new ApiException(403, "TOO_MANY_OPEN_SERVICES",
 				"Você já tem " + MAX_OPEN_LISTINGS + " serviços abertos — conclua ou remova um antes.");
 		}
 		Instant now = clock.instant();
 		return services.saveListing(ServiceListing.create(sellerId, category, title, description, deliverables, price,
-			deliveryDays, now));
+			currency, deliveryDays, now));
 	}
 
 	@Transactional
@@ -58,6 +58,11 @@ public class ServicesService {
 		}
 		if (listing.ownedBy(buyerId)) {
 			throw new ApiException(400, "OWN_SERVICE", "Não dá para contratar o seu próprio serviço.");
+		}
+		if ("BRL".equalsIgnoreCase(listing.currency())) {
+			// Reais não entram no ledger de faíscas: o pagamento é combinado direto com o profissional.
+			throw new ApiException(409, "DIRECT_PAYMENT_REQUIRED",
+				"Este serviço é cobrado em reais. Fale com o profissional para combinar o pagamento.");
 		}
 		Instant now = clock.instant();
 		ServiceContract contract = services.saveContract(ServiceContract.fromListing(listing, buyerId, now));

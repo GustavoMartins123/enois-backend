@@ -59,7 +59,8 @@ class ServicesController {
 			@RequestBody PublishListingRequest request) {
 		CurrentUser user = user(userId, sessionToken);
 		ServiceListing listing = services.publishListing(user.id().value(), request.category(), request.title(),
-			request.description(), request.deliverables(), request.price(), request.deliveryDays());
+			request.description(), request.deliverables(), request.price(), request.currency(),
+			request.deliveryDays());
 		return Map.of("id", listing.id(), "status", listing.status().name());
 	}
 
@@ -141,6 +142,7 @@ class ServicesController {
 	}
 
 	record PublishListingRequest(String category, String title, String description, String deliverables, long price,
+			String currency,
 			int deliveryDays) {
 	}
 
@@ -158,10 +160,10 @@ class ServicesController {
 	}
 
 	record ListingView(String id, String sellerId, String category, String title, String description,
-			String deliverables, long price, int deliveryDays, String status, String createdAt) {
+			String deliverables, long price, String currency, int deliveryDays, String status, String createdAt) {
 		static ListingView from(ServiceListing l) {
 			return new ListingView(l.id(), l.sellerId(), l.category(), l.title(), l.description(), l.deliverables(),
-				l.price(), l.deliveryDays(), l.status().name(), l.createdAt().toString());
+				l.price(), l.currency(), l.deliveryDays(), l.status().name(), l.createdAt().toString());
 		}
 	}
 
