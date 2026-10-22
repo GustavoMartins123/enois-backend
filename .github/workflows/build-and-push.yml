@@ -119,6 +119,8 @@ jobs:
           REDE_SECURITY_ENCRYPTION_KEY: ${{ secrets.QA_REDE_SECURITY_ENCRYPTION_KEY }}
           TURNSTILE_SITE_KEY: ${{ secrets.QA_TURNSTILE_SITE_KEY }}
           TURNSTILE_SECRET_KEY: ${{ secrets.QA_TURNSTILE_SECRET_KEY }}
+          # panic:yes => somente leitura; vazio/ausente => online (o botão do painel decide).
+          PANIC_MODE: ${{ secrets.PANIC_MODE }}
         run: |
           set -euo pipefail
           API="${PORTAINER_BASE_URL}/api/endpoints/${PORTAINER_ENDPOINT_ID}/docker"
@@ -148,6 +150,7 @@ jobs:
               "REDE_BACKEND_URL=https://enois-api-qa.b7cloud.tech",
               "FRONTEND_URL=https://enois-qa.b7cloud.tech",
               "CORS_ALLOWED_ORIGINS=https://enois-qa.b7cloud.tech",
+              "PANIC_MODE=${PANIC_MODE}",
               "REDE_SECURITY_ENCRYPTION_KEY=${REDE_SECURITY_ENCRYPTION_KEY}",
               "TURNSTILE_SITE_KEY=${TURNSTILE_SITE_KEY}",
               "TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY}",
