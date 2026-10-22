@@ -10,6 +10,10 @@ confira aqui o que já existe no código**: boa parte das camadas já foi constr
 anteriores e o trabalho de verdade agora é fechar as lacunas, não refazer o que está pronto.
 
 ### Já existe (conferido no código em 2026-10-21)
+- **Defesa contra varredura (2026-10-22):** `shared/security/AbuseGuardFilter` — a conta é por
+  ERRO numa janela curta (404/401/403/400/405/415/429), não por requisição; passou do teto, o IP
+  entra em negação com prazo (429 + `Retry-After`) e a duração escala na reincidência. É a resposta
+  à varredura de rotas, que o limitador global (que conta requisições) não distinguia de uso real.
 - **Prevenção por taxa e por janela:** `shared/security/GlobalApiRateLimitFilter` (300/min por IP),
   `IdentityRateLimitFilter` (cadastro, login, senha, e-mail, 2FA), `PostRateLimitFilter`,
   `IpRateLimiter`, `UserRateLimiter`, `IpBlockService`/`IpBlockReader`, `ActionThrottle` (ações que

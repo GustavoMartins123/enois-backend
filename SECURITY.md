@@ -68,6 +68,11 @@ pesquisa — é abuso.
   gerenciador/secret do ambiente — nunca no repositório, no bundle do frontend ou nos logs.
 - **Motor de risco** (`shared/risk`): sinais combinados viram nível, e a decisão fica registrada
   com o motivo e a versão da regra (ver `docs/PLANO_SEGURANCA_HUMANA.md`).
+- **Defesa contra varredura** (`shared/security/AbuseGuardFilter`): quem erra demais em pouco tempo
+  (404 de rota que não existe, 401/403 de acesso, 400/405/415 de payload, método ou tipo inválido)
+  é barrado na hora com **429 + `Retry-After`**, e o bloqueio escala na reincidência. A conta é por
+  ERRO, não por requisição: quem usa o app produz 200 e, às vezes, um 409 de estado — nada disso
+  conta. O `health`/`actuator` do cluster fica fora (derrubá-lo derrubaria o pod).
 
 ## Referências
 

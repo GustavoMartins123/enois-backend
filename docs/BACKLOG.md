@@ -209,6 +209,20 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   container MariaDB aplicando as migrações (o do front, o `ci.yml`, já roda lint, typecheck e
   vitest).
 ## Higiene do backend (entregue 2026-10-21)
+- **[x] ENTREGUE 2026-10-22 — A varredura de rotas não custava nada ao atacante.** Um scanner
+  martelando todas as rotas produzia 404 atrás de 404 (e 401/403/400 ao sondar acesso e payload) e
+  o único freio era o limitador global, que conta REQUISIÇÕES: dava para errar dezenas de vezes
+  antes de bater no teto, e cada erro não deixava consequência nenhuma.
+  *Corrigido:* `shared/security/AbuseGuardFilter` conta **respostas de erro** por IP numa janela
+  curta (padrão: 20 erros em 3 min) e, ao estourar, nega tudo daquele IP com **429 +
+  `Retry-After`** por 15 minutos — dobrando a cada reincidência (até 6 h). Quem usa o app produz
+  200 e, no máximo, um 409 de estado, que não conta; `health`/`actuator` fica fora, porque
+  derrubar a sonda derruba o pod.
+  *Testes:* `shared/security/AbuseGuardFilterTests` (5) — a varredura acaba em negação com prazo,
+  o bloqueio expira sozinho, a reincidência dura mais, uso normal (200/409) não conta e a sonda do
+  cluster nunca entra. O perfil de teste deixa a defesa ligada com teto alto (1000), para uma
+  classe que exercita 401/404 de propósito não derrubar as seguintes.
+  *Achado pelo relato da dona* ("nosso amigo probe está atacando em todas as rotas").
 - **[x] ENTREGUE 2026-10-22 — O serviço não dizia quem prestava, não tinha conversa com quem
   prestava, e os serviços de teste que sobraram na produção continuavam no catálogo.**
   Três coisas da mesma feature (o marketplace de serviços, Fase 5), pedidas pela dona:
