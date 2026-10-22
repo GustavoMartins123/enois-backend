@@ -16,5 +16,7 @@ public enum ReactionType {
 	EYES,
 	NOTE,
 	FIRE,
-	CLAP
+	CLAP,
+	CLOWN,
+	NAILS
 }
