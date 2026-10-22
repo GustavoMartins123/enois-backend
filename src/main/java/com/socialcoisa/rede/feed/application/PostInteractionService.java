@@ -167,8 +167,14 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 		Set<String> hidden = query.viewerId()
 			.map(viewer -> blockedUsersReader.hiddenIdsFor(viewer.value()))
 			.orElse(Set.of());
-		var fetched = commentRepository.findActiveByPost(query.postId(), before, limit);
-		var comments = fetched.stream()
+		// O fixado vem no TOPO da primeira pagina e sai da paginacao normal (sem duplicar).
+		var pinned = query.before().isEmpty() ? commentRepository.findPinnedByPost(query.postId())
+			: java.util.Optional.<com.socialcoisa.rede.feed.domain.Comment>empty();
+		var fetched = commentRepository.findActiveByPostExcludingPinned(query.postId(), before, limit);
+		var allComments = new java.util.ArrayList<com.socialcoisa.rede.feed.domain.Comment>();
+		pinned.ifPresent(allComments::add);
+		allComments.addAll(fetched);
+		var comments = allComments.stream()
 			.filter(c -> !hidden.contains(c.authorId().value()))
 			.map(c -> {
 				var p = userProfileRepository.findById(c.authorId().value()).orElse(null);
