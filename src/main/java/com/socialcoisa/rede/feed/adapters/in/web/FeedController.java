@@ -525,10 +525,13 @@ class FeedController {
 	@org.springframework.web.bind.annotation.ResponseStatus(org.springframework.http.HttpStatus.CREATED)
 	PostView repost(@RequestHeader(value = USER_HEADER, required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
-			@PathVariable String postId) {
+			@PathVariable String postId, @RequestBody(required = false) RepostRequest body) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		Post copy = repostPostService.repost(user.id().value(), postId);
+		Post copy = repostPostService.repost(user.id().value(), postId, body == null ? null : body.opinion());
 		return PostView.from(copy);
+	}
+
+	record RepostRequest(String opinion) {
 	}
 
 	/** Ate 4 midias na edicao, do proprio autor (mesma regra do comentario novo). */

@@ -2,6 +2,7 @@ package com.socialcoisa.rede.feed.application;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -17,6 +18,7 @@ import com.socialcoisa.rede.feed.application.port.out.PostRepository;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.shared.age.AgeGate;
 import com.socialcoisa.rede.shared.security.ActionThrottle;
+import com.socialcoisa.rede.shared.text.PlainText;
 import com.socialcoisa.rede.shared.web.ApiException;
 
 /**
@@ -52,7 +54,7 @@ public class RepostPostService {
 	}
 
 	@Transactional
-	public Post repost(String userId, String postId) {
+	public Post repost(String userId, String postId, String opinion) {
 		ageGate.requireCanWrite(userId);
 		throttle.exigePermitido("repost", userId, PER_HOUR, Duration.ofHours(1));
 
@@ -77,13 +79,22 @@ public class RepostPostService {
 			throw new ApiException(409, "ALREADY_REPOSTED", "Voce ja republicou este post.");
 		}
 
+		// Opinião opcional: vira o texto da cópia e o original aparece CITADO no card. Sem
+		// opinião, mantém o repost simples (a cópia carrega o conteúdo original).
+		String cleanOpinion = opinion == null ? "" : PlainText.defuse(opinion.trim());
+		if (cleanOpinion.length() > 600) {
+			throw new ApiException(400, "OPINION_TOO_LONG",
+				"A opiniao do repost deve ter no maximo 600 caracteres.");
+		}
+		boolean withOpinion = !cleanOpinion.isBlank();
 		String username = profiles.findById(root.authorId().value())
 			.map(profile -> profile.username())
 			.orElse(null);
 		Post copy = Post.publish(new PostId("post_" + UUID.randomUUID().toString().replace("-", "")),
-			new UserId(userId), root.type(), root.content(), null, root.tags(), root.mediaIds(), null,
-			root.topic(), clock.instant(), AuthorIdentity.SOCIAL)
-			.markRepostOf(root.id().value(), username);
+			new UserId(userId), root.type(), withOpinion ? cleanOpinion : root.content(), null,
+			withOpinion ? List.of() : root.tags(), withOpinion ? List.of() : root.mediaIds(), null,
+			withOpinion ? null : root.topic(), clock.instant(), AuthorIdentity.SOCIAL)
+			.markRepostOf(root.id().value(), username, withOpinion);
 		return posts.save(copy);
 	}
 }

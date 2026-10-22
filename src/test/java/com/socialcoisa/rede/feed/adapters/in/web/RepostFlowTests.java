@@ -54,6 +54,7 @@ class RepostFlowTests {
 			.andExpect(status().isCreated())
 			.andExpect(jsonPath("$.repostOf").value(originalId))
 			.andExpect(jsonPath("$.repostOfAuthor").value(authorUsername))
+			.andExpect(jsonPath("$.repostWithOpinion").value(false))
 			.andExpect(jsonPath("$.content").value("Conteúdo original que vale republicar."))
 			.andReturn();
 		String repostId = objectMapper.readTree(created.getResponse().getContentAsString()).get("id").asString();
@@ -77,6 +78,45 @@ class RepostFlowTests {
 			.andExpect(status().isOk());
 		mockMvc.perform(get("/feed/posts/{id}", repostId))
 			.andExpect(status().isNotFound());
+	}
+
+	@Test
+	void repostWithOpinionCarriesTheCommentAndQuotesTheOriginal() throws Exception {
+		var author = auth.authenticate("repost_quote_author_" + System.nanoTime());
+		var reposter = auth.authenticate("repost_quote_user_" + System.nanoTime());
+
+		String originalId = publish(author, "Texto original que será citado no repost com opinião.");
+		String opinion = "Discordo em parte: o ponto principal é bom, mas o contexto muda tudo.";
+
+		MvcResult created = mockMvc.perform(post("/feed/posts/{id}/repost", originalId)
+				.header("X-Session-Token", reposter.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("opinion", opinion))))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.repostOf").value(originalId))
+			.andExpect(jsonPath("$.repostWithOpinion").value(true))
+			.andExpect(jsonPath("$.content").value(opinion))
+			.andReturn();
+		String repostId = objectMapper.readTree(created.getResponse().getContentAsString()).get("id").asString();
+
+		// Na leitura, o original vem citado (conteúdo e mídias) para o card montar a citação.
+		mockMvc.perform(get("/feed/posts/{id}", repostId))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.repostWithOpinion").value(true))
+			.andExpect(jsonPath("$.repostOfContent")
+				.value("Texto original que será citado no repost com opinião."))
+			.andExpect(jsonPath("$.repostOfMediaIds").isArray());
+
+		// Opinião acima de 600 caracteres é recusada com mensagem própria. (Texto variado:
+		// PlainText.defuse colapsa corridas de 13+ do mesmo caractere.)
+		String longOpinion = ("Esta e uma opiniao longa sobre o post e o contexto. ").repeat(20).substring(0, 601);
+		var another = auth.authenticate("repost_quote_long_" + System.nanoTime());
+		mockMvc.perform(post("/feed/posts/{id}/repost", originalId)
+				.header("X-Session-Token", another.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("opinion", longOpinion))))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("OPINION_TOO_LONG"));
 	}
 
 	@Test
