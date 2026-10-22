@@ -100,10 +100,16 @@ public class SuspiciousAutoBanWorker {
 			if (target.riskScore() <= threshold) {
 				continue;
 			}
-			if (target.staff()) {
+			if (target.staff() && !target.signals().contains("NOME_SUSPEITO")) {
 				LOG.warn("Auto-ban: {} tem risco {} mas é da equipe — automação não pune; revise no painel.",
 					target.username(), target.riskScore());
 				continue;
+			}
+			if (target.staff()) {
+				// Equipe COM a assinatura do ataque não é equipe: é conta comprometida (o atacante
+				// de 22/10 usou uma conta que a triagem tratava como moderadora para não ser punida).
+				LOG.error("Auto-ban: {} tem selo de equipe E assinatura de ataque — punindo mesmo assim.",
+					target.username());
 			}
 			String reason = reasonFor(target);
 			try {

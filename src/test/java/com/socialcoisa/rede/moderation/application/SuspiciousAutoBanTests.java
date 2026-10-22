@@ -41,6 +41,36 @@ class SuspiciousAutoBanTests {
 	@Autowired
 	private SuspiciousAutoBanWorker worker;
 
+	@Autowired
+	private org.springframework.jdbc.core.JdbcTemplate jdbc;
+
+	@Test
+	void aStaffAccountCarryingTheAttackSignatureIsStillPunished() throws Exception {
+		var admin = new TestAuthHelper(mockMvc, objectMapper).authenticate("group-admin");
+		var target = new TestAuthHelper(mockMvc, objectMapper).authenticate("probe_staff_target");
+
+		// A conta entra na equipe (a automação normalmente não pune equipe)...
+		mockMvc.perform(post("/admin/moderators")
+				.header("X-Session-Token", admin.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of(
+					"username", "probe-staff-target", "note", "Nomeado no cenário de teste."))))
+			.andExpect(status().isOk());
+
+		worker.sweep();
+
+		// ...mas carrega o nome do ataque: é conta comprometida, não equipe.
+		mockMvc.perform(post("/auth/login")
+				.header("Idempotency-Key", "autoban-staff-login")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of(
+					"email", "probe_staff_target@test.com", "password", "Test1234!"))))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("ACCOUNT_BANNED"));
+
+		jdbc.update("delete from moderator_applications where user_id = ?", target.userId());
+	}
+
 	@Test
 	void bansAndSanitizesAnAccountAboveTheRiskCeiling() throws Exception {
 		var target = new TestAuthHelper(mockMvc, objectMapper).authenticate("probe_auto_target");
