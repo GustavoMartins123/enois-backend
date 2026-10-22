@@ -43,8 +43,8 @@ anteriores e o trabalho de verdade agora é fechar as lacunas, não refazer o qu
   `docs/SECURITY.md` (reportar vulnerabilidade).
 
 ### Lacunas (o que o plano pede e ainda NÃO existe) — a fila real
-1. **Motor de risco centralizado — PASSO 1 ENTREGUE (2026-10-22); falta a escalada e a
-   leitura.** Já existe `shared/risk/RiskEngine`: ele junta os sinais (cadência de robô, conteúdo
+1. **Motor de risco centralizado — PASSO 1 e a ESCALADA entregues (2026-10-22); falta a leitura
+   na tela da moderação.** Já existe `shared/risk/RiskEngine`: ele junta os sinais (cadência de robô, conteúdo
    repetido, conta nova, sanção ativa), vira **nível** (LOW/MEDIUM/HIGH/CRITICAL) e registra a
    decisão com o motivo e a versão da regra na tabela `risk_assessments` (V154). A resposta
    escalonada (permitir → monitorar → limitar → verificação → bloquear → ocorrência → suspender →

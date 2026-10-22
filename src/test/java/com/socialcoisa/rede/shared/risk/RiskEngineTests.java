@@ -91,6 +91,50 @@ class RiskEngineTests {
 	}
 
 	@Test
+	void nivelGraveViraOcorrenciaParaAModeracao() {
+		String userId = "risco-escalada";
+		// Cadencia de robo (3 pontos) + conteudo repetido (2) = 5, o limiar de HIGH.
+		for (int i = 0; i < 12; i++) {
+			timingGuard.record(userId);
+		}
+		duplicationGuard.require(userId, "o mesmo texto do robo");
+
+		RiskAssessment avaliacao = riskEngine.assess(userId, "publish", "o mesmo texto do robo");
+
+		assertThat(avaliacao).isNotNull();
+		assertThat(avaliacao.level()).isEqualTo(RiskLevel.HIGH);
+		// A moderacao recebeu a ocorrencia: denuncia automatica, com o nivel e os sinais.
+		// O guarda de cadencia tambem denuncia (descricao "[auto]"); a do MOTOR tem o prefixo
+		// "[risco automatico]" e o nivel — e essa que tem de existir.
+		List<Map<String, Object>> doMotor = jdbc.queryForList(
+			"select description from reports where target_id = ? and description like '%risco automatico%'",
+			userId);
+		assertThat(doMotor).hasSize(1);
+		assertThat(doMotor.get(0).get("description").toString()).contains("HIGH").contains("ROBOTIC_CADENCE");
+	}
+
+	@Test
+	void cadenciaSozinhaTambemViraOcorrenciaComONivel() {
+		String userId = "risco-medio";
+		// So a cadencia (3 pontos): MEDIUM. O guarda nao denuncia mais sozinho — quem entrega a
+		// ocorrencia (com o nivel e os sinais) e o motor; e por isso o comportamento antigo
+		// (cadencia detectada -> moderacao avisada) continua de pe.
+		for (int i = 0; i < 12; i++) {
+			timingGuard.record(userId);
+		}
+
+		RiskAssessment avaliacao = riskEngine.assess(userId, "publish", "conteudo");
+
+		assertThat(avaliacao).isNotNull();
+		assertThat(avaliacao.level()).isEqualTo(RiskLevel.MEDIUM);
+		List<Map<String, Object>> doMotor = jdbc.queryForList(
+			"select description from reports where target_id = ? and description like '%risco automatico%'",
+			userId);
+		assertThat(doMotor).hasSize(1);
+		assertThat(doMotor.get(0).get("description").toString()).contains("MEDIUM");
+	}
+
+	@Test
 	void modoDeObservacaoNaoBarraNinguem() {
 		String userId = "risco-observacao";
 		for (int i = 0; i < 12; i++) {

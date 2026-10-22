@@ -12,8 +12,12 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
+import com.socialcoisa.rede.moderation.domain.ReportReason;
+import com.socialcoisa.rede.moderation.domain.TargetType;
+import com.socialcoisa.rede.shared.security.AutoReportEvent;
 import com.socialcoisa.rede.shared.security.BehavioralTimingGuard;
 import com.socialcoisa.rede.shared.security.ContentDuplicationGuard;
 
@@ -44,10 +48,15 @@ public class RiskEngine {
 	/** Versão da política: entra em toda avaliação, para reconstruir a decisão depois. */
 	private static final String RULE_VERSION = "v1";
 
+	/** Intervalo entre duas ocorrências automáticas do mesmo caso (1 hora). */
+	private static final long ESCALATION_COOLDOWN_SECONDS = 3_600L;
+
 	private final RiskSubjectReader subjects;
 	private final RiskAssessmentWriter assessments;
 	private final BehavioralTimingGuard timing;
 	private final ContentDuplicationGuard duplication;
+	private final ApplicationEventPublisher events;
+	private final java.util.Map<String, Long> ultimaEscalada = new java.util.concurrent.ConcurrentHashMap<>();
 	private final Clock clock;
 	private final Map<RiskSignal, Integer> weights;
 	private final int mediumScore;
@@ -57,7 +66,8 @@ public class RiskEngine {
 	private final boolean enforce;
 
 	public RiskEngine(RiskSubjectReader subjects, RiskAssessmentWriter assessments,
-			BehavioralTimingGuard timing, ContentDuplicationGuard duplication, Clock clock,
+			BehavioralTimingGuard timing, ContentDuplicationGuard duplication,
+			ApplicationEventPublisher events, Clock clock,
 			@Value("${rede.risk.weights.robotic-cadence:3}") int roboticCadenceWeight,
 			@Value("${rede.risk.weights.duplicate-content:2}") int duplicateContentWeight,
 			@Value("${rede.risk.weights.new-account:1}") int newAccountWeight,
@@ -71,6 +81,7 @@ public class RiskEngine {
 		this.assessments = assessments;
 		this.timing = timing;
 		this.duplication = duplication;
+		this.events = events;
 		this.clock = clock;
 		Map<RiskSignal, Integer> peso = new EnumMap<>(RiskSignal.class);
 		peso.put(RiskSignal.ROBOTIC_CADENCE, roboticCadenceWeight);
@@ -122,6 +133,7 @@ public class RiskEngine {
 			RiskAssessment avaliacao = new RiskAssessment("risk_" + UUID.randomUUID().toString().replace("-", ""),
 				userId, action, level, score, sinais, RULE_VERSION, decision, agora);
 			registrar(avaliacao);
+			escalarSeGrave(avaliacao, agora.getEpochSecond());
 			return avaliacao;
 		}
 		catch (RuntimeException exception) {
@@ -152,6 +164,39 @@ public class RiskEngine {
 			case HIGH -> RiskDecision.ESCALATE;
 			case CRITICAL -> enforce ? RiskDecision.RESTRICT : RiskDecision.ESCALATE;
 		};
+	}
+
+	/**
+	 * Entrega à moderação o caso que o motor classificou como grave.
+	 *
+	 * <p>É a resposta "abrir uma ocorrência para a moderação" da escada do plano: quem decide é
+	 * uma pessoa, e o motor entrega o caso já com o nível e os sinais anexados. A denúncia é
+	 * automática e NÃO depende de alguém ter denunciado — é o que o plano pede ("o próprio Énóis
+	 * deve identificar e encaminhar incidentes proativamente").
+	 *
+	 * <p>A moderação já recusa denúncia repetida com 409 (o listener trata como best-effort), mas
+	 * o motor guarda o próprio intervalo: um post por segundo do mesmo robô viraria uma tentativa
+	 * de inserção por segundo, sem ganhar nada.
+	 */
+	private void escalarSeGrave(RiskAssessment avaliacao, long agoraSegundos) {
+		if (avaliacao.level() == RiskLevel.LOW) {
+			return;
+		}
+		Long anterior = ultimaEscalada.get(avaliacao.userId());
+		if (anterior != null && agoraSegundos - anterior < ESCALATION_COOLDOWN_SECONDS) {
+			return;
+		}
+		ultimaEscalada.put(avaliacao.userId(), agoraSegundos);
+		try {
+			events.publishEvent(new AutoReportEvent(avaliacao.userId(), TargetType.USER, ReportReason.SPAM,
+				"[risco automatico] Nivel " + avaliacao.level() + " (pontos " + avaliacao.score() + ", sinais "
+					+ avaliacao.signals() + ", regra " + avaliacao.ruleVersion() + ", acao " + avaliacao.action()
+					+ ")."));
+		}
+		catch (RuntimeException exception) {
+			LOG.warn("nao foi possivel escalar a avaliacao de risco id={}: {}", avaliacao.id(),
+				exception.getMessage());
+		}
 	}
 
 	/** Grava a avaliação (o histórico do risco). Uma falha aqui não impede a escalada. */

@@ -209,6 +209,21 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   container MariaDB aplicando as migrações (o do front, o `ci.yml`, já roda lint, typecheck e
   vitest).
 ## Higiene do backend (entregue 2026-10-21)
+- **[x] ENTREGUE 2026-10-22 — O motor de risco passou a ENTREGAR a ocorrência à moderação (não
+  só registrar).** O passo 1 do motor (nível + registro) existia, mas ninguém ficava sabendo: a
+  avaliação ia para a tabela e morria ali. Agora, nível **MEDIUM ou acima**, o motor entrega a
+  ocorrência à moderação com o nível, os sinais e a versão da regra na descrição — e a denúncia
+  automática **não depende de alguém ter denunciado**, que é o que o plano mestre pede ("o próprio
+  Énóis deve identificar e encaminhar incidentes proativamente"). Intervalo de 1 h por conta, para
+  um robô não virar uma tentativa de inserção por post.
+  *E o guarda de cadência deixou de denunciar sozinho:* ele **detecta**, o motor **entrega**. Antes
+  a denúncia do guarda saía primeiro e a do motor chegava depois como duplicata (a moderação
+  recusa repetida com 409) — a moderação ficava com a descrição pobre, sem nível e sem o conjunto
+  de sinais. O comportamento antigo (cadência detectada → moderação avisada) continua de pé, agora
+  com o nível junto.
+  *Testes:* `RiskEngineTests` (6) — nível grave vira ocorrência com nível e sinais, cadência
+  sozinha (MEDIUM) também vira ocorrência com o nível, e o modo de observação continua sem barrar
+  ninguém.
 - **[x] ENTREGUE 2026-10-22 — A varredura de rotas não custava nada ao atacante.** Um scanner
   martelando todas as rotas produzia 404 atrás de 404 (e 401/403/400 ao sondar acesso e payload) e
   o único freio era o limitador global, que conta REQUISIÇÕES: dava para errar dezenas de vezes
