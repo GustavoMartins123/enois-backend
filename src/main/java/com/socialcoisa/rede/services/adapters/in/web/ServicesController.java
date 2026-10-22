@@ -37,10 +37,12 @@ class ServicesController {
 
 	@GetMapping("/servicos")
 	Map<String, Object> catalog(@RequestParam(defaultValue = "40") int listings,
-			@RequestParam(defaultValue = "40") int requests) {
+			@RequestParam(defaultValue = "40") int requests,
+			@RequestParam(required = false) String q,
+			@RequestParam(required = false) String category) {
 		return Map.of(
-			"ofertas", services.listingCatalog(listings).stream().map(ListingView::from).toList(),
-			"pedidos", services.requestCatalog(requests).stream().map(RequestView::from).toList());
+			"ofertas", services.listingCatalog(listings, q, category).stream().map(ListingView::from).toList(),
+			"pedidos", services.requestCatalog(requests, q, category).stream().map(RequestView::from).toList());
 	}
 
 	@GetMapping("/servicos/minhas")

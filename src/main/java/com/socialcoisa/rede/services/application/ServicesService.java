@@ -158,16 +158,42 @@ public class ServicesService {
 		return contract;
 	}
 
-	public List<ServiceListing> listingCatalog(int limit) {
-		return services.findActiveListings(limit);
+	public List<ServiceListing> listingCatalog(int limit, String query, String category) {
+		return services.findActiveListings(Math.min(200, Math.max(1, limit) * 4)).stream()
+			.filter(l -> matches(query, l.title(), l.description(), l.deliverables()))
+			.filter(l -> matchesCategory(category, l.category()))
+			.limit(Math.min(60, Math.max(1, limit))).toList();
 	}
 
 	public List<ServiceListing> listingsBySeller(String sellerId) {
 		return services.findListingsBySeller(sellerId);
 	}
 
-	public List<ServiceRequest> requestCatalog(int limit) {
-		return services.findOpenRequests(limit);
+	public List<ServiceRequest> requestCatalog(int limit, String query, String category) {
+		return services.findOpenRequests(Math.min(200, Math.max(1, limit) * 4)).stream()
+			.filter(r -> matches(query, r.title(), r.description(), r.deliverables()))
+			.filter(r -> matchesCategory(category, r.category()))
+			.limit(Math.min(60, Math.max(1, limit))).toList();
+	}
+
+	private static boolean matches(String query, String... fields) {
+		if (query == null || query.isBlank()) {
+			return true;
+		}
+		String term = query.trim().toLowerCase(java.util.Locale.ROOT);
+		for (String field : fields) {
+			if (field != null && field.toLowerCase(java.util.Locale.ROOT).contains(term)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private static boolean matchesCategory(String category, String value) {
+		if (category == null || category.isBlank()) {
+			return true;
+		}
+		return value != null && value.equalsIgnoreCase(category.trim());
 	}
 
 	public List<ServiceProposal> proposalsFor(String requestId, String requesterId) {
