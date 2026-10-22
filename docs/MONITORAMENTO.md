@@ -20,6 +20,10 @@ encontrado e o que foi feito. Uma linha por ciclo, sem inventar o que não foi l
 
 ## Ciclos
 
+- **2026-10-22 17:20** — app saudável: `/api/stats/community` 200 em 0,92s/0,91s/0,91s, home 200,
+  `/api/health` 200. Estável em relação aos dois ciclos anteriores. Sem leitura de log (bastion sem
+  credencial AWS nem kubectl). Defesa, motor de risco e histórico de risco prontos no código,
+  **ainda não publicados**.
 - **2026-10-22 15:35** — app saudável: `/api/stats/community` 200 em 0,87s/0,80s/0,91s, home 200 em
   1,32s, `/api/health` 200 em 0,30s. Nada de diferente do ciclo anterior. Sem leitura de log (o
   bastion segue sem credencial AWS nem kubectl). Defesa contra varredura e motor de risco prontos

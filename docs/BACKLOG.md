@@ -209,6 +209,16 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   container MariaDB aplicando as migrações (o do front, o `ci.yml`, já roda lint, typecheck e
   vitest).
 ## Higiene do backend (entregue 2026-10-21)
+- **[x] ENTREGUE 2026-10-22 — A recorrência do banimento JÁ estava coberta (o plano ainda
+  dizia que faltava).** Conferido no código: o banimento revoga **todas** as sessões da conta
+  (`revokeAllByUser` — access e refresh na mesma linha de sessão), o **login** é recusado com 403
+  `ACCOUNT_BANNED`, o **desafio de 2FA** também, e o refresh de token revogado responde 401. A
+  prova está em `BulkBanAndSuspiciousTests` (a sessão antiga deixa de valer e o login novo é
+  bloqueado) e `SanctionFlowTests` (ban do recurso negado, com sessões revogadas e login travado).
+  *O que de fato falta (e fica anotado):* no banimento, o vínculo de **integração** (o token do
+  LinkedIn e os vínculos OAuth) continua valendo — o `BanCleanupService` apaga o conteúdo da
+  conta, não as credenciais de terceiros. O plano de segurança registra isso como a parte que
+  sobra da lacuna.
 - **[x] ENTREGUE 2026-10-22 — O histórico de risco ficou legível para a moderação.** O motor
   grava cada avaliação (nível, sinais, versão da regra) para a decisão poder ser reconstruída, mas
   o histórico só existia na tabela: ninguém consultava. Agora o admin tem

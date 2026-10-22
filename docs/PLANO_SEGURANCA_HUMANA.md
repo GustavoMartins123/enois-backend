@@ -63,8 +63,16 @@ anteriores e o trabalho de verdade agora é fechar as lacunas, não refazer o qu
    positivo; hoje há log e `RequestObservabilityFilter`, mas não há painel/métrica própria.
 5. **Base de conhecimento de incidentes** (item 10): não há catálogo versionado de padrões de abuso
    confirmados, nem registro de incidente com análise pós-morteiro.
-6. **Recorrência** (item 9): a invalidação de sessão no banimento e a revogação de credencial de
-   API precisam de cobertura de teste que prove a continuidade bloqueada.
+6. **Recorrência — JÁ ESTÁ COBERTA (conferido no código em 2026-10-22, o plano ainda dizia
+   que faltava).** O banimento revoga **todas** as sessões da conta (`revokeAllByUser` em
+   `AuthSessionJpaRepository`: o access e o refresh morrem juntos, porque é a mesma linha de
+   sessão), o **login** é recusado com 403 `ACCOUNT_BANNED` (`AuthService`), o **desafio de 2FA**
+   também é recusado, e o **refresh** de um token já revogado responde 401. A prova está em
+   `BulkBanAndSuspiciousTests` (a sessão antiga deixa de valer e o login novo é bloqueado) e em
+   `SanctionFlowTests` (o ban sai do recurso negado, com sessões revogadas e login travado).
+   *O que ainda não tem cobertura:* a revogação das credenciais de **integração** (o token do
+   LinkedIn e os vínculos OAuth) no momento do banimento — o `BanCleanupService` apaga o
+   conteúdo, mas não o vínculo de integração. É o resto da lacuna, e está anotado no BACKLOG.
 
 ### Regras de cada rodada
 - Uma lacuna por vez, a de maior impacto, com código de verdade e teste novo (nunca desativar
