@@ -439,8 +439,8 @@ public class CoinService {
 		for (CoinAccount account : ledger.allAccounts()) {
 			long rebuilt = ledger.balanceFromLedger(account.accountId());
 			if (rebuilt != account.balance()) {
-				System.out.println("[FAISCA][RECONCILIACAO] DIVERGENCIA conta=" + account.accountId()
-					+ " snapshot=" + account.balance() + " ledger=" + rebuilt);
+				LOG.error("coin_reconciliation_divergence accountId={} snapshot={} ledger={}", account.accountId(),
+					account.balance(), rebuilt);
 			}
 		}
 	}

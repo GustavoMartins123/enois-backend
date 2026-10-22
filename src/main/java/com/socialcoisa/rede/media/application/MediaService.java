@@ -5,6 +5,8 @@ import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -27,6 +29,9 @@ import com.socialcoisa.rede.shared.web.StatusResponse;
 @Service
 public class MediaService implements CreateMediaUploadUseCase, GetMediaAssetUseCase, RequestMediaDeletionUseCase,
 		RequestPostMediaDeletionUseCase, ValidateMediaOwnershipUseCase {
+
+	private static final Logger LOG = LoggerFactory.getLogger(MediaService.class);
+
 
 	/**
 	 * Teto de uma midia: 500MB por arquivo. O S3 aceita bem mais (o PUT assinado vai direto do
@@ -81,11 +86,18 @@ public class MediaService implements CreateMediaUploadUseCase, GetMediaAssetUseC
 			storageUrlFactory.provider());
 		MediaAsset saved = mediaAssetRepository.save(asset);
 		try {
-			return MediaUploadView.fromSigned(saved, signer.sign(objectKey, saved.mimeType()));
+			MediaUploadView view = MediaUploadView.fromSigned(saved, signer.sign(objectKey, saved.mimeType()));
+			// Metadados do upload (nunca o conteúdo): permite no CloudWatch ver quem subiu o quê,
+			// tamanho/tipo e o provedor, e cruzar com o mediaId que aparece nos posts.
+			LOG.info("media_upload_signed mediaId={} ownerId={} mime={} bytes={} purpose={} provider={}",
+				saved.id(), command.ownerId(), saved.mimeType(), command.size(), saved.purpose(), saved.storageProvider());
+			return view;
 		}
 		catch (RuntimeException assinaturaFalhou) {
 			// Credencial do S3 ausente/ruim (IRSA) virava 500 generico — o operador nao tinha o
 			// que ler. Aqui a falha fica explicita e o cliente recebe algo acionavel.
+			LOG.error("media_upload_signing_failed ownerId={} mime={} bytes={} error={}", command.ownerId(),
+				command.mimeType(), command.size(), assinaturaFalhou.getClass().getSimpleName());
 			throw new ApiException(503, "STORAGE_UNAVAILABLE",
 				"O armazenamento de midia esta indisponivel no momento. Tente novamente em instantes.");
 		}
