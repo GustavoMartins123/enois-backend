@@ -58,6 +58,14 @@ class MessagingPersistenceAdapter implements MessagingRepository {
 	}
 
 	@Override
+	public Optional<Conversation> findServiceBetween(String userA, String userB) {
+		return conversationRepo.findServiceBetween(userA, userB, org.springframework.data.domain.PageRequest.of(0, 1))
+			.stream()
+			.findFirst()
+			.map(ConversationJpaEntity::toDomain);
+	}
+
+	@Override
 	public Optional<Conversation> findConversationById(String id) {
 		return conversationRepo.findById(id).map(ConversationJpaEntity::toDomain);
 	}

@@ -88,6 +88,27 @@ public class MessagingService {
 		return id;
 	}
 
+	/**
+	 * Conversa de SERVICO entre duas pessoas: a que o botao do card de servico abre.
+	 *
+	 * <p>Ela e separada da conversa direta porque tem ASSUNTO (o tipo do servico e o pedido da
+	 * contratacao) e porque o prestador precisa de uma aba propria na caixa de entrada — a conversa
+	 * direta nao diz do que se trata. Clicar duas vezes no botao nao abre duas conversas: a
+	 * existente e reaproveitada.
+	 */
+	@Transactional
+	public String serviceConversationBetween(String userA, String userB, String assunto) {
+		var existing = repository.findServiceBetween(userA, userB);
+		if (existing.isPresent()) {
+			return existing.get().id();
+		}
+		String id = "conversation_" + java.util.UUID.randomUUID().toString().replace("-", "");
+		repository.saveConversation(Conversation.create(id, "SERVICE", assunto, userA, clock.instant()));
+		repository.saveParticipant(ConversationParticipant.create(id, userA, clock.instant()));
+		repository.saveParticipant(ConversationParticipant.create(id, userB, clock.instant()));
+		return id;
+	}
+
 	@Transactional
 	public Message sendMessage(String conversationId, String senderId, String text) {
 		return sendMessage(conversationId, senderId, text, java.util.List.of());

@@ -209,6 +209,27 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   container MariaDB aplicando as migrações (o do front, o `ci.yml`, já roda lint, typecheck e
   vitest).
 ## Higiene do backend (entregue 2026-10-21)
+- **[x] ENTREGUE 2026-10-22 — O serviço não dizia quem prestava, não tinha conversa com quem
+  prestava, e os serviços de teste que sobraram na produção continuavam no catálogo.**
+  Três coisas da mesma feature (o marketplace de serviços, Fase 5), pedidas pela dona:
+  1. **Serviços de teste no catálogo:** as ofertas de teste que rodaram contra a API de produção
+     ficaram lá depois que as contas de teste sumiram — oferta sem nome, sem foto e sem chat com
+     ninguém. A V155 limpa as ofertas (e os pedidos e propostas) cujo dono **não existe mais**; a
+     conta que a pessoa apaga pelo app é anonimizada e continua no catálogo, com o nome
+     anonimizado — essa não é órfã e a migração não mexe nela. *Validada na bancada MariaDB: a
+     cadeia inteira de migrações aplica numa base nova e a V155 aplica 2x sem erro; num teste com
+     uma oferta de conta real e uma de conta inexistente, a primeira fica e a segunda sai.*
+  2. **O serviço não mostrava quem presta:** o card tinha só o título. Agora a oferta carrega o
+     nome e a foto de quem prestador (uma consulta por prestador, não por oferta) e o preço
+     respeita a moeda do serviço (reais ou faíscas — o card mostrava sempre faíscas).
+  3. **O chat de serviço:** `POST /servicos/ofertas/{id}/chat` abre (ou reaproveita) uma conversa
+     do tipo **SERVICE**, com **assunto** (o tipo do serviço e o título da oferta) e a primeira
+     mensagem sendo o pedido da contratação. O prestador recebe numa aba **“Serviços”** da caixa
+     de entrada (as conversas de serviço não se misturam com as de vaga nem com as de pessoa), e
+     no compositor quem presta pode anexar o link de um serviço seu.
+     *Testes:* `ServicesFlowTests` (+2) — o catálogo mostra quem presta e a moeda, o chat abre com o
+     assunto e a primeira mensagem, clicar de novo não abre outra conversa, e o prestador não
+     abre chat consigo mesmo.
 - **[x] ENTREGUE 2026-10-22 — O motor central de risco (plano mestre de segurança humana,
   item 7): os sinais viram nível, e a decisão fica registrada.** Até aqui cada guarda olhava um
   sinal sozinho e agia sozinho — o de cadência denunciava, o de duplicidade recusava, o de conta

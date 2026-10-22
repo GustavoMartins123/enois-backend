@@ -27,6 +27,20 @@ interface SpringDataConversationJpaRepository extends JpaRepository<Conversation
 	List<ConversationJpaEntity> findDirectBetween(@Param("userA") String userA, @Param("userB") String userB,
 			Pageable pageable);
 
+	/**
+	 * A conversa de SERVICO entre as duas pessoas. Ela e SEPARADA da conversa direta: e o que
+	 * da a aba "Servicos" na caixa de entrada e o que guarda o assunto do pedido.
+	 */
+	@Query("""
+			SELECT c FROM ConversationJpaEntity c
+			WHERE c.kind = 'SERVICE'
+			AND c.id IN (SELECT cp.conversationId FROM ConversationParticipantJpaEntity cp WHERE cp.userId = :userA)
+			AND c.id IN (SELECT cp.conversationId FROM ConversationParticipantJpaEntity cp WHERE cp.userId = :userB)
+			AND (SELECT COUNT(all_) FROM ConversationParticipantJpaEntity all_ WHERE all_.conversationId = c.id) = 2
+			ORDER BY c.updatedAt DESC""")
+	List<ConversationJpaEntity> findServiceBetween(@Param("userA") String userA, @Param("userB") String userB,
+			Pageable pageable);
+
 	@Query("""
 			SELECT c FROM ConversationJpaEntity c
 			WHERE c.id IN (SELECT cp.conversationId FROM ConversationParticipantJpaEntity cp

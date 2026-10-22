@@ -40,8 +40,12 @@ class ServicesController {
 			@RequestParam(defaultValue = "40") int requests,
 			@RequestParam(required = false) String q,
 			@RequestParam(required = false) String category) {
+		var ofertas = services.listingCatalog(listings, q, category);
+		var prestadores = services.sellersOf(ofertas);
 		return Map.of(
-			"ofertas", services.listingCatalog(listings, q, category).stream().map(ListingView::from).toList(),
+			"ofertas", ofertas.stream()
+				.map(listing -> ListingView.from(listing, prestadores.get(listing.sellerId())))
+				.toList(),
 			"pedidos", services.requestCatalog(requests, q, category).stream().map(RequestView::from).toList());
 	}
 
@@ -49,8 +53,12 @@ class ServicesController {
 	Map<String, Object> mine(@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		CurrentUser user = user(userId, sessionToken);
+		var ofertas = services.listingsBySeller(user.id().value());
+		var prestadores = services.sellersOf(ofertas);
 		return Map.of(
-			"ofertas", services.listingsBySeller(user.id().value()).stream().map(ListingView::from).toList(),
+			"ofertas", ofertas.stream()
+				.map(listing -> ListingView.from(listing, prestadores.get(listing.sellerId())))
+				.toList(),
 			"contratosComoComprador", services.contractsByBuyer(user.id().value()).stream().map(ContractView::from).toList(),
 			"contratosComoVendedor", services.contractsBySeller(user.id().value()).stream().map(ContractView::from).toList());
 	}
@@ -73,6 +81,24 @@ class ServicesController {
 		CurrentUser user = user(userId, sessionToken);
 		ServiceContract contract = services.buyListing(listingId, user.id().value());
 		return Map.of("contractId", contract.id(), "state", contract.escrowState().name());
+	}
+
+	/**
+	 * Abre a conversa de servico com quem presta (o botao do card).
+	 *
+	 * <p>É o caminho do servico em REAIS: o pagamento e combinado direto com o prestador, e a
+	 * conversa fica com assunto (o tipo do servico e o pedido) na aba "Servicos" da caixa de
+	 * entrada dele. Em FAISCA o mesmo caminho existe — o escrow cuida do dinheiro.
+	 */
+	@PostMapping("/servicos/ofertas/{listingId}/chat")
+	Map<String, Object> openChat(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@PathVariable String listingId,
+			@RequestBody(required = false) OpenChatRequest request) {
+		CurrentUser user = user(userId, sessionToken);
+		var chat = services.openChat(listingId, user.id().value(), request == null ? null : request.message());
+		return Map.of("conversationId", chat.conversationId(), "assunto", chat.assunto(),
+			"listingId", chat.listingId(), "sellerId", chat.sellerId());
 	}
 
 	@PostMapping("/servicos/pedidos")
@@ -161,11 +187,18 @@ class ServicesController {
 	record DeliverRequest(String note) {
 	}
 
-	record ListingView(String id, String sellerId, String category, String title, String description,
-			String deliverables, long price, String currency, int deliveryDays, String status, String createdAt) {
-		static ListingView from(ServiceListing l) {
-			return new ListingView(l.id(), l.sellerId(), l.category(), l.title(), l.description(), l.deliverables(),
-				l.price(), l.currency(), l.deliveryDays(), l.status().name(), l.createdAt().toString());
+	/**
+	 * A oferta com QUEM vai prestar o serviço (nome e foto): um serviço sem rosto nao diz para
+	 * quem a pessoa esta contratando.
+	 */
+	record ListingView(String id, String sellerId, String sellerName, String sellerAvatar, String category,
+			String title, String description, String deliverables, long price, String currency, int deliveryDays,
+			String status, String createdAt) {
+		static ListingView from(ServiceListing l, ServicesService.Seller seller) {
+			return new ListingView(l.id(), l.sellerId(), seller == null ? null : seller.name(),
+				seller == null ? null : seller.avatar(), l.category(), l.title(), l.description(),
+				l.deliverables(), l.price(), l.currency(), l.deliveryDays(), l.status().name(),
+				l.createdAt().toString());
 		}
 	}
 
@@ -176,6 +209,10 @@ class ServicesController {
 				r.budgetMin(), r.budgetMax(), r.deadline() == null ? null : r.deadline().toString(),
 				r.status().name(), r.createdAt().toString());
 		}
+	}
+
+	/** O pedido que vai na primeira mensagem da conversa de servico. */
+	record OpenChatRequest(String message) {
 	}
 
 	record ProposalView(String id, String requestId, String userId, String message, long price, String status,
