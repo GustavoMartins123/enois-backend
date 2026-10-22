@@ -25,3 +25,19 @@ encontrado e o que foi feito. Uma linha por ciclo, sem inventar o que não foi l
   1,49s. Login respondeu 401 nas 6 tentativas erradas (o limite por IP é 60/min, então 6 não
   estouram — não é furo). Nenhum sinal de ataque ativo nos sinais medidos. Sem leitura de log
   (bastion sem credencial AWS nem kubectl). Defesa pronta no código, **falta publicar**.
+
+## Prompt do agendamento (para criar em um chat NOVO)
+
+A plataforma recusa criar uma tarefa agendada de dentro de uma sessão que já é uma tarefa
+agendada. Para ligar o ciclo a cada 10 minutos, peça em um **chat novo** (ou crie na tela de
+automações) com o título "Monitorar e defender o Énóis contra ataques a cada 10 minutos" e o
+cron `*/10 * * * *`, usando como instrução o bloco "Como o ciclo funciona" acima mais:
+
+> A cada 10 minutos: meça `GET https://enois.ia.br/api/stats/community` (3x, status e latência),
+> a home e `/api/health`; se houver acesso ao cluster/bastion, leia os logs do backend dos
+> últimos 10 minutos atrás de `abuse_guard`, `Rate limit`, 429/403/401 em rajada e rotas que não
+> existem; registre uma linha em `docs/MONITORAMENTO.md` e commite local (sem push). Se a latência
+> de rota pública passar de ~2s, houver 5xx/503/timeout ou 429 em cadeia, trate como incidente:
+> registre a hora e a rota e diga qual é a contenção e o que falta para executá-la (acesso ao
+> bastion/cluster ou publicação do código). Não publique, não bloqueie IP sem ordem e não rode
+> teste de carga contra a produção.
