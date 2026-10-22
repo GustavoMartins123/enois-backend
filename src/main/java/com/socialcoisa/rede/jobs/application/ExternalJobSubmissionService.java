@@ -54,14 +54,14 @@ public class ExternalJobSubmissionService {
 	@Transactional
 	public ExternalJob submit(String userId, String title, String company, String location, String url,
 			boolean communityAgreement) {
-		return submit(userId, title, company, location, url, null, null, null, null, null, communityAgreement);
+		return submit(userId, title, company, location, url, null, null, null, null, null, communityAgreement, false);
 	}
 
 	/** Cadastro completo: detalhes da vaga e canal de candidatura opcionais. */
 	@Transactional
 	public ExternalJob submit(String userId, String title, String company, String location, String url,
 			String description, String salaryMin, String salaryMax, String salaryPeriod, String applyEmail,
-			boolean communityAgreement) {
+			boolean communityAgreement, boolean salaryNotInformed) {
 		String cleanTitle = required(title, MAX_TITLE, "Informe o titulo da vaga.");
 		String cleanCompany = required(company, MAX_COMPANY, "Informe a empresa da vaga.");
 		String cleanLocation = optional(location, MAX_LOCATION);
@@ -83,10 +83,14 @@ public class ExternalJobSubmissionService {
 		}
 		String suffix = UUID.randomUUID().toString().replace("-", "");
 		Instant now = clock.instant();
+		// "Não informa salário" é uma declaração: a faixa some (não fica um campo vazio ambíguo).
+		String cleanSalaryMin = salaryNotInformed ? null : optional(salaryMin, 50);
+		String cleanSalaryMax = salaryNotInformed ? null : optional(salaryMax, 50);
+		String cleanSalaryPeriod = salaryNotInformed ? null : normalizePeriod(salaryPeriod);
 		ExternalJob job = new ExternalJob("ext_com_" + suffix, COMMUNITY_PLATFORM, "community_" + suffix,
 			cleanTitle, cleanCompany, cleanLocation, null, null, cleanUrl, now, now, ExternalJob.FOUND,
 			canonicalUrl, cleanApplyEmail(applyEmail), userId, optional(description, 5000),
-			optional(salaryMin, 50), optional(salaryMax, 50), normalizePeriod(salaryPeriod));
+			cleanSalaryMin, cleanSalaryMax, cleanSalaryPeriod, salaryNotInformed);
 		repository.save(job);
 		evictListing();
 		return job;

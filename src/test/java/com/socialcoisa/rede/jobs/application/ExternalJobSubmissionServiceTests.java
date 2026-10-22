@@ -66,6 +66,21 @@ class ExternalJobSubmissionServiceTests {
 	}
 
 	@Test
+	void salaryNotInformedClearsTheRangeAndKeepsTheFlag() {
+		when(reputationService.reputationOf(USER)).thenReturn(300);
+
+		ExternalJob job = service.submit(USER, "Vaga sem faixa", "Acme", "Remoto",
+			"https://acme.test/vagas/sem-salario", "Descrição da vaga", "1500", "2000", "MONTH", null, true,
+			true);
+
+		assertThat(job.salaryNotInformed()).isTrue();
+		assertThat(job.salaryMin()).isNull();
+		assertThat(job.salaryMax()).isNull();
+		assertThat(job.salaryPeriod()).isNull();
+		verify(repository).save(job);
+	}
+
+	@Test
 	void keepsTheSameReputationGateAsTheHouseJob() {
 		when(reputationService.reputationOf(USER)).thenReturn(JobService.MIN_REPUTATION_TO_CREATE_JOB);
 
@@ -129,7 +144,7 @@ class ExternalJobSubmissionServiceTests {
 		ExternalJob mine = new ExternalJob("ext_com_1", ExternalJobSubmissionService.COMMUNITY_PLATFORM, "community_1",
 			"Backend", "Acme", null, null, null, "https://acme.test/vaga", java.time.Instant.now(),
 			java.time.Instant.now(), ExternalJob.FOUND, "https://acme.test/vaga", null, USER, null, null, null,
-			null);
+			null, false);
 		when(repository.findById("ext_com_1")).thenReturn(Optional.of(mine));
 
 		assertThatThrownBy(() -> service.remove(OTHER, "ext_com_1"))

@@ -58,7 +58,7 @@ class CommunitySubmissionImportGuardTests {
 		Instant now = Instant.now();
 		repository.save(new ExternalJob("ext_com_guard", "Comunidade", "community_guard",
 			"Vaga cadastrada pela comunidade", "Empresa da comunidade", null, null, null, URL, now, now,
-			ExternalJob.FOUND, URL, null, "user_guard", null, null, null, null));
+			ExternalJob.FOUND, URL, null, "user_guard", null, null, null, null, false));
 
 		importService.refresh();
 
