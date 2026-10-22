@@ -20,6 +20,10 @@ encontrado e o que foi feito. Uma linha por ciclo, sem inventar o que não foi l
 
 ## Ciclos
 
+- **2026-10-22 15:35** — app saudável: `/api/stats/community` 200 em 0,87s/0,80s/0,91s, home 200 em
+  1,32s, `/api/health` 200 em 0,30s. Nada de diferente do ciclo anterior. Sem leitura de log (o
+  bastion segue sem credencial AWS nem kubectl). Defesa contra varredura e motor de risco prontos
+  no código, **os dois ainda não publicados**.
 - **2026-10-22 14:30** — app saudável: `/api/stats/community` 200 em 0,81s/0,81s/1,02s (a
   distância até `us-east-1` explica o RTT; não é fila), home 200 em 1,19s, `/api/health` 200 em
   1,49s. Login respondeu 401 nas 6 tentativas erradas (o limite por IP é 60/min, então 6 não
