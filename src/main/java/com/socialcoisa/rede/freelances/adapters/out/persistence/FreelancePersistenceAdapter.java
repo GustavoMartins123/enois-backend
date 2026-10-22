@@ -15,11 +15,14 @@ class FreelancePersistenceAdapter implements FreelanceRepository {
 	FreelancePersistenceAdapter(SpringDataFreelanceJpaRepository repo) { this.repo = repo; }
 	@Override public Freelance save(Freelance f) { return repo.save(FreelanceJpaEntity.fromDomain(f)).toDomain(); }
 	@Override public Optional<Freelance> findById(String id) { return repo.findById(id).map(FreelanceJpaEntity::toDomain); }
-	@Override public List<Freelance> findOpen(int limit, int offset) {
+	@Override public List<Freelance> findOpen(String query, int limit, int offset) {
 		int size = Math.max(1, limit);
 		int page = Math.max(0, offset) / size;
-		return repo.findByStatusOrderByCreatedAtDesc(Freelance.Status.OPEN, PageRequest.of(page, size))
-			.stream().skip(Math.max(0, offset) % size).map(FreelanceJpaEntity::toDomain).toList();
+		PageRequest pageable = PageRequest.of(page, size);
+		List<FreelanceJpaEntity> found = query == null || query.isBlank()
+			? repo.findByStatusOrderByCreatedAtDesc(Freelance.Status.OPEN, pageable)
+			: repo.searchOpen(Freelance.Status.OPEN, query, pageable);
+		return found.stream().skip(Math.max(0, offset) % size).map(FreelanceJpaEntity::toDomain).toList();
 	}
 	@Override public List<Freelance> findByUser(String userId) {
 		return repo.findByUserIdOrderByCreatedAtDesc(userId).stream().map(FreelanceJpaEntity::toDomain).toList();

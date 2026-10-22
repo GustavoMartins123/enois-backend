@@ -95,9 +95,17 @@ public class FreelanceService {
 		}
 	}
 
+	/**
+	 * Busca simples (título e escopo). `%` e `_` são removidos para o termo valer como texto:
+	 * a caixa de pesquisa do freela não tem a sintaxe booleana das vagas.
+	 */
 	@Transactional(readOnly = true)
-	public List<Freelance> list(int limit, int offset) {
-		return freelances.findOpen(Math.min(60, Math.max(1, limit)), Math.max(0, offset));
+	public List<Freelance> list(String query, int limit, int offset) {
+		String termo = query == null ? null : query.trim().replace("%", "").replace("_", "");
+		if (termo != null && termo.isBlank()) {
+			termo = null;
+		}
+		return freelances.findOpen(termo, Math.min(60, Math.max(1, limit)), Math.max(0, offset));
 	}
 
 	@Transactional(readOnly = true)

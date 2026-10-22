@@ -30,12 +30,13 @@ class FreelanceController {
 	@GetMapping("/freelances")
 	Map<String, Object> list(@RequestParam(required = false) Integer limit,
 			@RequestParam(required = false) String cursor,
+			@RequestParam(required = false) String q,
 			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		int size = limit == null ? 24 : Math.min(60, Math.max(1, limit));
 		int offset = parseCursor(cursor);
 		String viewer = viewerIdOrNull(userId, sessionToken);
-		List<FreelanceView> items = views(freelances.list(size, offset), viewer);
+		List<FreelanceView> items = views(freelances.list(q, size, offset), viewer);
 		Map<String, Object> result = new HashMap<>();
 		result.put("items", items);
 		result.put("nextCursor", items.size() == size ? Integer.toString(offset + size) : null);

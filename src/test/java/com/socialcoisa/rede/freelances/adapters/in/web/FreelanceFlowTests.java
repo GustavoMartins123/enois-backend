@@ -76,6 +76,42 @@ class FreelanceFlowTests {
 	}
 
 	@Test
+	void searchesByTitleAndScope() throws Exception {
+		var owner = new TestAuthHelper(mockMvc, objectMapper).authenticate("free_search");
+
+		mockMvc.perform(post("/freelances")
+				.header("X-Session-Token", owner.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of(
+					"title", "Landing page de vendas",
+					"scope", "Página de vendas com formulário e integração com o checkout.",
+					"budgetMin", 20_000,
+					"budgetMax", 30_000,
+					"deadline", LocalDate.now().plusDays(7).toString()))))
+			.andExpect(status().isOk());
+
+		mockMvc.perform(post("/freelances")
+				.header("X-Session-Token", owner.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of(
+					"title", "Ajuste de banco de dados",
+					"scope", "Revisar índices e consultas lentas do banco de produção.",
+					"budgetMin", 8_000,
+					"budgetMax", 12_000,
+					"deadline", LocalDate.now().plusDays(7).toString()))))
+			.andExpect(status().isOk());
+
+		mockMvc.perform(get("/freelances").param("q", "banco de dados"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.items[?(@.title == 'Ajuste de banco de dados')]").isNotEmpty())
+			.andExpect(jsonPath("$.items[?(@.title == 'Landing page de vendas')]").isEmpty());
+
+		mockMvc.perform(get("/freelances").param("q", "nao-existe-em-lugar-nenhum"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.items.length()").value(0));
+	}
+
+	@Test
 	void createsListsAndClosesAFreelance() throws Exception {
 		var owner = new TestAuthHelper(mockMvc, objectMapper).authenticate("free_owner");
 
