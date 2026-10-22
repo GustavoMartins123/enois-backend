@@ -25,15 +25,18 @@ class MessagingPersistenceAdapter implements MessagingRepository {
 	private final SpringDataConversationParticipantJpaRepository participantRepo;
 	private final SpringDataMessageJpaRepository messageRepo;
 	private final SpringDataMessageReactionJpaRepository messageReactionRepo;
+	private final SpringDataMessageHiddenJpaRepository messageHiddenRepo;
 
 	MessagingPersistenceAdapter(SpringDataConversationJpaRepository conversationRepo,
 			SpringDataConversationParticipantJpaRepository participantRepo,
 			SpringDataMessageJpaRepository messageRepo,
-			SpringDataMessageReactionJpaRepository messageReactionRepo) {
+			SpringDataMessageReactionJpaRepository messageReactionRepo,
+			SpringDataMessageHiddenJpaRepository messageHiddenRepo) {
 		this.conversationRepo = conversationRepo;
 		this.participantRepo = participantRepo;
 		this.messageRepo = messageRepo;
 		this.messageReactionRepo = messageReactionRepo;
+		this.messageHiddenRepo = messageHiddenRepo;
 	}
 
 	@Override
@@ -44,6 +47,22 @@ class MessagingPersistenceAdapter implements MessagingRepository {
 	@Override
 	public void saveParticipant(ConversationParticipant participant) {
 		participantRepo.save(ConversationParticipantJpaEntity.fromDomain(participant));
+	}
+
+	@Override
+	public Optional<Conversation> findDirectBetween(String userA, String userB) {
+		return conversationRepo.findDirectBetween(userA, userB, org.springframework.data.domain.PageRequest.of(0, 1))
+			.stream()
+			.findFirst()
+			.map(ConversationJpaEntity::toDomain);
+	}
+
+	@Override
+	public Optional<Conversation> findServiceBetween(String userA, String userB) {
+		return conversationRepo.findServiceBetween(userA, userB, org.springframework.data.domain.PageRequest.of(0, 1))
+			.stream()
+			.findFirst()
+			.map(ConversationJpaEntity::toDomain);
 	}
 
 	@Override
@@ -59,6 +78,13 @@ class MessagingPersistenceAdapter implements MessagingRepository {
 	}
 
 	@Override
+	public List<Conversation> findArchivedConversationsByUserId(String userId, java.time.Instant before, int limit) {
+		return conversationRepo.findArchivedByParticipantUserId(userId, before, PageRequest.of(0, limit)).stream()
+			.map(ConversationJpaEntity::toDomain)
+			.toList();
+	}
+
+	@Override
 	public List<ConversationParticipant> findParticipantsByConversation(String conversationId) {
 		return participantRepo.findByConversationId(conversationId).stream()
 			.map(ConversationParticipantJpaEntity::toDomain)
@@ -69,6 +95,22 @@ class MessagingPersistenceAdapter implements MessagingRepository {
 	public Optional<ConversationParticipant> findParticipant(String conversationId, String userId) {
 		return participantRepo.findByConversationIdAndUserId(conversationId, userId)
 			.map(ConversationParticipantJpaEntity::toDomain);
+	}
+
+	@Override
+	public int hideConversations(String userId, java.util.Collection<String> conversationIds, java.time.Instant now) {
+		if (conversationIds == null || conversationIds.isEmpty()) {
+			return 0;
+		}
+		return participantRepo.hideConversations(userId, conversationIds, now);
+	}
+
+	@Override
+	public int unhideConversations(String userId, java.util.Collection<String> conversationIds) {
+		if (conversationIds == null || conversationIds.isEmpty()) {
+			return 0;
+		}
+		return participantRepo.unhideConversations(userId, conversationIds);
 	}
 
 	@Override
@@ -99,15 +141,59 @@ class MessagingPersistenceAdapter implements MessagingRepository {
 	}
 
 	@Override
-	public List<Message> findMessagesByConversation(String conversationId, String cursor, int limit) {
-		var messages = messageRepo.findByConversationIdOrderByCreatedAtDesc(conversationId, PageRequest.of(0, limit));
+	public List<Message> findMessagesByConversation(String conversationId, String viewerId,
+			java.time.Instant before, int limit) {
+		var page = PageRequest.of(0, limit);
+		var messages = before == null
+			? messageRepo.visibleMessages(conversationId, viewerId, page)
+			: messageRepo.visibleMessagesBefore(conversationId, viewerId, before, page);
 		return messages.stream().map(MessageJpaEntity::toDomain).toList();
+	}
+
+	@Override
+	public Optional<Message> findRecentDuplicate(String conversationId, String senderId, String text,
+			java.time.Instant since) {
+		return messageRepo
+			.findFirstByConversationIdAndSenderIdAndTextAndCreatedAtAfterOrderByCreatedAtDesc(
+				conversationId, senderId, text, since)
+			.map(MessageJpaEntity::toDomain);
 	}
 
 	@Override
 	public Optional<Message> findLastMessage(String conversationId) {
 		return messageRepo.findTopByConversationIdOrderByCreatedAtDesc(conversationId)
 			.map(MessageJpaEntity::toDomain);
+	}
+
+	@Override
+	public int hideMessages(String userId, java.util.Collection<String> messageIds, java.time.Instant now) {
+		if (messageIds == null || messageIds.isEmpty()) {
+			return 0;
+		}
+		int hidden = 0;
+		for (String messageId : messageIds) {
+			// Idempotente: apagar de novo nao cria linha repetida (a unique tambem protege).
+			if (messageHiddenRepo.existsByUserIdAndMessageId(userId, messageId)) {
+				continue;
+			}
+			messageHiddenRepo.save(MessageHiddenJpaEntity.of(
+				"mhid_" + java.util.UUID.randomUUID().toString().replace("-", ""), userId, messageId, now));
+			hidden++;
+		}
+		return hidden;
+	}
+
+	@Override
+	public java.util.Set<String> hiddenMessageIds(String userId, java.util.Collection<String> messageIds) {
+		if (messageIds == null || messageIds.isEmpty()) {
+			return java.util.Set.of();
+		}
+		return new java.util.LinkedHashSet<>(messageHiddenRepo.hiddenIds(userId, messageIds));
+	}
+
+	@Override
+	public Optional<Message> findMessageById(String messageId) {
+		return messageRepo.findById(messageId).map(MessageJpaEntity::toDomain);
 	}
 
 	@Override
@@ -142,9 +228,26 @@ class MessagingPersistenceAdapter implements MessagingRepository {
 	}
 
 	@Override
+	public List<Message> findAllBySender(String senderId) {
+		return messageRepo.findBySenderId(senderId).stream()
+			.map(MessageJpaEntity::toDomain)
+			.toList();
+	}
+
+	@Override
 	public List<MessagingRepository.ReactionSummary> findReactionsByMessageId(String messageId) {
 		return messageReactionRepo.findByMessageIdOrderByCreatedAtDesc(messageId).stream()
 			.map(r -> new MessagingRepository.ReactionSummary(r.getUserId(), r.getReactionType(), r.getCreatedAt()))
+			.toList();
+	}
+
+	@Override
+	public List<MessagingRepository.MessageReactionRow> findReactionsByMessageIds(java.util.Collection<String> messageIds) {
+		if (messageIds == null || messageIds.isEmpty()) {
+			return List.of();
+		}
+		return messageReactionRepo.findByMessageIdIn(messageIds).stream()
+			.map(r -> new MessagingRepository.MessageReactionRow(r.getMessageId(), r.getUserId(), r.getReactionType()))
 			.toList();
 	}
 }

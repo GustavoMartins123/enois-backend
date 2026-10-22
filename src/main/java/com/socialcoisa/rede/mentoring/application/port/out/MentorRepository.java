@@ -23,6 +23,8 @@ public interface MentorRepository {
 
 	Optional<MentorSlot> findSlotById(String slotId);
 
+	void deleteSlot(String slotId);
+
 	void saveSession(MentorSession session);
 
 	void delete(String mentorId);

@@ -1,0 +1,58 @@
+package com.socialcoisa.rede.moderation.domain;
+
+import java.time.Instant;
+
+/**
+ * Sancao de um usuario por moderacao. RESTRICTION trava publicar/comentar e pode ser revista
+ * (recurso); BAN e permanente e vem do recurso NEGADO por um humano — a IA nunca bane.
+ */
+public record UserSanction(String id, String userId, String reportId, SanctionType type, String reason,
+		SanctionStatus status, Instant createdAt, Instant removedAt, String removedBy) {
+
+	public static UserSanction create(String id, String userId, String reportId, String reason, Instant now) {
+		return new UserSanction(id, userId, reportId, SanctionType.RESTRICTION, reason, SanctionStatus.ACTIVE,
+			now, null, null);
+	}
+
+	public static UserSanction restore(String id, String userId, String reportId, SanctionType type, String reason,
+			SanctionStatus status, Instant createdAt, Instant removedAt, String removedBy) {
+		return new UserSanction(id, userId, reportId, type, reason, status, createdAt, removedAt, removedBy);
+	}
+
+	public boolean isActive() {
+		return status == SanctionStatus.ACTIVE;
+	}
+
+	/** Banimento (BAN ou PERMABAN): sem sessao nova e sem recurso. */
+	public boolean isBan() {
+		return type == SanctionType.BAN || type == SanctionType.PERMABAN;
+	}
+
+	/**
+	 * PERMABAN direto do painel admin: mesmo efeito do BAN (sessoes revogadas, sem login) e
+	 * marcado como decisao definitiva — o painel nao oferece recurso.
+	 */
+	public static UserSanction permaBan(String id, String userId, String reportId, String reason, Instant now) {
+		return new UserSanction(id, userId, reportId, SanctionType.PERMABAN, reason, SanctionStatus.ACTIVE,
+			now, null, null);
+	}
+
+	/** Recurso aceito: restricao sai e a conta volta ao normal. */
+	public UserSanction remove(String reviewerId, Instant at) {
+		return new UserSanction(id, userId, reportId, type, reason, SanctionStatus.REMOVED, createdAt, at, reviewerId);
+	}
+
+	/** Recurso negado: restricao vira BAN permanente. */
+	public UserSanction escalateToBan() {
+		return escalateTo(SanctionType.BAN, reason);
+	}
+
+	/**
+	 * Escala a sancao ativa para um ban, mantendo o MESMO id. Criar outra linha deixaria duas
+	 * sancoes ACTIVE para o usuario e a mais recente mascararia a anterior em findActiveByUser.
+	 */
+	public UserSanction escalateTo(SanctionType type, String reason) {
+		return new UserSanction(id, userId, reportId, type, reason, SanctionStatus.ACTIVE, createdAt,
+			removedAt, removedBy);
+	}
+}

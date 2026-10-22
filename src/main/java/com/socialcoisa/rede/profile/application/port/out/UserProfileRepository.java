@@ -36,7 +36,27 @@ public interface UserProfileRepository {
 
 	int countActiveReportsAgainst(String userId);
 
-	List<UserProfile> findTopByReputation(int limit);
+	/**
+	 * Fatos CONFIRMADOS contra o usuário: denúncias julgadas procedentes (APPROVED) ou
+	 * penalizadas automaticamente (AUTO_PENALIZED), deduplicadas por conteúdo denunciado.
+	 * Pendente não é fato; descartada não existe.
+	 */
+	int countConfirmedReportFactsAgainst(String userId);
+
+	/** Pessoas DISTINTAS (sem o próprio autor) que reagiram ou comentaram posts dele. */
+	int countUniqueEngagers(String userId);
+
+	/** Presenças em eventos: as ainda existentes + o agregado guardado antes da purga. */
+	int countEventsAttendedTotal(String userId);
+
+	/** Grava a reputação na coluna de ranking (a busca de perfis ordena por ela). */
+	void updateReputation(String userId, int reputation);
+
+	/** Ids em páginas estáveis, para o job de atualização do ranking. */
+	List<String> findAllIds(int offset, int limit);
+
+	/** O ranking público: os perfis que acabaram de chegar, mais recentes primeiro. */
+	List<UserProfile> findNewestProfiles(int limit);
 
 	List<UserProfile> searchByQuery(String query);
 }

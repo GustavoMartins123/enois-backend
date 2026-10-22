@@ -10,18 +10,21 @@ public class Community {
 	private final String topic;
 	private final String cover;
 	private final String avatar;
+	/** Capa em HTML/CSS sanitizado (mesma tubulação da capa do perfil); nulo = usa a foto da capa. */
+	private final String bannerHtml;
 	private final String createdBy;
 	private final Instant createdAt;
 	private final Instant updatedAt;
 
 	private Community(String id, String name, String description, String topic, String cover, String avatar,
-			String createdBy, Instant createdAt, Instant updatedAt) {
+			String bannerHtml, String createdBy, Instant createdAt, Instant updatedAt) {
 		this.id = id;
 		this.name = name;
 		this.description = description;
 		this.topic = topic;
 		this.cover = cover;
 		this.avatar = avatar;
+		this.bannerHtml = bannerHtml;
 		this.createdBy = createdBy;
 		this.createdAt = createdAt;
 		this.updatedAt = updatedAt;
@@ -29,16 +32,29 @@ public class Community {
 
 	public static Community create(String id, String name, String description, String topic, String cover, String avatar,
 			String createdBy, Instant now) {
-		return new Community(id, name, description, topic, cover, avatar, createdBy, now, now);
+		return new Community(id, name, description, topic, cover, avatar, null, createdBy, now, now);
 	}
 
 	public static Community restore(String id, String name, String description, String topic, String cover, String avatar,
-			String createdBy, Instant createdAt, Instant updatedAt) {
-		return new Community(id, name, description, topic, cover, avatar, createdBy, createdAt, updatedAt);
+			String bannerHtml, String createdBy, Instant createdAt, Instant updatedAt) {
+		return new Community(id, name, description, topic, cover, avatar, bannerHtml, createdBy, createdAt, updatedAt);
 	}
 
-	public Community update(String name, String description, String topic, String cover, String avatar, Instant now) {
-		return new Community(id, name, description, topic, cover, avatar, createdBy, createdAt, now);
+	/** `bannerHtml` nulo mantem o valor atual (campo ausente no PATCH); string vazia limpa. */
+	public Community update(String name, String description, String topic, String cover, String avatar,
+			String bannerHtml, Instant now) {
+		String nextBannerHtml = bannerHtml == null ? this.bannerHtml
+			: (bannerHtml.isEmpty() ? null : bannerHtml);
+		return new Community(id, name, description, topic, cover, avatar, nextBannerHtml, createdBy, createdAt, now);
+	}
+
+	/**
+	 * Passa a propriedade para outro membro. A propriedade e o que autoriza editar e excluir, entao
+	 * a transferencia precisa ser explicita — sair da comunidade nao pode deixar o dono sem controle
+	 * nem largar a comunidade sem administracao.
+	 */
+	public Community transferOwnership(String newOwnerId, Instant now) {
+		return new Community(id, name, description, topic, cover, avatar, bannerHtml, newOwnerId, createdAt, now);
 	}
 
 	public String id() { return id; }
@@ -47,6 +63,7 @@ public class Community {
 	public String topic() { return topic; }
 	public String cover() { return cover; }
 	public String avatar() { return avatar; }
+	public String bannerHtml() { return bannerHtml; }
 	public String createdBy() { return createdBy; }
 	public Instant createdAt() { return createdAt; }
 	public Instant updatedAt() { return updatedAt; }

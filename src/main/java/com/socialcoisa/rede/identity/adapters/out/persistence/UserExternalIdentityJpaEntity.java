@@ -50,4 +50,6 @@ class UserExternalIdentityJpaEntity {
 	String userId() { return userId; }
 	String provider() { return provider; }
 	String externalUserId() { return externalUserId; }
+	String email() { return email; }
+	Instant createdAt() { return createdAt; }
 }

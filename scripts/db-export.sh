@@ -14,7 +14,7 @@ if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
   echo "  MARIADB_HOST       (default: 2a09:8280:1::121:fe41:0)"
   echo "  MARIADB_PORT       (default: 3306)"
   echo "  MARIADB_USER       (default: socialcoiso)"
-  echo "  MARIADB_PASSWORD   (default: a do application-qa.properties)"
+  echo "  MARIADB_PASSWORD   (obrigatoria)"
   echo "  MARIADB_DATABASE   (default: socialcoiso)"
   echo ""
   echo "Exemplo:"
@@ -28,7 +28,7 @@ fi
 HOST="${MARIADB_HOST:-2a09:8280:1::121:fe41:0}"
 PORT="${MARIADB_PORT:-3306}"
 USER="${MARIADB_USER:-socialcoiso}"
-PASS="${MARIADB_PASSWORD:-BhaskaraDeltab24ac!}"
+PASS="${MARIADB_PASSWORD:?defina MARIADB_PASSWORD}"
 DB="${MARIADB_DATABASE:-socialcoiso}"
 
 DUMPER=$(command -v mariadb-dump || command -v mysqldump || echo "")

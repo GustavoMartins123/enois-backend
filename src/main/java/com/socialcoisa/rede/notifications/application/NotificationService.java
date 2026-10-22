@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,10 +17,12 @@ import com.socialcoisa.rede.shared.web.ApiException;
 public class NotificationService {
 
 	private final NotificationRepository repository;
+	private final ApplicationEventPublisher events;
 	private final Clock clock;
 
-	public NotificationService(NotificationRepository repository, Clock clock) {
+	public NotificationService(NotificationRepository repository, ApplicationEventPublisher events, Clock clock) {
 		this.repository = repository;
+		this.events = events;
 		this.clock = clock;
 	}
 
@@ -30,6 +33,8 @@ public class NotificationService {
 		Notification notification = Notification.create(id, userId, kind, actorId, title, body, href, ctaLabel,
 			clock.instant());
 		repository.save(notification);
+		// Quem entrega fora do app (push no celular) escuta este evento depois do commit.
+		events.publishEvent(new NotificationCreatedEvent(userId, kind, title, body, href));
 		return notification;
 	}
 

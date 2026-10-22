@@ -19,7 +19,7 @@ if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
   echo "  MARIADB_HOST                           (default: 2a09:8280:1::121:fe41:0)"
   echo "  MARIADB_PORT                           (default: 3306)"
   echo "  MARIADB_USER                           (default: socialcoiso)"
-  echo "  MARIADB_PASSWORD                       (default: a que ta no properties)"
+  echo "  MARIADB_PASSWORD                       (obrigatoria)"
   echo "  MARIADB_DATABASE                       (default: socialcoiso)"
   echo ""
   echo "Exemplos:"
@@ -34,7 +34,7 @@ fi
 ORIGIN_HOST="${MARIADB_HOST:-2a09:8280:1::121:fe41:0}"
 ORIGIN_PORT="${MARIADB_PORT:-3306}"
 ORIGIN_USER="${MARIADB_USER:-socialcoiso}"
-ORIGIN_PASS="${MARIADB_PASSWORD:-BhaskaraDeltab24ac!}"
+ORIGIN_PASS="${MARIADB_PASSWORD:?defina MARIADB_PASSWORD}"
 ORIGIN_DB="${MARIADB_DATABASE:-socialcoiso}"
 
 DEST_USER="${1:-root}"

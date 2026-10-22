@@ -33,24 +33,40 @@ class PostInteractionPersistenceAdapter implements PostInteractionRepository {
 	}
 
 	@Override
-	public boolean addReaction(String id, PostId postId, UserId userId, ReactionType type, Instant createdAt) {
+	public ReactionOutcome addReaction(String id, PostId postId, UserId userId, ReactionType type, Instant createdAt) {
 		var existing = reactionRepository.findByPostIdAndUserId(postId.value(), userId.value());
+		boolean replacing = false;
 		if (existing.isPresent()) {
 			var old = existing.get();
 			if (old.getReactionType() == type) {
+				// Toggle: a mesma reacao foi tocada de novo -> desfaz.
 				reactionRepository.delete(old);
-				return false;
+				reactionRepository.flush();
+				return ReactionOutcome.REMOVED;
 			}
 			reactionRepository.delete(old);
 			reactionRepository.flush();
+			replacing = true;
 		}
 		try {
 			reactionRepository.saveAndFlush(new ReactionJpaEntity(id, postId.value(), userId.value(), type, createdAt));
-			return true;
+			return replacing ? ReactionOutcome.REPLACED : ReactionOutcome.ADDED;
 		}
 		catch (DataIntegrityViolationException exception) {
-			return false;
+			// Corrida: outra requisicao ja gravou a reacao deste usuario; o total ja a contempla.
+			// Tratar como troca evita incrementar de novo.
+			return ReactionOutcome.REPLACED;
 		}
+	}
+
+	@Override
+	public long countReactionsReceived(String authorId) {
+		return reactionRepository.countReceivedExcludingSelf(authorId);
+	}
+
+	@Override
+	public long countReactionsReceivedSince(String authorId, java.time.Instant since) {
+		return reactionRepository.countReceivedSince(authorId, since);
 	}
 
 	@Override
@@ -83,9 +99,30 @@ class PostInteractionPersistenceAdapter implements PostInteractionRepository {
 
 	@Override
 	public List<ReactionSummary> findReactionsByPostId(PostId postId, Instant before, int limit) {
-		return reactionRepository.findByPostIdOrderByCreatedAtDesc(postId.value()).stream()
+		// Bounded in SQL: a viral post must not load every reaction into memory to draw a list.
+		Instant until = before != null ? before : Instant.parse("9999-12-31T23:59:59Z");
+		return reactionRepository.findByPostIdAndCreatedAtBeforeOrderByCreatedAtDesc(postId.value(), until,
+				org.springframework.data.domain.PageRequest.of(0, Math.max(1, limit))).stream()
 			.map(r -> new ReactionSummary(r.getUserId(), r.getReactionType(), r.getCreatedAt()))
 			.toList();
+	}
+
+	@Override
+	public Map<PostId, Map<ReactionType, Long>> countReactionsByPostIds(Collection<PostId> postIds,
+			Collection<String> excludedUserIds) {
+		if (postIds.isEmpty()) {
+			return Map.of();
+		}
+		List<String> ids = postIds.stream().map(PostId::value).distinct().toList();
+		// Placeholder keeps NOT IN valid when nobody is excluded (same trick as the topic filters).
+		Collection<String> excluded = excludedUserIds == null || excludedUserIds.isEmpty() ? List.of("")
+			: excludedUserIds;
+		Map<PostId, Map<ReactionType, Long>> result = new HashMap<>();
+		for (Object[] row : reactionRepository.countByPostIdsGroupedByType(ids, excluded)) {
+			result.computeIfAbsent(new PostId((String) row[0]), key -> new java.util.EnumMap<>(ReactionType.class))
+				.put((ReactionType) row[1], (Long) row[2]);
+		}
+		return result;
 	}
 
 	@Override
@@ -158,9 +195,31 @@ class PostInteractionPersistenceAdapter implements PostInteractionRepository {
 	}
 
 	@Override
+	public Map<String, ReactionType> findCommentReactionsByUser(UserId userId, Collection<String> commentIds) {
+		if (commentIds == null || commentIds.isEmpty()) {
+			return Map.of();
+		}
+		Map<String, ReactionType> result = new HashMap<>();
+		for (CommentReactionJpaEntity r : commentReactionRepository.findByCommentIdInAndUserId(commentIds, userId.value())) {
+			result.put(r.getCommentId(), r.getReactionType());
+		}
+		return result;
+	}
+
+	@Override
 	public List<ReactionSummary> findReactionsByCommentId(String commentId) {
 		return commentReactionRepository.findByCommentIdOrderByCreatedAtDesc(commentId).stream()
 			.map(r -> new ReactionSummary(r.getUserId(), r.getReactionType(), r.getCreatedAt()))
 			.toList();
+	}
+
+	@Override
+	public Map<String, Integer> countCommentReactions(Collection<String> commentIds) {
+		if (commentIds == null || commentIds.isEmpty()) return Map.of();
+		Map<String, Integer> counts = new HashMap<>();
+		for (CommentReactionJpaEntity r : commentReactionRepository.findByCommentIdIn(commentIds)) {
+			counts.merge(r.getCommentId(), 1, Integer::sum);
+		}
+		return counts;
 	}
 }

@@ -15,6 +15,11 @@ class ImageKitStorageUrlFactory implements StorageUrlFactory {
 	}
 
 	@Override
+	public com.socialcoisa.rede.media.domain.MediaStorageProvider provider() {
+		return com.socialcoisa.rede.media.domain.MediaStorageProvider.IMAGEKIT;
+	}
+
+	@Override
 	public String objectKey(String mediaId, String fileName) {
 		return "uploads/" + mediaId + "/" + UriUtils.encodePathSegment(fileName, StandardCharsets.UTF_8);
 	}

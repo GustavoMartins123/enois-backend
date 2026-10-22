@@ -16,15 +16,26 @@ import com.socialcoisa.rede.shared.web.ApiException;
 public class RecommendationService {
 
 	private final RecommendationRepository repository;
+	private final com.socialcoisa.rede.shared.security.ActionThrottle actionThrottle;
+	private final int recommendationsPerDay;
 	private final Clock clock;
 
-	public RecommendationService(RecommendationRepository repository, Clock clock) {
+	public RecommendationService(RecommendationRepository repository,
+			com.socialcoisa.rede.shared.security.ActionThrottle actionThrottle,
+			@org.springframework.beans.factory.annotation.Value("${rede.profile.recommendations-per-day:20}") int recommendationsPerDay,
+			Clock clock) {
 		this.repository = repository;
+		this.actionThrottle = actionThrottle;
+		this.recommendationsPerDay = recommendationsPerDay;
 		this.clock = clock;
 	}
 
 	@Transactional
 	public Recommendation recommend(String recommenderId, String recommendedId, String comment) {
+		// Teto por conta: recomendar em massa (para um anel ou por retaliação) deixa de ser
+		// gratuito. O limite é de FREQUÊNCIA — quem recomenda de boa-fé não chega perto.
+		actionThrottle.exigePermitido("recommendation", recommenderId, recommendationsPerDay,
+			java.time.Duration.ofDays(1));
 		if (recommenderId.equals(recommendedId)) {
 			throw new ApiException(400, "SELF_RECOMMENDATION", "Voce nao pode recomendar a si mesmo.");
 		}

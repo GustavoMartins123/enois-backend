@@ -10,9 +10,24 @@ public interface ReportRepository {
 
 	Report save(Report report);
 
+	/** Denuncias PENDING ainda sem palpite de IA (para o triage agendado). */
+	List<com.socialcoisa.rede.moderation.domain.Report> findPendingWithoutAiTriage(int limit);
+
+	/** Denuncias PENDING ainda sem pré-triagem determinística. */
+	List<Report> findPendingWithoutPreTriage(int limit);
+
+	/** Denúncias PENDING de POST com score de pré-triagem alto (fila de exclusão em lote). */
+	List<Report> findPendingPostsByPreTriageScore(int minScore, int limit);
+
+	/** Quantas denuncias o mesmo alvo recebeu desde um instante (coordenação/ataque). */
+	long countAgainstTargetSince(String targetType, String targetId, java.time.Instant since);
+
 	Optional<Report> findById(String id);
 
 	List<Report> findByStatus(ReportStatus status, int limit);
 
 	boolean existsByReporterAndTarget(String reporterId, String targetType, String targetId);
+
+	/** Denuncias do proprio usuario (area de acompanhamento), mais recentes primeiro. */
+	List<Report> findByReporter(String reporterId, int limit);
 }

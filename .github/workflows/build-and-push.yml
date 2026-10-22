@@ -13,6 +13,7 @@ env:
   AWS_REGION: us-east-1
   ECR_REGISTRY: 818928662779.dkr.ecr.us-east-1.amazonaws.com
   ECR_REPOSITORY: enois/backend
+  ECR_REPOSITORY_FRONT: enois/frontend
   GITOPS_REPO: florestaencantada/integration_gitops
   GITOPS_BRANCH: main
   MANIFEST_PATH: clusters/forest-dev/applications/enois-app.yaml
@@ -34,7 +35,7 @@ jobs:
 
     steps:
       - name: 📥 Checkout do código
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: 🏷️ Definir Tag (SHA Curto)
         id: vars
@@ -44,26 +45,40 @@ jobs:
           echo "image_ref=${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${SHA_SHORT}" >> $GITHUB_OUTPUT
 
       - name: ⚙️ Configurar Credenciais AWS via OIDC
-        uses: aws-actions/configure-aws-credentials@v6.2.4
+        if: github.event_name != 'pull_request'
+        uses: aws-actions/configure-aws-credentials@v6.3.0
         with:
-          role-to-assume: arn:aws:iam::818928662779:role/forest-dev-github
+          role-to-assume: arn:aws:iam::818928662779:role/forest-dev-enois-ecr
           aws-region: ${{ env.AWS_REGION }}
 
       - name: 🔑 Login no Amazon ECR
+        if: github.event_name != 'pull_request'
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Verifica e cria o repositório no ECR
+        if: github.event_name != 'pull_request'
         uses: int128/create-ecr-repository-action@v1
         with:
           repository: ${{ env.ECR_REPOSITORY }}
 
       - name: ⚙️ Configurar Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
+
+      # PRs, especialmente de forks, não precisam de credenciais ou acesso ao ECR.
+      - name: 🧪 Validar build da imagem no PR
+        if: github.event_name == 'pull_request'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: enois/backend:pr
 
       - name: 🚀 Build & Push para o ECR
+        if: github.event_name != 'pull_request'
         id: build
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile
@@ -85,7 +100,7 @@ jobs:
 
     steps:
       - name: 📥 Checkout do Repositório GitOps (integration_onprem)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ${{ env.GITOPS_REPO }}
           ref: ${{ env.GITOPS_BRANCH }}
@@ -104,6 +119,19 @@ jobs:
 
           echo "Diff gerado:"
           git diff "${{ env.MANIFEST_PATH }}"
+
+      - name: 📥 Checkout do backend (scripts de deploy)
+        uses: actions/checkout@v7
+        with:
+          path: backend
+
+      - name: 🔐 Credenciais do LinkedIn no manifesto (env do pod)
+        env:
+          MANIFEST: gitops-repo/clusters/forest-dev/applications/enois-app.yaml
+          LINKEDIN_CLIENT_ID: ${{ secrets.LINKEDIN_CLIENT_ID }}
+          LINKEDIN_CLIENT_SECRET: ${{ secrets.LINKEDIN_CLIENT_SECRET }}
+          LINKEDIN_REDIRECT_URI: ${{ secrets.LINKEDIN_REDIRECT_URI }}
+        run: python3 backend/.github/scripts/linkedin_env.py
 
       - name: 🚀 Commit & Push no GitOps
         run: |

@@ -19,6 +19,7 @@ import com.socialcoisa.rede.events.application.EventService;
 import com.socialcoisa.rede.events.domain.Event;
 import com.socialcoisa.rede.idempotency.application.CommandResponse;
 import com.socialcoisa.rede.idempotency.application.IdempotencyApplicationService;
+import com.socialcoisa.rede.shared.web.AdminGuard;
 import com.socialcoisa.rede.shared.web.CurrentUser;
 import com.socialcoisa.rede.shared.web.CurrentUserResolver;
 import com.socialcoisa.rede.shared.web.CursorCodec;
@@ -34,33 +35,71 @@ class EventContractController {
 	private final EventService eventService;
 	private final CursorCodec cursorCodec;
 
+	private final AdminGuard adminGuard;
+
 	EventContractController(IdempotencyApplicationService idempotency, CurrentUserResolver currentUserResolver,
-			EventService eventService, CursorCodec cursorCodec) {
+			EventService eventService, CursorCodec cursorCodec, AdminGuard adminGuard) {
 		this.idempotency = idempotency;
 		this.currentUserResolver = currentUserResolver;
 		this.eventService = eventService;
 		this.cursorCodec = cursorCodec;
+		this.adminGuard = adminGuard;
 	}
 
+	/**
+	 * Apaga um evento. Quem criou pode apagar o seu; administrador apaga qualquer um — e e assim que
+	 * um evento absurdo (data que nao existe na vida real) sai da vitrine sem depender de banco.
+	 */
+	@DeleteMapping("/{eventId}")
+	ResponseEntity<String> delete(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@PathVariable String eventId) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		String hash = idempotency.hash(java.util.Map.of("eventId", eventId));
+		return idempotency.execute(user.id(), "DELETE", "/api/events/{eventId}", idempotencyKey, hash,
+			() -> {
+				eventService.delete(eventId, user.id().value(), isAdmin(user));
+				return new CommandResponse(200, new StatusResponse(eventId, "DELETED"));
+			});
+	}
+
+	/** O guarda de admin lança 403 para quem nao e: aqui queremos saber sem quebrar o fluxo. */
+	private boolean isAdmin(CurrentUser user) {
+		try {
+			adminGuard.requireAdmin(user);
+			return true;
+		}
+		catch (RuntimeException notAdmin) {
+			return false;
+		}
+	}
+
+	/** Lista os eventos que ainda vao acontecer; `includePast=true` inclui o historico (com selo). */
 	@GetMapping
 	PageResponse<EventView> events(@RequestParam(required = false) String format,
-			@RequestParam(required = false) String cursor, @RequestParam(defaultValue = "20") int limit) {
+			@RequestParam(required = false) String cursor, @RequestParam(defaultValue = "20") int limit,
+			@RequestParam(defaultValue = "false") boolean includePast) {
 		Instant before = cursorCodec.decode(cursor).orElse(null);
-		List<Event> events = eventService.list(format, before, limit);
-		var items = events.stream()
-			.map(e -> new EventView(e.id(), e.title(), e.date(), e.time(), e.format(), e.host(),
-				eventService.countAttendees(e.id()), e.cover()))
-			.toList();
-		String nextCursor = events.size() == limit
-			? cursorCodec.encode(events.get(events.size() - 1).createdAt()) : null;
+		var page = eventService.list(format, before, limit, includePast);
+		var items = page.items().stream().map(this::toView).toList();
+		// Cursor pela pagina que veio do banco: esconder evento vencido nao pode encerrar a paginacao.
+		String nextCursor = page.fetched().size() == limit
+			? cursorCodec.encode(page.fetched().get(page.fetched().size() - 1).createdAt()) : null;
 		return new PageResponse<>(items, nextCursor);
+	}
+
+	private EventView toView(Event event) {
+		// Depois da sanitizacao as presencas somem: o numero guardado sustenta o total.
+		Integer finalCount = event.finalAttendeesCount();
+		int attendees = finalCount != null ? finalCount : eventService.countAttendees(event.id());
+		return new EventView(event.id(), event.title(), event.date(), event.time(), event.format(), event.host(),
+			attendees, event.cover(), event.streamUrl(), event.location(), eventService.hasEnded(event));
 	}
 
 	@GetMapping("/{eventId}")
 	EventView event(@PathVariable String eventId) {
-		Event e = eventService.getById(eventId);
-		return new EventView(e.id(), e.title(), e.date(), e.time(), e.format(), e.host(),
-			eventService.countAttendees(e.id()), e.cover());
+		return toView(eventService.getById(eventId));
 	}
 
 	@PostMapping
@@ -73,9 +112,9 @@ class EventContractController {
 		return idempotency.execute(user.id(), "POST", "/api/events", idempotencyKey, hash,
 			() -> {
 				Event e = eventService.create(request.title(), request.date(), request.time(), request.format(),
-					request.host(), request.cover(), user.id().value());
-				return new CommandResponse(201, new EventView(e.id(), e.title(), e.date(), e.time(), e.format(),
-					e.host(), 1, e.cover()));
+					request.host(), request.cover(), request.streamUrl(), request.location(),
+					user.id().value());
+				return new CommandResponse(201, toView(e));
 			});
 	}
 
@@ -108,10 +147,11 @@ class EventContractController {
 	}
 
 	record EventView(String id, String title, String date, String time, String format, String host, int attendees,
-			String cover) {
+			String cover, String streamUrl, String location, boolean expired) {
 	}
 
-	record CreateEventRequest(String title, String date, String time, String format, String host, String cover) {
+	record CreateEventRequest(String title, String date, String time, String format, String host, String cover,
+			String streamUrl, String location) {
 	}
 
 }

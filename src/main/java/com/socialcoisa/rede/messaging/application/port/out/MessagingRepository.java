@@ -1,6 +1,8 @@
 package com.socialcoisa.rede.messaging.application.port.out;
 
 import java.time.Instant;
+import java.util.Collection;
+import java.util.Set;
 import java.util.List;
 import java.util.Optional;
 
@@ -18,11 +20,26 @@ public interface MessagingRepository {
 
 	List<Conversation> findConversationsByUserId(String userId, java.time.Instant before, int limit);
 
+	/** As conversas que a pessoa arquivou (apagadas so para ela). */
+	List<Conversation> findArchivedConversationsByUserId(String userId, java.time.Instant before, int limit);
+
 	List<ConversationParticipant> findParticipantsByConversation(String conversationId);
+
+	/** Conversa DIRETA (1:1) entre dois usuarios, se existir. */
+	Optional<Conversation> findDirectBetween(String userA, String userB);
+
+	/** A conversa de SERVICO entre as duas pessoas (a que abre o botao de chat do card). */
+	Optional<Conversation> findServiceBetween(String userA, String userB);
 
 	Optional<ConversationParticipant> findParticipant(String conversationId, String userId);
 
 	boolean isParticipant(String conversationId, String userId);
+
+	/** Esconde conversas para um usuario ("apagar para mim"); nao afeta os outros participantes. */
+	int hideConversations(String userId, Collection<String> conversationIds, java.time.Instant now);
+
+	/** Desfaz o "apagar para mim" (a conversa volta para a caixa de entrada). */
+	int unhideConversations(String userId, Collection<String> conversationIds);
 
 	void markRead(String conversationId, String userId, java.time.Instant now);
 
@@ -30,13 +47,35 @@ public interface MessagingRepository {
 
 	void saveMessage(Message message);
 
-	List<Message> findMessagesByConversation(String conversationId, String cursor, int limit);
+	List<Message> findMessagesByConversation(String conversationId, String viewerId, java.time.Instant before,
+			int limit);
 
 	Optional<Message> findLastMessage(String conversationId);
+
+	/** Mensagem idêntica do mesmo remetente na conversa desde um instante (duplo clique/retry). */
+	Optional<Message> findRecentDuplicate(String conversationId, String senderId, String text, java.time.Instant since);
+
+	/** A mensagem por id (para conferir de qual conversa ela e antes de mexer nela). */
+	Optional<Message> findMessageById(String messageId);
+
+	/** Apaga mensagens SO para quem chama (o outro participante mantem). */
+	int hideMessages(String userId, Collection<String> messageIds, java.time.Instant now);
+
+	/** Ids de mensagem que esta pessoa apagou para si (a listagem esconde). */
+	Set<String> hiddenMessageIds(String userId, Collection<String> messageIds);
 
 	boolean addMessageReaction(String id, String messageId, String userId, com.socialcoisa.rede.feed.domain.ReactionType type, java.time.Instant createdAt);
 	boolean removeMessageReaction(String messageId, String userId);
 	List<ReactionSummary> findReactionsByMessageId(String messageId);
 
+	/** Reações de várias mensagens numa consulta (resumo por mensagem no histórico). */
+	List<MessageReactionRow> findReactionsByMessageIds(java.util.Collection<String> messageIds);
+
+	record MessageReactionRow(String messageId, String userId, com.socialcoisa.rede.feed.domain.ReactionType type) {
+	}
+
 	record ReactionSummary(String userId, com.socialcoisa.rede.feed.domain.ReactionType type, java.time.Instant createdAt) {}
+
+	/** Todas as mensagens enviadas por um usuario — usado pelo ban cleanup. */
+	List<Message> findAllBySender(String senderId);
 }

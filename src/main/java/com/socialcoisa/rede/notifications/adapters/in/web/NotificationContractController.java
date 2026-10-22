@@ -23,6 +23,7 @@ import com.socialcoisa.rede.notifications.application.NotificationService;
 import com.socialcoisa.rede.notifications.domain.Notification;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.profile.domain.UserProfile;
+import com.socialcoisa.rede.shared.blocks.BlockedUsersReader;
 import com.socialcoisa.rede.shared.web.CurrentUser;
 import com.socialcoisa.rede.shared.web.CurrentUserResolver;
 import com.socialcoisa.rede.shared.web.CursorCodec;
@@ -38,15 +39,17 @@ class NotificationContractController {
 	private final NotificationService notificationService;
 	private final CursorCodec cursorCodec;
 	private final UserProfileRepository userProfileRepository;
+	private final BlockedUsersReader blockedUsersReader;
 
 	NotificationContractController(IdempotencyApplicationService idempotency, CurrentUserResolver currentUserResolver,
 			NotificationService notificationService, CursorCodec cursorCodec,
-			UserProfileRepository userProfileRepository) {
+			UserProfileRepository userProfileRepository, BlockedUsersReader blockedUsersReader) {
 		this.idempotency = idempotency;
 		this.currentUserResolver = currentUserResolver;
 		this.notificationService = notificationService;
 		this.cursorCodec = cursorCodec;
 		this.userProfileRepository = userProfileRepository;
+		this.blockedUsersReader = blockedUsersReader;
 	}
 
 	@GetMapping
@@ -55,13 +58,18 @@ class NotificationContractController {
 			@RequestParam(required = false) String cursor, @RequestParam(defaultValue = "20") int limit) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		Instant before = cursorCodec.decode(cursor).orElse(null);
-		List<Notification> notifications = notificationService.list(user.id().value(), before, limit);
+		// Bloqueio: notificacao de quem foi bloqueado (ou de quem bloqueou) nao aparece mais.
+		Set<String> hidden = blockedUsersReader.hiddenIdsFor(user.id().value());
+		List<Notification> notifications = notificationService.list(user.id().value(), before, limit).stream()
+			.filter(n -> n.actorId() == null || !hidden.contains(n.actorId()))
+			.toList();
 		Map<String, UserProfile> profiles = resolveActors(notifications);
 		var items = notifications.stream()
 			.map(n -> {
 				UserProfile p = profiles.get(n.actorId());
 				return new NotificationView(n.id(), n.kind(), n.actorId(),
 					p != null ? p.name() : null,
+					p != null ? p.username() : null,
 					p != null ? p.avatar() : null,
 					n.title(), n.body(),
 					n.createdAt() != null ? n.createdAt().toString() : null,
@@ -83,8 +91,9 @@ class NotificationContractController {
 			.collect(Collectors.toMap(UserProfile::id, Function.identity()));
 	}
 
-	record NotificationView(String id, String kind, String actorId, String actorName, String actorAvatar,
-			String title, String body, String createdAt, boolean read, String href, String ctaLabel) {
+	record NotificationView(String id, String kind, String actorId, String actorName, String actorUsername,
+			String actorAvatar, String title, String body, String createdAt, boolean read, String href,
+			String ctaLabel) {
 	}
 
 	@PostMapping("/{notificationId}/read")

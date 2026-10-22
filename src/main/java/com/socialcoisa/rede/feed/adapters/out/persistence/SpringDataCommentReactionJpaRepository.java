@@ -13,4 +13,6 @@ interface SpringDataCommentReactionJpaRepository extends JpaRepository<CommentRe
 	List<CommentReactionJpaEntity> findByCommentIdInAndUserId(Collection<String> commentIds, String userId);
 
 	List<CommentReactionJpaEntity> findByCommentIdOrderByCreatedAtDesc(String commentId);
+
+	List<CommentReactionJpaEntity> findByCommentIdIn(Collection<String> commentIds);
 }

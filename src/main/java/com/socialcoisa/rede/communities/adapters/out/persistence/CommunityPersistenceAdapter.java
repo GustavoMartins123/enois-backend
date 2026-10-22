@@ -11,17 +11,24 @@ import org.springframework.util.StringUtils;
 import com.socialcoisa.rede.communities.application.port.out.CommunityRepository;
 import com.socialcoisa.rede.communities.domain.Community;
 import com.socialcoisa.rede.communities.domain.CommunityMember;
+import com.socialcoisa.rede.communities.domain.MemberRole;
 
 @Repository
 class CommunityPersistenceAdapter implements CommunityRepository {
 
 	private final SpringDataCommunityJpaRepository springData;
 	private final SpringDataCommunityMemberJpaRepository memberRepo;
+	private final SpringDataFavoriteCommunityJpaRepository favoriteRepo;
+	private final SpringDataCommunityPinnedPostJpaRepository pinnedRepo;
 
 	CommunityPersistenceAdapter(SpringDataCommunityJpaRepository springData,
-			SpringDataCommunityMemberJpaRepository memberRepo) {
+			SpringDataCommunityMemberJpaRepository memberRepo,
+			SpringDataFavoriteCommunityJpaRepository favoriteRepo,
+			SpringDataCommunityPinnedPostJpaRepository pinnedRepo) {
 		this.springData = springData;
 		this.memberRepo = memberRepo;
+		this.favoriteRepo = favoriteRepo;
+		this.pinnedRepo = pinnedRepo;
 	}
 
 	@Override
@@ -35,20 +42,101 @@ class CommunityPersistenceAdapter implements CommunityRepository {
 	}
 
 	@Override
-	public List<Community> findAll(String topic, Instant before, int limit) {
+	public List<Community> findAll(String topic, String query, Instant before, int limit) {
 		PageRequest page = PageRequest.of(0, limit);
+		String q = StringUtils.hasText(query) ? query.trim() : "";
 		List<CommunityJpaEntity> entities;
 		if (StringUtils.hasText(topic)) {
-			entities = springData.findByTopic(topic, before, page);
+			entities = springData.findByTopic(topic, q, before, page);
 		} else {
-			entities = springData.findAllBefore(before, page);
+			entities = springData.findAllBefore(q, before, page);
 		}
 		return entities.stream().map(CommunityJpaEntity::toDomain).toList();
 	}
 
 	@Override
+	public List<Community> findByMember(String userId, int limit) {
+		List<String> communityIds = memberRepo.findByUserId(userId).stream()
+			.map(CommunityMemberJpaEntity::communityId)
+			.limit(limit)
+			.toList();
+		if (communityIds.isEmpty()) {
+			return List.of();
+		}
+		return springData.findAllById(communityIds).stream().map(CommunityJpaEntity::toDomain).toList();
+	}
+
+	@Override
 	public void saveMember(CommunityMember member) {
 		memberRepo.save(CommunityMemberJpaEntity.fromDomain(member));
+	}
+
+	@Override
+	public void updateMemberRole(String communityId, String userId, MemberRole role) {
+		memberRepo.findByCommunityIdAndUserId(communityId, userId).ifPresent(entity -> {
+			entity.changeRole(role);
+			memberRepo.save(entity);
+		});
+	}
+
+	@Override
+	public void removeAllMembers(String communityId) {
+		memberRepo.deleteByCommunityId(communityId);
+	}
+
+	@Override
+	public Optional<CommunityMember> findMember(String communityId, String userId) {
+		return memberRepo.findByCommunityIdAndUserId(communityId, userId).map(CommunityMemberJpaEntity::toDomain);
+	}
+
+	@Override
+	public void savePinnedPost(String communityId, String postId, String pinnedBy, Instant pinnedAt) {
+		// O id e a comunidade: salvar substitui o fixado anterior na mesma transacao.
+		pinnedRepo.save(new CommunityPinnedPostJpaEntity(communityId, postId, pinnedBy, pinnedAt));
+	}
+
+	@Override
+	public Optional<String> findPinnedPostId(String communityId) {
+		return pinnedRepo.findById(communityId).map(CommunityPinnedPostJpaEntity::postId);
+	}
+
+	@Override
+	public void removePinnedPost(String communityId) {
+		pinnedRepo.deleteById(communityId);
+	}
+
+	@Override
+	public void addFavorite(String communityId, String userId, Instant createdAt) {
+		if (favoriteRepo.existsByUserIdAndCommunityId(userId, communityId)) {
+			return;
+		}
+		String id = "fav_" + java.util.UUID.randomUUID().toString().replace("-", "");
+		favoriteRepo.save(new FavoriteCommunityJpaEntity(id, communityId, userId, createdAt));
+	}
+
+	@Override
+	public boolean removeFavorite(String communityId, String userId) {
+		if (!favoriteRepo.existsByUserIdAndCommunityId(userId, communityId)) {
+			return false;
+		}
+		favoriteRepo.deleteByUserIdAndCommunityId(userId, communityId);
+		return true;
+	}
+
+	@Override
+	public List<Community> findFavorites(String userId, int limit) {
+		List<String> ids = favoriteRepo.findByUserIdOrderByCreatedAtDesc(userId).stream()
+			.map(FavoriteCommunityJpaEntity::getCommunityId)
+			.limit(limit)
+			.toList();
+		if (ids.isEmpty()) {
+			return List.of();
+		}
+		// findById em lote preservando a ordem de favoritagem.
+		var byId = springData.findAllById(ids).stream()
+			.collect(java.util.stream.Collectors.toMap(entity -> entity.toDomain().id(), entity -> entity));
+		return ids.stream().map(byId::get).filter(java.util.Objects::nonNull)
+			.map(CommunityJpaEntity::toDomain).toList();
 	}
 
 	@Override

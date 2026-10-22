@@ -1,0 +1,24 @@
+name: Sugerir uma melhoria
+description: Uma ideia de funcionalidade, de regra ou de operação
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problema
+    attributes:
+      label: Que problema isso resolve
+      description: Descreva a situação, não a solução técnica.
+    validations:
+      required: true
+  - type: textarea
+    id: proposta
+    attributes:
+      label: O que você imagina
+    validations:
+      required: true
+  - type: textarea
+    id: impacto
+    attributes:
+      label: Impacto em dados e migrações
+      description: Precisa de tabela nova? Muda contrato de API já publicado?
+    validations:
+      required: false

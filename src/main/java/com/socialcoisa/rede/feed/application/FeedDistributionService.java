@@ -34,6 +34,12 @@ public class FeedDistributionService {
 	}
 
 	public void distribute(Post post) {
+		// Regra do plano: BUSINESS assina o feed corporativo — nunca entra no cache do feed
+		// social (autor, amigos, segundo grau), senão a separação feita nas consultas vazaria
+		// pelo cache do "Para você".
+		if (post.authorIdentity() == com.socialcoisa.rede.feed.domain.AuthorIdentity.CORPORATE) {
+			return;
+		}
 		double engagementBoost = calculateEngagementBoost(post);
 		feedCacheRepository.prepend(post.authorId(), new FeedItem(post.id(), post.authorId(), 1.0, post.createdAt(),
 			FeedReason.AUTHOR));

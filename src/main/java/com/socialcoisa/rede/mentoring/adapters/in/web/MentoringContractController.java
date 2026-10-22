@@ -51,7 +51,8 @@ class MentoringContractController {
 		Instant before = cursorCodec.decode(cursor).orElse(null);
 		List<Mentor> mentors = mentorService.list(expertise, before, limit);
 		var items = mentors.stream()
-			.map(m -> new MentorView(m.id(), m.userId(), m.expertise(), m.rating(), m.sessionsCount(), m.price(), null))
+			.map(m -> new MentorView(m.id(), m.userId(), m.expertise(), m.rating(), m.sessionsCount(), m.price(),
+				m.banner(), mentorService.nextAvailableSlot(m.id())))
 			.toList();
 		String nextCursor = mentors.size() == limit
 			? cursorCodec.encode(mentors.get(mentors.size() - 1).createdAt()) : null;
@@ -61,7 +62,8 @@ class MentoringContractController {
 	@GetMapping("/{mentorId}")
 	MentorView mentor(@PathVariable String mentorId) {
 		Mentor m = mentorService.getById(mentorId);
-		return new MentorView(m.id(), m.userId(), m.expertise(), m.rating(), m.sessionsCount(), m.price(), null);
+		return new MentorView(m.id(), m.userId(), m.expertise(), m.rating(), m.sessionsCount(), m.price(),
+			m.banner(), mentorService.nextAvailableSlot(m.id()));
 	}
 
 	@GetMapping("/{mentorId}/slots")
@@ -85,9 +87,10 @@ class MentoringContractController {
 		String hash = idempotency.hash(request);
 		return idempotency.execute(user.id(), "POST", "/api/mentors", idempotencyKey, hash,
 			() -> {
-				Mentor m = mentorService.create(user.id().value(), request.expertise(), request.price());
+				Mentor m = mentorService.create(user.id().value(), request.expertise(), request.price(),
+					request.banner());
 				return new CommandResponse(201, new MentorView(m.id(), m.userId(), m.expertise(), m.rating(),
-					m.sessionsCount(), m.price(), null));
+					m.sessionsCount(), m.price(), m.banner(), mentorService.nextAvailableSlot(m.id())));
 			});
 	}
 
@@ -100,9 +103,10 @@ class MentoringContractController {
 		String hash = idempotency.hash(Map.of("mentorId", mentorId, "request", request));
 		return idempotency.execute(user.id(), "PATCH", "/api/mentors/{mentorId}", idempotencyKey, hash,
 			() -> {
-				Mentor m = mentorService.update(mentorId, request.expertise(), request.price(), user.id().value());
+				Mentor m = mentorService.update(mentorId, request.expertise(), request.price(), request.banner(),
+					user.id().value());
 				return new CommandResponse(200, new MentorView(m.id(), m.userId(), m.expertise(), m.rating(),
-					m.sessionsCount(), m.price(), null));
+					m.sessionsCount(), m.price(), m.banner(), mentorService.nextAvailableSlot(m.id())));
 			});
 	}
 
@@ -154,7 +158,16 @@ class MentoringContractController {
 	}
 
 	record MentorView(String id, String userId, List<String> expertise, double rating, int sessions, String price,
-			String nextSlot) {
+			String banner, String nextSlot) {
+	}
+
+	@org.springframework.web.bind.annotation.DeleteMapping("/{mentorId}/slots/{slotId}")
+	ResponseEntity<Void> deleteSlot(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@PathVariable String mentorId, @PathVariable String slotId) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		mentorService.deleteSlot(mentorId, slotId, user.id().value());
+		return ResponseEntity.noContent().build();
 	}
 
 	record MentorSlotView(String id, String startsAt, String endsAt, boolean available) {
@@ -163,7 +176,7 @@ class MentoringContractController {
 	record MentorSessionRequest(String slotId, String message) {
 	}
 
-	record CreateMentorRequest(List<String> expertise, String price) {
+	record CreateMentorRequest(List<String> expertise, String price, String banner) {
 	}
 
 	record CreateSlotRequest(Instant startsAt, Instant endsAt) {

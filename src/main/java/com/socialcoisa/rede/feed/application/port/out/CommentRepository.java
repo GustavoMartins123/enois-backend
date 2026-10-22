@@ -15,7 +15,22 @@ public interface CommentRepository {
 
 	List<Comment> findActiveByPost(PostId postId, Instant before, int limit);
 
+	/** Comentário fixado do post (no máximo um; o serviço garante). */
+	Optional<Comment> findPinnedByPost(PostId postId);
+
+	/** Paginação normal sem o fixado: ele é devolvido no topo da primeira página. */
+	List<Comment> findActiveByPostExcludingPinned(PostId postId, Instant before, int limit);
+
+	/** Desfixa todos os comentários do post (chamado ao fixar outro). */
+	void unpinAllByPost(PostId postId);
+
 	void deleteById(String id);
 
 	List<String> findPostIdsByAuthor(String authorId);
+
+	/** TODOS os comentários do autor, em qualquer status — purga por spam e ban cleanup. */
+	List<Comment> findAllByAuthor(String authorId);
+
+	/** Todos os comentários (qualquer status) dos posts dados — uso da purga. */
+	List<Comment> findAllByPostIds(java.util.Collection<String> postIds);
 }

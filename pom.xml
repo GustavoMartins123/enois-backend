@@ -5,7 +5,7 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>4.0.6</version>
+		<version>4.1.1</version>
 		<relativePath/>
 	</parent>
 	<groupId>com.socialcoisa</groupId>
@@ -29,6 +29,13 @@
 	<properties>
 		<java.version>25</java.version>
 		<resilience4j.version>2.4.0</resilience4j.version>
+		<jsoup.version>1.23.2</jsoup.version>
+		<!-- O parent do Spring Boot 4 nao gerencia o SDK do AWS, entao a versao e fixada aqui.
+		     Precisa bater com o apache-client que ja esta no cache do Maven (evita baixar duas linhas). -->
+		<awssdk.version>2.56.0</awssdk.version>
+		<!-- Cache em memoria dos agregados da landing (ver CacheConfig). 2.9.x porque e a versao
+		     que ja esta no repositorio local; a API usada e a mesma das 3.x. -->
+		<caffeine.version>3.3.1</caffeine.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -52,6 +59,11 @@
 			<groupId>io.micrometer</groupId>
 			<artifactId>micrometer-registry-prometheus</artifactId>
 		</dependency>
+		<!-- Tracing (traceId/spanId in every log line). OTLP export only turns on when an endpoint is set. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-opentelemetry</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webmvc</artifactId>
@@ -67,7 +79,7 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-aspectj</artifactId>
-			<version>4.0.6</version>
+			<version>4.1.1</version>
 		</dependency>
 		<dependency>
 			<groupId>io.github.resilience4j</groupId>
@@ -78,7 +90,21 @@
 		<dependency>
 			<groupId>com.nimbusds</groupId>
 			<artifactId>nimbus-jose-jwt</artifactId>
-			<version>9.37.3</version>
+			<version>10.10</version>
+		</dependency>
+
+		<!-- Web Push (VAPID + payload criptografado) para as notificacoes no celular -->
+		<dependency>
+			<groupId>nl.martijndwars</groupId>
+			<artifactId>web-push</artifactId>
+			<version>5.1.1</version>
+		</dependency>
+
+		<!-- BouncyCastle: exigido em runtime pelo web-push para a criptografia do payload. -->
+		<dependency>
+			<groupId>org.bouncycastle</groupId>
+			<artifactId>bcprov-jdk18on</artifactId>
+			<version>1.86</version>
 		</dependency>
 
 		<dependency>
@@ -99,6 +125,45 @@
 		<dependency>
 			<groupId>org.flywaydb</groupId>
 			<artifactId>flyway-mysql</artifactId>
+		</dependency>
+		<!-- SDK do S3 (upload por URL assinada + migracao). Versao vem do BOM do Spring Boot. -->
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>s3</artifactId>
+			<version>${awssdk.version}</version>
+		</dependency>
+		<!-- STS: a cadeia padrao usa WebIdentityTokenCredentialsProvider (IRSA) para trocar o token
+		     do service account por credenciais. Sem este modulo o provider nao consegue assumir a
+		     role e o S3 falha com "Unable to load credentials". -->
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>sts</artifactId>
+			<version>${awssdk.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>apache-client</artifactId>
+			<version>${awssdk.version}</version>
+		</dependency>
+		<!-- Cache em memoria (contador de usuarios ativos da landing). -->
+		<dependency>
+			<groupId>com.github.ben-manes.caffeine</groupId>
+			<artifactId>caffeine</artifactId>
+			<version>${caffeine.version}</version>
+		</dependency>
+		<!-- Limpeza do HTML das paginas coladas pelos usuarios. O render acontece num iframe
+		     sandboxed, mas sanitizar no servidor evita guardar/entregar markup perigoso. -->
+		<dependency>
+			<groupId>org.jsoup</groupId>
+			<artifactId>jsoup</artifactId>
+			<version>${jsoup.version}</version>
+		</dependency>
+		<!-- Leitura do texto de curriculos em PDF (importacao via curriculo). So extracao de
+		     texto — nada de renderizacao nem formulario: o arquivo e tratado como documento. -->
+		<dependency>
+			<groupId>org.apache.pdfbox</groupId>
+			<artifactId>pdfbox</artifactId>
+			<version>3.0.8</version>
 		</dependency>
 		<dependency>
 			<groupId>org.projectlombok</groupId>
@@ -126,7 +191,7 @@
 		<dependency>
 			<groupId>io.github.cdimascio</groupId>
 			<artifactId>dotenv-java</artifactId>
-			<version>3.1.0</version>
+			<version>3.2.0</version>
 		</dependency>
 	</dependencies>
 
@@ -135,6 +200,13 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+				<executions>
+					<execution>
+						<goals>
+							<goal>build-info</goal>
+						</goals>
+					</execution>
+				</executions>
 				<configuration>
 					<excludes>
 						<exclude>

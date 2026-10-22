@@ -11,9 +11,29 @@ import com.socialcoisa.rede.feed.domain.UserId;
 
 public interface PostInteractionRepository {
 
-	boolean addReaction(String id, PostId postId, UserId userId, ReactionType type, Instant createdAt);
+	/**
+	 * Registra a reacao do usuario no post. Distinguir "nova" de "trocada" e o que impede a contagem
+	 * de subir quando a pessoa so muda o tipo da propria reacao.
+	 */
+	ReactionOutcome addReaction(String id, PostId postId, UserId userId, ReactionType type, Instant createdAt);
+
+	/** Resultado de registrar uma reacao: so {@link #ADDED} e {@link #REMOVED} mexem no total. */
+	enum ReactionOutcome {
+		/** Nao havia reacao: o total sobe. */
+		ADDED,
+		/** Havia reacao de outro tipo e foi trocada: o total nao muda. */
+		REPLACED,
+		/** A mesma reacao foi desfeita (toggle): o total desce. */
+		REMOVED
+	}
 
 	boolean removeReaction(PostId postId, UserId userId);
+
+	/** Reações recebidas por um autor (em posts dele, excluídas as próprias) — recompensa C2. */
+	long countReactionsReceived(String authorId);
+
+	/** Reações recebidas pelo autor desde um instante (teto diário da recompensa). */
+	long countReactionsReceivedSince(String authorId, java.time.Instant since);
 
 	boolean addSave(String id, PostId postId, UserId userId, Instant createdAt);
 
@@ -25,11 +45,27 @@ public interface PostInteractionRepository {
 
 	Map<PostId, ReactionType> findReactionsByUserAndPostIds(UserId userId, Collection<PostId> postIds);
 
+	/** Most recent reactions of a post (created before `before`, at most `limit`). */
 	List<ReactionSummary> findReactionsByPostId(PostId postId, Instant before, int limit);
 
+	/**
+	 * Reaction counts per type for several posts in one query, ignoring reactions from
+	 * `excludedUserIds` (people the reader blocked). Posts without reactions are absent.
+	 */
+	Map<PostId, Map<ReactionType, Long>> countReactionsByPostIds(Collection<PostId> postIds,
+			Collection<String> excludedUserIds);
+
 	boolean addCommentReaction(String id, String commentId, UserId userId, ReactionType type, Instant createdAt);
+
+	/** Remove a reacao do usuario no comentario (qualquer tipo). false quando nao havia. */
 	boolean removeCommentReaction(String commentId, UserId userId);
+
+	/** Reacoes do usuario para varios comentarios (id do comentario -> tipo), em uma consulta. */
+	Map<String, ReactionType> findCommentReactionsByUser(UserId userId, Collection<String> commentIds);
 	List<ReactionSummary> findReactionsByCommentId(String commentId);
+
+	/** Contagem total de reacoes por comentario (em batch, pra nao fazer N+1). */
+	Map<String, Integer> countCommentReactions(Collection<String> commentIds);
 
 	record ReactionSummary(String userId, ReactionType type, Instant createdAt) {
 	}

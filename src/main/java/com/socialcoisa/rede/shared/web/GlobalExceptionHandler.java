@@ -14,6 +14,7 @@ import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import io.github.resilience4j.bulkhead.BulkheadFullException;
@@ -27,23 +28,74 @@ public class GlobalExceptionHandler {
 
 	@ExceptionHandler(ApiException.class)
 	ResponseEntity<ErrorResponse> handleApiException(ApiException exception) {
+		// 4xx é fluxo normal (validação, permissão); 5xx é falha do servidor e precisa aparecer
+		// no CloudWatch com o código do erro, sem corpo de requisição nem dado pessoal.
+		if (exception.status() >= 500) {
+			LOGGER.error("api_error status={} code={} message={}", exception.status(), exception.code(),
+				exception.getMessage());
+		}
+		else {
+			LOGGER.debug("api_client_error status={} code={}", exception.status(), exception.code());
+		}
 		return ResponseEntity.status(exception.status())
 			.body(new ErrorResponse(exception.code(), exception.getMessage(), Instant.now()));
 	}
 
+	/**
+	 * Cabeçalho de sessão ausente é 401, não 400. Semanticamente a rota está protegida e o cliente
+	 * não se autenticou; devolver BAD_REQUEST fazia o front tratar como requisição malformada e
+	 * escondia a exigência de login dos monitores. Outros cabeçalhos obrigatórios continuam 400.
+	 */
+	@ExceptionHandler(MissingRequestHeaderException.class)
+	ResponseEntity<ErrorResponse> handleMissingHeader(MissingRequestHeaderException exception) {
+		if ("X-Session-Token".equalsIgnoreCase(exception.getHeaderName())) {
+			return ResponseEntity.status(401)
+				.body(new ErrorResponse("UNAUTHENTICATED", "Sessao invalida ou expirada.", Instant.now()));
+		}
+		return ResponseEntity.badRequest()
+			.body(new ErrorResponse("BAD_REQUEST", "Requisicao invalida.", Instant.now()));
+	}
+
 	// InvalidDataAccessApiUsageException cobre, por exemplo, PageRequest com size < 1 (limit=0).
-	@ExceptionHandler({ MissingRequestHeaderException.class, MethodArgumentNotValidException.class,
+	@ExceptionHandler({ MethodArgumentNotValidException.class,
 			HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class,
 			IllegalArgumentException.class, InvalidDataAccessApiUsageException.class })
 	ResponseEntity<ErrorResponse> handleBadRequest(Exception exception) {
+		// DEBUG de propósito: um cliente malformado não deve gerar milhares de linhas INFO.
+		LOGGER.debug("bad_request type={}", exception.getClass().getSimpleName());
 		return ResponseEntity.badRequest()
 			.body(new ErrorResponse("BAD_REQUEST", "Requisicao invalida.", Instant.now()));
 	}
 
 	@ExceptionHandler(DataIntegrityViolationException.class)
 	ResponseEntity<ErrorResponse> handleConflict(DataIntegrityViolationException exception) {
+		// A resposta e generica de proposito (nao vaza detalhe de banco para quem chamou), mas o log
+		// guarda a causa raiz. Foi um "Data too long for column 'page_html'" invisivel que virou
+		// horas de investigacao: o 409 sozinho nao diz se foi coluna pequena, chave duplicada ou FK.
+		LOGGER.warn("data_integrity_violation: {}", rootMessage(exception));
 		return ResponseEntity.status(409)
 			.body(new ErrorResponse("CONFLICT", "Operacao conflita com o estado atual dos dados.", Instant.now()));
+	}
+
+	/** A mensagem mais especifica da cadeia: o "Data too long for column ..." mora no fim dela. */
+	private String rootMessage(Throwable exception) {
+		Throwable cause = exception;
+		while (cause.getCause() != null) {
+			cause = cause.getCause();
+		}
+		return cause.getMessage();
+	}
+
+	/**
+	 * O arquivo estourou o limite do Servlet (ver `spring.servlet.multipart.max-file-size`). Sem
+	 * este tratamento, um ZIP grande virava "Erro interno inesperado" — foi assim que o import do
+	 * LinkedIn (5 MB no servico, 1 MB no Servlet) ficou sem resposta util para quem tentava.
+	 */
+	@ExceptionHandler(MaxUploadSizeExceededException.class)
+	ResponseEntity<ErrorResponse> handleUploadTooLarge(MaxUploadSizeExceededException exception) {
+		return ResponseEntity.status(413)
+			.body(new ErrorResponse("FILE_TOO_LARGE", "O arquivo enviado passa do limite permitido.",
+				Instant.now()));
 	}
 
 	@ExceptionHandler(RequestNotPermitted.class)

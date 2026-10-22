@@ -47,6 +47,14 @@ class RecommendationPersistenceAdapter implements RecommendationRepository {
 	}
 
 	@Override
+	public int countReciprocal(String recommendedId) {
+		// Recebidas em que existe a volta (eu recomendei quem me recomendou): par mútuo = troca,
+		// não confiança — não conta para a credibilidade.
+		var result = repo.countReciprocal(recommendedId);
+		return ((Number) result).intValue();
+	}
+
+	@Override
 	public void delete(String id) {
 		repo.deleteById(id);
 	}

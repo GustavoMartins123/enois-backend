@@ -40,13 +40,16 @@ class MessagingContractController {
 	private final CurrentUserResolver currentUserResolver;
 	private final MessagingService messagingService;
 	private final CursorCodec cursorCodec;
+	private final com.socialcoisa.rede.shared.blocks.BlockedUsersReader blockedUsersReader;
 
 	MessagingContractController(IdempotencyApplicationService idempotency, CurrentUserResolver currentUserResolver,
-			MessagingService messagingService, CursorCodec cursorCodec) {
+			MessagingService messagingService, CursorCodec cursorCodec,
+			com.socialcoisa.rede.shared.blocks.BlockedUsersReader blockedUsersReader) {
 		this.idempotency = idempotency;
 		this.currentUserResolver = currentUserResolver;
 		this.messagingService = messagingService;
 		this.cursorCodec = cursorCodec;
+		this.blockedUsersReader = blockedUsersReader;
 	}
 
 	@GetMapping
@@ -58,14 +61,16 @@ class MessagingContractController {
 		List<Conversation> conversations = messagingService.listConversations(user.id().value(), before, limit);
 		var items = conversations.stream()
 			.map(c -> {
-				List<String> pIds = messagingService.getParticipants(c.id()).stream()
+				var participants = messagingService.getParticipants(c.id());
+				List<String> pIds = participants.stream()
 					.map(ConversationParticipant::userId)
 					.toList();
 				return new ConversationView(c.id(), user.id().value(), c.kind(), c.title(), pIds,
 					messagingService.getLastMessageText(c.id()),
 					messagingService.getLastMessageTime(c.id()) != null
 						? messagingService.getLastMessageTime(c.id()).toString() : null,
-					messagingService.countUnread(c.id(), user.id().value()));
+					messagingService.countUnread(c.id(), user.id().value()),
+					otherLastReadAt(participants, user.id().value()));
 			})
 			.toList();
 		String nextCursor = conversations.size() == limit
@@ -83,14 +88,16 @@ class MessagingContractController {
 		var items = conversations.stream()
 			.filter(c -> query.isEmpty() || (c.title() != null && c.title().toLowerCase().contains(query)))
 			.map(c -> {
-				List<String> pIds = messagingService.getParticipants(c.id()).stream()
+				var participants = messagingService.getParticipants(c.id());
+				List<String> pIds = participants.stream()
 					.map(ConversationParticipant::userId)
 					.toList();
 				return new ConversationView(c.id(), user.id().value(), c.kind(), c.title(), pIds,
 					messagingService.getLastMessageText(c.id()),
 					messagingService.getLastMessageTime(c.id()) != null
 						? messagingService.getLastMessageTime(c.id()).toString() : null,
-					messagingService.countUnread(c.id(), user.id().value()));
+					messagingService.countUnread(c.id(), user.id().value()),
+					otherLastReadAt(participants, user.id().value()));
 			})
 			.toList();
 		return new PageResponse<>(items, null);
@@ -105,12 +112,14 @@ class MessagingContractController {
 			throw new ApiException(403, "NOT_PARTICIPANT", "Voce nao participa desta conversa.");
 		}
 		Conversation c = messagingService.getConversation(conversationId);
-		List<String> pIds = messagingService.getParticipants(c.id()).stream()
+		var participants = messagingService.getParticipants(c.id());
+		List<String> pIds = participants.stream()
 			.map(ConversationParticipant::userId)
 			.toList();
 		return new ConversationDetailView(c.id(), c.kind(), c.title(), pIds,
 			messagingService.getLastMessageText(c.id()),
-			messagingService.countUnread(c.id(), user.id().value()));
+			messagingService.countUnread(c.id(), user.id().value()),
+			otherLastReadAt(participants, user.id().value()));
 	}
 
 	@GetMapping("/{conversationId}/messages")
@@ -122,12 +131,51 @@ class MessagingContractController {
 		if (!messagingService.isParticipant(conversationId, user.id().value())) {
 			throw new ApiException(403, "NOT_PARTICIPANT", "Voce nao participa desta conversa.");
 		}
-		List<Message> msgs = messagingService.getMessages(conversationId, cursor, limit);
+		Instant before = cursorCodec.decode(cursor).orElse(null);
+		List<Message> msgs = messagingService.getMessages(conversationId, user.id().value(), before, limit);
+		var summaries = messagingService.reactionSummaries(msgs.stream().map(Message::id).toList(),
+			user.id().value());
 		var items = msgs.stream()
-			.map(m -> new MessageView(m.id(), m.conversationId(), m.senderId(), m.text(),
-				m.createdAt() != null ? m.createdAt().toString() : null))
+			.map(m -> {
+				var summary = summaries.get(m.id());
+				return new MessageView(m.id(), m.conversationId(), m.senderId(), m.text(), m.mediaIds(),
+					m.createdAt() != null ? m.createdAt().toString() : null,
+					summary == null ? java.util.Map.of() : summary.counts(),
+					summary == null ? null : summary.myReaction(), m.mediaSpoiler());
+			})
 			.toList();
-		return new PageResponse<>(items, null);
+		// Pagina cheia => ainda ha mensagens mais antigas: o cursor aponta para a mais antiga desta pagina.
+		String nextCursor = msgs.size() == limit && !msgs.isEmpty()
+			? cursorCodec.encode(msgs.get(msgs.size() - 1).createdAt()) : null;
+		return new PageResponse<>(items, nextCursor);
+	}
+
+	/**
+	 * "Apagar para mim" por MENSAGEM: some so para quem apagou (o outro participante mantem).
+	 *
+	 * Diferente do apagar a conversa inteira (`/conversations/hide`), aqui a pessoa escolhe o que
+	 * sumiu — mesmo padrao do inbox: selecionar, selecionar tudo, apagar.
+	 */
+	@PostMapping("/{conversationId}/messages/hide")
+	ResponseEntity<String> hideMessages(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@PathVariable String conversationId, @RequestBody HideConversationsRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		if (!messagingService.isParticipant(conversationId, user.id().value())) {
+			throw new ApiException(403, "NOT_PARTICIPANT", "Voce nao participa desta conversa.");
+		}
+		List<String> ids = request.ids() == null ? List.of()
+			: request.ids().stream().filter(id -> id != null && !id.isBlank()).map(String::trim).distinct().toList();
+		if (ids.isEmpty()) {
+			throw new ApiException(400, "EMPTY_MESSAGE_LIST", "Selecione ao menos uma mensagem.");
+		}
+		String hash = idempotency.hash(Map.of("ids", ids));
+		return idempotency.execute(user.id(), "POST", "/api/conversations/{conversationId}/messages/hide",
+			idempotencyKey, hash, () -> {
+				int hidden = messagingService.hideMessages(user.id().value(), ids);
+				return new CommandResponse(200, Map.of("hidden", hidden));
+			});
 	}
 
 	@PostMapping("/{conversationId}/messages")
@@ -136,12 +184,18 @@ class MessagingContractController {
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String conversationId, @RequestBody SendMessageRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		String hash = idempotency.hash(Map.of("conversationId", conversationId, "text", request.text()));
+		String hash = idempotency.hash(Map.of("conversationId", conversationId, "text",
+			request.text() == null ? "" : request.text(), "mediaIds",
+			request.mediaIds() == null ? List.of() : request.mediaIds(), "mediaSpoiler",
+			Boolean.TRUE.equals(request.mediaSpoiler())));
 		return idempotency.execute(user.id(), "POST", "/api/conversations/{conversationId}/messages", idempotencyKey,
 			hash, () -> {
-				Message msg = messagingService.sendMessage(conversationId, user.id().value(), request.text());
+				Message msg = messagingService.sendMessage(conversationId, user.id().value(), request.text(),
+					request.mediaIds(), Boolean.TRUE.equals(request.mediaSpoiler()));
 				return new CommandResponse(201, new MessageView(msg.id(), msg.conversationId(), msg.senderId(),
-					msg.text(), msg.createdAt() != null ? msg.createdAt().toString() : null));
+					msg.text(), msg.mediaIds(),
+					msg.createdAt() != null ? msg.createdAt().toString() : null, java.util.Map.of(), null,
+					msg.mediaSpoiler()));
 			});
 	}
 
@@ -159,6 +213,112 @@ class MessagingContractController {
 			});
 	}
 
+	/**
+	 * Abre (ou reaproveita) a conversa direta com um usuario — e o que o botao "Mensagem" do perfil
+	 * chama. Nao cria conversa duplicada: devolve a existente quando ja ha uma entre os dois.
+	 */
+	@PostMapping("/direct")
+	ResponseEntity<String> direct(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@RequestBody DirectConversationRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		String otherId = request.userId() == null ? "" : request.userId().trim();
+		if (otherId.isEmpty()) {
+			throw new ApiException(400, "INVALID_RECIPIENT", "Destinatario obrigatorio.");
+		}
+		if (otherId.equals(user.id().value())) {
+			throw new ApiException(400, "INVALID_RECIPIENT", "Nao da para abrir uma conversa consigo mesmo.");
+		}
+		// Bloqueio vale nos dois sentidos: ninguem fala com quem bloqueou (ou foi bloqueado).
+		if (blockedUsersReader.hiddenIdsFor(user.id().value()).contains(otherId)
+				|| blockedUsersReader.hiddenIdsFor(otherId).contains(user.id().value())) {
+			throw new ApiException(403, "USER_BLOCKED", "Nao e possivel conversar com este usuario.");
+		}
+		Map<String, Object> payload = Map.of("direct", otherId);
+		String hash = idempotency.hash(payload);
+		return idempotency.execute(user.id(), "POST", "/api/conversations/direct", idempotencyKey, hash, () -> {
+			String conversationId = messagingService.directConversationBetween(user.id().value(), otherId);
+			var participants = messagingService.getParticipants(conversationId);
+			List<String> pIds = participants.stream()
+				.map(ConversationParticipant::userId)
+				.toList();
+			return new CommandResponse(200, new ConversationDetailView(conversationId, "DIRECT", null, pIds,
+				messagingService.getLastMessageText(conversationId),
+				messagingService.countUnread(conversationId, user.id().value()),
+				otherLastReadAt(participants, user.id().value())));
+		});
+	}
+
+	/**
+	 * "Apagar para mim" em massa: esconde as conversas escolhidas SO para quem chama. O outro
+	 * participante mantem a conversa. Aceita a lista de ids.
+	 */
+	@PostMapping("/hide")
+	ResponseEntity<String> hide(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@RequestBody HideConversationsRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		List<String> ids = request.ids() == null ? List.of()
+			: request.ids().stream().filter(id -> id != null && !id.isBlank()).map(String::trim).distinct().toList();
+		if (ids.isEmpty()) {
+			throw new ApiException(400, "EMPTY_CONVERSATION_LIST", "Selecione ao menos uma conversa.");
+		}
+		String hash = idempotency.hash(Map.of("ids", ids));
+		return idempotency.execute(user.id(), "POST", "/api/conversations/hide", idempotencyKey, hash, () -> {
+			int hidden = messagingService.hideConversations(user.id().value(), ids);
+			return new CommandResponse(200, Map.of("hidden", hidden));
+		});
+	}
+
+	/** As conversas que a pessoa apagou para si — a tela de arquivadas. */
+	@GetMapping("/archived")
+	PageResponse<ConversationView> archived(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestParam(required = false) String cursor, @RequestParam(defaultValue = "20") int limit) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		Instant before = cursorCodec.decode(cursor).orElse(null);
+		List<Conversation> conversations = messagingService.listArchivedConversations(user.id().value(), before,
+			Math.min(limit, 50));
+		var items = conversations.stream()
+			.map(c -> {
+				var participants = messagingService.getParticipants(c.id());
+				List<String> pIds = participants.stream()
+					.map(ConversationParticipant::userId)
+					.toList();
+				return new ConversationView(c.id(), user.id().value(), c.kind(), c.title(), pIds,
+					messagingService.getLastMessageText(c.id()),
+					messagingService.getLastMessageTime(c.id()) != null
+						? messagingService.getLastMessageTime(c.id()).toString() : null,
+					messagingService.countUnread(c.id(), user.id().value()),
+					otherLastReadAt(participants, user.id().value()));
+			})
+			.toList();
+		String nextCursor = conversations.size() == limit
+			? cursorCodec.encode(conversations.get(conversations.size() - 1).updatedAt()) : null;
+		return new PageResponse<>(items, nextCursor);
+	}
+
+	/** Restaurar: desfaz o "apagar para mim" das conversas escolhidas. */
+	@PostMapping("/unhide")
+	ResponseEntity<String> unhide(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@RequestBody HideConversationsRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		List<String> ids = request.ids() == null ? List.of()
+			: request.ids().stream().filter(id -> id != null && !id.isBlank()).map(String::trim).distinct().toList();
+		if (ids.isEmpty()) {
+			throw new ApiException(400, "EMPTY_CONVERSATION_LIST", "Selecione ao menos uma conversa.");
+		}
+		String hash = idempotency.hash(Map.of("ids", ids));
+		return idempotency.execute(user.id(), "POST", "/api/conversations/unhide", idempotencyKey, hash, () -> {
+			int restored = messagingService.unhideConversations(user.id().value(), ids);
+			return new CommandResponse(200, Map.of("restored", restored));
+		});
+	}
+
 	@PostMapping
 	ResponseEntity<String> create(@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
@@ -170,12 +330,14 @@ class MessagingContractController {
 			() -> {
 				Conversation c = messagingService.createConversation(request.kind(), request.title(),
 					request.participantIds(), user.id().value());
-				List<String> pIds = messagingService.getParticipants(c.id()).stream()
+				var participants = messagingService.getParticipants(c.id());
+				List<String> pIds = participants.stream()
 					.map(ConversationParticipant::userId)
 					.toList();
 				return new CommandResponse(201, new ConversationDetailView(c.id(), c.kind(), c.title(), pIds,
 					messagingService.getLastMessageText(c.id()),
-					messagingService.countUnread(c.id(), user.id().value())));
+					messagingService.countUnread(c.id(), user.id().value()),
+					otherLastReadAt(participants, user.id().value())));
 			});
 	}
 
@@ -186,6 +348,7 @@ class MessagingContractController {
 			@PathVariable String conversationId, @PathVariable String messageId,
 			@RequestBody ReactToMessageRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		requireMessageInConversation(conversationId, messageId, user.id().value());
 		Map<String, Object> payload = new LinkedHashMap<>();
 		payload.put("messageId", messageId);
 		payload.put("type", request.type() == null ? "" : request.type());
@@ -202,33 +365,59 @@ class MessagingContractController {
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String conversationId, @PathVariable String messageId) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		if (!messagingService.isParticipant(conversationId, user.id().value())) {
-			throw new ApiException(403, "NOT_PARTICIPANT", "Voce nao participa desta conversa.");
-		}
+		requireMessageInConversation(conversationId, messageId, user.id().value());
 		var reactions = messagingService.getReactions(messageId);
 		var summary = reactions.stream()
 			.collect(Collectors.groupingBy(MessagingRepository.ReactionSummary::type, Collectors.counting()));
 		return Map.of("messageId", messageId, "summary", summary, "reactions", reactions);
 	}
 
+	/** Participa da conversa E a mensagem e dela: e o que o id da conversa no caminho promete. */
+	private void requireMessageInConversation(String conversationId, String messageId, String userId) {
+		if (!messagingService.isParticipant(conversationId, userId)) {
+			throw new ApiException(403, "NOT_PARTICIPANT", "Voce nao participa desta conversa.");
+		}
+		if (!messagingService.messageBelongsTo(messageId, conversationId)) {
+			throw new ApiException(404, "MESSAGE_NOT_FOUND", "Mensagem nao encontrada nesta conversa.");
+		}
+	}
+
 	record ReactToMessageRequest(ReactionType type) {
 	}
 
+	/** Quem leu por último entre os OUTROS participantes (null = nunca abriu). */
+	private static String otherLastReadAt(List<ConversationParticipant> participants, String viewerId) {
+		return participants.stream()
+			.filter(participant -> !participant.userId().equals(viewerId))
+			.map(ConversationParticipant::lastReadAt)
+			.filter(java.util.Objects::nonNull)
+			.max(java.time.Instant::compareTo)
+			.map(java.time.Instant::toString)
+			.orElse(null);
+	}
+
 	record ConversationView(String id, String userId, String kind, String title, List<String> participantIds,
-			String lastMessage, String time, int unread) {
+			String lastMessage, String time, int unread, String otherLastReadAt) {
 	}
 
 	record ConversationDetailView(String id, String kind, String title, List<String> participantIds, String lastMessage,
-			int unread) {
+			int unread, String otherLastReadAt) {
 	}
 
-	record MessageView(String id, String conversationId, String from, String text, String time) {
+	record MessageView(String id, String conversationId, String from, String text, List<String> mediaIds,
+			String time, java.util.Map<String, Integer> reactions, String myReaction, boolean mediaSpoiler) {
 	}
 
 	record CreateConversationRequest(String kind, String title, List<String> participantIds) {
 	}
 
-	record SendMessageRequest(String text) {
+	record DirectConversationRequest(String userId) {
+	}
+
+	record HideConversationsRequest(List<String> ids) {
+	}
+
+	record SendMessageRequest(String text, List<String> mediaIds, Boolean mediaSpoiler) {
 	}
 
 }

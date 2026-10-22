@@ -14,6 +14,8 @@ interface SpringDataJobSaveJpaRepository extends JpaRepository<JobSaveJpaEntity,
 
 	void deleteByJobId(String jobId);
 
+	List<JobSaveJpaEntity> findByUserIdOrderBySavedAtDesc(String userId);
+
 	@Query("SELECT s.jobId FROM JobSaveJpaEntity s WHERE s.userId = :userId AND s.jobId IN :jobIds")
 	List<String> findJobIdsByUserIdAndJobIdIn(@Param("userId") String userId,
 			@Param("jobIds") java.util.Collection<String> jobIds);

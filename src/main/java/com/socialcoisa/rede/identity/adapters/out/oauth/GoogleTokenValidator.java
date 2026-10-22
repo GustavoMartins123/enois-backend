@@ -45,8 +45,8 @@ class GoogleTokenValidator implements TokenValidator {
 	}
 
 	@Override
-	public Optional<TokenValidationResult> validate(OAuthProvider provider, String authorizationCode) {
-		if (provider != OAuthProvider.GOOGLE || !StringUtils.hasText(authorizationCode)) {
+	public Optional<TokenValidationResult> validate(OAuthProvider provider, String credential, String expectedNonce) {
+		if (provider != OAuthProvider.GOOGLE || !StringUtils.hasText(credential)) {
 			return Optional.empty();
 		}
 
@@ -54,11 +54,11 @@ class GoogleTokenValidator implements TokenValidator {
 			return Optional.empty();
 		}
 
-		if (isJwt(authorizationCode)) {
-			return verifyIdToken(authorizationCode);
+		if (isJwt(credential)) {
+			return verifyIdToken(credential, expectedNonce);
 		}
 
-		return exchangeCodeForTokens(authorizationCode);
+		return exchangeCodeForTokens(credential, expectedNonce);
 	}
 
 	private boolean isJwt(String value) {
@@ -66,7 +66,7 @@ class GoogleTokenValidator implements TokenValidator {
 		return dotCount == 2;
 	}
 
-	private Optional<TokenValidationResult> verifyIdToken(String idToken) {
+	private Optional<TokenValidationResult> verifyIdToken(String idToken, String expectedNonce) {
 		try {
 			SignedJWT signedJWT = SignedJWT.parse(idToken);
 			JWSVerifier verifier = new RSASSAVerifier(findRsaKey(signedJWT));
@@ -93,17 +93,30 @@ class GoogleTokenValidator implements TokenValidator {
 				return Optional.empty();
 			}
 
+			// O nonce amarra o id_token ao pedido de autorizacao que NOS iniciamos: sem isso, um
+			// token emitido para outro cliente/pedido poderia ser reapresentado aqui.
+			if (StringUtils.hasText(expectedNonce)
+					&& !expectedNonce.equals(claims.getStringClaim("nonce"))) {
+				return Optional.empty();
+			}
+
 			String externalUserId = claims.getSubject();
 			String email = claims.getStringClaim("email");
 			String name = claims.getStringClaim("name");
+			// `email_verified` pode vir como boolean ou string, dependendo do provedor.
+			boolean emailVerified = isTruthy(claims.getClaim("email_verified"));
 
-			return Optional.of(new TokenValidationResult(externalUserId, email, name));
+			return Optional.of(new TokenValidationResult(externalUserId, email, name, emailVerified));
 		} catch (Exception e) {
 			return Optional.empty();
 		}
 	}
 
-	private Optional<TokenValidationResult> exchangeCodeForTokens(String code) {
+	private boolean isTruthy(Object claim) {
+		return Boolean.TRUE.equals(claim) || "true".equalsIgnoreCase(String.valueOf(claim));
+	}
+
+	private Optional<TokenValidationResult> exchangeCodeForTokens(String code, String expectedNonce) {
 		try {
 			OAuthProperties.GoogleConfig config = properties.getGoogle();
 			Map<String, String> params = new LinkedHashMap<>();
@@ -138,7 +151,7 @@ class GoogleTokenValidator implements TokenValidator {
 				return Optional.empty();
 			}
 
-			return verifyIdToken(idToken);
+			return verifyIdToken(idToken, expectedNonce);
 		} catch (Exception e) {
 			return Optional.empty();
 		}

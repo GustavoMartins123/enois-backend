@@ -3,12 +3,9 @@ package com.socialcoisa.rede.shared.application;
 import java.time.Clock;
 import java.util.UUID;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.JavaMailSenderImpl;
 
 import com.socialcoisa.rede.feed.application.port.out.IdGenerator;
 import com.socialcoisa.rede.feed.domain.PostId;
@@ -33,9 +30,9 @@ public class InfrastructureConfig {
 		return new OAuthProperties();
 	}
 
-	@Bean
-	@ConditionalOnMissingBean(JavaMailSender.class)
-	public JavaMailSender javaMailSender() {
-		return new JavaMailSenderImpl();
-	}
+	// Nao declaramos JavaMailSender aqui de proposito: a auto-configuracao do Spring Boot monta o bean
+	// a partir de `spring.mail.*` (MAIL_HOST, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD). Um bean manual
+	// com `new JavaMailSenderImpl()` faz o auto-config recuar (ConditionalOnMissingBean) e o envio cai
+	// nos padroes do JavaMail (localhost:25), ignorando em silencio o SMTP configurado — nenhum e-mail
+	// saia, nem o de redefinicao de senha.
 }

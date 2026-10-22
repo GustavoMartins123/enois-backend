@@ -38,6 +38,11 @@ public class CommunityMember {
 		return new CommunityMember(id, communityId, userId, MemberRole.ADMIN, joinedAt);
 	}
 
+	/** Rebaixa para membro comum (ex.: o antigo dono ao transferir a propriedade). */
+	public CommunityMember demoteToMember() {
+		return new CommunityMember(id, communityId, userId, MemberRole.MEMBER, joinedAt);
+	}
+
 	public Instant joinedAt() { return joinedAt; }
 
 }

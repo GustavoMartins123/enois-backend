@@ -18,6 +18,11 @@ public record Counters(int reactions, int comments, int saves, int shares) {
 		return new Counters(reactions, comments + 1, saves, shares);
 	}
 
+	/** Apagar comentário precisa DEVOLVER o contador — antes ele só crescia (inflação). */
+	public Counters decrementComments() {
+		return new Counters(reactions, Math.max(0, comments - 1), saves, shares);
+	}
+
 	public Counters incrementSaves() {
 		return new Counters(reactions, comments, saves + 1, shares);
 	}

@@ -11,8 +11,14 @@ import com.socialcoisa.rede.media.application.port.out.StorageUrlFactory;
 class DevStorageUrlFactory implements StorageUrlFactory {
 
 	@Override
+	public com.socialcoisa.rede.media.domain.MediaStorageProvider provider() {
+		return com.socialcoisa.rede.media.domain.MediaStorageProvider.IMAGEKIT;
+	}
+
+	@Override
 	public String objectKey(String mediaId, String fileName) {
-		return "dev/" + mediaId + "/" + UriUtils.encodePathSegment(fileName, java.nio.charset.StandardCharsets.UTF_8);
+		String safe = fileName.replaceAll("(^|/)\\.{1,2}(/|$)", "$1_$2");
+		return "dev/" + mediaId + "/" + UriUtils.encodePathSegment(safe, java.nio.charset.StandardCharsets.UTF_8);
 	}
 
 	@Override

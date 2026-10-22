@@ -1,6 +1,7 @@
 package com.socialcoisa.rede.identity.adapters.out.persistence;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -13,6 +14,18 @@ interface SpringDataAuthSessionJpaRepository extends JpaRepository<AuthSessionJp
 	Optional<AuthSessionJpaEntity> findByRefreshToken(String refreshToken);
 
 	@Modifying
+	@Query(value = "update auth_sessions set token = :tokenHash, refresh_token = :refreshHash where token = :rawToken",
+		nativeQuery = true)
+	int rehash(@Param("rawToken") String rawToken, @Param("tokenHash") String tokenHash,
+			@Param("refreshHash") String refreshHash);
+
+	@Modifying
 	@Query("UPDATE AuthSessionJpaEntity s SET s.revokedAt = :now WHERE s.userId = :userId AND s.revokedAt IS NULL")
 	void revokeAllByUser(@Param("userId") String userId, @Param("now") Instant now);
+
+	@org.springframework.data.jpa.repository.Query(
+		"SELECT s.ip FROM AuthSessionJpaEntity s WHERE s.userId = :userId AND s.ip IS NOT NULL "
+			+ "ORDER BY s.createdAt DESC")
+	List<String> findRecentIpsByUser(@Param("userId") String userId,
+			org.springframework.data.domain.Pageable page);
 }

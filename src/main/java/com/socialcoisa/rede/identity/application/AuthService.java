@@ -4,11 +4,14 @@ import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Base64;
 import java.util.Locale;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -23,13 +26,20 @@ import com.socialcoisa.rede.identity.application.port.in.RefreshSessionUseCase;
 import com.socialcoisa.rede.identity.application.port.in.RequestPasswordResetUseCase;
 import com.socialcoisa.rede.identity.application.port.in.ResetPasswordUseCase;
 import com.socialcoisa.rede.identity.application.port.in.SignupUseCase;
+import com.socialcoisa.rede.identity.application.port.in.TwoFactorLoginUseCase;
+import com.socialcoisa.rede.identity.application.port.in.VerifyEmailUseCase;
 import com.socialcoisa.rede.identity.application.port.out.AuthSessionRepository;
 import com.socialcoisa.rede.identity.application.port.out.CredentialRepository;
+import com.socialcoisa.rede.identity.application.port.out.EmailVerificationTokenRepository;
 import com.socialcoisa.rede.identity.application.port.out.PasswordResetTokenRepository;
+import com.socialcoisa.rede.identity.application.port.out.PendingSignupRepository;
 import com.socialcoisa.rede.identity.application.port.out.StoredCredential;
 import com.socialcoisa.rede.identity.application.port.out.UserExternalIdentityRepository;
 import com.socialcoisa.rede.identity.application.EmailService;
+import com.socialcoisa.rede.identity.domain.EmailVerificationToken;
 import com.socialcoisa.rede.identity.domain.PasswordResetToken;
+import com.socialcoisa.rede.identity.domain.PendingSignup;
+import com.socialcoisa.rede.identity.domain.TwoFactorChallenge;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.profile.domain.UserProfile;
 import com.socialcoisa.rede.shared.web.ApiException;
@@ -37,9 +47,19 @@ import com.socialcoisa.rede.shared.web.ApiException;
 @Service
 public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, GetAuthenticatedUserUseCase,
 		RequestPasswordResetUseCase, ResetPasswordUseCase, RefreshSessionUseCase, ChangeEmailUseCase,
-		ChangePasswordUseCase, DeleteAccountUseCase {
+		ChangePasswordUseCase, DeleteAccountUseCase, VerifyEmailUseCase, TwoFactorLoginUseCase {
+
+	private static final Logger LOG = LoggerFactory.getLogger(AuthService.class);
+
 
 	private static final Duration RESET_TOKEN_TTL = Duration.ofHours(24);
+
+	/** Validade do link de confirmacao de e-mail. */
+	private static final Duration VERIFICATION_TOKEN_TTL = Duration.ofHours(24);
+
+	/** Janela do limite de reenvio do link de confirmacao. */
+	private static final Duration VERIFICATION_RESEND_WINDOW = Duration.ofHours(1);
+	private static final int VERIFICATION_RESEND_LIMIT = 3;
 
 	private final Duration accessTokenTtl;
 	private final Duration refreshTokenTtl;
@@ -47,62 +67,254 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 	private final CredentialRepository credentialRepository;
 	private final AuthSessionRepository authSessionRepository;
 	private final PasswordResetTokenRepository passwordResetTokenRepository;
+	private final EmailVerificationTokenRepository emailVerificationTokenRepository;
+	private final PendingSignupRepository pendingSignups;
+	private final TwoFactorService twoFactorService;
 	private final UserExternalIdentityRepository externalIdentityRepository;
 	private final PasswordHasher passwordHasher;
 	private final EmailService emailService;
 	private final Clock clock;
+
+	private final com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate;
 	private final SecureRandom secureRandom = new SecureRandom();
 
 	public AuthService(@Value("${rede.auth.access-token-ttl-minutes:60}") int accessTokenTtlMinutes,
                        @Value("${rede.auth.refresh-token-ttl-days:30}") int refreshTokenTtlDays,
                        UserProfileRepository userProfileRepository, CredentialRepository credentialRepository,
                        AuthSessionRepository authSessionRepository, PasswordResetTokenRepository passwordResetTokenRepository,
+                       EmailVerificationTokenRepository emailVerificationTokenRepository,
+                       PendingSignupRepository pendingSignups,
+                       TwoFactorService twoFactorService,
                        UserExternalIdentityRepository externalIdentityRepository,
-                       PasswordHasher passwordHasher, EmailService emailService, Clock clock) {
+                       PasswordHasher passwordHasher, EmailService emailService, Clock clock,
+                       com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate) {
 		this.accessTokenTtl = Duration.ofMinutes(accessTokenTtlMinutes);
 		this.refreshTokenTtl = Duration.ofDays(refreshTokenTtlDays);
 		this.userProfileRepository = userProfileRepository;
 		this.credentialRepository = credentialRepository;
 		this.authSessionRepository = authSessionRepository;
 		this.passwordResetTokenRepository = passwordResetTokenRepository;
+		this.emailVerificationTokenRepository = emailVerificationTokenRepository;
+		this.pendingSignups = pendingSignups;
+		this.twoFactorService = twoFactorService;
 		this.externalIdentityRepository = externalIdentityRepository;
 		this.passwordHasher = passwordHasher;
         this.emailService = emailService;
         this.clock = clock;
+		this.sanctionGate = sanctionGate;
 	}
 
 	@Override
 	@Transactional
-	public AuthResponse signup(SignupCommand command) {
+	public SignupResult signup(SignupCommand command) {
 		validateSignup(command);
+		LocalDate birthDate = parseBirthDate(command.birthDate());
 		String email = command.email().trim().toLowerCase(Locale.ROOT);
 		if (userProfileRepository.existsByEmail(email) || credentialRepository.existsByEmail(email)) {
 			throw new ApiException(409, "EMAIL_ALREADY_REGISTERED", "Email ja cadastrado.");
 		}
 		Instant now = clock.instant();
-		String userId = "user_" + UUID.randomUUID().toString().replace("-", "");
-		String username = uniqueUsername(command.name(), email);
-		// Nao existe papel no schema; o headline deve ficar vazio ate o usuario preencher.
-		UserProfile profile = UserProfile.create(userId, username, email, command.name().trim(), null, now);
-		profile.acceptTerms(now);
-		UserProfile saved = userProfileRepository.save(profile);
-		credentialRepository.save(saved.id(), email, passwordHasher.hash(command.password()));
-		return createResponse(saved);
+		// Duas etapas: NADA de conta (users/credentials) nasce aqui. Guardamos o cadastro com o
+		// hash da senha e mandamos o link; a conta so existe quando o e-mail for confirmado — e
+		// assim um cadastro em massa com e-mail invalido nao polui a base.
+		pendingSignups.deleteExpired(now);
+		pendingSignups.deleteByEmail(email);
+		String rawToken = newVerificationToken();
+		String name = command.name().trim();
+		// O e-mail do cadastro conta como o 1o envio da janela: sobram 2 reenvios, como no
+		// fluxo de conta ja criada.
+		PendingSignup pending = new PendingSignup(
+			"pending_" + UUID.randomUUID().toString().replace("-", ""),
+			email, name, birthDate, passwordHasher.hash(command.password()),
+			hashToken(rawToken), now.plus(VERIFICATION_TOKEN_TTL), now, 1, now);
+		pendingSignups.save(pending);
+		boolean emailSent = emailService.sendVerificationEmail(email, name, rawToken);
+		LOG.info("auth_signup_pending emailSent={}", emailSent);
+		return new SignupResult(email, true, emailSent);
+	}
+
+	/**
+	 * Valida a data de nascimento declarada (ECA Digital): formato ISO, data real, nao-futura e
+	 * idade plausivel (0 a 120 anos). Recusa null — cadastro sem data nao existe mais.
+	 */
+	static LocalDate parseBirthDate(String value) {
+		if (value == null || value.isBlank()) {
+			throw new ApiException(400, "BIRTH_DATE_REQUIRED",
+				"Informe a data de nascimento para criar a conta.");
+		}
+		LocalDate date;
+		try {
+			date = LocalDate.parse(value.trim());
+		}
+		catch (Exception e) {
+			throw new ApiException(400, "INVALID_BIRTH_DATE", "Data de nascimento invalida (use aaaa-mm-dd).");
+		}
+		LocalDate today = LocalDate.now(java.time.ZoneId.of("America/Sao_Paulo"));
+		if (date.isAfter(today)) {
+			throw new ApiException(400, "INVALID_BIRTH_DATE", "A data de nascimento nao pode ser no futuro.");
+		}
+		int age = java.time.Period.between(date, today).getYears();
+		if (age < 0 || age > 120) {
+			throw new ApiException(400, "INVALID_BIRTH_DATE", "A data de nascimento nao parece real.");
+		}
+		return date;
 	}
 
 	@Override
 	@Transactional
-	public AuthResponse login(LoginCommand command) {
+	public LoginResult login(LoginCommand command) {
 		validateLogin(command);
 		String email = command.email().trim().toLowerCase(Locale.ROOT);
-		StoredCredential credential = credentialRepository.findByEmail(email)
-			.orElseThrow(() -> new ApiException(401, "INVALID_CREDENTIALS", "Email ou senha invalidos."));
+		StoredCredential credential = credentialRepository.findByEmail(email).orElseThrow(() -> {
+			// Cadastro de duas etapas: a conta ainda NAO existe, mas a pessoa ja se cadastrou e a
+			// senha dela esta certa. Responder "senha invalida" seria mentira (e a pessoa nao
+			// entenderia o que fazer) — o certo e pedir a confirmacao do e-mail.
+			var pending = pendingSignups.findByEmail(email);
+			if (pending.isPresent() && !pending.get().isExpired(clock.instant())) {
+				LOG.warn("auth_login_failed reason=email_not_verified");
+				return new ApiException(403, "EMAIL_NOT_VERIFIED",
+					"Confirme o e-mail que enviamos para ativar a conta.");
+			}
+			LOG.warn("auth_login_failed reason=unknown_email");
+			return new ApiException(401, "INVALID_CREDENTIALS", "Email ou senha invalidos.");
+		});
 		if (!passwordHasher.matches(command.password(), credential.passwordHash())) {
+			LOG.warn("auth_login_failed reason=invalid_password");
 			throw new ApiException(401, "INVALID_CREDENTIALS", "Email ou senha invalidos.");
 		}
 		UserProfile profile = userProfileRepository.findById(credential.userId())
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
-		return createResponse(profile);
+		requireVerifiedIdentity(profile);
+		// Ban (recurso negado) trava ate o login: a conta nao emite sessao nova.
+		if (sanctionGate.banned(profile.id())) {
+			LOG.warn("auth_login_blocked reason=account_banned userId={}", profile.id());
+			throw new ApiException(403, "ACCOUNT_BANNED",
+				"Esta conta foi banida apos revisao do recurso. Fale com o suporte se precisar.");
+		}
+
+		// Senha correta e o primeiro passo: com segundo fator ativo, aqui sai um desafio, nao sessao.
+		var requiredMethod = twoFactorService.requiredMethod(profile.id());
+		if (requiredMethod.isPresent()) {
+			LOG.info("auth_login_two_factor_required userId={} method={}", profile.id(), requiredMethod.get());
+			TwoFactorChallenge challenge = twoFactorService.startChallenge(profile.id(), requiredMethod.get());
+			return LoginResult.twoFactorRequired(challenge.id(), challenge.method().name(), challenge.expiresAt());
+		}
+		LOG.info("auth_login_success userId={}", profile.id());
+		return LoginResult.authenticated(createResponse(profile, command.ip()));
+	}
+
+	/** Conclui o login com o codigo do segundo fator (ou um codigo de recuperacao). */
+	@Override
+	@Transactional
+	public AuthResponse verifyTwoFactor(String challengeId, String code) {
+		if (!StringUtils.hasText(challengeId)) {
+			throw new ApiException(400, "TWO_FACTOR_CHALLENGE_NOT_FOUND", "Informe o desafio do login.");
+		}
+		String userId = twoFactorService.verifyChallenge(challengeId.trim(), code);
+		UserProfile profile = userProfileRepository.findById(userId)
+			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
+		if (sanctionGate.banned(profile.id())) {
+			throw new ApiException(403, "ACCOUNT_BANNED",
+				"Esta conta foi banida apos revisao do recurso. Fale com o suporte se precisar.");
+		}
+		LOG.info("auth_login_success userId={} via=2fa", profile.id());
+		return createResponse(profile, null);
+	}
+
+	@Override
+	public void resendTwoFactorCode(String challengeId) {
+		twoFactorService.resendTwoFactorCode(challengeId);
+	}
+
+	@Override
+	@Transactional
+	public AuthResponse verifyEmail(String token) {
+		if (!StringUtils.hasText(token)) {
+			throw new ApiException(400, "INVALID_TOKEN", "Token de confirmacao obrigatorio.");
+		}
+		String tokenHash = hashToken(token.trim());
+		// Cadastro em duas etapas: o link confirma o e-mail E cria a conta (que ainda nao existia).
+		var pending = pendingSignups.findByTokenHash(tokenHash);
+		if (pending.isPresent()) {
+			PendingSignup signup = pending.get();
+			Instant now = clock.instant();
+			if (signup.isExpired(now)) {
+				// Nao apagamos aqui: a transacao vai reverter com o 410. O pendente vencido e
+				// removido na proxima limpeza oportunista (novo cadastro ou reenvio).
+				throw new ApiException(410, "TOKEN_EXPIRED", "Link de confirmacao expirado. Peca um novo.");
+			}
+			// Corrida rara: a mesma pessoa pode ter criado a conta por outro caminho nesse meio-tempo.
+			if (userProfileRepository.existsByEmail(signup.email()) || credentialRepository.existsByEmail(signup.email())) {
+				pendingSignups.deleteByEmail(signup.email());
+				throw new ApiException(409, "EMAIL_ALREADY_REGISTERED", "Email ja cadastrado.");
+			}
+			String userId = "user_" + UUID.randomUUID().toString().replace("-", "");
+			String username = uniqueUsername(signup.name(), signup.email());
+			// Nao existe papel no schema; o headline fica vazio ate o usuario preencher.
+			UserProfile profile = UserProfile.create(userId, username, signup.email(), signup.name(), null,
+				signup.createdAt());
+			profile.acceptTerms(now);
+			// ECA Digital: a idade vem da data declarada no cadastro, validada no servidor.
+			profile.declareBirthDate(signup.birthDate(), now);
+			// O e-mail acabou de ser provado: a conta nasce verificada e ja emite sessao.
+			profile.markEmailVerified(now);
+			userProfileRepository.save(profile);
+			credentialRepository.save(userId, signup.email(), signup.passwordHash());
+			pendingSignups.deleteByEmail(signup.email());
+			return createResponse(profile, null);
+		}
+		EmailVerificationToken verification = emailVerificationTokenRepository.findByToken(tokenHash)
+			.orElseThrow(() -> new ApiException(404, "INVALID_TOKEN", "Link de confirmacao invalido."));
+		if (verification.isUsed()) {
+			throw new ApiException(409, "TOKEN_ALREADY_USED", "Este link de confirmacao ja foi usado.");
+		}
+		if (verification.isExpired(clock.instant())) {
+			throw new ApiException(410, "TOKEN_EXPIRED", "Link de confirmacao expirado. Peca um novo.");
+		}
+		UserProfile profile = userProfileRepository.findById(verification.userId())
+			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
+		Instant now = clock.instant();
+		if (!profile.emailVerified()) {
+			profile.markEmailVerified(now);
+			userProfileRepository.save(profile);
+		}
+		// Uso unico: consome o token antes de emitir a sessao.
+		emailVerificationTokenRepository.markUsed(tokenHash);
+		return createResponse(profile, null);
+	}
+
+	@Override
+	@Transactional
+	public void resendVerification(String email) {
+		if (!StringUtils.hasText(email) || !email.contains("@")) {
+			throw new ApiException(400, "INVALID_EMAIL", "Email invalido.");
+		}
+		String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
+		// Resposta neutra: nao confirmamos se o e-mail existe (evita enumeracao de contas).
+		userProfileRepository.findByEmail(normalizedEmail)
+			.filter(profile -> !profile.emailVerified())
+			.ifPresent(profile -> {
+				Instant now = clock.instant();
+				if (emailVerificationTokenRepository.countByUserIdSince(profile.id(),
+						now.minus(VERIFICATION_RESEND_WINDOW)) >= VERIFICATION_RESEND_LIMIT) {
+					throw new ApiException(429, "TOO_MANY_REQUESTS",
+						"Limite de reenvios atingido. Tente novamente mais tarde.");
+				}
+				issueVerificationToken(profile, now);
+			});
+		// Cadastro de duas etapas: ainda nao ha conta, mas o pendente pode reenviar o link — com o
+		// MESMO teto do fluxo de conta (3 envios por hora). Sem o contador, o reenvio nao tinha
+		// limite: dava para spammar a caixa de quem se cadastrou.
+		pendingSignups.findByEmail(normalizedEmail).ifPresent(pending -> {
+			Instant now = clock.instant();
+			if (pending.sendsWithin(now, VERIFICATION_RESEND_WINDOW) >= VERIFICATION_RESEND_LIMIT) {
+				throw new ApiException(429, "TOO_MANY_REQUESTS",
+					"Limite de reenvios atingido. Tente novamente mais tarde.");
+			}
+			String rawToken = newVerificationToken();
+			pendingSignups.save(pending.resent(hashToken(rawToken), now.plus(VERIFICATION_TOKEN_TTL), now));
+			emailService.sendVerificationEmail(pending.email(), pending.name(), rawToken);
+		});
 	}
 
 	@Override
@@ -120,7 +332,17 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 			.orElseThrow(() -> new ApiException(401, "UNAUTHENTICATED", "Sessao invalida ou expirada."));
 		UserProfile profile = userProfileRepository.findById(userId)
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
-		return AuthUserView.from(profile);
+		return AuthUserView.from(profile, hasUsablePassword(userId));
+	}
+
+	/**
+	 * A conta tem senha que a pessoa conhece?
+	 *
+	 * Quem entrou por login social nasce com um hash aleatorio (`password_usable = false`) — a tela
+	 * usa isto para pedir "criar senha" em vez de "confirmar a senha atual".
+	 */
+	private boolean hasUsablePassword(String userId) {
+		return credentialRepository.findByUserId(userId).map(StoredCredential::passwordUsable).orElse(false);
 	}
 
 	@Override
@@ -201,8 +423,13 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		}
 		StoredCredential credential = credentialRepository.findByUserId(userId)
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
-		if (!StringUtils.hasText(currentPassword)
-				|| !passwordHasher.matches(currentPassword, credential.passwordHash())) {
+		// Conta criada por login social nasce com um hash aleatorio que ninguem conhece: aqui a
+		// pessoa CRIA a primeira senha, entao nao ha o que confirmar. Exigir a senha atual nesse
+		// caso trancava a conta para fora — o segundo fator manda "defina uma senha" e a troca
+		// pedia uma senha que nunca existiu.
+		if (credential.passwordUsable()
+				&& (!StringUtils.hasText(currentPassword)
+						|| !passwordHasher.matches(currentPassword, credential.passwordHash()))) {
 			throw new ApiException(401, "INVALID_CREDENTIALS", "Senha atual incorreta.");
 		}
 		credentialRepository.save(userId, credential.email(), passwordHasher.hash(newPassword));
@@ -230,6 +457,47 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		userProfileRepository.save(profile);
 	}
 
+	/**
+	 * Cria um novo token de confirmacao (invalidando o anterior) e envia o link.
+	 *
+	 * @return false quando o envio do e-mail falhou — a conta continua pendente e a tela oferece reenviar
+	 */
+	private boolean issueVerificationToken(UserProfile profile, Instant now) {
+		String rawToken = newVerificationToken();
+		// Um token valido por vez: reenviar invalida o link anterior (marcado como usado).
+		emailVerificationTokenRepository.markAllUsedByUserId(profile.id(), now);
+		emailVerificationTokenRepository.save(EmailVerificationToken.create(hashToken(rawToken), profile.id(),
+			now.plus(VERIFICATION_TOKEN_TTL), now));
+		return emailService.sendVerificationEmail(profile.email(), profile.name(), rawToken);
+	}
+
+	/** Chamado pelo login social: o provedor ja confirmou o e-mail, entao a conta nasce verificada. */
+	@Transactional
+	public void markEmailVerifiedForProvider(String userId, Instant now) {
+		userProfileRepository.findById(userId).ifPresent(profile -> {
+			if (!profile.emailVerified()) {
+				profile.markEmailVerified(now);
+				userProfileRepository.save(profile);
+			}
+		});
+	}
+
+	/**
+	 * Exige identidade verificada: e-mail confirmado OU segundo fator ativo. A mesma regra sustenta a
+	 * credibilidade (sem nenhum dos dois, a reputacao e zerada).
+	 */
+	private void requireVerifiedIdentity(UserProfile profile) {
+		if (!profile.identityVerified()) {
+			throw new ApiException(403, "EMAIL_NOT_VERIFIED",
+				"Confirme seu e-mail ou ative a verificacao em duas etapas para entrar. "
+					+ "Enviamos o link de confirmacao para " + normalizedEmail(profile) + ".");
+		}
+	}
+
+	private String normalizedEmail(UserProfile profile) {
+		return profile.email() == null ? "" : profile.email().trim().toLowerCase(Locale.ROOT);
+	}
+
 	private String requireUserId(String sessionToken) {
 		if (!StringUtils.hasText(sessionToken)) {
 			throw new ApiException(401, "UNAUTHENTICATED", "Sessao invalida ou expirada.");
@@ -238,14 +506,16 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 			.orElseThrow(() -> new ApiException(401, "UNAUTHENTICATED", "Sessao invalida ou expirada."));
 	}
 
-	private AuthResponse createResponse(UserProfile profile) {
+	private AuthResponse createResponse(UserProfile profile, String ip) {
 		Instant now = clock.instant();
 		Instant expiresAt = now.plus(accessTokenTtl);
 		Instant refreshExpiresAt = now.plus(refreshTokenTtl);
 		String token = newToken();
 		String refreshToken = newToken();
-		authSessionRepository.save(token, refreshToken, profile.id(), now, expiresAt);
-		return new AuthResponse(token, refreshToken, expiresAt, refreshExpiresAt, AuthUserView.from(profile));
+		authSessionRepository.save(token, refreshToken, profile.id(), now, expiresAt, refreshExpiresAt,
+			ip == null || ip.isBlank() ? null : ip.trim());
+		return new AuthResponse(token, refreshToken, expiresAt, refreshExpiresAt,
+			AuthUserView.from(profile, hasUsablePassword(profile.id())));
 	}
 
 	private AuthResponse refreshSession(String currentRefreshToken) {
@@ -255,7 +525,7 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		authSessionRepository.revokeByRefreshToken(currentRefreshToken, now);
 		UserProfile profile = userProfileRepository.findById(userId)
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
-		return createResponse(profile);
+		return createResponse(profile, null);
 	}
 
 	@Override
@@ -276,6 +546,12 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		byte[] bytes = new byte[48];
 		secureRandom.nextBytes(bytes);
 		return "reset_" + Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+	}
+
+	private String newVerificationToken() {
+		byte[] bytes = new byte[48];
+		secureRandom.nextBytes(bytes);
+		return "verify_" + Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
 	}
 
 	private String uniqueUsername(String name, String email) {

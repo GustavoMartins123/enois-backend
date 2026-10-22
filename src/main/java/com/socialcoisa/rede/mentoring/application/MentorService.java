@@ -26,23 +26,33 @@ public class MentorService {
 
 	@Transactional
 	public Mentor create(String userId, List<String> expertise, String price) {
+		return create(userId, expertise, price, null);
+	}
+
+	@Transactional
+	public Mentor create(String userId, List<String> expertise, String price, String banner) {
 		if (repository.findByUserId(userId).isPresent()) {
 			throw new ApiException(409, "ALREADY_MENTOR", "Voce ja esta cadastrado como mentor.");
 		}
 		String id = "mentor_" + UUID.randomUUID().toString().replace("-", "");
-		Mentor mentor = Mentor.create(id, userId, expertise, price, clock.instant());
+		Mentor mentor = Mentor.create(id, userId, expertise, price, banner, clock.instant());
 		repository.save(mentor);
 		return mentor;
 	}
 
 	@Transactional
 	public Mentor update(String mentorId, List<String> expertise, String price, String userId) {
+		return update(mentorId, expertise, price, null, userId);
+	}
+
+	@Transactional
+	public Mentor update(String mentorId, List<String> expertise, String price, String banner, String userId) {
 		Mentor mentor = repository.findById(mentorId)
 			.orElseThrow(() -> new ApiException(404, "MENTOR_NOT_FOUND", "Mentor nao encontrado."));
 		if (!mentor.userId().equals(userId)) {
 			throw new ApiException(403, "FORBIDDEN", "Voce nao e o dono deste perfil de mentor.");
 		}
-		Mentor updated = mentor.update(expertise, price, clock.instant());
+		Mentor updated = mentor.update(expertise, price, banner, clock.instant());
 		repository.save(updated);
 		return updated;
 	}
@@ -58,6 +68,22 @@ public class MentorService {
 		MentorSlot slot = MentorSlot.create(id, mentorId, startsAt, endsAt);
 		repository.saveSlot(slot);
 		return slot;
+	}
+
+	/** Remove um horario publicado; so o dono. Horario ja reservado nao pode sumir. */
+	@Transactional
+	public void deleteSlot(String mentorId, String slotId, String userId) {
+		Mentor mentor = repository.findById(mentorId)
+			.orElseThrow(() -> new ApiException(404, "MENTOR_NOT_FOUND", "Mentor nao encontrado."));
+		if (!mentor.userId().equals(userId)) {
+			throw new ApiException(403, "FORBIDDEN", "Voce nao e o dono deste perfil de mentor.");
+		}
+		MentorSlot slot = repository.findSlotById(slotId)
+			.orElseThrow(() -> new ApiException(404, "SLOT_NOT_FOUND", "Horario nao encontrado."));
+		if (!slot.available()) {
+			throw new ApiException(409, "SLOT_BOOKED", "Este horario ja foi reservado.");
+		}
+		repository.deleteSlot(slotId);
 	}
 
 	@Transactional
@@ -97,6 +123,23 @@ public class MentorService {
 
 	public List<MentorSlot> getSlots(String mentorId) {
 		return repository.findSlotsByMentor(mentorId);
+	}
+
+	/**
+	 * Proximo horario livre do mentor (ISO-8601) ou null quando nao ha agenda publicada.
+	 *
+	 * Antes o campo vinha sempre nulo na resposta, entao a tela nao tinha como dizer quando a pessoa
+	 * atende nem por onde comecar o agendamento.
+	 */
+	public String nextAvailableSlot(String mentorId) {
+		java.time.Instant now = clock.instant();
+		return repository.findSlotsByMentor(mentorId).stream()
+			.filter(MentorSlot::available)
+			.filter(slot -> slot.startsAt() != null && slot.startsAt().isAfter(now))
+			.sorted(java.util.Comparator.comparing(MentorSlot::startsAt))
+			.map(slot -> slot.startsAt().toString())
+			.findFirst()
+			.orElse(null);
 	}
 
 }
