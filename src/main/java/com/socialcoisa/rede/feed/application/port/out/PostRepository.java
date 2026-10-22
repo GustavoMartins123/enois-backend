@@ -32,6 +32,12 @@ public interface PostRepository {
 	/** Perfil SOCIAL do autor: sem BLOG (ponteiro) e sem o que a identidade profissional assinou. */
 	List<Post> findActiveByAuthor(UserId authorId, Instant before, int limit);
 
+	/** Republicação ativa desta pessoa para este post original (dedupe do botão). */
+	Optional<Post> findActiveRepostByAuthorAndSource(UserId authorId, String sourcePostId);
+
+	/** Cópias ativas de um post (limpeza quando o original é apagado). */
+	List<Post> findActiveRepostsBySource(String sourcePostId);
+
 	List<Post> findActiveByCommunity(String communityId, Instant before, int limit);
 
 	/** Posts de um canal privado — só o feed do canal chama (nunca os feeds gerais). */
