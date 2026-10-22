@@ -60,12 +60,14 @@ public class BlogService {
 	private final UserProfileRepository profiles;
 	private final ApplicationEventPublisher events;
 	private final com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate;
+	private final com.socialcoisa.rede.shared.security.SuspiciousText suspiciousText;
 	private final Clock clock;
 
 	public BlogService(BlogRepository blogs, BlogPostRepository posts, BlogSubscriptionRepository subscriptions,
 			PublishPostUseCase publishPost, DeletePostUseCase deletePost, NotificationService notifications,
 			UserProfileRepository profiles, ApplicationEventPublisher events,
-			com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate, Clock clock) {
+			com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate,
+			com.socialcoisa.rede.shared.security.SuspiciousText suspiciousText, Clock clock) {
 		this.blogs = blogs;
 		this.posts = posts;
 		this.subscriptions = subscriptions;
@@ -75,6 +77,7 @@ public class BlogService {
 		this.profiles = profiles;
 		this.events = events;
 		this.sanctionGate = sanctionGate;
+		this.suspiciousText = suspiciousText;
 		this.clock = clock;
 	}
 
@@ -84,6 +87,7 @@ public class BlogService {
 		return blogs.findAll(limit).stream()
 			// Blog de conta banida sai da vitrine (o perfil já dá 404).
 			.filter(blog -> !sanctionGate.banned(blog.userId()))
+			.filter(blog -> !suspiciousText.matches(blog.title(), blog.slug()))
 			.map(blog -> BlogSummaryView.from(blog, profiles.findById(blog.userId()).orElse(null),
 				posts.countByBlog(blog.id())))
 			.toList();
@@ -94,6 +98,7 @@ public class BlogService {
 	public Optional<BlogView> blogOf(String slug, String viewerId) {
 		return blogs.findBySlug(slug)
 			.filter(blog -> !sanctionGate.banned(blog.userId()))
+			.filter(blog -> !suspiciousText.matches(blog.title(), blog.slug()))
 			.map(blog -> view(blog, viewerId, POSTS_PAGE));
 	}
 

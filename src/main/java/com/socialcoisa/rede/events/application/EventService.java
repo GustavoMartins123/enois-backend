@@ -25,12 +25,15 @@ public class EventService {
 
 	private final EventRepository repository;
 	private final com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate;
+	private final com.socialcoisa.rede.shared.security.SuspiciousText suspiciousText;
 	private final Clock clock;
 
 	public EventService(EventRepository repository,
-			com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate, Clock clock) {
+			com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate,
+			com.socialcoisa.rede.shared.security.SuspiciousText suspiciousText, Clock clock) {
 		this.repository = repository;
 		this.sanctionGate = sanctionGate;
+		this.suspiciousText = suspiciousText;
 		this.clock = clock;
 	}
 
@@ -125,7 +128,10 @@ public class EventService {
 		List<Event> fetched = repository.findAll(format, before, limit);
 		List<Event> visible = includePast ? fetched : fetched.stream().filter(event -> !hasEnded(event)).toList();
 		// Evento de conta banida sai da vitrine (o conteúdo dela já está sendo limpo).
-		visible = visible.stream().filter(event -> !sanctionGate.banned(event.createdBy())).toList();
+		visible = visible.stream()
+			.filter(event -> !sanctionGate.banned(event.createdBy()))
+			.filter(event -> !suspiciousText.matches(event.title(), event.host()))
+			.toList();
 		return new EventPage(visible, fetched);
 	}
 

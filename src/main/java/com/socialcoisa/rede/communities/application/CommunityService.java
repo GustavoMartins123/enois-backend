@@ -23,13 +23,16 @@ public class CommunityService {
 	private final CommunityRepository repository;
 	private final PostRepository postRepository;
 	private final com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate;
+	private final com.socialcoisa.rede.shared.security.SuspiciousText suspiciousText;
 	private final Clock clock;
 
 	public CommunityService(CommunityRepository repository, PostRepository postRepository,
-			com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate, Clock clock) {
+			com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate,
+			com.socialcoisa.rede.shared.security.SuspiciousText suspiciousText, Clock clock) {
 		this.repository = repository;
 		this.postRepository = postRepository;
 		this.sanctionGate = sanctionGate;
+		this.suspiciousText = suspiciousText;
 		this.clock = clock;
 	}
 
@@ -177,6 +180,7 @@ public class CommunityService {
 		// Comunidade criada por conta banida sai da vitrine (o conteúdo dela já é limpo).
 		return repository.findAll(topic, query, before, limit).stream()
 			.filter(community -> !sanctionGate.banned(community.createdBy()))
+			.filter(community -> !suspiciousText.matches(community.name(), community.description()))
 			.toList();
 	}
 
