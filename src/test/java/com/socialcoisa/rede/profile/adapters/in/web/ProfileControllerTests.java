@@ -337,6 +337,32 @@ class ProfileControllerTests {
 			.as("a tela mostra há quanto tempo a pessoa chegou").isNotBlank();
 	}
 
+	/**
+	 * Conta banida sai da vitrine de chegada: depois da limpeza dos cadastros em série
+	 * (2026-10-22) as contas punidas continuavam aparecendo como "chegando agora".
+	 */
+	@Test
+	void bannedProfilesLeaveTheRanking() throws Exception {
+		var auth = new com.socialcoisa.rede.shared.web.TestAuthHelper(mockMvc, objectMapper);
+		String suffix = String.valueOf(System.nanoTime());
+		var banned = auth.authenticate("rank_banned_" + suffix);
+		var admin = auth.authenticate("group-admin");
+
+		mockMvc.perform(post("/admin/users/rank-banned-" + suffix + "/sanction")
+				.header("X-Session-Token", admin.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of(
+					"type", "BAN", "reason", "Cadastro em série na triagem de contas."))))
+			.andExpect(status().isOk());
+
+		MvcResult result = mockMvc.perform(get("/profile/ranking").param("limit", "50"))
+			.andExpect(status().isOk())
+			.andReturn();
+		JsonNode items = objectMapper.readTree(result.getResponse().getContentAsString());
+		org.assertj.core.api.Assertions.assertThat(indexOfUser(items, banned.userId()))
+			.as("conta banida não aparece na vitrine").isEqualTo(-1);
+	}
+
 	private int indexOfUser(JsonNode items, String userId) {
 		for (int i = 0; i < items.size(); i++) {
 			if (userId.equals(items.get(i).path("id").asString())) {
