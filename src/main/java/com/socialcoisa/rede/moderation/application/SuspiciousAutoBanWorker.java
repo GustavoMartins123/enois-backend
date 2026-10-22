@@ -98,6 +98,11 @@ public class SuspiciousAutoBanWorker {
 			if (target.riskScore() <= threshold) {
 				continue;
 			}
+			if (target.staff()) {
+				LOG.warn("Auto-ban: {} tem risco {} mas é da equipe — automação não pune; revise no painel.",
+					target.username(), target.riskScore());
+				continue;
+			}
 			String reason = reasonFor(target);
 			try {
 				var result = moderators.sanctionUser(ACTOR, target.username(), SanctionType.BAN, reason);

@@ -118,6 +118,28 @@ class CoinController {
 	}
 
 	/** A fila das contestações (moderação). */
+	/**
+	 * Extrato de uma conta para auditoria de incidente (admin): saldo + últimas movimentações,
+	 * sem o efeito colateral de abrir a carteira (nada de genesis/presença em quem está sob
+	 * investigação).
+	 */
+	@GetMapping("/admin/carteira/usuarios/{username}/extrato")
+	Map<String, Object> adminExtract(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@PathVariable String username,
+			@RequestParam(defaultValue = "100") int limit) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		adminGuard.requireAdmin(user);
+		var profile = profiles.findByUsername(username.trim().toLowerCase())
+			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuário não encontrado."));
+		var wallet = coins.walletSnapshot(profile.id(), profile.username(), limit);
+		return Map.of(
+			"username", wallet.chave(),
+			"balance", wallet.balance(),
+			"escala", wallet.escala(),
+			"entries", wallet.entries().stream().map(EntryView::from).toList());
+	}
+
 	@GetMapping("/admin/carteira/disputas")
 	List<Map<String, Object>> disputesQueue(@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,

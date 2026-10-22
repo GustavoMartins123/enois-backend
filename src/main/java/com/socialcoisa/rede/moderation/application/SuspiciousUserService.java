@@ -69,14 +69,16 @@ public class SuspiciousUserService {
 
 		List<Scored> scored = new ArrayList<>();
 		for (var candidate : candidates) {
-			if (candidate.moderator() || adminGuard.isAdmin(candidate.email(), candidate.username())) {
-				continue;
-			}
 			// Quem já foi banido não volta para a fila de triagem: a decisão já foi tomada.
 			if (sanctionGate.banned(candidate.id())) {
 				continue;
 			}
-			Scored item = score(candidate, repeatedNames.getOrDefault(normalize(candidate.name()), 0L));
+			// Conta da EQUIPE entra na lista (marcada) em vez de desaparecer: no incidente de
+			// 22/10 uma conta do atacante ficou invisível por ser tratada como moderador. A
+			// automação continua sem punir a equipe; quem decide é um humano, no painel.
+			boolean staff = candidate.moderator()
+				|| adminGuard.isAdmin(candidate.email(), candidate.username());
+			Scored item = score(candidate, repeatedNames.getOrDefault(normalize(candidate.name()), 0L), staff);
 			if (item.risk() >= MIN_SCORE) {
 				scored.add(item);
 			}
@@ -86,14 +88,18 @@ public class SuspiciousUserService {
 
 		List<SuspiciousUserView> items = scored.stream()
 			.limit(limit)
-			.map(item -> view(item.candidate(), item.risk(), item.signals()))
+			.map(item -> view(item.candidate(), item.risk(), item.signals(), item.staff()))
 			.toList();
 		return new SuspiciousUsersView(items, items.size(), since, days);
 	}
 
-	private Scored score(SuspiciousUserReader.Candidate candidate, long sameNameCount) {
+	private Scored score(SuspiciousUserReader.Candidate candidate, long sameNameCount, boolean staff) {
 		int risk = 0;
 		List<String> signals = new ArrayList<>();
+		if (staff) {
+			// Não pesa no risco: é um aviso para o humano que está olhando a fila.
+			signals.add("EQUIPE");
+		}
 		String typed = normalize(candidate.username()) + " " + normalize(candidate.name());
 
 		if (namePatterns.stream().anyMatch(typed::contains)) {
@@ -126,13 +132,14 @@ public class SuspiciousUserService {
 			risk += (int) Math.min(45, candidate.reportCount() * 15);
 			signals.add("DENUNCIAS_CONTRA");
 		}
-		return new Scored(candidate, risk, List.copyOf(signals));
+		return new Scored(candidate, risk, List.copyOf(signals), staff);
 	}
 
-	private SuspiciousUserView view(SuspiciousUserReader.Candidate candidate, int risk, List<String> signals) {
+	private SuspiciousUserView view(SuspiciousUserReader.Candidate candidate, int risk, List<String> signals,
+			boolean staff) {
 		return new SuspiciousUserView(candidate.username(), candidate.name(), candidate.createdAt(),
 			candidate.emailVerifiedAt() != null, candidate.postCount(), candidate.commentCount(),
-			candidate.reportCount(), risk, signals);
+			candidate.reportCount(), risk, signals, staff);
 	}
 
 	private static String normalize(String value) {
@@ -143,13 +150,15 @@ public class SuspiciousUserService {
 		return value == null || value.isBlank();
 	}
 
-	private record Scored(SuspiciousUserReader.Candidate candidate, int risk, List<String> signals) {
+	private record Scored(SuspiciousUserReader.Candidate candidate, int risk, List<String> signals,
+			boolean staff) {
 	}
 
 	public record SuspiciousUsersView(List<SuspiciousUserView> items, int total, Instant since, int days) {
 	}
 
 	public record SuspiciousUserView(String username, String name, Instant createdAt, boolean emailVerified,
-			long posts, long comments, long reportsAgainst, int riskScore, List<String> signals) {
+			long posts, long comments, long reportsAgainst, int riskScore, List<String> signals,
+			boolean staff) {
 	}
 }
