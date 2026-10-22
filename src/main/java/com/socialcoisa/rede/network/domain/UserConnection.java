@@ -36,6 +36,15 @@ public class UserConnection {
 		return new UserConnection(id, requesterUserId, receiverUserId, ConnectionStatus.ACCEPTED, createdAt, now, null);
 	}
 
+	/**
+	 * Reabre a MESMA linha como uma solicitação nova (inclusive na direção inversa). Criar outra
+	 * linha com o mesmo par colidia com uk_user_connection_pair e devolvia 409 — era o que impedia
+	 * reconectar depois de remover/recusar ou bloquear.
+	 */
+	public UserConnection reopen(String requesterUserId, String receiverUserId, Instant now) {
+		return new UserConnection(id, requesterUserId, receiverUserId, ConnectionStatus.PENDING, now, null, null);
+	}
+
 	public UserConnection remove(Instant now) {
 		return new UserConnection(id, requesterUserId, receiverUserId, ConnectionStatus.REMOVED, createdAt, acceptedAt,
 			now);

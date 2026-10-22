@@ -1,6 +1,8 @@
 package com.socialcoisa.rede.preferences.application;
 
 import java.time.Clock;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -40,14 +42,14 @@ public class PersonalizationService {
 	}
 
 	public record Personalization(List<String> likedTopics, List<String> blockedTopics,
-			List<String> disabledModules, boolean nightRestReminder) {
+			List<String> disabledModules, boolean nightRestReminder, LocalDate nightRestDismissedOn) {
 	}
 
 	public Personalization of(String userId) {
 		return repository.find(userId)
 			.map(p -> new Personalization(parse(p.likedTopics()), parse(p.blockedTopics()),
-				parse(p.disabledModules()), p.nightRestReminder()))
-			.orElseGet(() -> new Personalization(List.of(), List.of(), List.of(), true));
+				parse(p.disabledModules()), p.nightRestReminder(), p.nightRestDismissedOn()))
+			.orElseGet(() -> new Personalization(List.of(), List.of(), List.of(), true, null));
 	}
 
 	/**
@@ -73,7 +75,33 @@ public class PersonalizationService {
 		boolean reminder = nightRestReminder != null ? nightRestReminder
 			: (existing == null || existing.nightRestReminder());
 		repository.save(new UserPreference(userId,
-			existing == null ? null : existing.themeId(), liked, blocked, modules, reminder, clock.instant()));
+			existing == null ? null : existing.themeId(), liked, blocked, modules, reminder,
+			existing == null ? null : existing.nightRestDismissedOn(), clock.instant()));
+		return of(userId);
+	}
+
+	/**
+	 * Marca o lembrete da madrugada como visto NESTA noite. A data vem do relógio do aparelho
+	 * (é ele que define a janela 00:00–04:59); comparar a data no cliente faz o popup voltar
+	 * sozinho na meia-noite seguinte, sem job de reset. Formato inválido é recusado; data no
+	 * futuro não é problema — só afeta a própria pessoa.
+	 */
+	public Personalization dismissNightRest(String userId, String night) {
+		LocalDate date;
+		try {
+			date = LocalDate.parse(night == null ? "" : night.trim());
+		}
+		catch (DateTimeParseException invalid) {
+			throw new ApiException(400, "INVALID_NIGHT",
+				"Informe a noite no formato AAAA-MM-DD (relógio do aparelho).");
+		}
+		UserPreference existing = repository.find(userId).orElse(null);
+		repository.save(new UserPreference(userId,
+			existing == null ? null : existing.themeId(),
+			existing == null ? null : existing.likedTopics(),
+			existing == null ? null : existing.blockedTopics(),
+			existing == null ? null : existing.disabledModules(),
+			existing == null || existing.nightRestReminder(), date, clock.instant()));
 		return of(userId);
 	}
 

@@ -1,5 +1,6 @@
 package com.socialcoisa.rede.preferences.adapters.in.web;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import org.springframework.web.bind.annotation.GetMapping;
@@ -33,7 +34,10 @@ class PersonalizationController {
 	}
 
 	record PersonalizationResponse(List<String> likedTopics, List<String> blockedTopics,
-			List<String> disabledModules, boolean nightRestReminder) {
+			List<String> disabledModules, boolean nightRestReminder, LocalDate nightRestDismissedOn) {
+	}
+
+	record DismissNightRestRequest(String night) {
 	}
 
 	record UpdateRequest(List<String> likedTopics, List<String> blockedTopics, List<String> disabledModules,
@@ -45,8 +49,7 @@ class PersonalizationController {
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		var personalization = service.of(user.id().value());
-		return new PersonalizationResponse(personalization.likedTopics(), personalization.blockedTopics(),
-			personalization.disabledModules(), personalization.nightRestReminder());
+		return view(personalization);
 	}
 
 	@PutMapping("/me/preferences")
@@ -59,7 +62,26 @@ class PersonalizationController {
 			request == null ? null : request.blockedTopics(),
 			request == null ? null : request.disabledModules(),
 			request == null ? null : request.nightRestReminder());
-		return new PersonalizationResponse(updated.likedTopics(), updated.blockedTopics(),
-			updated.disabledModules(), updated.nightRestReminder());
+		return view(updated);
+	}
+
+	/**
+	 * Fecha o lembrete da madrugada para a noite informada (data local do aparelho). Persistir
+	 * no banco é o que impede o popup de voltar a cada reload; a data diferente na madrugada
+	 * seguinte libera o lembrete de novo às 00:00.
+	 */
+	@org.springframework.web.bind.annotation.PostMapping("/me/preferences/night-rest/dismissed")
+	PersonalizationResponse dismissNightRest(
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestBody DismissNightRestRequest request) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		return view(service.dismissNightRest(user.id().value(), request == null ? null : request.night()));
+	}
+
+	private PersonalizationResponse view(PersonalizationService.Personalization personalization) {
+		return new PersonalizationResponse(personalization.likedTopics(), personalization.blockedTopics(),
+			personalization.disabledModules(), personalization.nightRestReminder(),
+			personalization.nightRestDismissedOn());
 	}
 }

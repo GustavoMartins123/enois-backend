@@ -100,6 +100,59 @@ class NetworkContractControllerTests {
 	}
 
 	@Test
+	void removedOrBlockedConnectionCanBeRequestedAgainAfterUnblocking() throws Exception {
+		var a = auth.authenticate("net_reconnect_a_" + System.nanoTime());
+		var b = auth.authenticate("net_reconnect_b_" + System.nanoTime());
+
+		// Conecta e aceita.
+		mockMvc.perform(post("/network/connections/{target}", b.userId())
+				.header("X-Session-Token", a.token())
+				.header("Idempotency-Key", "net-rc-connect"))
+			.andExpect(status().isAccepted());
+		mockMvc.perform(put("/network/connections/{target}/accept", a.userId())
+				.header("X-Session-Token", b.token())
+				.header("Idempotency-Key", "net-rc-accept"))
+			.andExpect(status().isOk());
+
+		// Remover (o "recusar" usa o mesmo endpoint) não impede a nova solicitação.
+		mockMvc.perform(delete("/network/connections/{target}", b.userId())
+				.header("X-Session-Token", a.token())
+				.header("Idempotency-Key", "net-rc-remove"))
+			.andExpect(status().isOk());
+		mockMvc.perform(post("/network/connections/{target}", b.userId())
+				.header("X-Session-Token", a.token())
+				.header("Idempotency-Key", "net-rc-again"))
+			.andExpect(status().isAccepted())
+			.andExpect(jsonPath("$.status").value("REQUESTED"));
+
+		// Aceita, bloqueia e confirma o 403 enquanto o bloqueio existir.
+		mockMvc.perform(put("/network/connections/{target}/accept", a.userId())
+				.header("X-Session-Token", b.token())
+				.header("Idempotency-Key", "net-rc-accept-2"))
+			.andExpect(status().isOk());
+		mockMvc.perform(post("/network/blocks/{target}", b.userId())
+				.header("X-Session-Token", a.token())
+				.header("Idempotency-Key", "net-rc-block"))
+			.andExpect(status().isCreated());
+		mockMvc.perform(post("/network/connections/{target}", a.userId())
+				.header("X-Session-Token", b.token())
+				.header("Idempotency-Key", "net-rc-blocked"))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("BLOCKED"));
+
+		// Depois de desbloquear, a conexão volta a ser possível.
+		mockMvc.perform(delete("/network/blocks/{target}", b.userId())
+				.header("X-Session-Token", a.token())
+				.header("Idempotency-Key", "net-rc-unblock"))
+			.andExpect(status().isOk());
+		mockMvc.perform(post("/network/connections/{target}", a.userId())
+				.header("X-Session-Token", b.token())
+				.header("Idempotency-Key", "net-rc-unblocked"))
+			.andExpect(status().isAccepted())
+			.andExpect(jsonPath("$.status").value("REQUESTED"));
+	}
+
+	@Test
 	void replaysIdempotentConnectionRequest() throws Exception {
 		var targetSession = auth.authenticate("net_idem_target_" + System.nanoTime());
 		var session = auth.authenticate("net_idem_user");
