@@ -16,6 +16,7 @@ import com.socialcoisa.rede.games.application.GamePageView;
 import com.socialcoisa.rede.games.application.GameSearchCriteria;
 import com.socialcoisa.rede.games.application.GameService;
 import com.socialcoisa.rede.games.application.GameView;
+import com.socialcoisa.rede.games.application.TrendingGameView;
 import com.socialcoisa.rede.games.domain.Game;
 import com.socialcoisa.rede.shared.web.AdminGuard;
 import com.socialcoisa.rede.shared.web.CurrentUser;
@@ -71,6 +72,23 @@ class GameController {
 		String viewerId = viewerIdOrNull(userId, sessionToken);
 		return new GamePageView(page.items().stream().map(game -> view(game, viewerId)).toList(),
 			page.nextCursor());
+	}
+
+	/**
+	 * "Jogados hoje": as últimas 24 horas, do mais jogado para o menos.
+	 *
+	 * Público e sem sessão — o card abre no feed de quem acabou de chegar. O endereço literal vem
+	 * antes de `/games/{username}` na resolução do Spring, igual a `/games/colecoes`.
+	 */
+	@GetMapping("/games/hoje")
+	List<TrendingGameView> trendingToday(@RequestParam(required = false, defaultValue = "6") int limit) {
+		var ranked = catalog.trendingToday(limit);
+		Map<String, String> names = new java.util.HashMap<>();
+		profiles.findAllByIds(ranked.stream().map(item -> item.game().userId()).distinct().toList())
+			.forEach(p -> names.put(p.id(), p.username()));
+		return ranked.stream()
+			.map(item -> TrendingGameView.of(item, names.get(item.game().userId())))
+			.toList();
 	}
 
 	@GetMapping("/games/{username}")
