@@ -33,6 +33,7 @@ class EventSanitizationWindowTests {
 		var sanctions = mock(com.socialcoisa.rede.shared.sanctions.SanctionGateReader.class);
 		org.mockito.Mockito.when(sanctions.banned(org.mockito.ArgumentMatchers.anyString())).thenReturn(false);
 		return new EventService(mock(EventRepository.class), sanctions,
+			new com.socialcoisa.rede.shared.security.SuspiciousText("probe"),
 			Clock.fixed(Instant.parse(instant), ZoneOffset.UTC));
 	}
 
