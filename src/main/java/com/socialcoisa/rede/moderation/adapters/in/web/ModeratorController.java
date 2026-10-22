@@ -45,6 +45,7 @@ class ModeratorController {
 	private final SuspiciousUserService suspiciousUsers;
 	private final BulkBanService bulkBans;
 	private final com.socialcoisa.rede.moderation.application.IpBlockService ipBlocks;
+	private final com.socialcoisa.rede.moderation.application.port.out.RiskAssessmentReader riskAssessments;
 	private final GameService games;
 	private final ServiceOfferService serviceOffers;
 	private final UserProfileRepository profiles;
@@ -54,6 +55,7 @@ class ModeratorController {
 	ModeratorController(ModeratorService moderators, SanctionProposalService sanctionProposals,
 			SuspiciousUserService suspiciousUsers, BulkBanService bulkBans,
 			com.socialcoisa.rede.moderation.application.IpBlockService ipBlocks,
+			com.socialcoisa.rede.moderation.application.port.out.RiskAssessmentReader riskAssessments,
 			GameService games, ServiceOfferService serviceOffers, UserProfileRepository profiles,
 			CurrentUserResolver currentUserResolver, AdminGuard adminGuard) {
 		this.moderators = moderators;
@@ -61,6 +63,7 @@ class ModeratorController {
 		this.suspiciousUsers = suspiciousUsers;
 		this.bulkBans = bulkBans;
 		this.ipBlocks = ipBlocks;
+		this.riskAssessments = riskAssessments;
 		this.games = games;
 		this.serviceOffers = serviceOffers;
 		this.profiles = profiles;
@@ -212,6 +215,23 @@ class ModeratorController {
 		return java.util.Map.of(
 			"state", minor ? "MINOR_DECLARED" : "ADULT_DECLARED",
 			"ageBand", minor ? (age <= 13 ? "ATE_13" : "14_17") : "ADULTO");
+	}
+
+	/**
+	 * O histórico de risco da conta: o que o motor de risco combinou, com nível, sinais e versão da
+	 * regra. É o que responde "por que esta pessoa foi sinalizada?" — a decisão do motor fica
+	 * reconstruível, sem depender de memória de ninguém.
+	 */
+	@GetMapping("/admin/users/{username}/risco")
+	List<com.socialcoisa.rede.shared.risk.RiskAssessment> riskHistory(
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String username,
+			@RequestParam(defaultValue = "20") int limit) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		adminGuard.requireAdmin(user);
+		var profile = profiles.findByUsername(username.trim())
+			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuário não encontrado."));
+		return riskAssessments.recentFor(profile.id(), Math.min(100, Math.max(1, limit)));
 	}
 
 	/** IPs recentes de onde o usuário entrou — fonte para o bloqueio de IP. */

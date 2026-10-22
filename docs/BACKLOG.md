@@ -209,6 +209,15 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   container MariaDB aplicando as migrações (o do front, o `ci.yml`, já roda lint, typecheck e
   vitest).
 ## Higiene do backend (entregue 2026-10-21)
+- **[x] ENTREGUE 2026-10-22 — O histórico de risco ficou legível para a moderação.** O motor
+  grava cada avaliação (nível, sinais, versão da regra) para a decisão poder ser reconstruída, mas
+  o histórico só existia na tabela: ninguém consultava. Agora o admin tem
+  `GET /admin/users/{username}/risco` (o histórico da conta, do mais novo para o mais antigo, com
+  nível, sinais e versão da regra) — é o que responde "por que esta pessoa foi sinalizada?". O
+  mesmo formato do `/age` e do `/ips` do painel: sessão + `AdminGuard`.
+  *Testes:* `RiskHistoryEndpointTests` (2) — o admin vê o histórico com nível e sinais, e quem não
+  é admin não enxerga. *(A tela do painel para exibir isso ainda não foi feita — o endpoint é o
+  passo que a destrava.)*
 - **[x] ENTREGUE 2026-10-22 — O motor de risco passou a ENTREGAR a ocorrência à moderação (não
   só registrar).** O passo 1 do motor (nível + registro) existia, mas ninguém ficava sabendo: a
   avaliação ia para a tabela e morria ali. Agora, nível **MEDIUM ou acima**, o motor entrega a
