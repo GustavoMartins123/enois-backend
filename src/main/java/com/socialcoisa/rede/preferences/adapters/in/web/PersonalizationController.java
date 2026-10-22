@@ -34,14 +34,15 @@ class PersonalizationController {
 	}
 
 	record PersonalizationResponse(List<String> likedTopics, List<String> blockedTopics,
-			List<String> disabledModules, boolean nightRestReminder, LocalDate nightRestDismissedOn) {
+			List<String> disabledModules, boolean nightRestReminder, LocalDate nightRestDismissedOn,
+			boolean liteMode) {
 	}
 
 	record DismissNightRestRequest(String night) {
 	}
 
 	record UpdateRequest(List<String> likedTopics, List<String> blockedTopics, List<String> disabledModules,
-			Boolean nightRestReminder) {
+			Boolean nightRestReminder, Boolean liteMode) {
 	}
 
 	@GetMapping("/me/preferences")
@@ -61,7 +62,8 @@ class PersonalizationController {
 			request == null ? null : request.likedTopics(),
 			request == null ? null : request.blockedTopics(),
 			request == null ? null : request.disabledModules(),
-			request == null ? null : request.nightRestReminder());
+			request == null ? null : request.nightRestReminder(),
+			request == null ? null : request.liteMode());
 		return view(updated);
 	}
 
@@ -82,6 +84,6 @@ class PersonalizationController {
 	private PersonalizationResponse view(PersonalizationService.Personalization personalization) {
 		return new PersonalizationResponse(personalization.likedTopics(), personalization.blockedTopics(),
 			personalization.disabledModules(), personalization.nightRestReminder(),
-			personalization.nightRestDismissedOn());
+			personalization.nightRestDismissedOn(), personalization.liteMode());
 	}
 }

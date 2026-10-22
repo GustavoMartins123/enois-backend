@@ -54,7 +54,7 @@ public class ThemeService {
 			}
 			repository.save(new UserPreference(userId, null, existing.likedTopics(), existing.blockedTopics(),
 				existing.disabledModules(), existing.nightRestReminder(), existing.nightRestDismissedOn(),
-				clock.instant()));
+				existing.liteMode(), clock.instant()));
 			return;
 		}
 		String normalized = themeId.trim();
@@ -66,6 +66,7 @@ public class ThemeService {
 			existing == null ? null : existing.blockedTopics(),
 			existing == null ? null : existing.disabledModules(),
 			existing == null || existing.nightRestReminder(),
-			existing == null ? null : existing.nightRestDismissedOn(), clock.instant()));
+			existing == null ? null : existing.nightRestDismissedOn(),
+			existing != null && existing.liteMode(), clock.instant()));
 	}
 }

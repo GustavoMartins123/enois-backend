@@ -42,14 +42,16 @@ public class PersonalizationService {
 	}
 
 	public record Personalization(List<String> likedTopics, List<String> blockedTopics,
-			List<String> disabledModules, boolean nightRestReminder, LocalDate nightRestDismissedOn) {
+			List<String> disabledModules, boolean nightRestReminder, LocalDate nightRestDismissedOn,
+			boolean liteMode) {
 	}
 
 	public Personalization of(String userId) {
 		return repository.find(userId)
 			.map(p -> new Personalization(parse(p.likedTopics()), parse(p.blockedTopics()),
-				parse(p.disabledModules()), p.nightRestReminder(), p.nightRestDismissedOn()))
-			.orElseGet(() -> new Personalization(List.of(), List.of(), List.of(), true, null));
+				parse(p.disabledModules()), p.nightRestReminder(), p.nightRestDismissedOn(),
+				p.liteMode()))
+			.orElseGet(() -> new Personalization(List.of(), List.of(), List.of(), true, null, false));
 	}
 
 	/**
@@ -58,7 +60,7 @@ public class PersonalizationService {
 	 * vazias = volta ao padrão. O tema da conta é preservado.
 	 */
 	public Personalization update(String userId, List<String> likedTopics, List<String> blockedTopics,
-			List<String> disabledModules, Boolean nightRestReminder) {
+			List<String> disabledModules, Boolean nightRestReminder, Boolean liteMode) {
 		UserPreference existing = repository.find(userId).orElse(null);
 		String liked = validateAndJoin(likedTopics, ContentTaxonomy.TOPIC_SET, "assunto");
 		String blocked = validateAndJoin(blockedTopics, ContentTaxonomy.TOPIC_SET, "assunto");
@@ -74,9 +76,10 @@ public class PersonalizationService {
 		}
 		boolean reminder = nightRestReminder != null ? nightRestReminder
 			: (existing == null || existing.nightRestReminder());
+		boolean lite = liteMode != null ? liteMode : (existing != null && existing.liteMode());
 		repository.save(new UserPreference(userId,
 			existing == null ? null : existing.themeId(), liked, blocked, modules, reminder,
-			existing == null ? null : existing.nightRestDismissedOn(), clock.instant()));
+			existing == null ? null : existing.nightRestDismissedOn(), lite, clock.instant()));
 		return of(userId);
 	}
 
@@ -101,7 +104,8 @@ public class PersonalizationService {
 			existing == null ? null : existing.likedTopics(),
 			existing == null ? null : existing.blockedTopics(),
 			existing == null ? null : existing.disabledModules(),
-			existing == null || existing.nightRestReminder(), date, clock.instant()));
+			existing == null || existing.nightRestReminder(), date,
+			existing != null && existing.liteMode(), clock.instant()));
 		return of(userId);
 	}
 
