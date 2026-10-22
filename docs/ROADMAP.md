@@ -6,9 +6,15 @@ Cada frente é entregue **uma por passada**, compilando, com testes verdes e pub
 dependência externa, está marcado como **BLOQUEADO** (não é código meu).
 
 ## Em aberto (sem bloqueio) — conferido no código em 2026-10-21
-1. **API `/api/v1` versionada** — NÃO existe: o back não tem alias versionado (grep por `api/v1`
-   só acha URLs de terceiros). Falta: alias dos endpoints existentes + DTOs explícitos + erros e
-   paginação padronizados.
+1. **API `/api/v1` versionada — o ALIAS entregue (2026-10-21); falta o CONGELAMENTO.** O caminho
+   fixado existe: o filtro `apiv1/V1AliasFilter.java` reescreve `/api/v1/...` para o mesmo
+   handler do caminho sem versão (`@Order(0)`, **antes** dos limitadores de taxa, para que o
+   login pelo v1 caia no mesmo limite por IP) e `GET /api/v1` responde o índice da versão
+   (`apiv1/V1ApiController.java`), montado a partir do roteador de verdade — a lista não pode
+   divergir das rotas. O envelope de erro é o mesmo (`{code, message, timestamp}`).
+   *O que ainda não é:* o v1 é o alias do v0, não uma cópia congelada — quando o v0 muda, o v1
+   muda junto. Congelar exige DTO próprio por endpoint (e uma política de depreciação do v0).
+   É decisão de produto se vale a pena manter as duas coisas; o que já está pronto é o mecanismo.
 2. **OpenAPI validado no CI** — o springdoc está plugado (`springdoc.api-docs.path=/api/openapi.json`,
    ligado por `SPRINGDOC_ENABLED`, desligado por padrão), mas a **esteira só constrói a imagem**:
    não há passo que gere e compare o OpenAPI. Falta: o passo (o workflow é do raposo).
@@ -29,6 +35,10 @@ dependência externa, está marcado como **BLOQUEADO** (não é código meu).
    O que sobra de segurança é a **esteira** (item 4), que é do raposo.
 
 ## Concluído (no ar) — cada item conferido no código em 2026-10-21
+- **API `/api/v1` (alias versionado).** `apiv1/V1AliasFilter.java` reescreve `/api/v1/...` para o
+  mesmo handler do caminho sem versão; `apiv1/V1ApiController.java` responde `GET /api/v1` com o
+  índice montado a partir do roteador de verdade. Testes:
+  `V1ApiAliasTests` (9) e `V1LoginRateLimitTests` (1, o limite por IP do login vale no v1).
 - **Vaga com valor obrigatório, período e faixa + descrição.** `JobService.java:512`
   (`SALARY_REQUIRED`), `DESCRIPTION_REQUIRED`, `INVALID_SALARY_RANGE`, `INVALID_SALARY_PERIOD`;
   `JobView.salaryLabel` ("R$ 1.500 / mês"); migração V110; front com valor mínimo obrigatório,
