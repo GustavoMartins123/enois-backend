@@ -53,7 +53,8 @@ public class NetworkService {
 			return switch (conn.status()) {
 				case PENDING, ACCEPTED -> conn;
 				case REMOVED, BLOCKED -> {
-					var renewed = UserConnection.request(requesterUserId, receiverUserId, clock.instant());
+					// Mesma linha (id existente): uma linha nova colidiria com o par único.
+					var renewed = conn.reopen(requesterUserId, receiverUserId, clock.instant());
 					connectionRepository.save(renewed);
 					notifyConnectionRequest(requesterUserId, receiverUserId);
 					yield renewed;

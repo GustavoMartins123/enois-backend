@@ -15,4 +15,10 @@ public interface SuspiciousUserReader {
 	}
 
 	List<Candidate> findRecent(Instant since, int limit);
+
+	/**
+	 * Contas cujo username OU nome contém um dos padrões (ex.: "probe"), dentro da janela.
+	 * Caminho independente do score: usado pela contenção direta do padrão de ataque.
+	 */
+	List<Candidate> findMatching(List<String> patterns, Instant since, int limit);
 }

@@ -31,6 +31,9 @@ class MessageJpaEntity {
 	@Column(name = "media_ids", length = 1000)
 	private String mediaIds;
 
+	@Column(name = "media_spoiler", nullable = false)
+	private boolean mediaSpoiler;
+
 	@Column(name = "created_at", nullable = false)
 	private Instant createdAt;
 
@@ -44,6 +47,7 @@ class MessageJpaEntity {
 		e.senderId = message.senderId();
 		e.text = message.text();
 		e.mediaIds = message.mediaIds().isEmpty() ? null : String.join(",", message.mediaIds());
+		e.mediaSpoiler = message.mediaSpoiler();
 		e.createdAt = message.createdAt();
 		return e;
 	}
@@ -52,7 +56,7 @@ class MessageJpaEntity {
 		List<String> media = mediaIds == null || mediaIds.isBlank()
 			? List.of()
 			: Arrays.stream(mediaIds.split(",")).map(String::trim).filter(v -> !v.isEmpty()).toList();
-		return Message.restore(id, conversationId, senderId, text, media, createdAt);
+		return Message.restore(id, conversationId, senderId, text, media, mediaSpoiler, createdAt);
 	}
 
 }

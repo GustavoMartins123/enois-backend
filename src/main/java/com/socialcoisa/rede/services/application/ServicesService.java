@@ -32,16 +32,18 @@ public class ServicesService {
 	private final CoinService coins;
 	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles;
 	private final com.socialcoisa.rede.messaging.application.MessagingService messaging;
+	private final com.socialcoisa.rede.shared.security.SuspiciousText suspiciousText;
 	private final Clock clock;
 
 	public ServicesService(ServiceRepository services, CoinService coins,
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles,
-			com.socialcoisa.rede.messaging.application.MessagingService messaging, Clock clock) {
+			com.socialcoisa.rede.messaging.application.MessagingService messaging,
+			com.socialcoisa.rede.shared.security.SuspiciousText suspiciousText, Clock clock) {
 		this.services = services;
 		this.coins = coins;
 		this.profiles = profiles;
 		this.messaging = messaging;
-		this.clock = clock;
+		this.suspiciousText = suspiciousText;		this.clock = clock;
 	}
 
 	/**
@@ -225,6 +227,8 @@ public class ServicesService {
 
 	public List<ServiceListing> listingCatalog(int limit, String query, String category) {
 		return services.findActiveListings(Math.min(200, Math.max(1, limit) * 4)).stream()
+			// Conteúdo com o padrão do ataque não aparece no catálogo público.
+			.filter(l -> !suspiciousText.matches(l.title(), l.description(), l.deliverables()))
 			.filter(l -> matches(query, l.title(), l.description(), l.deliverables()))
 			.filter(l -> matchesCategory(category, l.category()))
 			.limit(Math.min(60, Math.max(1, limit))).toList();
@@ -236,6 +240,7 @@ public class ServicesService {
 
 	public List<ServiceRequest> requestCatalog(int limit, String query, String category) {
 		return services.findOpenRequests(Math.min(200, Math.max(1, limit) * 4)).stream()
+			.filter(r -> !suspiciousText.matches(r.title(), r.description(), r.deliverables()))
 			.filter(r -> matches(query, r.title(), r.description(), r.deliverables()))
 			.filter(r -> matchesCategory(category, r.category()))
 			.limit(Math.min(60, Math.max(1, limit))).toList();

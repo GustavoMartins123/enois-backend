@@ -25,7 +25,7 @@ class MissingSessionHeaderTests {
 
 	@Test
 	void protectedRouteWithoutSessionHeaderRespondsUnauthorized() throws Exception {
-		mockMvc.perform(get("/admin/users/suspicious"))
+		mockMvc.perform(get("/admin/reports"))
 			.andExpect(status().isUnauthorized())
 			.andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
 
@@ -34,7 +34,7 @@ class MissingSessionHeaderTests {
 			.andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
 
 		// Token inválido também é barrado pelo interceptor de /admin antes do controller.
-		mockMvc.perform(get("/admin/users/suspicious").header("X-Session-Token", "invalido"))
+		mockMvc.perform(get("/admin/reports").header("X-Session-Token", "invalido"))
 			.andExpect(status().isUnauthorized())
 			.andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
 	}

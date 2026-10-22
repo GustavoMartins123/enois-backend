@@ -45,12 +45,117 @@ class BulkBanAndSuspiciousTests {
 	}
 
 	@Test
+	void approvedModeratorCanSeeTheQueueAndBanInBulk() throws Exception {
+		var admin = new TestAuthHelper(mockMvc, objectMapper).authenticate("bb_admin");
+		var moderator = new TestAuthHelper(mockMvc, objectMapper).authenticate("bb_moderator");
+		new TestAuthHelper(mockMvc, objectMapper).authenticate("probe_mod_target");
+
+		mockMvc.perform(post("/admin/moderators")
+				.header("X-Session-Token", admin.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of(
+					"username", "bb-moderator", "note", "Nomeado para o teste de banimento em lote."))))
+			.andExpect(status().isOk());
+
+		try {
+			mockMvc.perform(get("/moderation/users/suspicious")
+					.header("X-Session-Token", moderator.token())
+					.param("days", "1")
+					.param("limit", "200"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.items[?(@.username == 'probe-mod-target')]").exists());
+
+			mockMvc.perform(post("/moderation/users/bulk-ban")
+					.header("X-Session-Token", moderator.token())
+					.contentType(MediaType.APPLICATION_JSON)
+					.content(objectMapper.writeValueAsString(Map.of(
+						"usernames", List.of("probe-mod-target"),
+						"type", "BAN",
+						"reason", "Cadastro em série identificado na triagem de contas."))))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.banned").value(1));
+
+			mockMvc.perform(post("/auth/login")
+					.header("Idempotency-Key", "bulk-login-mod-target")
+					.contentType(MediaType.APPLICATION_JSON)
+					.content(objectMapper.writeValueAsString(Map.of(
+						"email", "probe_mod_target@test.com", "password", "Test1234!"))))
+				.andExpect(status().isForbidden())
+				.andExpect(jsonPath("$.code").value("ACCOUNT_BANNED"));
+		}
+		finally {
+			// A suíte compartilha o mesmo banco: a nomeação não pode vazar para outros testes.
+			mockMvc.perform(post("/admin/moderators/" + moderator.userId() + "/revoke")
+					.header("X-Session-Token", admin.token())
+					.contentType(MediaType.APPLICATION_JSON)
+					.content(objectMapper.writeValueAsString(Map.of("note", "Reset do cenário de teste."))))
+				.andExpect(status().isOk());
+		}
+	}
+
+	@Test
+	void approvedModeratorCanSeeAndRemoveSuspiciousPostsInBulk() throws Exception {
+		var admin = new TestAuthHelper(mockMvc, objectMapper).authenticate("bb_admin");
+		var moderator = new TestAuthHelper(mockMvc, objectMapper).authenticate("bb_moderator");
+		var author = new TestAuthHelper(mockMvc, objectMapper).authenticate("probe_posts_author");
+
+		mockMvc.perform(post("/admin/moderators")
+				.header("X-Session-Token", admin.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of(
+					"username", "bb-moderator", "note", "Nomeado para o teste de posts suspeitos."))))
+			.andExpect(status().isOk());
+
+		try {
+			// A fila de posts suspeitos é do time de moderação (não só do admin).
+			mockMvc.perform(get("/moderation/posts/suspicious")
+					.header("X-Session-Token", moderator.token()))
+				.andExpect(status().isOk());
+
+			// Usuário comum não entra.
+			mockMvc.perform(get("/moderation/posts/suspicious")
+					.header("X-Session-Token", author.token()))
+				.andExpect(status().isForbidden());
+
+			MvcResult published = mockMvc.perform(post("/feed/posts")
+					.header("X-Session-Token", author.token())
+					.header("Idempotency-Key", "bulk-posts-pub-1")
+					.contentType(MediaType.APPLICATION_JSON)
+					.content(objectMapper.writeValueAsString(Map.of(
+						"type", "INSIGHT", "content", "Post que será removido em lote.", "tags", List.of(),
+						"mediaIds", List.of()))))
+				.andExpect(status().isCreated())
+				.andReturn();
+			String postId = objectMapper.readTree(published.getResponse().getContentAsString())
+				.get("id").asText();
+
+			mockMvc.perform(post("/moderation/posts/bulk-delete")
+					.header("X-Session-Token", moderator.token())
+					.contentType(MediaType.APPLICATION_JSON)
+					.content(objectMapper.writeValueAsString(Map.of(
+						"postIds", List.of(postId),
+						"reason", "Conteúdo removido na limpeza em lote do painel."))))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.items[0].status").value("DELETED"));
+
+			mockMvc.perform(get("/feed/posts/" + postId)).andExpect(status().isNotFound());
+		}
+		finally {
+			mockMvc.perform(post("/admin/moderators/" + moderator.userId() + "/revoke")
+					.header("X-Session-Token", admin.token())
+					.contentType(MediaType.APPLICATION_JSON)
+					.content(objectMapper.writeValueAsString(Map.of("note", "Reset do cenário de teste."))))
+				.andExpect(status().isOk());
+		}
+	}
+
+	@Test
 	void bulkBanReportsEachUserAndSuspiciousListFlagsProbeNames() throws Exception {
 		var admin = new TestAuthHelper(mockMvc, objectMapper).authenticate("bb_admin");
 		var first = new TestAuthHelper(mockMvc, objectMapper).authenticate("probe_bulk_a");
 		var second = new TestAuthHelper(mockMvc, objectMapper).authenticate("probe_bulk_b");
 
-		MvcResult suspicious = mockMvc.perform(get("/admin/users/suspicious")
+		MvcResult suspicious = mockMvc.perform(get("/moderation/users/suspicious")
 				.header("X-Session-Token", admin.token())
 				.param("days", "1")
 				.param("limit", "200"))
@@ -60,11 +165,11 @@ class BulkBanAndSuspiciousTests {
 		assertThat(list.get("items").toString()).contains("probe-bulk-a", "probe-bulk-b");
 		assertThat(list.get("items").toString()).contains("NOME_SUSPEITO");
 
-		// Lista é só de admin.
-		mockMvc.perform(get("/admin/users/suspicious").header("X-Session-Token", first.token()))
+		// Lista é do time de moderação (admin incluído).
+		mockMvc.perform(get("/moderation/users/suspicious").header("X-Session-Token", first.token()))
 			.andExpect(status().isForbidden());
 
-		MvcResult banned = mockMvc.perform(post("/admin/users/bulk-ban")
+		MvcResult banned = mockMvc.perform(post("/moderation/users/bulk-ban")
 				.header("X-Session-Token", admin.token())
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(objectMapper.writeValueAsString(Map.of(
@@ -91,7 +196,7 @@ class BulkBanAndSuspiciousTests {
 			.andExpect(jsonPath("$.code").value("ACCOUNT_BANNED"));
 
 		// Repetir o lote é idempotente: não cria uma segunda sanção ativa.
-		mockMvc.perform(post("/admin/users/bulk-ban")
+		mockMvc.perform(post("/moderation/users/bulk-ban")
 				.header("X-Session-Token", admin.token())
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(objectMapper.writeValueAsString(Map.of(

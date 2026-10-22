@@ -190,7 +190,8 @@ public class PublishPostService implements PublishPostUseCase {
 			duplicationGuard.require(command.authorId().value(), command.content());
 		}
 		Post post = Post.publish(idGenerator.newPostId(), command.authorId(), command.type(), textOf(command),
-			pageHtml(command), tags, mediaIds, communityId, topic, channelId, clock.instant(), authorIdentity);
+			pageHtml(command), tags, mediaIds, communityId, topic, channelId, clock.instant(), authorIdentity,
+			command.mediaSpoiler());
 		Post saved = postRepository.save(post);
 		String articleBody = articleBody(command);
 		if (articleBody != null) {

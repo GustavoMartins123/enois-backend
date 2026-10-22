@@ -16,6 +16,7 @@ import com.socialcoisa.rede.games.domain.Game;
 import com.socialcoisa.rede.moderation.application.BulkBanService;
 import com.socialcoisa.rede.moderation.application.ModeratorService;
 import com.socialcoisa.rede.moderation.application.SanctionProposalService;
+import com.socialcoisa.rede.moderation.application.SuspiciousAutoBanWorker;
 import com.socialcoisa.rede.moderation.application.SuspiciousUserService;
 import com.socialcoisa.rede.moderation.domain.ModerationVoteType;
 import com.socialcoisa.rede.moderation.domain.ModeratorApplicationStatus;
@@ -44,6 +45,7 @@ class ModeratorController {
 	private final SanctionProposalService sanctionProposals;
 	private final SuspiciousUserService suspiciousUsers;
 	private final BulkBanService bulkBans;
+	private final SuspiciousAutoBanWorker autoBan;
 	private final com.socialcoisa.rede.moderation.application.IpBlockService ipBlocks;
 	private final com.socialcoisa.rede.moderation.application.port.out.RiskAssessmentReader riskAssessments;
 	private final GameService games;
@@ -53,7 +55,7 @@ class ModeratorController {
 	private final AdminGuard adminGuard;
 
 	ModeratorController(ModeratorService moderators, SanctionProposalService sanctionProposals,
-			SuspiciousUserService suspiciousUsers, BulkBanService bulkBans,
+			SuspiciousUserService suspiciousUsers, BulkBanService bulkBans, SuspiciousAutoBanWorker autoBan,
 			com.socialcoisa.rede.moderation.application.IpBlockService ipBlocks,
 			com.socialcoisa.rede.moderation.application.port.out.RiskAssessmentReader riskAssessments,
 			GameService games, ServiceOfferService serviceOffers, UserProfileRepository profiles,
@@ -62,6 +64,7 @@ class ModeratorController {
 		this.sanctionProposals = sanctionProposals;
 		this.suspiciousUsers = suspiciousUsers;
 		this.bulkBans = bulkBans;
+		this.autoBan = autoBan;
 		this.ipBlocks = ipBlocks;
 		this.riskAssessments = riskAssessments;
 		this.games = games;
@@ -280,27 +283,41 @@ class ModeratorController {
 	/**
 	 * Contas recentes ranqueadas por sinais objetivos (nome em série, e-mail não confirmado,
 	 * perfil vazio, denúncias contra). Não bane ninguém: é a fila de validação humana.
+	 *
+	 * Fica em /moderation (e não em /admin) porque a limpeza de contas em série é trabalho do
+	 * time de moderação — qualquer moderador aprovado vê a fila e pode agir (decisão da dona,
+	 * 2026-10-22).
 	 */
-	@GetMapping("/admin/users/suspicious")
+	@GetMapping("/moderation/users/suspicious")
 	SuspiciousUserService.SuspiciousUsersView suspicious(
 			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken,
 			@RequestParam(defaultValue = "100") int limit,
 			@RequestParam(defaultValue = "30") int days) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		adminGuard.requireAdmin(user);
+		requireModerator(user);
 		return suspiciousUsers.list(limit, days);
 	}
 
 	/** Banimento em lote: cada conta passa pelo fluxo normal de sanção, com resultado por item. */
-	@PostMapping("/admin/users/bulk-ban")
+	@PostMapping("/moderation/users/bulk-ban")
 	BulkBanService.BulkBanResult bulkBan(
 			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken,
 			@RequestBody BulkBanRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		adminGuard.requireAdmin(user);
+		requireModerator(user);
 		return bulkBans.ban(user.id().value(), request.usernames(), request.type(), request.reason());
+	}
+
+	/** Última rodada da automação (o "não sabemos o que aconteceu" do incidente). */
+	@GetMapping("/admin/automod/status")
+	SuspiciousAutoBanWorker.Status automodStatus(
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader("X-Session-Token") String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		adminGuard.requireAdmin(user);
+		return autoBan.status();
 	}
 
 	@GetMapping("/moderation/sanction-proposals")

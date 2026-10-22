@@ -14,8 +14,9 @@ public record OwnProfileView(String id, String username, String name, String hea
 		List<String> skills,
 		List<String> goals,
 		String availability, String portfolio, List<String> externalLinks, boolean openToWork, boolean isMentor,
-		int connectionsCount, int followersCount, int reputation, String nickname, String socialName,
-		String pronouns, List<String> badges, String aka, String resumeUrl, String resumeName, boolean showRanking) {
+		int connectionsCount, int followersCount, int reputation, Integer postsCount, String nickname, String socialName,
+		String pronouns, List<String> badges, String aka, String resumeUrl, String resumeName, boolean showRanking,
+		String nameTheme, String nameFont, String nameColor) {
 
 	public static OwnProfileView from(UserProfile profile) {
 		return new OwnProfileView(profile.id(), profile.username(), profile.name(), profile.headline(), profile.email(),
@@ -24,8 +25,9 @@ public record OwnProfileView(String id, String username, String name, String hea
 			profile.skills(),
 			profile.goals(), profile.availability(), profile.portfolio(), profile.externalLinks(), profile.openToWork(),
 			profile.mentor(), profile.connectionsCount(), profile.followersCount(), profile.reputation(),
-			profile.nickname(), profile.socialName(), profile.pronouns(), profile.badges(), profile.aka(),
-			profile.resumeUrl(), profile.resumeName(), profile.showRanking());
+			profile.postsCount(), profile.nickname(), profile.socialName(), profile.pronouns(), profile.badges(),
+			profile.aka(), profile.resumeUrl(), profile.resumeName(), profile.showRanking(), profile.nameTheme(),
+			profile.nameFont(), profile.nameColor());
 
 	}
 
@@ -38,15 +40,15 @@ public record OwnProfileView(String id, String username, String name, String hea
 	public OwnProfileView withBioHtml(String bioHtml) {
 		return new OwnProfileView(id, username, name, headline, email, company, location, avatar, banner, badge, bio,
 			bioHtml, bannerHtml, skills, goals, availability, portfolio, externalLinks, openToWork, isMentor,
-			connectionsCount, followersCount, reputation, nickname, socialName, pronouns, badges, aka, resumeUrl,
-			resumeName, showRanking);
+			connectionsCount, followersCount, reputation, postsCount, nickname, socialName, pronouns, badges, aka,
+			resumeUrl, resumeName, showRanking, nameTheme, nameFont, nameColor);
 	}
 
 	/** Capa em HTML/CSS; so a leitura do perfil anexa (mesmo motivo da bio). */
 	public OwnProfileView withBannerHtml(String bannerHtml) {
 		return new OwnProfileView(id, username, name, headline, email, company, location, avatar, banner, badge, bio,
 			bioHtml, bannerHtml, skills, goals, availability, portfolio, externalLinks, openToWork, isMentor,
-			connectionsCount, followersCount, reputation, nickname, socialName, pronouns, badges, aka, resumeUrl,
-			resumeName, showRanking);
+			connectionsCount, followersCount, reputation, postsCount, nickname, socialName, pronouns, badges, aka,
+			resumeUrl, resumeName, showRanking, nameTheme, nameFont, nameColor);
 	}
 }

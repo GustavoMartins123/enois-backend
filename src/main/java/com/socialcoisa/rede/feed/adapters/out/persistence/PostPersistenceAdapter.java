@@ -16,9 +16,10 @@ import com.socialcoisa.rede.feed.domain.PostId;
 import com.socialcoisa.rede.feed.domain.PostStatus;
 import com.socialcoisa.rede.feed.domain.PostType;
 import com.socialcoisa.rede.feed.domain.UserId;
+import com.socialcoisa.rede.profile.application.port.out.SocialPostCountReader;
 
 @Repository
-class PostPersistenceAdapter implements PostRepository {
+class PostPersistenceAdapter implements PostRepository, SocialPostCountReader {
 
 	private final SpringDataPostJpaRepository repository;
 
@@ -73,6 +74,20 @@ class PostPersistenceAdapter implements PostRepository {
 	}
 
 	@Override
+	public java.util.Optional<Post> findActiveRepostByAuthorAndSource(UserId authorId, String sourcePostId) {
+		return repository.findRepostByAuthorAndSource(authorId.value(), sourcePostId,
+			com.socialcoisa.rede.feed.domain.PostStatus.ACTIVE).map(PostJpaEntity::toDomain);
+	}
+
+	@Override
+	public List<Post> findActiveRepostsBySource(String sourcePostId) {
+		return repository.findRepostsBySource(sourcePostId,
+			com.socialcoisa.rede.feed.domain.PostStatus.ACTIVE).stream()
+			.map(PostJpaEntity::toDomain)
+			.toList();
+	}
+
+	@Override
 	public List<Post> findActiveByAuthor(UserId authorId, Instant before, int limit) {
 		// Ponteiro de blog fica fora do perfil (o conteudo dele mora no blog) e o que a identidade
 		// profissional assinou fica fora do perfil SOCIAL (fica na pagina profissional).
@@ -80,6 +95,17 @@ class PostPersistenceAdapter implements PostRepository {
 			PostType.BLOG, before, PageRequest.of(0, limit)).stream()
 			.map(PostJpaEntity::toDomain)
 			.toList();
+	}
+
+	@Override
+	public int countActiveByAuthor(UserId authorId) {
+		return (int) repository.countSocialByAuthor(authorId.value(), PostStatus.ACTIVE, AuthorIdentity.SOCIAL,
+			PostType.BLOG);
+	}
+
+	@Override
+	public int countByUser(String userId) {
+		return countActiveByAuthor(new UserId(userId));
 	}
 
 	@Override

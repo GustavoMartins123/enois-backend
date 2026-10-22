@@ -68,11 +68,23 @@ class PostJpaEntity {
 	@Column(name = "media_id", nullable = false)
 	private List<String> mediaIds = new ArrayList<>();
 
+	@Column(name = "media_spoiler", nullable = false)
+	private boolean mediaSpoiler;
+
 	@Column(name = "community_id")
 	private String communityId;
 
 	@Column(name = "channel_id", length = 64)
 	private String channelId;
+
+	@Column(name = "repost_of", length = 64)
+	private String repostOf;
+
+	@Column(name = "repost_of_author", length = 80)
+	private String repostOfAuthor;
+
+	@Column(name = "repost_with_opinion", nullable = false)
+	private boolean repostWithOpinion;
 
 	@Column(name = "created_at", nullable = false)
 	private Instant createdAt;
@@ -125,8 +137,12 @@ class PostJpaEntity {
 		entity.pageHtml = post.pageHtml();
 		entity.tags = new ArrayList<>(post.tags());
 		entity.mediaIds = new ArrayList<>(post.mediaIds());
+		entity.mediaSpoiler = post.mediaSpoiler();
 		entity.communityId = post.communityId();
 		entity.channelId = post.channelId();
+		entity.repostOf = post.repostOf();
+		entity.repostOfAuthor = post.repostOfAuthor();
+		entity.repostWithOpinion = post.repostWithOpinion();
 		entity.createdAt = post.createdAt();
 		entity.visibility = post.visibility();
 		entity.reactions = post.counters().reactions();
@@ -145,6 +161,7 @@ class PostJpaEntity {
 	Post toDomain() {
 		return Post.restore(new PostId(id), new UserId(authorId), type, content, pageHtml, tags, mediaIds, communityId,
 			topic, channelId, createdAt, visibility, new Counters(reactions, comments, saves, shares), status,
-			deletedAt, editedAt, expiresAt, authorIdentity);
+			deletedAt, editedAt, expiresAt, authorIdentity, mediaSpoiler)
+			.markRepostOf(repostOf, repostOfAuthor, repostWithOpinion);
 	}
 }

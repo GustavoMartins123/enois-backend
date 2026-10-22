@@ -129,6 +129,42 @@ class PersonalizationTests {
 	}
 
 	@Test
+	void liteModeDefaultsOffAndIsPersistedAlongsideTheOtherPreferences() throws Exception {
+		var session = auth.authenticate("pers_lite");
+
+		mockMvc.perform(get("/me/preferences").header("X-Session-Token", session.token()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.liteMode").value(false));
+
+		mockMvc.perform(put("/me/preferences")
+				.header("X-Session-Token", session.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(java.util.Map.of(
+					"likedTopics", java.util.List.of("TECNOLOGIA"),
+					"liteMode", true))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.liteMode").value(true));
+
+		// Uma atualização que não fala de liteMode preserva a escolha (parcial, como o resto).
+		mockMvc.perform(put("/me/preferences")
+				.header("X-Session-Token", session.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(java.util.Map.of(
+					"blockedTopics", java.util.List.of("DESIGN")))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.liteMode").value(true));
+
+		// Trocar o tema grava a mesma linha: o modo lite não pode se perder nisso.
+		mockMvc.perform(put("/me/theme").header("X-Session-Token", session.token())
+				.contentType(MediaType.APPLICATION_JSON).content("{\"theme\":\"terminal\"}"))
+			.andExpect(status().isNoContent());
+
+		mockMvc.perform(get("/me/preferences").header("X-Session-Token", session.token()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.liteMode").value(true));
+	}
+
+	@Test
 	void themeIsPreservedWhenPersonalizationChanges() throws Exception {
 		var session = auth.authenticate("pers_theme");
 

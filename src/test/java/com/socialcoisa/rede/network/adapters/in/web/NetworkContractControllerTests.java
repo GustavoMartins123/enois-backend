@@ -65,6 +65,29 @@ class NetworkContractControllerTests {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.status").value("ACCEPTED"));
 
+		String usernameA = objectMapper.readTree(mockMvc.perform(get("/me")
+				.header("X-Session-Token", sessionA.token()))
+			.andExpect(status().isOk())
+			.andReturn().getResponse().getContentAsString()).get("username").asText();
+		String usernameB = objectMapper.readTree(mockMvc.perform(get("/me")
+				.header("X-Session-Token", sessionB.token()))
+			.andExpect(status().isOk())
+			.andReturn().getResponse().getContentAsString()).get("username").asText();
+
+		mockMvc.perform(get("/users/{username}/connections", usernameA))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$[0].id").value(sessionB.userId()))
+			.andExpect(jsonPath("$[0].username").value(usernameB));
+
+		mockMvc.perform(get("/users/{username}/followers", usernameA))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$").isEmpty());
+
+		mockMvc.perform(get("/users/{username}/followers", usernameB))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$[0].id").value(sessionA.userId()))
+			.andExpect(jsonPath("$[0].username").value(usernameA));
+
 		mockMvc.perform(get("/network/summary")
 				.header("X-Session-Token", sessionA.token()))
 			.andExpect(status().isOk())
@@ -97,6 +120,63 @@ class NetworkContractControllerTests {
 				.header("X-Session-Token", sessionA.token()))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.connections").value(0));
+
+		mockMvc.perform(get("/users/{username}/connections", usernameA))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$").isEmpty());
+	}
+
+	@Test
+	void removedOrBlockedConnectionCanBeRequestedAgainAfterUnblocking() throws Exception {
+		var a = auth.authenticate("net_reconnect_a_" + System.nanoTime());
+		var b = auth.authenticate("net_reconnect_b_" + System.nanoTime());
+
+		// Conecta e aceita.
+		mockMvc.perform(post("/network/connections/{target}", b.userId())
+				.header("X-Session-Token", a.token())
+				.header("Idempotency-Key", "net-rc-connect"))
+			.andExpect(status().isAccepted());
+		mockMvc.perform(put("/network/connections/{target}/accept", a.userId())
+				.header("X-Session-Token", b.token())
+				.header("Idempotency-Key", "net-rc-accept"))
+			.andExpect(status().isOk());
+
+		// Remover (o "recusar" usa o mesmo endpoint) não impede a nova solicitação.
+		mockMvc.perform(delete("/network/connections/{target}", b.userId())
+				.header("X-Session-Token", a.token())
+				.header("Idempotency-Key", "net-rc-remove"))
+			.andExpect(status().isOk());
+		mockMvc.perform(post("/network/connections/{target}", b.userId())
+				.header("X-Session-Token", a.token())
+				.header("Idempotency-Key", "net-rc-again"))
+			.andExpect(status().isAccepted())
+			.andExpect(jsonPath("$.status").value("REQUESTED"));
+
+		// Aceita, bloqueia e confirma o 403 enquanto o bloqueio existir.
+		mockMvc.perform(put("/network/connections/{target}/accept", a.userId())
+				.header("X-Session-Token", b.token())
+				.header("Idempotency-Key", "net-rc-accept-2"))
+			.andExpect(status().isOk());
+		mockMvc.perform(post("/network/blocks/{target}", b.userId())
+				.header("X-Session-Token", a.token())
+				.header("Idempotency-Key", "net-rc-block"))
+			.andExpect(status().isCreated());
+		mockMvc.perform(post("/network/connections/{target}", a.userId())
+				.header("X-Session-Token", b.token())
+				.header("Idempotency-Key", "net-rc-blocked"))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("BLOCKED"));
+
+		// Depois de desbloquear, a conexão volta a ser possível.
+		mockMvc.perform(delete("/network/blocks/{target}", b.userId())
+				.header("X-Session-Token", a.token())
+				.header("Idempotency-Key", "net-rc-unblock"))
+			.andExpect(status().isOk());
+		mockMvc.perform(post("/network/connections/{target}", a.userId())
+				.header("X-Session-Token", b.token())
+				.header("Idempotency-Key", "net-rc-unblocked"))
+			.andExpect(status().isAccepted())
+			.andExpect(jsonPath("$.status").value("REQUESTED"));
 	}
 
 	@Test

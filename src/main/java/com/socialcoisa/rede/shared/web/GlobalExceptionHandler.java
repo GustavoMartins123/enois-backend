@@ -28,6 +28,15 @@ public class GlobalExceptionHandler {
 
 	@ExceptionHandler(ApiException.class)
 	ResponseEntity<ErrorResponse> handleApiException(ApiException exception) {
+		// 4xx é fluxo normal (validação, permissão); 5xx é falha do servidor e precisa aparecer
+		// no CloudWatch com o código do erro, sem corpo de requisição nem dado pessoal.
+		if (exception.status() >= 500) {
+			LOGGER.error("api_error status={} code={} message={}", exception.status(), exception.code(),
+				exception.getMessage());
+		}
+		else {
+			LOGGER.debug("api_client_error status={} code={}", exception.status(), exception.code());
+		}
 		return ResponseEntity.status(exception.status())
 			.body(new ErrorResponse(exception.code(), exception.getMessage(), Instant.now()));
 	}
@@ -52,6 +61,8 @@ public class GlobalExceptionHandler {
 			HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class,
 			IllegalArgumentException.class, InvalidDataAccessApiUsageException.class })
 	ResponseEntity<ErrorResponse> handleBadRequest(Exception exception) {
+		// DEBUG de propósito: um cliente malformado não deve gerar milhares de linhas INFO.
+		LOGGER.debug("bad_request type={}", exception.getClass().getSimpleName());
 		return ResponseEntity.badRequest()
 			.body(new ErrorResponse("BAD_REQUEST", "Requisicao invalida.", Instant.now()));
 	}

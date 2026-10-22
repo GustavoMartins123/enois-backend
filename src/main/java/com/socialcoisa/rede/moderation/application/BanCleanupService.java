@@ -6,6 +6,8 @@ import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import com.socialcoisa.rede.feed.application.port.out.CommentRepository;
@@ -41,17 +43,22 @@ public class BanCleanupService {
 	private final ModerationRemovePostUseCase removePost;
 	private final BanContentArchiveRepository archive;
 	private final ConnectionRepository connectionRepository;
+	private final JdbcTemplate jdbc;
+	private final SuspiciousContentTargets sweepTargets;
 	private final Clock clock;
 
 	public BanCleanupService(PostRepository postRepository, CommentRepository commentRepository,
 			MessagingRepository messagingRepository, ModerationRemovePostUseCase removePost,
-			BanContentArchiveRepository archive, ConnectionRepository connectionRepository, Clock clock) {
+			BanContentArchiveRepository archive, ConnectionRepository connectionRepository, JdbcTemplate jdbc,
+			SuspiciousContentTargets sweepTargets, Clock clock) {
 		this.postRepository = postRepository;
 		this.commentRepository = commentRepository;
 		this.messagingRepository = messagingRepository;
 		this.removePost = removePost;
 		this.archive = archive;
 		this.connectionRepository = connectionRepository;
+		this.jdbc = jdbc;
+		this.sweepTargets = sweepTargets;
 		this.clock = clock;
 	}
 
@@ -66,8 +73,9 @@ public class BanCleanupService {
 		int comments = archiveAndRemoveComments(sanctionId, userId, now);
 		int messages = archiveMessages(sanctionId, userId, now);
 		int connections = removeConnections(userId, now);
-		LOG.info("Ban cleanup para usuario {}: {} posts, {} comentarios, {} mensagens, {} conexoes",
-			userId, posts, comments, messages, connections);
+		int modules = removeModuleContent(userId);
+		LOG.info("Ban cleanup para usuario {}: {} posts, {} comentarios, {} mensagens, {} conexoes, {} itens em modulos",
+			userId, posts, comments, messages, connections, modules);
 	}
 
 	private int archiveAndRemovePosts(String sanctionId, String userId, Instant now) {
@@ -112,6 +120,26 @@ public class BanCleanupService {
 			}
 		}
 		return messages.size();
+	}
+
+	/**
+	 * Remove o conteúdo do usuário nos demais módulos (comunidades, grupos, vagas, blogs, freelas,
+	 * empresas, mentorias, eventos, marketplace, serviços, projetos, jogos). Tabelas/colunas vêm
+	 * da mesma configuração da varredura; FK bloqueando uma linha é logada e não impede as outras.
+	 */
+	private int removeModuleContent(String userId) {
+		int removed = 0;
+		for (SuspiciousContentTargets.Target target : sweepTargets.targets()) {
+			try {
+				removed += jdbc.update("DELETE FROM " + target.table() + " WHERE " + target.authorColumn() + " = ?",
+					userId);
+			}
+			catch (DataAccessException failure) {
+				LOG.warn("Ban cleanup: falha ao remover de {} (usuario {}): {}", target.table(), userId,
+					failure.getClass().getSimpleName());
+			}
+		}
+		return removed;
 	}
 
 	private int removeConnections(String userId, Instant now) {

@@ -117,6 +117,12 @@ public class MessagingService {
 	@Transactional
 	public Message sendMessage(String conversationId, String senderId, String text,
 			java.util.List<String> mediaIds) {
+		return sendMessage(conversationId, senderId, text, mediaIds, false);
+	}
+
+	@Transactional
+	public Message sendMessage(String conversationId, String senderId, String text,
+			java.util.List<String> mediaIds, boolean mediaSpoiler) {
 		// ECA Digital: sem data de nascimento declarada, nao envia mensagem (tela de regularizacao).
 		ageGate.requireCanWrite(senderId);
 		// Sancao de moderacao: conta restrita nao manda mensagem. O canal privado e onde a
@@ -144,11 +150,12 @@ public class MessagingService {
 		// minutos devolve a linha já criada em vez de duplicar e notificar de novo.
 		var duplicate = repository.findRecentDuplicate(conversationId, senderId, corpo,
 			clock.instant().minusSeconds(10));
-		if (duplicate.isPresent() && duplicate.get().mediaIds().equals(midias)) {
+		if (duplicate.isPresent() && duplicate.get().mediaIds().equals(midias)
+				&& duplicate.get().mediaSpoiler() == mediaSpoiler) {
 			return duplicate.get();
 		}
 		String id = "message_" + UUID.randomUUID().toString().replace("-", "");
-		Message message = Message.create(id, conversationId, senderId, corpo, midias, clock.instant());
+		Message message = Message.create(id, conversationId, senderId, corpo, midias, mediaSpoiler, clock.instant());
 		repository.saveMessage(message);
 		// Ao enviar, a conversa fica lida para QUEM ENVIOU (PR #15) — antes o contador continuava
 		// aceso mesmo com a conversa aberta.
