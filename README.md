@@ -112,6 +112,10 @@ All 24 integration tests must pass.
 # Build and start (defaults to dev profile with H2)
 docker compose up --build
 
+# Ferramentas opcionais de desenvolvimento (SMTP fake + UI do Mailpit):
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+# e-mails capturados em http://localhost:8025
+
 # With hml profile and MariaDB
 docker compose --profile hml up --build
 ```

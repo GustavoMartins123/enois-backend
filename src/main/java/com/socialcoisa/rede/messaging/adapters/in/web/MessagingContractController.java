@@ -61,14 +61,16 @@ class MessagingContractController {
 		List<Conversation> conversations = messagingService.listConversations(user.id().value(), before, limit);
 		var items = conversations.stream()
 			.map(c -> {
-				List<String> pIds = messagingService.getParticipants(c.id()).stream()
+				var participants = messagingService.getParticipants(c.id());
+				List<String> pIds = participants.stream()
 					.map(ConversationParticipant::userId)
 					.toList();
 				return new ConversationView(c.id(), user.id().value(), c.kind(), c.title(), pIds,
 					messagingService.getLastMessageText(c.id()),
 					messagingService.getLastMessageTime(c.id()) != null
 						? messagingService.getLastMessageTime(c.id()).toString() : null,
-					messagingService.countUnread(c.id(), user.id().value()));
+					messagingService.countUnread(c.id(), user.id().value()),
+					otherLastReadAt(participants, user.id().value()));
 			})
 			.toList();
 		String nextCursor = conversations.size() == limit
@@ -86,14 +88,16 @@ class MessagingContractController {
 		var items = conversations.stream()
 			.filter(c -> query.isEmpty() || (c.title() != null && c.title().toLowerCase().contains(query)))
 			.map(c -> {
-				List<String> pIds = messagingService.getParticipants(c.id()).stream()
+				var participants = messagingService.getParticipants(c.id());
+				List<String> pIds = participants.stream()
 					.map(ConversationParticipant::userId)
 					.toList();
 				return new ConversationView(c.id(), user.id().value(), c.kind(), c.title(), pIds,
 					messagingService.getLastMessageText(c.id()),
 					messagingService.getLastMessageTime(c.id()) != null
 						? messagingService.getLastMessageTime(c.id()).toString() : null,
-					messagingService.countUnread(c.id(), user.id().value()));
+					messagingService.countUnread(c.id(), user.id().value()),
+					otherLastReadAt(participants, user.id().value()));
 			})
 			.toList();
 		return new PageResponse<>(items, null);
@@ -108,12 +112,14 @@ class MessagingContractController {
 			throw new ApiException(403, "NOT_PARTICIPANT", "Voce nao participa desta conversa.");
 		}
 		Conversation c = messagingService.getConversation(conversationId);
-		List<String> pIds = messagingService.getParticipants(c.id()).stream()
+		var participants = messagingService.getParticipants(c.id());
+		List<String> pIds = participants.stream()
 			.map(ConversationParticipant::userId)
 			.toList();
 		return new ConversationDetailView(c.id(), c.kind(), c.title(), pIds,
 			messagingService.getLastMessageText(c.id()),
-			messagingService.countUnread(c.id(), user.id().value()));
+			messagingService.countUnread(c.id(), user.id().value()),
+			otherLastReadAt(participants, user.id().value()));
 	}
 
 	@GetMapping("/{conversationId}/messages")
@@ -231,12 +237,14 @@ class MessagingContractController {
 		String hash = idempotency.hash(payload);
 		return idempotency.execute(user.id(), "POST", "/api/conversations/direct", idempotencyKey, hash, () -> {
 			String conversationId = messagingService.directConversationBetween(user.id().value(), otherId);
-			List<String> pIds = messagingService.getParticipants(conversationId).stream()
+			var participants = messagingService.getParticipants(conversationId);
+			List<String> pIds = participants.stream()
 				.map(ConversationParticipant::userId)
 				.toList();
 			return new CommandResponse(200, new ConversationDetailView(conversationId, "DIRECT", null, pIds,
 				messagingService.getLastMessageText(conversationId),
-				messagingService.countUnread(conversationId, user.id().value())));
+				messagingService.countUnread(conversationId, user.id().value()),
+				otherLastReadAt(participants, user.id().value())));
 		});
 	}
 
@@ -273,14 +281,16 @@ class MessagingContractController {
 			Math.min(limit, 50));
 		var items = conversations.stream()
 			.map(c -> {
-				List<String> pIds = messagingService.getParticipants(c.id()).stream()
+				var participants = messagingService.getParticipants(c.id());
+				List<String> pIds = participants.stream()
 					.map(ConversationParticipant::userId)
 					.toList();
 				return new ConversationView(c.id(), user.id().value(), c.kind(), c.title(), pIds,
 					messagingService.getLastMessageText(c.id()),
 					messagingService.getLastMessageTime(c.id()) != null
 						? messagingService.getLastMessageTime(c.id()).toString() : null,
-					messagingService.countUnread(c.id(), user.id().value()));
+					messagingService.countUnread(c.id(), user.id().value()),
+					otherLastReadAt(participants, user.id().value()));
 			})
 			.toList();
 		String nextCursor = conversations.size() == limit
@@ -318,12 +328,14 @@ class MessagingContractController {
 			() -> {
 				Conversation c = messagingService.createConversation(request.kind(), request.title(),
 					request.participantIds(), user.id().value());
-				List<String> pIds = messagingService.getParticipants(c.id()).stream()
+				var participants = messagingService.getParticipants(c.id());
+				List<String> pIds = participants.stream()
 					.map(ConversationParticipant::userId)
 					.toList();
 				return new CommandResponse(201, new ConversationDetailView(c.id(), c.kind(), c.title(), pIds,
 					messagingService.getLastMessageText(c.id()),
-					messagingService.countUnread(c.id(), user.id().value())));
+					messagingService.countUnread(c.id(), user.id().value()),
+					otherLastReadAt(participants, user.id().value())));
 			});
 	}
 
@@ -371,12 +383,23 @@ class MessagingContractController {
 	record ReactToMessageRequest(ReactionType type) {
 	}
 
+	/** Quem leu por último entre os OUTROS participantes (null = nunca abriu). */
+	private static String otherLastReadAt(List<ConversationParticipant> participants, String viewerId) {
+		return participants.stream()
+			.filter(participant -> !participant.userId().equals(viewerId))
+			.map(ConversationParticipant::lastReadAt)
+			.filter(java.util.Objects::nonNull)
+			.max(java.time.Instant::compareTo)
+			.map(java.time.Instant::toString)
+			.orElse(null);
+	}
+
 	record ConversationView(String id, String userId, String kind, String title, List<String> participantIds,
-			String lastMessage, String time, int unread) {
+			String lastMessage, String time, int unread, String otherLastReadAt) {
 	}
 
 	record ConversationDetailView(String id, String kind, String title, List<String> participantIds, String lastMessage,
-			int unread) {
+			int unread, String otherLastReadAt) {
 	}
 
 	record MessageView(String id, String conversationId, String from, String text, List<String> mediaIds,
