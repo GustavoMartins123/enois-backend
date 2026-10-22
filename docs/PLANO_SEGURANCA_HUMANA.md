@@ -28,6 +28,11 @@ anteriores e o trabalho de verdade agora é fechar as lacunas, não refazer o qu
 - **Autorização no servidor:** `WriteRouteInterceptor` (toda rota de escrita pede sessão, exceto a
   allowlist pública explícita), `AdminRouteInterceptor` (rota admin exige admin), `CurrentUserResolver`
   (o header `X-User-Id` não vale sem sessão), `SafeHtml` (HTML sanitizado), `OutboundUrlGuard` (SSRF).
+- **Portões de escrita (ECA + sanção):** `shared/age/AgeGate` (data de nascimento declarada e, para
+  menor, autorização do responsável ativa) e `shared/sanctions/SanctionGate` (conta com sanção ativa
+  não escreve) são chamados em **todo** caminho que produz conteúdo ou fala com outra pessoa: post
+  e comentário do feed, post e comentário de grupo e mensagem privada (o blog entra pelo feed).
+  Antes de 2026-10-21 o portão da sanção só olhava o feed, e o grupo nem olhava o de idade.
 - **Identidade:** confirmação de e-mail em duas etapas, 2FA (TOTP), `SecretCipher` (token cifrado),
   hash de sessão versionado, `PendingSignup` com limite de reenvio.
 - **Política escrita:** `docs/PUBLISHING_POLICY.md` (proibição de automação de publicação),
