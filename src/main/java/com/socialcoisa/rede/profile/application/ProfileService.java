@@ -11,6 +11,7 @@ import org.springframework.util.StringUtils;
 import com.socialcoisa.rede.profile.application.port.in.GetMeUseCase;
 import com.socialcoisa.rede.profile.application.port.in.GetUserProfileUseCase;
 import com.socialcoisa.rede.profile.application.port.in.UpdateProfileUseCase;
+import com.socialcoisa.rede.profile.application.port.out.SocialPostCountReader;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.profile.domain.UserProfile;
 import com.socialcoisa.rede.shared.html.SafeHtml;
@@ -23,16 +24,19 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 	private final ReputationService reputationService;
 	private final org.springframework.beans.factory.ObjectProvider<com.socialcoisa.rede.media.application.LazyUrlMigrationService> lazyMedia;
 	private final com.socialcoisa.rede.age.application.port.out.ParentalLinkRepository parentalLinks;
+	private final SocialPostCountReader postCounts;
 	private final Clock clock;
 
 	public ProfileService(UserProfileRepository repository, ReputationService reputationService,
 			org.springframework.beans.factory.ObjectProvider<com.socialcoisa.rede.media.application.LazyUrlMigrationService> lazyMedia,
 			com.socialcoisa.rede.age.application.port.out.ParentalLinkRepository parentalLinks,
+			SocialPostCountReader postCounts,
 			Clock clock) {
 		this.repository = repository;
 		this.reputationService = reputationService;
 		this.lazyMedia = lazyMedia;
 		this.parentalLinks = parentalLinks;
+		this.postCounts = postCounts;
 		this.clock = clock;
 	}
 
@@ -128,6 +132,7 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 	private UserProfile populateCounts(UserProfile profile) {
 		ReputationService.Counts counts = reputationService.countsFor(profile.id());
 		profile.setCounts(counts.connections(), counts.followers(), counts.reputation());
+		profile.setPostsCount(postCounts.countByUser(profile.id()));
 		repository.save(profile);
 		return profile;
 	}

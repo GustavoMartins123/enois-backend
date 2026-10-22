@@ -146,6 +146,11 @@ class LinkedInShareOutboxEventHandlerTests {
 		}
 
 		@Override
+		public int countActiveByAuthor(UserId authorId) {
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
 		public List<Post> findActiveByCommunity(String communityId, Instant before, int limit) {
 			throw new UnsupportedOperationException();
 		}

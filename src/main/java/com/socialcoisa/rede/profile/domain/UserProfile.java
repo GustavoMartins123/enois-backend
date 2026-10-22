@@ -47,6 +47,11 @@ public class UserProfile {
 	private int connectionsCount;
 	private int followersCount;
 	private int reputation;
+	/**
+	 * Publicacoes do perfil social. Embalado: busca, ranking e lista de conexoes nao calculam, e
+	 * um 0 ahi seria lido como "essa pessoa nunca postou".
+	 */
+	private Integer postsCount;
 	private final Instant createdAt;
 	private Instant updatedAt;
 	private Instant termsAcceptedAt;
@@ -568,6 +573,14 @@ public class UserProfile {
 
 	public int reputation() {
 		return reputation;
+	}
+
+	public Integer postsCount() {
+		return postsCount;
+	}
+
+	public void setPostsCount(Integer postsCount) {
+		this.postsCount = postsCount;
 	}
 
 	public Instant createdAt() {

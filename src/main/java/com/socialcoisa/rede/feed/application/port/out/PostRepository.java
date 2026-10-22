@@ -32,6 +32,9 @@ public interface PostRepository {
 	/** Perfil SOCIAL do autor: sem BLOG (ponteiro) e sem o que a identidade profissional assinou. */
 	List<Post> findActiveByAuthor(UserId authorId, Instant before, int limit);
 
+	/** Inteiro do que {@link #findActiveByAuthor} lista, sem paginação. */
+	int countActiveByAuthor(UserId authorId);
+
 	List<Post> findActiveByCommunity(String communityId, Instant before, int limit);
 
 	/** Posts de um canal privado — só o feed do canal chama (nunca os feeds gerais). */

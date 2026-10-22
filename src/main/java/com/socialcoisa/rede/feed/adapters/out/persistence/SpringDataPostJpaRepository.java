@@ -83,6 +83,17 @@ interface SpringDataPostJpaRepository extends JpaRepository<PostJpaEntity, Strin
 			Pageable pageable);
 
 	/**
+	 * Total do que o perfil SOCIAL do autor lista: mesmos filtros da consulta acima, sem o
+	 * ponteiro de cursor. O card de publicações precisa do inteiro, não do que coube na página.
+	 */
+	@Query("""
+			SELECT COUNT(p) FROM PostJpaEntity p
+			WHERE p.authorId = :authorId AND p.status = :status
+			  AND p.authorIdentity = :social AND p.type <> :blog AND p.channelId IS NULL""")
+	long countSocialByAuthor(@Param("authorId") String authorId, @Param("status") PostStatus status,
+			@Param("social") AuthorIdentity social, @Param("blog") PostType blog);
+
+	/**
 	 * Feed "Tudo" com os assuntos bloqueados do leitor: posts SEM tópico nunca são bloqueados
 	 * (sem classificação não há evidência — regra do plano).
 	 */

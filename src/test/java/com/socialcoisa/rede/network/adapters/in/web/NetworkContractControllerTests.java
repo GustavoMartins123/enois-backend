@@ -65,6 +65,29 @@ class NetworkContractControllerTests {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.status").value("ACCEPTED"));
 
+		String usernameA = objectMapper.readTree(mockMvc.perform(get("/me")
+				.header("X-Session-Token", sessionA.token()))
+			.andExpect(status().isOk())
+			.andReturn().getResponse().getContentAsString()).get("username").asText();
+		String usernameB = objectMapper.readTree(mockMvc.perform(get("/me")
+				.header("X-Session-Token", sessionB.token()))
+			.andExpect(status().isOk())
+			.andReturn().getResponse().getContentAsString()).get("username").asText();
+
+		mockMvc.perform(get("/users/{username}/connections", usernameA))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$[0].id").value(sessionB.userId()))
+			.andExpect(jsonPath("$[0].username").value(usernameB));
+
+		mockMvc.perform(get("/users/{username}/followers", usernameA))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$").isEmpty());
+
+		mockMvc.perform(get("/users/{username}/followers", usernameB))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$[0].id").value(sessionA.userId()))
+			.andExpect(jsonPath("$[0].username").value(usernameA));
+
 		mockMvc.perform(get("/network/summary")
 				.header("X-Session-Token", sessionA.token()))
 			.andExpect(status().isOk())
@@ -97,6 +120,10 @@ class NetworkContractControllerTests {
 				.header("X-Session-Token", sessionA.token()))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.connections").value(0));
+
+		mockMvc.perform(get("/users/{username}/connections", usernameA))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$").isEmpty());
 	}
 
 	@Test
