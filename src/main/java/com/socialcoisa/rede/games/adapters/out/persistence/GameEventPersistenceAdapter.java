@@ -45,6 +45,13 @@ class GameEventPersistenceAdapter implements GameEventRepository {
 	}
 
 	@Override
+	public java.util.List<com.socialcoisa.rede.games.application.GameTally> mostPlayedSince(GameEventKind kind,
+			Instant since, int limit) {
+		return events.mostPlayedSince(kind, since, org.springframework.data.domain.PageRequest.of(0,
+			Math.max(1, limit)));
+	}
+
+	@Override
 	public void deleteByGame(String gameId) {
 		events.deleteByGameId(gameId);
 	}

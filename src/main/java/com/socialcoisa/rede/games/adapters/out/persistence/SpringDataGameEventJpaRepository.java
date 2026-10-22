@@ -22,6 +22,17 @@ interface SpringDataGameEventJpaRepository extends JpaRepository<GameEventJpaEnt
 	java.util.List<GameEventJpaEntity> findByGameIdAndCreatedAtAfterOrderByCreatedAtAsc(String gameId,
 			java.time.Instant from, org.springframework.data.domain.Pageable pageable);
 
+	/**
+	 * Ranking da janela: sessões e jogadores distintos agrupados por jogo, mais jogado primeiro. O
+	 * `Pageable` é o teto de linhas — o card do feed pede seis, e o resto é conta alheia.
+	 */
+	@Query("SELECT new com.socialcoisa.rede.games.application.GameTally(e.gameId, COUNT(e.id), "
+		+ "COUNT(DISTINCT COALESCE(e.userId, e.id))) FROM GameEventJpaEntity e "
+		+ "WHERE e.kind = :kind AND e.createdAt >= :since "
+		+ "GROUP BY e.gameId ORDER BY COUNT(e.id) DESC")
+	java.util.List<com.socialcoisa.rede.games.application.GameTally> mostPlayedSince(@Param("kind") GameEventKind kind,
+			@Param("since") java.time.Instant since, org.springframework.data.domain.Pageable pageable);
+
 	@org.springframework.data.jpa.repository.Modifying
 	@Query("DELETE FROM GameEventJpaEntity e WHERE e.gameId = :gameId")
 	int deleteByGameId(@Param("gameId") String gameId);

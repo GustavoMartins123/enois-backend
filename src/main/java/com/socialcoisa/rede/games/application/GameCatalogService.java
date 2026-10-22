@@ -1,6 +1,8 @@
 package com.socialcoisa.rede.games.application;
 
 import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -109,6 +111,41 @@ public class GameCatalogService {
 	@Transactional(readOnly = true)
 	public List<Game> fromFollowedDevelopers(List<String> developerIds, int limit) {
 		return games.findPublishedByUsers(new ArrayList<>(developerIds), limit);
+	}
+
+	// --- "jogados hoje" ---
+
+	/** Teto do ranking: mais que isso vira lista, e o card do feed é um punhado de jogos. */
+	public static final int MAX_TRENDING = 12;
+
+	/** Um jogo do ranking e o que ele fez na janela. */
+	public record TrendingGame(Game game, long plays, long players) {
+	}
+
+	/**
+	 * O ranking das últimas 24 horas, do mais jogado para o menos.
+	 *
+	 * A janela é rolante e não o dia de calendário de propósito: "hoje" depende do fuso de quem vê,
+	 * e o servidor não conhece o fuso de ninguém. Vinte e quatro horas para trás dão o mesmo número
+	 * para todo mundo e não zeram o card à meia-noite.
+	 *
+	 * Só publicado entra, como no resto do catálogo. Lêem-se o dobro de candidatos porque um jogo
+	 * suspenso no topo não pode encolher o card.
+	 */
+	@Transactional(readOnly = true)
+	public List<TrendingGame> trendingToday(int limit) {
+		int size = Math.max(1, Math.min(limit, MAX_TRENDING));
+		Instant since = clock.instant().minus(Duration.ofHours(24));
+		List<TrendingGame> ranked = new ArrayList<>();
+		for (GameTally tally : events.mostPlayedSince(GameEventKind.PLAY_START, since, size * 2)) {
+			games.findById(tally.gameId())
+				.filter(game -> game.status() == GameStatus.PUBLISHED)
+				.ifPresent(game -> ranked.add(new TrendingGame(game, tally.plays(), tally.players())));
+			if (ranked.size() == size) {
+				break;
+			}
+		}
+		return ranked;
 	}
 
 	// --- painel do criador: gráfico de uso ---
