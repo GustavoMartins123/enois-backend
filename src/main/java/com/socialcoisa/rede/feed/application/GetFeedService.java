@@ -305,6 +305,14 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 		// Reaction pills for the whole page in one query: the card used to fetch them per post.
 		Map<PostId, Map<ReactionType, Long>> reactionSummaries = postInteractionRepository
 			.countReactionsByPostIds(postIds, hidden);
+		// Citação do repost com opinião: busca os originais da página em UMA consulta.
+		java.util.Set<String> quotedIds = visible.stream()
+			.filter(p -> p.repostWithOpinion() && p.repostOf() != null)
+			.map(Post::repostOf)
+			.collect(Collectors.toSet());
+		Map<String, Post> quotedPosts = quotedIds.isEmpty() ? Map.of()
+			: postRepository.findByIds(quotedIds.stream().map(PostId::new).toList()).stream()
+				.collect(Collectors.toMap(p -> p.id().value(), Function.identity()));
 		return visible.stream()
 			.map(post -> {
 				UserProfile profile = profiles.get(post.authorId().value());
@@ -321,6 +329,12 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 				ReactionType reaction = currentUserReactions.get(post.id());
 				PostView withReaction = (reaction != null ? view.withCurrentUserReaction(reaction) : view)
 					.withReactionSummary(reactionSummaries.getOrDefault(post.id(), Map.of()));
+				if (post.repostWithOpinion() && post.repostOf() != null) {
+					Post quoted = quotedPosts.get(post.repostOf());
+					if (quoted != null) {
+						withReaction = withReaction.withRepostQuote(quoted.content(), quoted.mediaIds());
+					}
+				}
 				PostCommunityReader.CommunityRef community = post.communityId() == null ? null
 					: communities.get(post.communityId());
 				return community == null ? withReaction

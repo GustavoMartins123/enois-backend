@@ -22,6 +22,7 @@ import com.socialcoisa.rede.moderation.domain.UserSanction;
 import com.socialcoisa.rede.notifications.application.NotificationService;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.profile.domain.UserProfile;
+import com.socialcoisa.rede.shared.sanctions.SanctionGateReader;
 import com.socialcoisa.rede.shared.web.ApiException;
 
 /**
@@ -44,18 +45,20 @@ public class SanctionProposalService {
 	private final SanctionService sanctions;
 	private final AuthSessionRepository sessions;
 	private final NotificationService notifications;
+	private final SanctionGateReader sanctionGate;
 	private final Clock clock;
 
 	public SanctionProposalService(SanctionProposalRepository proposals,
 			ModeratorApplicationRepository applications, UserProfileRepository profiles,
 			SanctionService sanctions, AuthSessionRepository sessions, NotificationService notifications,
-			Clock clock) {
+			SanctionGateReader sanctionGate, Clock clock) {
 		this.proposals = proposals;
 		this.applications = applications;
 		this.profiles = profiles;
 		this.sanctions = sanctions;
 		this.sessions = sessions;
 		this.notifications = notifications;
+		this.sanctionGate = sanctionGate;
 		this.clock = clock;
 	}
 
@@ -77,6 +80,10 @@ public class SanctionProposalService {
 		}
 		UserProfile target = profiles.findByUsername(trim(username))
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuário não encontrado."));
+		// Conta já banida não precisa (nem pode) entrar em nova votação.
+		if (sanctionGate.banned(target.id())) {
+			throw new ApiException(409, "USER_ALREADY_BANNED", "Este usuário já está banido.");
+		}
 		if (target.id().equals(proposerId)) {
 			throw new ApiException(400, "CANNOT_SANCTION_SELF", "Você não pode propor punição contra si.");
 		}
@@ -99,6 +106,9 @@ public class SanctionProposalService {
 		long moderatorCount = moderatorCount();
 		int required = requiredVotes(moderatorCount);
 		return proposals.findByStatus(SanctionProposalStatus.PENDING, limit).stream()
+			// Alvo banido por outro caminho (admin, lote, automação): a votação perdeu o objeto.
+			// some da fila em vez de ficar pedindo votos para uma decisão já tomada.
+			.filter(proposal -> !sanctionGate.banned(proposal.targetUserId()))
 			.map(proposal -> view(proposal.withRequiredVotes(required), viewerId, moderatorCount))
 			.toList();
 	}
@@ -111,6 +121,9 @@ public class SanctionProposalService {
 		}
 		SanctionProposal proposal = proposals.findById(proposalId)
 			.orElseThrow(() -> new ApiException(404, "PROPOSAL_NOT_FOUND", "Votação não encontrada."));
+		if (sanctionGate.banned(proposal.targetUserId())) {
+			throw new ApiException(409, "TARGET_ALREADY_BANNED", "O usuário desta votação já está banido.");
+		}
 		if (proposal.status() != SanctionProposalStatus.PENDING) {
 			throw new ApiException(409, "ALREADY_DECIDED", "Esta votação já foi encerrada.");
 		}
@@ -171,6 +184,9 @@ public class SanctionProposalService {
 	public ProposalView cancel(String proposalId, String adminId) {
 		SanctionProposal proposal = proposals.findById(proposalId)
 			.orElseThrow(() -> new ApiException(404, "PROPOSAL_NOT_FOUND", "Votação não encontrada."));
+		if (sanctionGate.banned(proposal.targetUserId())) {
+			throw new ApiException(409, "TARGET_ALREADY_BANNED", "O usuário desta votação já está banido.");
+		}
 		if (proposal.status() != SanctionProposalStatus.PENDING) {
 			throw new ApiException(409, "ALREADY_DECIDED", "Esta votação já foi encerrada.");
 		}

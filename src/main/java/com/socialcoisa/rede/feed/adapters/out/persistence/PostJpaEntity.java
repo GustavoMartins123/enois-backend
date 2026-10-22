@@ -83,6 +83,9 @@ class PostJpaEntity {
 	@Column(name = "repost_of_author", length = 80)
 	private String repostOfAuthor;
 
+	@Column(name = "repost_with_opinion", nullable = false)
+	private boolean repostWithOpinion;
+
 	@Column(name = "created_at", nullable = false)
 	private Instant createdAt;
 
@@ -139,6 +142,7 @@ class PostJpaEntity {
 		entity.channelId = post.channelId();
 		entity.repostOf = post.repostOf();
 		entity.repostOfAuthor = post.repostOfAuthor();
+		entity.repostWithOpinion = post.repostWithOpinion();
 		entity.createdAt = post.createdAt();
 		entity.visibility = post.visibility();
 		entity.reactions = post.counters().reactions();
@@ -158,6 +162,6 @@ class PostJpaEntity {
 		return Post.restore(new PostId(id), new UserId(authorId), type, content, pageHtml, tags, mediaIds, communityId,
 			topic, channelId, createdAt, visibility, new Counters(reactions, comments, saves, shares), status,
 			deletedAt, editedAt, expiresAt, authorIdentity, mediaSpoiler)
-			.markRepostOf(repostOf, repostOfAuthor);
+			.markRepostOf(repostOf, repostOfAuthor, repostWithOpinion);
 	}
 }

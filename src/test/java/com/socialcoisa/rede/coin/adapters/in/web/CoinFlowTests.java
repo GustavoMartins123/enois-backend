@@ -128,6 +128,32 @@ class CoinFlowTests {
 			.andExpect(status().isBadRequest());
 	}
 
+	/**
+	 * Incidente 22/10: o atacante varreu /admin/carteira/disputas. A trava de /admin/** tem de
+	 * responder 403 para quem não é admin (e 200 para quem é).
+	 */
+	@Test
+	void adminWalletQueueIsClosedToNonAdmins() throws Exception {
+		var user = auth("coin_plain_user");
+		var admin = auth("group-admin");
+
+		mockMvc.perform(get("/admin/carteira/disputas").header("X-Session-Token", user.token()))
+			.andExpect(status().isForbidden());
+
+		mockMvc.perform(get("/admin/carteira/disputas").header("X-Session-Token", admin.token()))
+			.andExpect(status().isOk());
+
+		// Auditoria de incidente: o admin lê o extrato de uma conta (e o comum não).
+		mockMvc.perform(get("/admin/carteira/usuarios/coin-plain-user/extrato")
+				.header("X-Session-Token", user.token()))
+			.andExpect(status().isForbidden());
+		mockMvc.perform(get("/admin/carteira/usuarios/coin-plain-user/extrato")
+				.header("X-Session-Token", admin.token()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.username").value("coin-plain-user"))
+			.andExpect(jsonPath("$.balance").value(0));
+	}
+
 	private TestAuthHelper.AuthSession auth(String name) throws Exception {
 		return new TestAuthHelper(mockMvc, objectMapper).authenticate(name);
 	}
