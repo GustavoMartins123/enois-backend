@@ -37,6 +37,9 @@ class ServiceListingJpaEntity {
 	@Column(nullable = false)
 	private long price;
 
+	@Column(nullable = false, length = 8)
+	private String currency = "FAISCA";
+
 	@Column(name = "delivery_days", nullable = false)
 	private int deliveryDays;
 
@@ -58,6 +61,7 @@ class ServiceListingJpaEntity {
 		e.description = l.description();
 		e.deliverables = l.deliverables();
 		e.price = l.price();
+		e.currency = l.currency() == null ? "FAISCA" : l.currency();
 		e.deliveryDays = l.deliveryDays();
 		e.status = l.status().name();
 		e.createdAt = l.createdAt();
@@ -66,8 +70,8 @@ class ServiceListingJpaEntity {
 	}
 
 	ServiceListing toDomain() {
-		return new ServiceListing(id, sellerId, category, title, description, deliverables, price, deliveryDays,
-			ServiceListing.Status.valueOf(status), createdAt, updatedAt);
+		return new ServiceListing(id, sellerId, category, title, description, deliverables, price, currency,
+			deliveryDays, ServiceListing.Status.valueOf(status), createdAt, updatedAt);
 	}
 }
 

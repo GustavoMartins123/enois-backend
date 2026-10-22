@@ -82,6 +82,44 @@ class ServicesFlowTests {
 	}
 
 	@Test
+	void cashServiceStaysOutOfTheLedgerAndHasNoFee() throws Exception {
+		var seller = auth("svc_cash_seller");
+		var buyer = auth("svc_cash_buyer");
+		wallet(buyer.token());
+		balance(buyer.token(), 105_000);
+
+		// Oferta em REAIS: nenhuma faísca entra em escrow e nenhuma taxa é cobrada.
+		MvcResult created = mockMvc.perform(post("/servicos/ofertas")
+				.header("X-Session-Token", seller.token())
+				.header("Idempotency-Key", "svc-cash-listing")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of(
+					"category", "design", "title", "Identidade visual completa",
+					"description", "Marca, tipografia e manual de aplicação com duas rodadas de ajuste.",
+					"deliverables", "PDF do manual + arquivos editáveis", "price", 150_000,
+					"currency", "BRL", "deliveryDays", 10))))
+			.andExpect(status().isOk())
+			.andReturn();
+		String listingId = objectMapper.readTree(created.getResponse().getContentAsString()).get("id").asText();
+
+		// A oferta existe no catálogo em reais (a criação devolve só id/status).
+		mockMvc.perform(get("/servicos"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.ofertas[?(@.id == '" + listingId + "')].currency",
+				org.hamcrest.Matchers.hasItem("BRL")));
+
+		mockMvc.perform(post("/servicos/ofertas/" + listingId + "/contratar")
+				.header("X-Session-Token", buyer.token()))
+			.andExpect(status().isConflict())
+			.andExpect(jsonPath("$.code").value("DIRECT_PAYMENT_REQUIRED"));
+
+		// Saldo intocado: dinheiro não passa pelo ledger de faíscas (logo, sem os 10%).
+		balance(buyer.token(), 105_000);
+		wallet(seller.token());
+		balance(seller.token(), 105_000);
+	}
+
+	@Test
 	void requestProposalsChooseRefundAndDeliverablesRequired() throws Exception {
 		var requester = auth("svc_requester");
 		var pro = auth("svc_pro");

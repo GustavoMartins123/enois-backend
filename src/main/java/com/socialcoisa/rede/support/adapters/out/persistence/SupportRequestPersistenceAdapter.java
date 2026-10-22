@@ -43,4 +43,18 @@ class SupportRequestPersistenceAdapter implements SupportRequestRepository {
 	public long countByUserSince(String userId, Instant since) {
 		return repository.countByUserIdAndCreatedAtAfter(userId, since);
 	}
+
+	@Override
+	public Optional<SupportRequest> findByGithubIssueNumber(int githubIssueNumber) {
+		return repository.findByGithubIssueNumber(githubIssueNumber).map(SupportRequestJpaEntity::toDomain);
+	}
+
+	@Override
+	public List<SupportRequest> findByUserId(String userId, int limit) {
+		return repository.findByUserIdOrderByCreatedAtDesc(userId,
+				PageRequest.of(0, Math.max(1, Math.min(limit, 100))))
+			.stream()
+			.map(SupportRequestJpaEntity::toDomain)
+			.toList();
+	}
 }

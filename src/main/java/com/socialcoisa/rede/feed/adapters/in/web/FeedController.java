@@ -49,7 +49,10 @@ import com.socialcoisa.rede.feed.application.port.in.PublishPostUseCase;
 import com.socialcoisa.rede.feed.application.port.in.ReactToPostUseCase;
 import com.socialcoisa.rede.feed.application.port.in.SavePostUseCase;
 import com.socialcoisa.rede.feed.application.port.in.SharePostUseCase;
+import com.socialcoisa.rede.feed.application.PostView;
+import com.socialcoisa.rede.feed.application.RepostPostService;
 import com.socialcoisa.rede.feed.application.port.out.PostInteractionRepository;
+import com.socialcoisa.rede.feed.domain.Post;
 import com.socialcoisa.rede.feed.domain.PostId;
 import com.socialcoisa.rede.feed.domain.UserId;
 import com.socialcoisa.rede.shared.blocks.BlockedUsersReader;
@@ -81,6 +84,7 @@ class FeedController {
 	private final ReactToPostUseCase reactToPostUseCase;
 	private final SavePostUseCase savePostUseCase;
 	private final SharePostUseCase sharePostUseCase;
+	private final RepostPostService repostPostService;
 	private final IdempotencyApplicationService idempotency;
 	private final CurrentUserResolver currentUserResolver;
 	private final PostInteractionRepository postInteractionRepository;
@@ -98,6 +102,7 @@ class FeedController {
 			BulkDeletePostsUseCase bulkDeletePostsUseCase, CommentOnPostUseCase commentOnPostUseCase,
 			GetCommentsUseCase getCommentsUseCase, ReactToPostUseCase reactToPostUseCase,
 			SavePostUseCase savePostUseCase, SharePostUseCase sharePostUseCase,
+			RepostPostService repostPostService,
 			IdempotencyApplicationService idempotency, CurrentUserResolver currentUserResolver,
 			PostInteractionRepository postInteractionRepository, CommentRepository commentRepository,
 			com.socialcoisa.rede.feed.application.port.out.PostRepository postRepository,
@@ -117,6 +122,7 @@ class FeedController {
 		this.reactToPostUseCase = reactToPostUseCase;
 		this.savePostUseCase = savePostUseCase;
 		this.sharePostUseCase = sharePostUseCase;
+		this.repostPostService = repostPostService;
 		this.idempotency = idempotency;
 		this.currentUserResolver = currentUserResolver;
 		this.postInteractionRepository = postInteractionRepository;
@@ -512,6 +518,20 @@ class FeedController {
 		String hash = idempotency.hash(payload);
 		return idempotency.execute(user.id(), "POST", "/api/feed/posts/{postId}/shares", idempotencyKey, hash,
 			() -> new CommandResponse(200, sharePostUseCase.share(new PostActionCommand(user.id(), new PostId(postId)))));
+	}
+
+	/** Republica um post no feed de quem clicou (cópia com crédito ao autor original). */
+	@PostMapping("/feed/posts/{postId}/repost")
+	@org.springframework.web.bind.annotation.ResponseStatus(org.springframework.http.HttpStatus.CREATED)
+	PostView repost(@RequestHeader(value = USER_HEADER, required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@PathVariable String postId, @RequestBody(required = false) RepostRequest body) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		Post copy = repostPostService.repost(user.id().value(), postId, body == null ? null : body.opinion());
+		return PostView.from(copy);
+	}
+
+	record RepostRequest(String opinion) {
 	}
 
 	/** Ate 4 midias na edicao, do proprio autor (mesma regra do comentario novo). */

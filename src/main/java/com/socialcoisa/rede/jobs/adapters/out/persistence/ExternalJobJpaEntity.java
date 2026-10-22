@@ -74,6 +74,10 @@ class ExternalJobJpaEntity {
 	@Column(name = "salary_period", length = 20)
 	private String salaryPeriod;
 
+	/** Quem cadastrou declarou que a vaga não informa salário (não é o mesmo que campo vazio). */
+	@Column(name = "salary_not_informed", nullable = false)
+	private boolean salaryNotInformed;
+
 	protected ExternalJobJpaEntity() {
 	}
 
@@ -98,12 +102,13 @@ class ExternalJobJpaEntity {
 		e.salaryMin = job.salaryMin();
 		e.salaryMax = job.salaryMax();
 		e.salaryPeriod = job.salaryPeriod();
+		e.salaryNotInformed = job.salaryNotInformed();
 		return e;
 	}
 
 	ExternalJob toDomain() {
 		return new ExternalJob(id, platform, externalId, title, company, location, salary, currency, url,
 			importedAt, lastCheckedAt, externalStatus, canonicalUrl, applyEmail, submittedBy, description,
-			salaryMin, salaryMax, salaryPeriod);
+			salaryMin, salaryMax, salaryPeriod, salaryNotInformed);
 	}
 }

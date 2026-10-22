@@ -17,6 +17,20 @@ interface SpringDataPostJpaRepository extends JpaRepository<PostJpaEntity, Strin
 
 	List<PostJpaEntity> findByAuthorId(String authorId);
 
+	@Query("""
+		select p from PostJpaEntity p
+		where p.authorId = :authorId and p.repostOf = :source and p.status = :status
+		""")
+	java.util.Optional<PostJpaEntity> findRepostByAuthorAndSource(@Param("authorId") String authorId,
+			@Param("source") String source, @Param("status") com.socialcoisa.rede.feed.domain.PostStatus status);
+
+	@Query("""
+		select p from PostJpaEntity p
+		where p.repostOf = :source and p.status = :status
+		""")
+	List<PostJpaEntity> findRepostsBySource(@Param("source") String source,
+			@Param("status") com.socialcoisa.rede.feed.domain.PostStatus status);
+
 	List<PostJpaEntity> findByIdIn(Collection<String> ids);
 
 	List<PostJpaEntity> findByAuthorIdInAndStatusAndChannelIdIsNullAndCreatedAtBeforeOrderByCreatedAtDesc(Collection<String> authorIds,
@@ -81,6 +95,17 @@ interface SpringDataPostJpaRepository extends JpaRepository<PostJpaEntity, Strin
 	List<PostJpaEntity> findSocialByAuthor(@Param("authorId") String authorId, @Param("status") PostStatus status,
 			@Param("social") AuthorIdentity social, @Param("blog") PostType blog, @Param("before") Instant before,
 			Pageable pageable);
+
+	/**
+	 * Total do que o perfil SOCIAL do autor lista: mesmos filtros da consulta acima, sem o
+	 * ponteiro de cursor. O card de publicações precisa do inteiro, não do que coube na página.
+	 */
+	@Query("""
+			SELECT COUNT(p) FROM PostJpaEntity p
+			WHERE p.authorId = :authorId AND p.status = :status
+			  AND p.authorIdentity = :social AND p.type <> :blog AND p.channelId IS NULL""")
+	long countSocialByAuthor(@Param("authorId") String authorId, @Param("status") PostStatus status,
+			@Param("social") AuthorIdentity social, @Param("blog") PostType blog);
 
 	/**
 	 * Feed "Tudo" com os assuntos bloqueados do leitor: posts SEM tópico nunca são bloqueados

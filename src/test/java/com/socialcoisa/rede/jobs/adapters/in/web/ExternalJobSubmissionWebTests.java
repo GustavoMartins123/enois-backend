@@ -193,6 +193,35 @@ class ExternalJobSubmissionWebTests {
 			.andExpect(jsonPath("$.items[0].id").value(id));
 	}
 
+	@Test
+	void salaryNotInformedIsExplicitClearsTheRangeAndShowsOnTheCard() throws Exception {
+		var author = auth.authenticate("ext_job_no_salary");
+		String title = "Vaga sem faixa " + System.nanoTime();
+		String url = "https://vagas.exemplo.test/sem-faixa/" + System.nanoTime();
+		String payload = objectMapper.writeValueAsString(Map.of(
+			"title", title,
+			"company", "Empresa Exemplo",
+			"location", "Remoto",
+			"url", url,
+			"description", "Vaga sem faixa divulgada no anúncio original.",
+			"salaryMin", "1500",
+			"salaryMax", "2000",
+			"salaryPeriod", "MONTH",
+			"salaryNotInformed", true,
+			"communityAgreement", true));
+
+		mockMvc.perform(post("/jobs/external")
+				.header("X-Session-Token", author.token())
+				.header("Idempotency-Key", "ext-no-salary")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(payload))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.salaryNotInformed").value(true))
+			.andExpect(jsonPath("$.salaryLabel").value("Salário não informado"))
+			.andExpect(jsonPath("$.salaryMin").value(org.hamcrest.Matchers.nullValue()))
+			.andExpect(jsonPath("$.salaryMax").value(org.hamcrest.Matchers.nullValue()));
+	}
+
 	private org.springframework.test.web.servlet.ResultActions submit(
 			TestAuthHelper.AuthSession session, String title, String company, String location, String url,
 			String idempotencyKey) throws Exception {

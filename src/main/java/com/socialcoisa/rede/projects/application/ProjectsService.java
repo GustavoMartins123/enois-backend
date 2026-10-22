@@ -28,6 +28,8 @@ public class ProjectsService {
 
 	private static final int MAX_STACK_ITEMS = 10;
 	private static final int MAX_DIARY_ENTRIES = 50;
+	/** Entrada do diário: cabe a descrição de um projeto do LinkedIn (até 2.000 caracteres). */
+	private static final int MAX_DIARY_TEXT = 2000;
 	private static final int MAX_PROJECTS = 20;
 
 	private final UserProjectRepository repository;
@@ -117,7 +119,7 @@ public class ProjectsService {
 		List<ProjectDiaryEntry> diary = new ArrayList<>();
 		for (var entry : input.diary()) {
 			String text = PlainText.defuse(entry.text());
-			check(text, 400, "cada entrada do diario");
+			check(text, MAX_DIARY_TEXT, "cada entrada do diario");
 			String date = entry.date() == null ? "" : entry.date().trim();
 			check(date, 10, "a data do diario");
 			diary.add(new ProjectDiaryEntry(date, text == null ? "" : text));

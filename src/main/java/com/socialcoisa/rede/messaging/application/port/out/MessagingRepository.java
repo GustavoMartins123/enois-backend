@@ -49,6 +49,9 @@ public interface MessagingRepository {
 
 	Optional<Message> findLastMessage(String conversationId);
 
+	/** Mensagem idêntica do mesmo remetente na conversa desde um instante (duplo clique/retry). */
+	Optional<Message> findRecentDuplicate(String conversationId, String senderId, String text, java.time.Instant since);
+
 	/** A mensagem por id (para conferir de qual conversa ela e antes de mexer nela). */
 	Optional<Message> findMessageById(String messageId);
 

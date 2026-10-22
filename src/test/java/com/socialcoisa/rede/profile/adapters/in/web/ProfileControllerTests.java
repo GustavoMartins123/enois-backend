@@ -172,6 +172,53 @@ class ProfileControllerTests {
 	}
 
 	@Test
+	void publicExperiencesAreOrderedMostRecentFirst() throws Exception {
+		mockMvc.perform(post("/me/experiences")
+				.header("X-User-Id", userId)
+				.header("X-Session-Token", sessionToken)
+				.header("Idempotency-Key", "prof-exp-public-old")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of(
+					"title", "Software Engineer",
+					"company", "Tech Co",
+					"location", "Remoto",
+					"description", "APIs em Java e Spring.",
+					"startDate", "2018-01-01",
+					"endDate", "2020-12-31"))))
+			.andExpect(status().isCreated());
+
+		mockMvc.perform(post("/me/experiences")
+				.header("X-User-Id", userId)
+				.header("X-Session-Token", sessionToken)
+				.header("Idempotency-Key", "prof-exp-public-current")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of(
+					"title", "Tech Lead",
+					"company", "É Nóis",
+					"startDate", "2024-03-01"))))
+			.andExpect(status().isCreated());
+
+		String username = objectMapper.readTree(mockMvc.perform(get("/me")
+				.header("X-User-Id", userId)
+				.header("X-Session-Token", sessionToken))
+			.andReturn().getResponse().getContentAsString()).get("username").asText();
+
+		// Leitura pública (sem sessão), do mais recente para o mais antigo.
+		mockMvc.perform(get("/users/" + username + "/experiences"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.length()").value(2))
+			.andExpect(jsonPath("$[0].title").value("Tech Lead"))
+			.andExpect(jsonPath("$[0].currentlyHere").value(true))
+			.andExpect(jsonPath("$[1].title").value("Software Engineer"))
+			.andExpect(jsonPath("$[1].location").value("Remoto"))
+			.andExpect(jsonPath("$[1].description").value("APIs em Java e Spring."))
+			.andExpect(jsonPath("$[1].endDate").value("2020-12-31"));
+
+		mockMvc.perform(get("/users/perfil-que-nao-existe-" + System.nanoTime() + "/experiences"))
+			.andExpect(status().isNotFound());
+	}
+
+	@Test
 	void managesEducation() throws Exception {
 		String eduPayload = objectMapper.writeValueAsString(Map.of(
 			"school", "USP",

@@ -178,7 +178,7 @@ class JobContractController {
 					base.applicationsCount(), base.applied(), true, false, 0, null, base.applicationFields(),
 					base.status(), base.closedAt(), base.sourceType(), base.sourceUrl(), base.sourcePlatform(),
 					base.applyEmail(), base.description(), base.salaryMin(), base.salaryMax(),
-					base.salaryPeriod(), base.salaryLabel()));
+					base.salaryPeriod(), base.salaryLabel(), base.salaryNotInformed()));
 			}
 		}
 		return new PageResponse<>(views, null);
@@ -213,7 +213,8 @@ class JobContractController {
 		return idempotency.execute(user.id(), "POST", "/api/jobs/external", idempotencyKey, hash, () -> {
 			ExternalJob job = externalJobSubmission.submit(user.id().value(), body.title(), body.company(),
 				body.location(), body.url(), body.description(), body.salaryMin(), body.salaryMax(),
-				body.salaryPeriod(), body.applyEmail(), body.communityAgreement());
+				body.salaryPeriod(), body.applyEmail(), body.communityAgreement(),
+				Boolean.TRUE.equals(body.salaryNotInformed()));
 			return new CommandResponse(201, toExternalView(job, true));
 		});
 	}
@@ -470,7 +471,7 @@ class JobContractController {
 					job.status().name(), job.closedAt() != null ? job.closedAt().toString() : null,
 					"INTERNAL", null, null, null,
 					job.description(), formatAmount(job.salaryMin()), formatAmount(job.salaryMax()),
-					job.salaryPeriod(), salaryLabel(job));
+					job.salaryPeriod(), salaryLabel(job), false);
 			})
 			.toList();
 		String nextCursor = jobs.size() == limit
@@ -516,7 +517,8 @@ class JobContractController {
 			job.salary(), job.currency(), List.of(),
 			job.importedAt() != null ? job.importedAt().toString() : null, 0, false, false, owner, 0, null,
 			List.of(), "OPEN", null, "EXTERNAL", job.url(), job.platform(), job.applyEmail(),
-			job.description(), job.salaryMin(), job.salaryMax(), job.salaryPeriod(), externalSalaryLabel(job));
+			job.description(), job.salaryMin(), job.salaryMax(), job.salaryPeriod(), externalSalaryLabel(job),
+			job.salaryNotInformed());
 	}
 
 	private JobView toView(Job job, String viewer, boolean applied, boolean saved, int applicationsCount) {
@@ -526,7 +528,7 @@ class JobContractController {
 			fieldViews(job), job.status().name(), job.closedAt() != null ? job.closedAt().toString() : null,
 			"INTERNAL", null, null, null,
 			job.description(), formatAmount(job.salaryMin()), formatAmount(job.salaryMax()),
-			job.salaryPeriod(), salaryLabel(job));
+			job.salaryPeriod(), salaryLabel(job), false);
 	}
 
 	/** Faixa da vaga nova em pt-BR: "R$ 1.500 / mês" ou "de R$ 1.500 até R$ 2.000 / mês". */
@@ -545,6 +547,9 @@ class JobContractController {
 
 	/** Faixa da vaga externa cadastrada à mão ("de R$ 1.500 até R$ 2.000 / mês"). */
 	private static String externalSalaryLabel(ExternalJob job) {
+		if (job.salaryNotInformed()) {
+			return "Salário não informado";
+		}
 		if (!org.springframework.util.StringUtils.hasText(job.salaryMin())) {
 			return null;
 		}
@@ -633,7 +638,8 @@ class JobContractController {
 			// Valor estruturado da vaga nova (item 5 do backlog). `salaryLabel` já vem pronto
 			// ("R$ 1.500 / mês" ou "de R$ 1.500 até R$ 2.000 / mês"); vagas antigas trazem só
 			// o texto livre em `salary` e nulos aqui.
-			String description, String salaryMin, String salaryMax, String salaryPeriod, String salaryLabel) {
+			String description, String salaryMin, String salaryMax, String salaryPeriod, String salaryLabel,
+			boolean salaryNotInformed) {
 	}
 
 	/** Quem publicou a vaga, com o que sustenta a credibilidade dele. */
@@ -653,7 +659,7 @@ class JobContractController {
 	/** Cadastro de vaga EXTERNA: so o que a listagem mostra e o link para onde a candidatura vai. */
 	record CreateExternalJobRequest(String title, String company, String location, String url,
 			String description, String salaryMin, String salaryMax, String salaryPeriod, String applyEmail,
-			boolean communityAgreement) {
+			boolean communityAgreement, Boolean salaryNotInformed) {
 	}
 
 	record ApplicationFieldRequest(String label, String type, boolean required) {

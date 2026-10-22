@@ -84,7 +84,7 @@ public class ExternalJobImportService {
 					external.title(), external.company(), external.location(), external.salary(),
 					current.currency(), external.url(), current.importedAt(), clock.instant(),
 					ExternalJob.FOUND, canonicalUrl, applyEmail, current.submittedBy(), current.description(),
-					current.salaryMin(), current.salaryMax(), current.salaryPeriod()));
+					current.salaryMin(), current.salaryMax(), current.salaryPeriod(), current.salaryNotInformed()));
 				saved++;
 				continue;
 			}
@@ -103,14 +103,15 @@ public class ExternalJobImportService {
 					original.title(), original.company(), original.location(), original.salary(),
 					original.currency(), original.url(), original.importedAt(), clock.instant(),
 					original.status(), original.canonicalUrl(), original.applyEmail(), original.submittedBy(),
-					original.description(), original.salaryMin(), original.salaryMax(), original.salaryPeriod()));
+					original.description(), original.salaryMin(), original.salaryMax(), original.salaryPeriod(),
+					original.salaryNotInformed()));
 				saved++;
 				continue;
 			}
 			repository.save(new ExternalJob("ext_" + platform + "_" + external.externalId(), platform,
 				external.externalId(), external.title(), external.company(), external.location(),
 				external.salary(), null, external.url(), clock.instant(), clock.instant(), ExternalJob.FOUND,
-				canonicalUrl, applyEmail, null, null, null, null, null));
+				canonicalUrl, applyEmail, null, null, null, null, null, false));
 			saved++;
 		}
 		return saved;

@@ -15,6 +15,15 @@ public interface GameEventRepository {
 	/** Jogadores distintos estimados: ids diferentes que deram PLAY_START. */
 	long distinctPlayers(String gameId);
 
+	/**
+	 * Ranking por jogo na janela que começa em `since`, mais jogado primeiro.
+	 *
+	 * A janela é sempre curta (o "hoje" do feed são 24 horas): sem `since` a consulta agruparia o
+	 * histórico inteiro a cada abertura de feed.
+	 */
+	java.util.List<com.socialcoisa.rede.games.application.GameTally> mostPlayedSince(GameEventKind kind,
+			java.time.Instant since, int limit);
+
 	/** Compartilhamentos do usuário no jogo desde um instante (o teto diário do G-share). */
 	long countByGameAndUserAndKindSince(String gameId, GameEventKind kind, String userId, java.time.Instant since);
 

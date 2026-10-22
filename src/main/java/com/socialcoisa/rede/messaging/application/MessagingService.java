@@ -112,6 +112,13 @@ public class MessagingService {
 		if (midias.size() > 4) {
 			throw new ApiException(400, "TOO_MANY_MEDIA", "Anexe no maximo 4 midias por mensagem.");
 		}
+		// Duplo clique/retry: a MESMA mensagem (texto + mídias) do mesmo remetente em até 2
+		// minutos devolve a linha já criada em vez de duplicar e notificar de novo.
+		var duplicate = repository.findRecentDuplicate(conversationId, senderId, corpo,
+			clock.instant().minusSeconds(10));
+		if (duplicate.isPresent() && duplicate.get().mediaIds().equals(midias)) {
+			return duplicate.get();
+		}
 		String id = "message_" + UUID.randomUUID().toString().replace("-", "");
 		Message message = Message.create(id, conversationId, senderId, corpo, midias, clock.instant());
 		repository.saveMessage(message);

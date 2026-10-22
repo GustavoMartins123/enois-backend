@@ -56,6 +56,8 @@ public class DeletePostService implements DeletePostUseCase, BulkDeletePostsUseC
 		}
 		post.delete(clock.instant());
 		postRepository.save(post);
+		// A cópia de uma republicação não pode sobreviver ao original (inclusive por moderação).
+		removeReposts(post);
 		feedCacheRepository.removeEverywhere(post.id());
 		outboxEventRepository.append("PostDeleted", post.id().value(), "{\"postId\":\"" + post.id().value() + "\"}");
 		requestMediaDeletion(post);
@@ -112,6 +114,8 @@ public class DeletePostService implements DeletePostUseCase, BulkDeletePostsUseC
 		}
 		post.delete(clock.instant());
 		postRepository.save(post);
+		// A cópia de uma republicação não pode sobreviver ao original (inclusive por moderação).
+		removeReposts(post);
 		feedCacheRepository.removeEverywhere(post.id());
 		outboxEventRepository.append("PostDeleted", post.id().value(), "{\"postId\":\"" + post.id().value()
 			+ "\",\"reason\":\"MOMENT_EXPIRED\"}");
@@ -128,6 +132,8 @@ public class DeletePostService implements DeletePostUseCase, BulkDeletePostsUseC
 		}
 		post.delete(clock.instant());
 		postRepository.save(post);
+		// A cópia de uma republicação não pode sobreviver ao original (inclusive por moderação).
+		removeReposts(post);
 		feedCacheRepository.removeEverywhere(post.id());
 		outboxEventRepository.append("PostDeleted", post.id().value(), "{\"postId\":\"" + post.id().value() + "\"}");
 		requestMediaDeletion(post);
@@ -148,6 +154,15 @@ public class DeletePostService implements DeletePostUseCase, BulkDeletePostsUseC
 
 	private String normalizeReason(String reason) {
 		return StringUtils.hasText(reason) ? reason.trim() : null;
+	}
+
+	/** Apaga as republicações ativas que apontam para este post. */
+	private void removeReposts(Post original) {
+		for (Post repost : postRepository.findActiveRepostsBySource(original.id().value())) {
+			repost.delete(clock.instant());
+			postRepository.save(repost);
+			feedCacheRepository.removeEverywhere(repost.id());
+		}
 	}
 
 	private void requestMediaDeletion(Post post) {

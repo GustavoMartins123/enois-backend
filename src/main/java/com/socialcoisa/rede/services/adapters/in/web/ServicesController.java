@@ -37,10 +37,12 @@ class ServicesController {
 
 	@GetMapping("/servicos")
 	Map<String, Object> catalog(@RequestParam(defaultValue = "40") int listings,
-			@RequestParam(defaultValue = "40") int requests) {
+			@RequestParam(defaultValue = "40") int requests,
+			@RequestParam(required = false) String q,
+			@RequestParam(required = false) String category) {
 		return Map.of(
-			"ofertas", services.listingCatalog(listings).stream().map(ListingView::from).toList(),
-			"pedidos", services.requestCatalog(requests).stream().map(RequestView::from).toList());
+			"ofertas", services.listingCatalog(listings, q, category).stream().map(ListingView::from).toList(),
+			"pedidos", services.requestCatalog(requests, q, category).stream().map(RequestView::from).toList());
 	}
 
 	@GetMapping("/servicos/minhas")
@@ -59,7 +61,8 @@ class ServicesController {
 			@RequestBody PublishListingRequest request) {
 		CurrentUser user = user(userId, sessionToken);
 		ServiceListing listing = services.publishListing(user.id().value(), request.category(), request.title(),
-			request.description(), request.deliverables(), request.price(), request.deliveryDays());
+			request.description(), request.deliverables(), request.price(), request.currency(),
+			request.deliveryDays());
 		return Map.of("id", listing.id(), "status", listing.status().name());
 	}
 
@@ -141,6 +144,7 @@ class ServicesController {
 	}
 
 	record PublishListingRequest(String category, String title, String description, String deliverables, long price,
+			String currency,
 			int deliveryDays) {
 	}
 
@@ -158,10 +162,10 @@ class ServicesController {
 	}
 
 	record ListingView(String id, String sellerId, String category, String title, String description,
-			String deliverables, long price, int deliveryDays, String status, String createdAt) {
+			String deliverables, long price, String currency, int deliveryDays, String status, String createdAt) {
 		static ListingView from(ServiceListing l) {
 			return new ListingView(l.id(), l.sellerId(), l.category(), l.title(), l.description(), l.deliverables(),
-				l.price(), l.deliveryDays(), l.status().name(), l.createdAt().toString());
+				l.price(), l.currency(), l.deliveryDays(), l.status().name(), l.createdAt().toString());
 		}
 	}
 

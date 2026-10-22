@@ -2,6 +2,10 @@ package com.socialcoisa.rede.profile.adapters.in.web;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -31,8 +35,12 @@ import com.socialcoisa.rede.profile.application.port.in.UpdateProfileUseCase;
 import com.socialcoisa.rede.idempotency.application.CommandResponse;
 import com.socialcoisa.rede.idempotency.application.IdempotencyApplicationService;
 import com.socialcoisa.rede.profile.application.ProfileService;
+import com.socialcoisa.rede.network.application.NetworkService;
+import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
+import com.socialcoisa.rede.profile.domain.UserProfile;
 import com.socialcoisa.rede.shared.web.CurrentUser;
 import com.socialcoisa.rede.shared.web.CurrentUserResolver;
+import com.socialcoisa.rede.shared.web.ApiException;
 
 @RestController
 class ProfileController {
@@ -42,12 +50,15 @@ class ProfileController {
 	private final UpdateProfileUseCase updateProfileUseCase;
 	private final ManageProfileExtensionUseCase profileExtensionUseCase;
 	private final ProfileService profileService;
+	private final NetworkService networkService;
+	private final UserProfileRepository userProfileRepository;
 	private final CurrentUserResolver currentUserResolver;
 	private final IdempotencyApplicationService idempotency;
 
 	ProfileController(GetMeUseCase getMeUseCase, GetUserProfileUseCase getUserProfileUseCase,
 			UpdateProfileUseCase updateProfileUseCase,
 			ManageProfileExtensionUseCase profileExtensionUseCase, ProfileService profileService,
+			NetworkService networkService, UserProfileRepository userProfileRepository,
 			CurrentUserResolver currentUserResolver,
 			IdempotencyApplicationService idempotency) {
 		this.getMeUseCase = getMeUseCase;
@@ -55,6 +66,8 @@ class ProfileController {
 		this.updateProfileUseCase = updateProfileUseCase;
 		this.profileExtensionUseCase = profileExtensionUseCase;
 		this.profileService = profileService;
+		this.networkService = networkService;
+		this.userProfileRepository = userProfileRepository;
 		this.currentUserResolver = currentUserResolver;
 		this.idempotency = idempotency;
 	}
@@ -91,6 +104,44 @@ class ProfileController {
 	@GetMapping("/users/{username}")
 	Object user(@PathVariable String username) {
 		return getUserProfileUseCase.getByUsername(username);
+	}
+
+	/** Pessoas ligadas ao perfil visitado; apenas conexoes aceitas entram na leitura publica. */
+	@GetMapping("/users/{username}/connections")
+	List<PublicNetworkUserView> connections(@PathVariable String username) {
+		return networkUsers(username, false);
+	}
+
+	/** Seguidores do perfil visitado: quem enviou uma conexao aceita para ele. */
+	@GetMapping("/users/{username}/followers")
+	List<PublicNetworkUserView> followers(@PathVariable String username) {
+		return networkUsers(username, true);
+	}
+
+	private List<PublicNetworkUserView> networkUsers(String username, boolean followers) {
+		UserProfile profile = userProfileRepository.findByUsername(username)
+			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
+		List<String> ids = networkService.getConnections(profile.id()).stream()
+			.filter(connection -> !followers || profile.id().equals(connection.receiverUserId()))
+			.map(connection -> profile.id().equals(connection.requesterUserId())
+				? connection.receiverUserId() : connection.requesterUserId())
+			.distinct()
+			.toList();
+		Map<String, UserProfile> profiles = userProfileRepository.findAllByIds(ids).stream()
+			.collect(Collectors.toMap(UserProfile::id, Function.identity()));
+		return ids.stream()
+			.map(profiles::get)
+			.filter(Objects::nonNull)
+			.map(PublicNetworkUserView::from)
+			.toList();
+	}
+
+	record PublicNetworkUserView(String id, String username, String name, String headline, String avatar,
+		String avatarFrame) {
+		static PublicNetworkUserView from(UserProfile profile) {
+			return new PublicNetworkUserView(profile.id(), profile.username(), profile.displayWithNickname(),
+				profile.headline(), profile.avatar(), profile.avatarFrame());
+		}
 	}
 
 	record RankingPreferenceRequest(boolean show) {
@@ -152,6 +203,12 @@ class ProfileController {
 
 	private CurrentUser resolve(String userId, String sessionToken) {
 		return currentUserResolver.resolve(userId, sessionToken);
+	}
+
+	/** Experiências para o perfil público (abaixo dos projetos); leitura aberta. */
+	@GetMapping("/users/{username}/experiences")
+	List<ExperienceView> experiencesByUsername(@PathVariable String username) {
+		return profileExtensionUseCase.getExperiencesOf(username);
 	}
 
 	@GetMapping("/me/experiences")

@@ -1,6 +1,7 @@
 package com.socialcoisa.rede.services.domain;
 
 import java.time.Instant;
+import java.util.Locale;
 import java.util.UUID;
 
 import org.springframework.util.StringUtils;
@@ -19,20 +20,26 @@ public final class ServiceModels {
 	}
 
 	public record ServiceListing(String id, String sellerId, String category, String title, String description,
-			String deliverables, long price, int deliveryDays, Status status, Instant createdAt, Instant updatedAt) {
+			String deliverables, long price, String currency, int deliveryDays, Status status, Instant createdAt,
+			Instant updatedAt) {
 
 		public enum Status {
 			ACTIVE, REMOVED
 		}
 
 		public static ServiceListing create(String sellerId, String category, String title, String description,
-				String deliverables, long price, int deliveryDays, Instant now) {
+				String deliverables, long price, String currency, int deliveryDays, Instant now) {
 			validateCommon(category, title, description, deliverables, price);
+			String moeda = currency == null ? "FAISCA" : currency.trim().toUpperCase(Locale.ROOT);
+			if (!moeda.equals("FAISCA") && !moeda.equals("BRL")) {
+				throw new ApiException(400, "INVALID_CURRENCY", "Moeda precisa ser FAISCA ou BRL.");
+			}
 			if (deliveryDays <= 0 || deliveryDays > 365) {
 				throw new ApiException(400, "INVALID_DELIVERY", "O prazo de entrega precisa de 1 a 365 dias.");
 			}
 			return new ServiceListing("sl_" + UUID.randomUUID().toString().replace("-", ""), sellerId, category.trim(),
-				title.trim(), description.trim(), deliverables.trim(), price, deliveryDays, Status.ACTIVE, now, now);
+				title.trim(), description.trim(), deliverables.trim(), price, moeda, deliveryDays, Status.ACTIVE,
+				now, now);
 		}
 
 		public boolean ownedBy(String accountId) {
@@ -40,8 +47,8 @@ public final class ServiceModels {
 		}
 
 		public ServiceListing remove(Instant now) {
-			return new ServiceListing(id, sellerId, category, title, description, deliverables, price, deliveryDays,
-				Status.REMOVED, createdAt, now);
+			return new ServiceListing(id, sellerId, category, title, description, deliverables, price, currency,
+				deliveryDays, Status.REMOVED, createdAt, now);
 		}
 	}
 

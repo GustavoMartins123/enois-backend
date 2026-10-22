@@ -1,6 +1,7 @@
 package com.socialcoisa.rede.preferences.adapters.out.persistence;
 
 import java.time.Instant;
+import java.time.LocalDate;
 
 import com.socialcoisa.rede.preferences.domain.UserPreference;
 
@@ -17,7 +18,7 @@ class UserPreferenceJpaEntity {
 	@Column(name = "user_id", nullable = false)
 	private String userId;
 
-	@Column(name = "theme_id", length = 32)
+	@Column(name = "theme_id", length = 64)
 	private String themeId;
 
 	@Column(name = "liked_topics", length = 400)
@@ -31,6 +32,13 @@ class UserPreferenceJpaEntity {
 
 	@Column(name = "night_rest_reminder", nullable = false)
 	private boolean nightRestReminder = true;
+
+	/** Data local da noite em que o lembrete foi dispensado (null = nunca dispensou). */
+	@Column(name = "night_rest_dismissed_on")
+	private LocalDate nightRestDismissedOn;
+
+	@Column(name = "lite_mode", nullable = false)
+	private boolean liteMode;
 
 	@Column(name = "updated_at", nullable = false)
 	private Instant updatedAt;
@@ -51,11 +59,13 @@ class UserPreferenceJpaEntity {
 		entity.blockedTopics = preference.blockedTopics();
 		entity.disabledModules = preference.disabledModules();
 		entity.nightRestReminder = preference.nightRestReminder();
+		entity.nightRestDismissedOn = preference.nightRestDismissedOn();
+		entity.liteMode = preference.liteMode();
 		return entity;
 	}
 
 	UserPreference toDomain() {
 		return new UserPreference(userId, themeId, likedTopics, blockedTopics, disabledModules,
-			nightRestReminder, updatedAt);
+			nightRestReminder, nightRestDismissedOn, liteMode, updatedAt);
 	}
 }

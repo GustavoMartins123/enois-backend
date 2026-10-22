@@ -7,6 +7,9 @@ public interface ManageProfileExtensionUseCase {
 
 	List<ExperienceView> getExperiences(String userId);
 
+	/** Experiências públicas de alguém (a tela de perfil busca por username). */
+	List<ExperienceView> getExperiencesOf(String username);
+
 	ExperienceView addExperience(String userId, String title, String company, String location, String description,
 			LocalDate startDate, LocalDate endDate);
 

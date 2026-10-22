@@ -29,6 +29,12 @@ public class Post {
 	private final String topic;
 	/** Canal privado da comunidade onde o post nasceu; nulo = post normal (aparece nos feeds). */
 	private final String channelId;
+	/** Post original de uma republicação (nulo = post original). */
+	private String repostOf;
+	/** @ do autor original, para o crédito no card sem join na listagem. */
+	private String repostOfAuthor;
+	/** Repost COM opinião: o content é o comentário do reposter e o original aparece citado. */
+	private boolean repostWithOpinion;
 
 	private Post(PostId id, UserId authorId, PostType type, String content, String pageHtml, List<String> tags,
 			List<String> mediaIds, String communityId, String topic, String channelId, Instant createdAt,
@@ -189,6 +195,30 @@ public class Post {
 	/** Canal privado onde o post nasceu (null = post normal). */
 	public String channelId() {
 		return channelId;
+	}
+
+	/** Marca esta publicação como republicação de outra (chamado só pelo serviço de repost). */
+	public Post markRepostOf(String originalPostId, String originalAuthorUsername) {
+		return markRepostOf(originalPostId, originalAuthorUsername, false);
+	}
+
+	public Post markRepostOf(String originalPostId, String originalAuthorUsername, boolean withOpinion) {
+		this.repostOf = originalPostId;
+		this.repostOfAuthor = originalAuthorUsername;
+		this.repostWithOpinion = withOpinion;
+		return this;
+	}
+
+	public boolean repostWithOpinion() {
+		return repostWithOpinion;
+	}
+
+	public String repostOf() {
+		return repostOf;
+	}
+
+	public String repostOfAuthor() {
+		return repostOfAuthor;
 	}
 
 	public boolean delete(Instant deletedAt) {

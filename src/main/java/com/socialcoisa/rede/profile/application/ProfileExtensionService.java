@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.socialcoisa.rede.profile.application.port.in.ManageProfileExtensionUseCase;
 import com.socialcoisa.rede.profile.application.port.out.ProfileExtensionRepository;
+import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.profile.domain.Certification;
 import com.socialcoisa.rede.profile.domain.Education;
 import com.socialcoisa.rede.profile.domain.Experience;
@@ -21,10 +22,12 @@ public class ProfileExtensionService implements ManageProfileExtensionUseCase {
 	private static final int MAX_ENTRIES_PER_KIND = 10;
 
 	private final ProfileExtensionRepository repository;
+	private final UserProfileRepository profiles;
 	private final Clock clock;
 
-	public ProfileExtensionService(ProfileExtensionRepository repository, Clock clock) {
+	public ProfileExtensionService(ProfileExtensionRepository repository, UserProfileRepository profiles, Clock clock) {
 		this.repository = repository;
+		this.profiles = profiles;
 		this.clock = clock;
 	}
 
@@ -32,6 +35,22 @@ public class ProfileExtensionService implements ManageProfileExtensionUseCase {
 	@Transactional(readOnly = true)
 	public List<ExperienceView> getExperiences(String userId) {
 		return repository.findExperiencesByUserId(userId).stream()
+			.map(this::toExperienceView)
+			.toList();
+	}
+
+	/**
+	 * Perfil público: o mais recente primeiro (é a ordem que se espera de um currículo). Quem
+	 * ainda não preencheu data de início fica no fim, sem sumir da lista.
+	 */
+	@Override
+	@Transactional(readOnly = true)
+	public List<ExperienceView> getExperiencesOf(String username) {
+		var profile = profiles.findByUsername(username == null ? "" : username.trim())
+			.orElseThrow(() -> new ApiException(404, "PROFILE_NOT_FOUND", "Perfil não encontrado."));
+		return repository.findExperiencesByUserId(profile.id()).stream()
+			.sorted(java.util.Comparator.comparing(Experience::startDate,
+				java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())))
 			.map(this::toExperienceView)
 			.toList();
 	}
