@@ -28,11 +28,13 @@ public class MessagingService {
 	private final BehavioralTimingGuard behavioralTimingGuard;
 	private final com.socialcoisa.rede.shared.age.AgePolicyReader agePolicy;
 	private final com.socialcoisa.rede.shared.age.AgeGate ageGate;
+	private final com.socialcoisa.rede.shared.sanctions.SanctionGate sanctionGate;
 	private final com.socialcoisa.rede.network.application.port.out.ConnectionRepository connections;
 
 	public MessagingService(MessagingRepository repository, NotificationService notificationService, Clock clock,
 			UserRateLimiter userRateLimiter, BehavioralTimingGuard behavioralTimingGuard,
 			com.socialcoisa.rede.shared.age.AgePolicyReader agePolicy, com.socialcoisa.rede.shared.age.AgeGate ageGate,
+			com.socialcoisa.rede.shared.sanctions.SanctionGate sanctionGate,
 			com.socialcoisa.rede.network.application.port.out.ConnectionRepository connections) {
 		this.repository = repository;
 		this.notificationService = notificationService;
@@ -41,6 +43,7 @@ public class MessagingService {
 		this.behavioralTimingGuard = behavioralTimingGuard;
 		this.agePolicy = agePolicy;
 		this.ageGate = ageGate;
+		this.sanctionGate = sanctionGate;
 		this.connections = connections;
 	}
 
@@ -95,6 +98,10 @@ public class MessagingService {
 			java.util.List<String> mediaIds) {
 		// ECA Digital: sem data de nascimento declarada, nao envia mensagem (tela de regularizacao).
 		ageGate.requireCanWrite(senderId);
+		// Sancao de moderacao: conta restrita nao manda mensagem. O canal privado e onde a
+		// moderacao nao enxerga, entao deixar a conversa aberta era a forma mais facil de a
+		// restricao ser contornada.
+		sanctionGate.requireNotRestricted(senderId);
 		userRateLimiter.require(senderId, UserRateLimiter.SEND_MESSAGE);
 		behavioralTimingGuard.record(senderId);
 		Conversation conversation = repository.findConversationById(conversationId)

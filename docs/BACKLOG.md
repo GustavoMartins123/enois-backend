@@ -172,6 +172,31 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   container MariaDB aplicando as migrações (o do front, o `ci.yml`, já roda lint, typecheck e
   vitest).
 ## Higiene do backend (entregue 2026-10-21)
+- **[x] ENTREGUE 2026-10-21 — Os portões de escrita não cobriam todos os caminhos: uma conta
+  restrita ainda publicava em grupo, comentava em grupo e mandava mensagem privada.** A sanção de
+  moderação (a RESTRICTION — decisão humana de "não publica nem comenta", com recurso) era
+  conferida em **dois** lugares: o post e o comentário do feed. A mesma conta restrita continuava
+  alcançando pessoas pelos outros caminhos, e o canal privado é justamente onde a moderação não
+  enxerga. Pior: as escritas de grupo nem passavam pelo **portão de idade (ECA Digital)**, então uma
+  conta de menor sem autorização do responsável publicava e comentava em grupo normalmente — o
+  feed barra, o grupo não.
+  *Corrigido:* o portão virou um componente compartilhado (`shared/sanctions/SanctionGate`, no
+  mesmo formato do `AgeGate`), com **código e mensagem únicos** (`ACCOUNT_RESTRICTED`), e passou a
+  ser chamado em toda escrita que produz conteúdo ou fala com outra pessoa: post e comentário do
+  feed, post e comentário de grupo e mensagem privada. O blog já estava coberto (o post do blog
+  nasce como post do feed). As escritas de grupo ganharam também o portão de idade.
+  *Testes:* `shared/sanctions/WriteGateCoverageTests` (5) — conta restrita não publica em grupo,
+  não comenta em grupo, não manda mensagem, menor sem autorização não publica em grupo, e a
+  conta sem nada contra ela continua escrevendo. A suíte inteira continua verde.
+  *No app:* o chat não mostrava **nada** quando o envio falhava (a pessoa clicava em enviar e o
+  app ficava quieto) e a publicação de grupo mostrava um erro genérico que escondia o motivo.
+  Agora os dois mostram a mensagem do servidor — que é a que diz o motivo (conta restrita, ECA,
+  tópico arquivado) e onde recorrer.
+  *Fica em aberto (decisão de produto):* as escritas de **anúncio** (vaga, freelance, serviço,
+  projeto, evento, comunidade, microprojeto) seguem sem o portão da sanção — hoje elas têm
+  portões próprios (reputação, identidade verificada, revisão). Se a restrição deve alcançar também
+  esse tipo de publicação, é decisão da dona: pode ser que uma empresa restrita por um comentário
+  não deva perder o cadastro de vaga.
 - **[x] ENTREGUE 2026-10-21 — A suíte voltou a ficar verde, e 2 das 9 falhas eram defeitos do
   app (não dos testes).** O cadastro em duas etapas (V134, 2026-10-20) deixou 5 classes de teste
   desatualizadas e, no caminho, **abriu dois buracos no código de produção**:

@@ -43,7 +43,7 @@ public class PublishPostService implements PublishPostUseCase {
 	private final ValidateMediaOwnershipUseCase validateMediaOwnershipUseCase;
 	private final NotificationService notificationService;
 	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository;
-	private final com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate;
+	private final com.socialcoisa.rede.shared.sanctions.SanctionGate sanctionGate;
 	private final com.socialcoisa.rede.shared.age.AgeGate agePolicy;
 	private final PostCommunityReader postCommunityReader;
 	private final com.socialcoisa.rede.feed.application.port.out.CommunityChannelReader communityChannelReader;
@@ -64,7 +64,7 @@ public class PublishPostService implements PublishPostUseCase {
 			ValidateMediaOwnershipUseCase validateMediaOwnershipUseCase,
 			NotificationService notificationService,
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository,
-			com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate,
+			com.socialcoisa.rede.shared.sanctions.SanctionGate sanctionGate,
 			com.socialcoisa.rede.shared.age.AgeGate agePolicy,
 			PostCommunityReader postCommunityReader,
 			com.socialcoisa.rede.feed.application.port.out.CommunityChannelReader communityChannelReader,
@@ -100,10 +100,7 @@ public class PublishPostService implements PublishPostUseCase {
 	public PostView publish(PublishPostCommand command) {
 		// ECA Digital: sem data de nascimento declarada, nenhuma publicacao sai (tela de regularizacao).
 		agePolicy.requireCanWrite(command.authorId().value());
-		if (sanctionGate.restricted(command.authorId().value())) {
-			throw new ApiException(403, "ACCOUNT_RESTRICTED",
-				"Sua conta esta restrita por moderacao. Voce pode recorrer na pagina Penalidades.");
-		}
+		sanctionGate.requireNotRestricted(command.authorId().value());
 		newAccountCooldown.require(command.authorId().value());
 		userRateLimiter.require(command.authorId().value(), UserRateLimiter.CREATE_POST);
 		behavioralTimingGuard.record(command.authorId().value());

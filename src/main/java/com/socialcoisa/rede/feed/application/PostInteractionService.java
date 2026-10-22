@@ -50,7 +50,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository;
 	private final BlockedUsersReader blockedUsersReader;
 	private final com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseCase validateMediaOwnership;
-	private final com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate;
+	private final com.socialcoisa.rede.shared.sanctions.SanctionGate sanctionGate;
 	private final com.socialcoisa.rede.shared.age.AgeGate agePolicy;
 	private final com.socialcoisa.rede.coin.application.CoinService coins;
 	private final NewAccountCooldown newAccountCooldown;
@@ -67,7 +67,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository,
 			BlockedUsersReader blockedUsersReader,
 			com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseCase validateMediaOwnership,
-			com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate,
+			com.socialcoisa.rede.shared.sanctions.SanctionGate sanctionGate,
 			com.socialcoisa.rede.coin.application.CoinService coins,
 			NewAccountCooldown newAccountCooldown,
 			UserRateLimiter userRateLimiter,
@@ -98,10 +98,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 	public CommentView comment(CommentOnPostCommand command) {
 		// ECA Digital: sem data de nascimento declarada, nao comenta (tela de regularizacao).
 		agePolicy.requireCanWrite(command.authorId().value());
-		if (sanctionGate.restricted(command.authorId().value())) {
-			throw new ApiException(403, "ACCOUNT_RESTRICTED",
-				"Sua conta esta restrita por moderacao. Voce pode recorrer na pagina Penalidades.");
-		}
+		sanctionGate.requireNotRestricted(command.authorId().value());
 		newAccountCooldown.require(command.authorId().value());
 		userRateLimiter.require(command.authorId().value(), UserRateLimiter.CREATE_COMMENT);
 		behavioralTimingGuard.record(command.authorId().value());

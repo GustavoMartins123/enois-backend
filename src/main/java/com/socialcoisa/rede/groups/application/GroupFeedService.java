@@ -51,14 +51,19 @@ public class GroupFeedService {
 	private final GroupContentRepository content;
 	private final AuditLogRepository audit;
 	private final GroupNotifier notifier;
+	private final com.socialcoisa.rede.shared.age.AgeGate ageGate;
+	private final com.socialcoisa.rede.shared.sanctions.SanctionGate sanctionGate;
 	private final Clock clock;
 
 	public GroupFeedService(GroupRepository groups, GroupContentRepository content, AuditLogRepository audit,
-			GroupNotifier notifier, Clock clock) {
+			GroupNotifier notifier, com.socialcoisa.rede.shared.age.AgeGate ageGate,
+			com.socialcoisa.rede.shared.sanctions.SanctionGate sanctionGate, Clock clock) {
 		this.groups = groups;
 		this.content = content;
 		this.audit = audit;
 		this.notifier = notifier;
+		this.ageGate = ageGate;
+		this.sanctionGate = sanctionGate;
 		this.clock = clock;
 	}
 
@@ -149,6 +154,11 @@ public class GroupFeedService {
 
 	@Transactional
 	public GroupPost publish(String groupId, String topicId, String actorId, String text, List<String> mediaIds) {
+		// Os mesmos portoes do feed: ECA (menor sem autorizacao nao publica) e sancao de
+		// moderacao (conta restrita nao publica). Sem eles, a publicacao de grupo era um buraco
+		// por onde a regra do feed era contornada.
+		ageGate.requireCanWrite(actorId);
+		sanctionGate.requireNotRestricted(actorId);
 		Group group = requireGroup(groupId);
 		require(roleOf(groupId, actorId), GroupCapability.PUBLISH);
 		if (!group.status().acceptsNewContent()) {
@@ -262,6 +272,9 @@ public class GroupFeedService {
 
 	@Transactional
 	public GroupComment comment(String groupId, String postId, String authorId, String text, String parentCommentId) {
+		// Mesmos portoes do comentario do feed (ECA e sancao de moderacao).
+		ageGate.requireCanWrite(authorId);
+		sanctionGate.requireNotRestricted(authorId);
 		Group group = requireGroup(groupId);
 		GroupPost post = requirePost(groupId, postId);
 		require(roleOf(groupId, authorId), GroupCapability.INTERACT);
