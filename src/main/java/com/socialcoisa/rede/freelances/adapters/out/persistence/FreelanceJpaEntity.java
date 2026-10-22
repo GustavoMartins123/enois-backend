@@ -19,6 +19,8 @@ class FreelanceJpaEntity {
 	@Column(name="budget_min", nullable=false) private int budgetMin;
 	@Column(name="budget_max", nullable=false) private int budgetMax;
 	@Column(nullable=false) private LocalDate deadline;
+	@Enumerated(EnumType.STRING) @Column(name="payment_method", nullable=false, length=16)
+	private Freelance.PaymentMethod paymentMethod;
 	@Enumerated(EnumType.STRING) @Column(nullable=false, length=16) private Freelance.Status status;
 	@Column(name="created_at", nullable=false) private Instant createdAt;
 	@Column(name="updated_at", nullable=false) private Instant updatedAt;
@@ -29,11 +31,13 @@ class FreelanceJpaEntity {
 		FreelanceJpaEntity e = new FreelanceJpaEntity();
 		e.id=f.id(); e.userId=f.userId(); e.title=f.title(); e.scope=f.scope();
 		e.budgetMin=f.budgetMin(); e.budgetMax=f.budgetMax(); e.deadline=f.deadline();
+		e.paymentMethod=f.paymentMethod();
 		e.status=f.status(); e.createdAt=f.createdAt(); e.updatedAt=f.updatedAt();
 		return e;
 	}
 
 	Freelance toDomain() {
-		return Freelance.restore(id,userId,title,scope,budgetMin,budgetMax,deadline,status,createdAt,updatedAt);
+		return Freelance.restore(id,userId,title,scope,budgetMin,budgetMax,deadline,paymentMethod,status,
+			createdAt,updatedAt);
 	}
 }

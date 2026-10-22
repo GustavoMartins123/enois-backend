@@ -32,6 +32,50 @@ class FreelanceFlowTests {
 	private ObjectMapper objectMapper;
 
 	@Test
+	void paymentCanBeCashOrDefaultsToFaiscas() throws Exception {
+		var owner = new TestAuthHelper(mockMvc, objectMapper).authenticate("free_payment");
+
+		mockMvc.perform(post("/freelances")
+				.header("X-Session-Token", owner.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of(
+					"title", "Site institucional",
+					"scope", "Montar o site com cinco páginas e formulário de contato.",
+					"budgetMin", 1500,
+					"budgetMax", 2500,
+					"deadline", LocalDate.now().plusDays(5).toString(),
+					"paymentMethod", "CASH"))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.paymentMethod").value("CASH"));
+
+		// Sem o campo, o freela continua no circuito da faísca (comportamento antigo).
+		mockMvc.perform(post("/freelances")
+				.header("X-Session-Token", owner.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of(
+					"title", "Ajuste de CSS",
+					"scope", "Corrigir o layout quebrado na home e no painel administrativo.",
+					"budgetMin", 5_000,
+					"budgetMax", 8_000,
+					"deadline", LocalDate.now().plusDays(5).toString()))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.paymentMethod").value("FAISCAS"));
+
+		mockMvc.perform(post("/freelances")
+				.header("X-Session-Token", owner.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of(
+					"title", "Outro trabalho",
+					"scope", "Descrição com tamanho suficiente para passar na validação de escopo.",
+					"budgetMin", 100,
+					"budgetMax", 200,
+					"deadline", LocalDate.now().plusDays(5).toString(),
+					"paymentMethod", "PIX"))))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_PAYMENT_METHOD"));
+	}
+
+	@Test
 	void createsListsAndClosesAFreelance() throws Exception {
 		var owner = new TestAuthHelper(mockMvc, objectMapper).authenticate("free_owner");
 

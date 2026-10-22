@@ -154,6 +154,12 @@ class ProfileController {
 		return currentUserResolver.resolve(userId, sessionToken);
 	}
 
+	/** Experiências para o perfil público (abaixo dos projetos); leitura aberta. */
+	@GetMapping("/users/{username}/experiences")
+	List<ExperienceView> experiencesByUsername(@PathVariable String username) {
+		return profileExtensionUseCase.getExperiencesOf(username);
+	}
+
 	@GetMapping("/me/experiences")
 	List<ExperienceView> getExperiences(@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken) {

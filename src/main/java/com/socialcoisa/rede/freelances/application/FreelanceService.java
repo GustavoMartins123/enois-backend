@@ -39,7 +39,7 @@ public class FreelanceService {
 
 	@Transactional
 	public Freelance create(String userId, String title, String scope, int budgetMin, int budgetMax,
-			String deadline) {
+			String deadline, String paymentMethod) {
 		ageGate.requireCanWrite(userId);
 		throttle.exigePermitido("freelance", userId, PER_HOUR, java.time.Duration.ofHours(1));
 		if (!StringUtils.hasText(title) || title.trim().length() < 3) {
@@ -62,8 +62,9 @@ public class FreelanceService {
 		if (date.isBefore(LocalDate.now(clock))) {
 			throw new ApiException(400, "INVALID_DEADLINE", "O prazo precisa ser hoje ou no futuro.");
 		}
+		Freelance.PaymentMethod payment = parsePaymentMethod(paymentMethod);
 		Freelance f = Freelance.create("free_" + UUID.randomUUID().toString().replace("-", ""), userId,
-			title.trim(), scope.trim(), budgetMin, budgetMax, date, clock.instant());
+			title.trim(), scope.trim(), budgetMin, budgetMax, date, payment, clock.instant());
 		return freelances.save(f);
 	}
 
@@ -78,6 +79,20 @@ public class FreelanceService {
 			throw new ApiException(409, "ALREADY_CLOSED", "Este freela já está encerrado.");
 		}
 		return freelances.save(f.close(clock.instant()));
+	}
+
+	/** Aceita CASH/FAISCAS; sem valor, mantém o circuito da faísca (comportamento antigo). */
+	private Freelance.PaymentMethod parsePaymentMethod(String raw) {
+		if (!StringUtils.hasText(raw)) {
+			return Freelance.PaymentMethod.FAISCAS;
+		}
+		try {
+			return Freelance.PaymentMethod.valueOf(raw.trim().toUpperCase(java.util.Locale.ROOT));
+		}
+		catch (IllegalArgumentException invalid) {
+			throw new ApiException(400, "INVALID_PAYMENT_METHOD",
+				"Escolha o pagamento em dinheiro ou em faíscas.");
+		}
 	}
 
 	@Transactional(readOnly = true)

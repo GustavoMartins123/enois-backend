@@ -54,7 +54,7 @@ class FreelanceController {
 			@RequestHeader("X-Session-Token") String sessionToken, @RequestBody CreateFreelanceRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		Freelance f = freelances.create(user.id().value(), request.title(), request.scope(),
-			request.budgetMin(), request.budgetMax(), request.deadline());
+			request.budgetMin(), request.budgetMax(), request.deadline(), request.paymentMethod());
 		return FreelanceView.of(f, freelances.usernameOf(user.id().value()), user.id().value());
 	}
 
@@ -87,6 +87,7 @@ class FreelanceController {
 		try { return Math.max(0, Integer.parseInt(cursor.trim())); } catch (NumberFormatException e) { return 0; }
 	}
 
-	record CreateFreelanceRequest(String title, String scope, int budgetMin, int budgetMax, String deadline) {
+	record CreateFreelanceRequest(String title, String scope, int budgetMin, int budgetMax, String deadline,
+			String paymentMethod) {
 	}
 }
