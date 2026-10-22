@@ -16,9 +16,10 @@ import com.socialcoisa.rede.feed.domain.PostId;
 import com.socialcoisa.rede.feed.domain.PostStatus;
 import com.socialcoisa.rede.feed.domain.PostType;
 import com.socialcoisa.rede.feed.domain.UserId;
+import com.socialcoisa.rede.profile.application.port.out.SocialPostCountReader;
 
 @Repository
-class PostPersistenceAdapter implements PostRepository {
+class PostPersistenceAdapter implements PostRepository, SocialPostCountReader {
 
 	private final SpringDataPostJpaRepository repository;
 
@@ -94,6 +95,17 @@ class PostPersistenceAdapter implements PostRepository {
 			PostType.BLOG, before, PageRequest.of(0, limit)).stream()
 			.map(PostJpaEntity::toDomain)
 			.toList();
+	}
+
+	@Override
+	public int countActiveByAuthor(UserId authorId) {
+		return (int) repository.countSocialByAuthor(authorId.value(), PostStatus.ACTIVE, AuthorIdentity.SOCIAL,
+			PostType.BLOG);
+	}
+
+	@Override
+	public int countByUser(String userId) {
+		return countActiveByAuthor(new UserId(userId));
 	}
 
 	@Override

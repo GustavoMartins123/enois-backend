@@ -146,6 +146,11 @@ class LinkedInShareOutboxEventHandlerTests {
 		}
 
 		@Override
+		public int countActiveByAuthor(UserId authorId) {
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
 		public Optional<Post> findActiveRepostByAuthorAndSource(UserId authorId, String sourcePostId) {
 			return Optional.empty();
 		}
