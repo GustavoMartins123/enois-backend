@@ -74,6 +74,20 @@ class PostPersistenceAdapter implements PostRepository, SocialPostCountReader {
 	}
 
 	@Override
+	public java.util.Optional<Post> findActiveRepostByAuthorAndSource(UserId authorId, String sourcePostId) {
+		return repository.findRepostByAuthorAndSource(authorId.value(), sourcePostId,
+			com.socialcoisa.rede.feed.domain.PostStatus.ACTIVE).map(PostJpaEntity::toDomain);
+	}
+
+	@Override
+	public List<Post> findActiveRepostsBySource(String sourcePostId) {
+		return repository.findRepostsBySource(sourcePostId,
+			com.socialcoisa.rede.feed.domain.PostStatus.ACTIVE).stream()
+			.map(PostJpaEntity::toDomain)
+			.toList();
+	}
+
+	@Override
 	public List<Post> findActiveByAuthor(UserId authorId, Instant before, int limit) {
 		// Ponteiro de blog fica fora do perfil (o conteudo dele mora no blog) e o que a identidade
 		// profissional assinou fica fora do perfil SOCIAL (fica na pagina profissional).

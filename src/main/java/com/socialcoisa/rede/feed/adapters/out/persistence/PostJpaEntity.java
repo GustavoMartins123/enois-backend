@@ -74,6 +74,12 @@ class PostJpaEntity {
 	@Column(name = "channel_id", length = 64)
 	private String channelId;
 
+	@Column(name = "repost_of", length = 64)
+	private String repostOf;
+
+	@Column(name = "repost_of_author", length = 80)
+	private String repostOfAuthor;
+
 	@Column(name = "created_at", nullable = false)
 	private Instant createdAt;
 
@@ -127,6 +133,8 @@ class PostJpaEntity {
 		entity.mediaIds = new ArrayList<>(post.mediaIds());
 		entity.communityId = post.communityId();
 		entity.channelId = post.channelId();
+		entity.repostOf = post.repostOf();
+		entity.repostOfAuthor = post.repostOfAuthor();
 		entity.createdAt = post.createdAt();
 		entity.visibility = post.visibility();
 		entity.reactions = post.counters().reactions();
@@ -145,6 +153,7 @@ class PostJpaEntity {
 	Post toDomain() {
 		return Post.restore(new PostId(id), new UserId(authorId), type, content, pageHtml, tags, mediaIds, communityId,
 			topic, channelId, createdAt, visibility, new Counters(reactions, comments, saves, shares), status,
-			deletedAt, editedAt, expiresAt, authorIdentity);
+			deletedAt, editedAt, expiresAt, authorIdentity)
+			.markRepostOf(repostOf, repostOfAuthor);
 	}
 }

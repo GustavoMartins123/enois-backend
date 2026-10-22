@@ -17,6 +17,20 @@ interface SpringDataPostJpaRepository extends JpaRepository<PostJpaEntity, Strin
 
 	List<PostJpaEntity> findByAuthorId(String authorId);
 
+	@Query("""
+		select p from PostJpaEntity p
+		where p.authorId = :authorId and p.repostOf = :source and p.status = :status
+		""")
+	java.util.Optional<PostJpaEntity> findRepostByAuthorAndSource(@Param("authorId") String authorId,
+			@Param("source") String source, @Param("status") com.socialcoisa.rede.feed.domain.PostStatus status);
+
+	@Query("""
+		select p from PostJpaEntity p
+		where p.repostOf = :source and p.status = :status
+		""")
+	List<PostJpaEntity> findRepostsBySource(@Param("source") String source,
+			@Param("status") com.socialcoisa.rede.feed.domain.PostStatus status);
+
 	List<PostJpaEntity> findByIdIn(Collection<String> ids);
 
 	List<PostJpaEntity> findByAuthorIdInAndStatusAndChannelIdIsNullAndCreatedAtBeforeOrderByCreatedAtDesc(Collection<String> authorIds,
