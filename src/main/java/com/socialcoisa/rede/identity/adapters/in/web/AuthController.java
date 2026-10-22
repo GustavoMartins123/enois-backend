@@ -74,6 +74,7 @@ class AuthController {
 	private final com.socialcoisa.rede.identity.application.NewDeviceNotifier newDeviceNotifier;
 	private final com.socialcoisa.rede.shared.security.IpBlockReader ipBlockReader;
 	private final com.socialcoisa.rede.shared.security.SignupAttackGuard signupAttackGuard;
+	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles;
 	private final com.socialcoisa.rede.shared.security.ClientIpResolver ipResolver;
 	/** Cadastros abertos? Desligado, o POST /auth/signup responde 403 SIGNUP_DISABLED. */
 	private final boolean signupEnabled;
@@ -97,6 +98,7 @@ class AuthController {
 			com.socialcoisa.rede.identity.application.NewDeviceNotifier newDeviceNotifier,
 			com.socialcoisa.rede.shared.security.IpBlockReader ipBlockReader,
 			com.socialcoisa.rede.shared.security.SignupAttackGuard signupAttackGuard,
+			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles,
 			com.socialcoisa.rede.shared.security.ClientIpResolver ipResolver,
 			@Value("${rede.auth.signup-enabled:true}") boolean signupEnabled) {
 		this.signupUseCase = signupUseCase;
@@ -121,6 +123,7 @@ class AuthController {
 		this.newDeviceNotifier = newDeviceNotifier;
 		this.ipBlockReader = ipBlockReader;
 		this.signupAttackGuard = signupAttackGuard;
+		this.profiles = profiles;
 		this.ipResolver = ipResolver;
 		this.signupEnabled = signupEnabled;
 	}
@@ -174,6 +177,9 @@ class AuthController {
 		// Contenção imediata: nome com o padrão do ataque não cria conta e o IP cai na lista
 		// (as contas "probe" de 20/10 e 22/10 nasciam em série do mesmo provedor).
 		signupAttackGuard.checkSignup(body.name(), body.email(), ip);
+		// Cadastro em massa reaproveita o MESMO e-mail com alias (fulano+1@, fu.lano@gmail).
+		// Comparar a forma normalizada fecha o buraco sem punir ninguém.
+		exigeEmailUnico(body.email());
 		// Portao de cadastros: a operacao pode fechar a criacao de contas (a Mel pediu em
 		// 2026-10-20). Antes de Turnstile/throttle: nao adianta o cliente resolver captcha.
 		if (!signupEnabled) {
@@ -568,6 +574,41 @@ class AuthController {
 	}
 
 	record AuthConfig(String captchaMode, String turnstileSiteKey) {
+	}
+
+	/** Recusa quando o e-mail, normalizado, já pertence a uma conta. */
+	private void exigeEmailUnico(String email) {
+		String normalized = normalizeEmail(email);
+		if (normalized == null) {
+			return;
+		}
+		if (profiles.findByEmail(email == null ? normalized : email.trim()).isPresent()
+			|| profiles.findByEmail(normalized).isPresent()) {
+			throw new ApiException(409, "EMAIL_IN_USE",
+				"Este e-mail ja tem conta no Enois. Entre ou recupere a senha.");
+		}
+	}
+
+	/**
+	 * Forma canônica do e-mail: minúsculo, sem "+tag" e, nos provedores que ignoram pontos,
+	 * sem os pontos do usuário. Duas contas não podem nascer da mesma caixa de entrada.
+	 */
+	private static String normalizeEmail(String email) {
+		if (email == null || !email.contains("@")) {
+			return null;
+		}
+		String clean = email.trim().toLowerCase(java.util.Locale.ROOT);
+		int at = clean.lastIndexOf('@');
+		String local = clean.substring(0, at);
+		String domain = clean.substring(at);
+		int plus = local.indexOf('+');
+		if (plus > 0) {
+			local = local.substring(0, plus);
+		}
+		if (domain.equals("@gmail.com") || domain.equals("@googlemail.com")) {
+			local = local.replace(".", "");
+		}
+		return local + domain;
 	}
 
 	private String authScope(String email) {
