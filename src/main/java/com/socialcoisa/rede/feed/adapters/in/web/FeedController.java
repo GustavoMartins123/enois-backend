@@ -151,7 +151,7 @@ class FeedController {
 		return idempotency.execute(user.id(), "POST", "/api/feed/posts", idempotencyKey, hash, () -> new CommandResponse(201,
 			publishPostUseCase.publish(new PublishPostCommand(user.id(), request.type(), request.content(),
 				request.pageHtml(), request.articleBody(), request.tags(), request.mediaIds(), request.communityId(),
-				request.mentionedUserIds(), request.topic(), request.channelId()))));
+				request.mentionedUserIds(), request.topic(), request.channelId(), Boolean.TRUE.equals(request.mediaSpoiler())))));
 	}
 
 	@GetMapping("/feed")
@@ -301,11 +301,12 @@ class FeedController {
 		payload.put("parentCommentId", request.parentCommentId() == null ? "" : request.parentCommentId());
 		payload.put("content", request.content() == null ? "" : request.content());
 		payload.put("mediaIds", request.mediaIds() == null ? List.of() : request.mediaIds());
+		payload.put("mediaSpoiler", Boolean.TRUE.equals(request.mediaSpoiler()));
 		String hash = idempotency.hash(payload);
 		return idempotency.execute(user.id(), "POST", "/api/feed/posts/{postId}/comments", idempotencyKey, hash,
 			() -> new CommandResponse(201, commentOnPostUseCase.comment(new CommentOnPostCommand(user.id(),
 				new PostId(postId), request.parentCommentId(), request.content(), request.mediaIds(),
-				request.mentionedUserIds()))));
+				request.mentionedUserIds(), Boolean.TRUE.equals(request.mediaSpoiler())))));
 	}
 
 	@GetMapping("/feed/posts/{postId}/comments")

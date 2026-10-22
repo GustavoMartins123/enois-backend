@@ -33,7 +33,7 @@ public record PostView(String id, String authorId, String authorUsername, String
 		 * per page) so the card does not fetch it per post; null where the read does not compute it
 		 * (publish/edit responses).
 		 */
-		Map<ReactionType, Long> reactionSummary) {
+		Map<ReactionType, Long> reactionSummary, boolean mediaSpoiler) {
 
 	/** Comunidade onde o post foi publicado (nome para o texto "publicou em ...") + se quem le participa. */
 	public record CommunityView(String id, String name, boolean joined) {
@@ -53,7 +53,7 @@ public record PostView(String id, String authorId, String authorUsername, String
 		return new PostView(post.id().value(), post.authorId().value(), null, null, null, null, List.of(),
 			post.type(), post.content(), null, null, post.tags(), post.mediaIds(), post.createdAt(), post.counters(),
 			null, post.communityId(), null, post.editedAt(), post.expiresAt(), post.authorIdentity(), null,
-			post.topic(), post.repostOf(), post.repostOfAuthor(), null);
+			post.topic(), post.repostOf(), post.repostOfAuthor(), null, post.mediaSpoiler());
 	}
 
 	public static PostView from(Post post, String authorUsername, String authorName, String authorAvatar) {
@@ -79,46 +79,52 @@ public record PostView(String id, String authorId, String authorUsername, String
 			badges.isEmpty() ? null : badges.get(0), badges, post.type(), post.content(), null, null, post.tags(),
 			post.mediaIds(), post.createdAt(), post.counters(), null, post.communityId(), null, post.editedAt(),
 			post.expiresAt(), authorIdentity, null, post.topic(), post.repostOf(), post.repostOfAuthor(),
-			null);
+			null, post.mediaSpoiler());
 	}
 
 	/** Anexa a moldura do avatar do autor (cosmético) depois do enriquecimento do perfil. */
 	public PostView withAvatarFrame(String frame) {
 		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
 			content, pageHtml, articleBody, tags, mediaIds, createdAt, counters, currentUserReaction, communityId,
-			community, editedAt, expiresAt, authorIdentity, frame, topic, repostOf, repostOfAuthor, reactionSummary);
+			community, editedAt, expiresAt, authorIdentity, frame, topic, repostOf, repostOfAuthor, reactionSummary,
+			mediaSpoiler);
 	}
 
 	public PostView withCurrentUserReaction(ReactionType reaction) {
 		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
 			content, pageHtml, articleBody, tags, mediaIds, createdAt, counters, reaction, communityId, community,
-			editedAt, expiresAt, authorIdentity, authorAvatarFrame, topic, repostOf, repostOfAuthor, reactionSummary);
+			editedAt, expiresAt, authorIdentity, authorAvatarFrame, topic, repostOf, repostOfAuthor, reactionSummary,
+			mediaSpoiler);
 	}
 
 	/** Anexa o HTML da pagina; so o post unico faz isso (ver {@link #from(Post)}). */
 	public PostView withPageHtml(String pageHtml) {
 		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
 			content, pageHtml, articleBody, tags, mediaIds, createdAt, counters, currentUserReaction, communityId,
-			community, editedAt, expiresAt, authorIdentity, authorAvatarFrame, topic, repostOf, repostOfAuthor, reactionSummary);
+			community, editedAt, expiresAt, authorIdentity, authorAvatarFrame, topic, repostOf, repostOfAuthor, reactionSummary,
+			mediaSpoiler);
 	}
 
 	/** Anexa a comunidade (nome + participacao do leitor) depois do enriquecimento. */
 	public PostView withCommunity(String communityId, CommunityView community) {
 		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
 			content, pageHtml, articleBody, tags, mediaIds, createdAt, counters, currentUserReaction, communityId,
-			community, editedAt, expiresAt, authorIdentity, authorAvatarFrame, topic, repostOf, repostOfAuthor, reactionSummary);
+			community, editedAt, expiresAt, authorIdentity, authorAvatarFrame, topic, repostOf, repostOfAuthor, reactionSummary,
+			mediaSpoiler);
 	}
 
 	public PostView withReactionSummary(Map<ReactionType, Long> summary) {
 		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
 			content, pageHtml, articleBody, tags, mediaIds, createdAt, counters, currentUserReaction, communityId,
-			community, editedAt, expiresAt, authorIdentity, authorAvatarFrame, topic, repostOf, repostOfAuthor, summary);
+			community, editedAt, expiresAt, authorIdentity, authorAvatarFrame, topic, repostOf, repostOfAuthor, summary,
+			mediaSpoiler);
 	}
 
 	/** Anexa o corpo do artigo; so a leitura do post unico faz isso (mesma regra da pagina). */
 	public PostView withArticleBody(String body) {
 		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
 			content, pageHtml, body, tags, mediaIds, createdAt, counters, currentUserReaction, communityId, community,
-			editedAt, expiresAt, authorIdentity, authorAvatarFrame, topic, repostOf, repostOfAuthor, reactionSummary);
+			editedAt, expiresAt, authorIdentity, authorAvatarFrame, topic, repostOf, repostOfAuthor, reactionSummary,
+			mediaSpoiler);
 	}
 }

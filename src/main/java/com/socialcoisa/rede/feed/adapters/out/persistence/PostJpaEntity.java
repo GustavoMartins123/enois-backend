@@ -68,6 +68,9 @@ class PostJpaEntity {
 	@Column(name = "media_id", nullable = false)
 	private List<String> mediaIds = new ArrayList<>();
 
+	@Column(name = "media_spoiler", nullable = false)
+	private boolean mediaSpoiler;
+
 	@Column(name = "community_id")
 	private String communityId;
 
@@ -131,6 +134,7 @@ class PostJpaEntity {
 		entity.pageHtml = post.pageHtml();
 		entity.tags = new ArrayList<>(post.tags());
 		entity.mediaIds = new ArrayList<>(post.mediaIds());
+		entity.mediaSpoiler = post.mediaSpoiler();
 		entity.communityId = post.communityId();
 		entity.channelId = post.channelId();
 		entity.repostOf = post.repostOf();
@@ -153,7 +157,7 @@ class PostJpaEntity {
 	Post toDomain() {
 		return Post.restore(new PostId(id), new UserId(authorId), type, content, pageHtml, tags, mediaIds, communityId,
 			topic, channelId, createdAt, visibility, new Counters(reactions, comments, saves, shares), status,
-			deletedAt, editedAt, expiresAt, authorIdentity)
+			deletedAt, editedAt, expiresAt, authorIdentity, mediaSpoiler)
 			.markRepostOf(repostOf, repostOfAuthor);
 	}
 }

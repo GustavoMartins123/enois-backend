@@ -13,6 +13,10 @@ public class UserProfile {
 
 	/** Moldura de avatar equipada (loja de cosméticos); null = sem moldura. */
 	private String avatarFrame;
+	/** Estilo seguro do nome exibido; ids de fonte e cor hex, nunca CSS livre. */
+	private String nameTheme;
+	private String nameFont;
+	private String nameColor;
 	private String company;
 	private String location;
 	private String avatar;
@@ -446,6 +450,20 @@ public class UserProfile {
 		this.avatarFrame = frameId;
 	}
 
+	/** Equipa um tema, uma fonte e uma cor aprovados para o nome do perfil. */
+	public void updateNameStyle(String theme, String font, String color, Instant now) {
+		this.nameTheme = theme;
+		this.nameFont = font;
+		this.nameColor = color;
+		this.updatedAt = now;
+	}
+
+	public void hydrateNameStyle(String theme, String font, String color) {
+		this.nameTheme = theme;
+		this.nameFont = font;
+		this.nameColor = color;
+	}
+
 	/** Declara (ou regulariza) a data de nascimento. Validacao de plausibilidade fica no service. */
 	public void declareBirthDate(java.time.LocalDate birthDate, Instant now) {
 		this.birthDate = birthDate;
@@ -485,6 +503,18 @@ public class UserProfile {
 
 	public String avatarFrame() {
 		return avatarFrame;
+	}
+
+	public String nameFont() {
+		return nameFont;
+	}
+
+	public String nameTheme() {
+		return nameTheme;
+	}
+
+	public String nameColor() {
+		return nameColor;
 	}
 
 	public String company() {
