@@ -34,16 +34,19 @@ class ReportController {
 	private final AdminGuard adminGuard;
 	private final ReportRepository reports;
 	private final ModerationRemovePostUseCase removePost;
+	private final com.socialcoisa.rede.moderation.application.ModeratorService moderators;
 
 	ReportController(ModerationService moderationService, IdempotencyApplicationService idempotency,
 			CurrentUserResolver currentUserResolver, AdminGuard adminGuard, ReportRepository reports,
-			ModerationRemovePostUseCase removePost) {
+			ModerationRemovePostUseCase removePost,
+			com.socialcoisa.rede.moderation.application.ModeratorService moderators) {
 		this.moderationService = moderationService;
 		this.idempotency = idempotency;
 		this.currentUserResolver = currentUserResolver;
 		this.adminGuard = adminGuard;
 		this.reports = reports;
 		this.removePost = removePost;
+		this.moderators = moderators;
 	}
 
 	@PostMapping("/reports")
@@ -90,15 +93,20 @@ class ReportController {
 			"content", review.content() == null ? "" : review.content());
 	}
 
-	/** Posts denunciados com score de pré-triagem alto: fila pronta para exclusão em lote. */
-	@GetMapping("/admin/posts/suspicious")
+	/**
+	 * Posts denunciados com score de pré-triagem alto: fila pronta para exclusão em lote.
+	 *
+	 * Em /moderation (e não em /admin) porque a exclusão de post denunciado é trabalho do time de
+	 * moderação — qualquer moderador aprovado vê a fila e age (decisão da dona, 2026-10-22).
+	 */
+	@GetMapping("/moderation/posts/suspicious")
 	List<SuspiciousPostView> suspiciousPosts(
 			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestParam(defaultValue = "30") int minScore,
 			@RequestParam(defaultValue = "50") int limit) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		adminGuard.requireAdmin(user);
+		requireModerator(user);
 		return reports.findPendingPostsByPreTriageScore(Math.max(0, minScore), Math.min(200, Math.max(1, limit)))
 			.stream()
 			.map(report -> new SuspiciousPostView(report.targetId(), report.id(),
@@ -108,13 +116,13 @@ class ReportController {
 	}
 
 	/** Exclusão (soft delete com auditoria) dos posts suspeitos selecionados. */
-	@PostMapping("/admin/posts/bulk-delete")
+	@PostMapping("/moderation/posts/bulk-delete")
 	BulkDeletePostsResult bulkDeleteSuspiciousPosts(
 			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestBody BulkDeleteSuspiciousRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		adminGuard.requireAdmin(user);
+		requireModerator(user);
 		if (request == null || request.postIds() == null || request.postIds().isEmpty()) {
 			throw new com.socialcoisa.rede.shared.web.ApiException(400, "NO_POSTS_SELECTED",
 				"Selecione pelo menos um post.");
@@ -223,6 +231,14 @@ class ReportController {
 			return new ReportView(r.id(), r.reporterId(), r.targetType().name(), r.targetId(), r.reason().name(),
 				r.description(), r.status().name(), r.createdAt().toString(),
 				r.aiTriage(), r.aiTriagedAt() != null ? r.aiTriagedAt().toString() : null);
+		}
+	}
+
+	/** Admin ou moderador aprovado: os dois enxergam a limpeza de conteúdo denunciado. */
+	private void requireModerator(CurrentUser user) {
+		if (!adminGuard.isAdmin(user) && !moderators.isModerator(user.id().value())) {
+			throw new com.socialcoisa.rede.shared.web.ApiException(403, "FORBIDDEN",
+				"Acesso restrito a moderadores.");
 		}
 	}
 }
