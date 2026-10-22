@@ -16,6 +16,7 @@ import com.socialcoisa.rede.games.domain.Game;
 import com.socialcoisa.rede.moderation.application.BulkBanService;
 import com.socialcoisa.rede.moderation.application.ModeratorService;
 import com.socialcoisa.rede.moderation.application.SanctionProposalService;
+import com.socialcoisa.rede.moderation.application.SuspiciousAutoBanWorker;
 import com.socialcoisa.rede.moderation.application.SuspiciousUserService;
 import com.socialcoisa.rede.moderation.domain.ModerationVoteType;
 import com.socialcoisa.rede.moderation.domain.ModeratorApplicationStatus;
@@ -44,6 +45,7 @@ class ModeratorController {
 	private final SanctionProposalService sanctionProposals;
 	private final SuspiciousUserService suspiciousUsers;
 	private final BulkBanService bulkBans;
+	private final SuspiciousAutoBanWorker autoBan;
 	private final com.socialcoisa.rede.moderation.application.IpBlockService ipBlocks;
 	private final GameService games;
 	private final ServiceOfferService serviceOffers;
@@ -52,7 +54,7 @@ class ModeratorController {
 	private final AdminGuard adminGuard;
 
 	ModeratorController(ModeratorService moderators, SanctionProposalService sanctionProposals,
-			SuspiciousUserService suspiciousUsers, BulkBanService bulkBans,
+			SuspiciousUserService suspiciousUsers, BulkBanService bulkBans, SuspiciousAutoBanWorker autoBan,
 			com.socialcoisa.rede.moderation.application.IpBlockService ipBlocks,
 			GameService games, ServiceOfferService serviceOffers, UserProfileRepository profiles,
 			CurrentUserResolver currentUserResolver, AdminGuard adminGuard) {
@@ -60,6 +62,7 @@ class ModeratorController {
 		this.sanctionProposals = sanctionProposals;
 		this.suspiciousUsers = suspiciousUsers;
 		this.bulkBans = bulkBans;
+		this.autoBan = autoBan;
 		this.ipBlocks = ipBlocks;
 		this.games = games;
 		this.serviceOffers = serviceOffers;
@@ -285,6 +288,16 @@ class ModeratorController {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		requireModerator(user);
 		return bulkBans.ban(user.id().value(), request.usernames(), request.type(), request.reason());
+	}
+
+	/** Última rodada da automação (o "não sabemos o que aconteceu" do incidente). */
+	@GetMapping("/admin/automod/status")
+	SuspiciousAutoBanWorker.Status automodStatus(
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader("X-Session-Token") String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		adminGuard.requireAdmin(user);
+		return autoBan.status();
 	}
 
 	@GetMapping("/moderation/sanction-proposals")
