@@ -39,10 +39,15 @@ anteriores e o trabalho de verdade agora é fechar as lacunas, não refazer o qu
   `docs/SECURITY.md` (reportar vulnerabilidade).
 
 ### Lacunas (o que o plano pede e ainda NÃO existe) — a fila real
-1. **Motor de risco centralizado com níveis e resposta graduada** (plano, item 7): hoje há sanção
-   e learning, mas não há um motor que junte sinais em nível de risco e aplique a resposta
+1. **Motor de risco centralizado — PASSO 1 ENTREGUE (2026-10-22); falta a escalada e a
+   leitura.** Já existe `shared/risk/RiskEngine`: ele junta os sinais (cadência de robô, conteúdo
+   repetido, conta nova, sanção ativa), vira **nível** (LOW/MEDIUM/HIGH/CRITICAL) e registra a
+   decisão com o motivo e a versão da regra na tabela `risk_assessments` (V154). A resposta
    escalonada (permitir → monitorar → limitar → verificação → bloquear → ocorrência → suspender →
-   banir), com motivo e versão das regras registrados.
+   banir) está em `RiskDecision`, mas o motor roda em **modo de observação** (`rede.risk.enforce
+   =false`): ele avalia, registra e escala o que é grave, e não barra ninguém. *Falta:* a escalada
+   pelo motor (hoje a denúncia automática sai dos guardas, para não duplicar denúncia e inflar o
+   score da triagem) e a leitura do histórico na tela da moderação.
 2. **Correlação de campanha** (itens 5 e 8): não há detector que agrupe contas coordenadas
    (mesma janela, mesmo texto, mesma origem, contas criadas na mesma hora) numa ocorrência
    consolidada, com timeline e evidências.

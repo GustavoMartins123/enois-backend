@@ -44,6 +44,7 @@ public class PublishPostService implements PublishPostUseCase {
 	private final NotificationService notificationService;
 	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository;
 	private final com.socialcoisa.rede.shared.sanctions.SanctionGate sanctionGate;
+	private final com.socialcoisa.rede.shared.risk.RiskEngine riskEngine;
 	private final com.socialcoisa.rede.shared.age.AgeGate agePolicy;
 	private final PostCommunityReader postCommunityReader;
 	private final com.socialcoisa.rede.feed.application.port.out.CommunityChannelReader communityChannelReader;
@@ -65,6 +66,7 @@ public class PublishPostService implements PublishPostUseCase {
 			NotificationService notificationService,
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository,
 			com.socialcoisa.rede.shared.sanctions.SanctionGate sanctionGate,
+			com.socialcoisa.rede.shared.risk.RiskEngine riskEngine,
 			com.socialcoisa.rede.shared.age.AgeGate agePolicy,
 			PostCommunityReader postCommunityReader,
 			com.socialcoisa.rede.feed.application.port.out.CommunityChannelReader communityChannelReader,
@@ -84,6 +86,7 @@ public class PublishPostService implements PublishPostUseCase {
 		this.notificationService = notificationService;
 		this.userProfileRepository = userProfileRepository;
 		this.sanctionGate = sanctionGate;
+		this.riskEngine = riskEngine;
 		this.agePolicy = agePolicy;
 		this.postCommunityReader = postCommunityReader;
 		this.communityChannelReader = communityChannelReader;
@@ -104,6 +107,9 @@ public class PublishPostService implements PublishPostUseCase {
 		newAccountCooldown.require(command.authorId().value());
 		userRateLimiter.require(command.authorId().value(), UserRateLimiter.CREATE_POST);
 		behavioralTimingGuard.record(command.authorId().value());
+		// Motor de risco (plano mestre, item 7): avalia e registra o risco desta escrita. Em modo
+		// de observacao ele nao bloqueia nada — so devolve a linha de base que faltava.
+		riskEngine.assess(command.authorId().value(), "publish", command.content());
 		validate(command);
 		List<String> tags = command.tags() == null ? List.of() : command.tags().stream()
 			.filter(StringUtils::hasText)

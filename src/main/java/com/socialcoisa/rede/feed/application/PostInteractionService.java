@@ -51,6 +51,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 	private final BlockedUsersReader blockedUsersReader;
 	private final com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseCase validateMediaOwnership;
 	private final com.socialcoisa.rede.shared.sanctions.SanctionGate sanctionGate;
+	private final com.socialcoisa.rede.shared.risk.RiskEngine riskEngine;
 	private final com.socialcoisa.rede.shared.age.AgeGate agePolicy;
 	private final com.socialcoisa.rede.coin.application.CoinService coins;
 	private final NewAccountCooldown newAccountCooldown;
@@ -68,6 +69,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 			BlockedUsersReader blockedUsersReader,
 			com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseCase validateMediaOwnership,
 			com.socialcoisa.rede.shared.sanctions.SanctionGate sanctionGate,
+			com.socialcoisa.rede.shared.risk.RiskEngine riskEngine,
 			com.socialcoisa.rede.coin.application.CoinService coins,
 			NewAccountCooldown newAccountCooldown,
 			UserRateLimiter userRateLimiter,
@@ -85,6 +87,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 		this.blockedUsersReader = blockedUsersReader;
 		this.validateMediaOwnership = validateMediaOwnership;
 		this.sanctionGate = sanctionGate;
+		this.riskEngine = riskEngine;
 		this.agePolicy = agePolicy;
 		this.coins = coins;
 		this.newAccountCooldown = newAccountCooldown;
@@ -102,6 +105,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 		newAccountCooldown.require(command.authorId().value());
 		userRateLimiter.require(command.authorId().value(), UserRateLimiter.CREATE_COMMENT);
 		behavioralTimingGuard.record(command.authorId().value());
+		riskEngine.assess(command.authorId().value(), "comment", command.content());
 		duplicationGuard.require(command.authorId().value(), command.content());
 		Post post = activePost(command.postId());
 		List<String> mediaIds = normalizeCommentMedia(command.mediaIds(), command.authorId());

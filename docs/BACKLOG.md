@@ -209,6 +209,29 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   container MariaDB aplicando as migrações (o do front, o `ci.yml`, já roda lint, typecheck e
   vitest).
 ## Higiene do backend (entregue 2026-10-21)
+- **[x] ENTREGUE 2026-10-22 — O motor central de risco (plano mestre de segurança humana,
+  item 7): os sinais viram nível, e a decisão fica registrada.** Até aqui cada guarda olhava um
+  sinal sozinho e agia sozinho — o de cadência denunciava, o de duplicidade recusava, o de conta
+  nova segurava. O plano pede o contrário: **combinar** sinais independentes, transformar a soma em
+  um **nível** e aplicar a resposta correspondente, com o motivo e a versão da regra registrados
+  para a decisão poder ser reconstruída.
+  *Entregue agora (passo 1, em modo de observação):* `shared/risk/RiskEngine` (o motor), com
+  `RiskLevel` (LOW/MEDIUM/HIGH/CRITICAL), `RiskSignal` (cadência de robô, conteúdo repetido, conta
+  nova, sanção ativa), `RiskDecision` (ALLOW/MONITOR/ESCALATE/RESTRICT) e `RiskAssessment` (o
+  registro). O motor pergunta aos guardas (memória, sem consulta), junta o contexto (conta nova e
+  sanção ativa), soma os pesos (`rede.risk.weights.*`) e compara com os limiares
+  (`rede.risk.thresholds.*`); a avaliação vai para a tabela nova `risk_assessments` (V154) com o
+  nível, os sinais, a versão da regra e a resposta. Ele **não barra ninguém** por enquanto
+  (`rede.risk.enforce=false`): o plano pede medir antes de endurecer, e a contenção
+  (RESTRICT) está no código com o seu teste, esperando a linha de base.
+  *Onde roda:* na publicação e no comentário do feed — e só quando há sinal (o motor não custa uma
+  consulta a cada post).
+  *Testes:* `shared/risk/RiskEngineTests` (4) — a cadência de robô registra a avaliação com o
+  sinal, a escrita normal não suja o histórico, o conteúdo repetido entra como sinal, e o modo de
+  observação não restringe ninguém.
+  *O que fica para o próximo passo:* a escalada pelo motor (hoje a denúncia automática continua
+  saindo dos guardas, para não duplicar denúncia e inflar o score da triagem) e a leitura do
+  histórico na tela da moderação.
 - **[x] ENTREGUE 2026-10-21 — Os portões de escrita não cobriam todos os caminhos: uma conta
   restrita ainda publicava em grupo, comentava em grupo e mandava mensagem privada.** A sanção de
   moderação (a RESTRICTION — decisão humana de "não publica nem comenta", com recurso) era

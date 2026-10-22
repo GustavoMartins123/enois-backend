@@ -69,6 +69,26 @@ public class BehavioralTimingGuard {
 		}
 	}
 
+	/**
+	 * A cadencia desta conta esta com cara de automacao agora?
+	 *
+	 * <p>É o que o motor de risco pergunta antes de gastar uma consulta: a deteccao e feita em
+	 * memoria (a janela de acoes), e nao publica nada — quem publica a denuncia automatica continua
+	 * sendo este guarda.
+	 */
+	public boolean looksAutomated(String userId) {
+		Deque<Long> timestamps = actions.get(userId);
+		if (timestamps == null) {
+			return false;
+		}
+		synchronized (timestamps) {
+			if (timestamps.size() < WINDOW_SIZE) {
+				return false;
+			}
+			return stdDevOfIntervals(timestamps) < STD_DEV_THRESHOLD_MS;
+		}
+	}
+
 	static double stdDevOfIntervals(Deque<Long> timestamps) {
 		long[] ts = timestamps.stream().mapToLong(Long::longValue).toArray();
 		double[] intervals = new double[ts.length - 1];
