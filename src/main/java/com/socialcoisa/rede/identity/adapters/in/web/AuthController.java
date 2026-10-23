@@ -596,20 +596,8 @@ class AuthController {
 	}
 
 	record AuthConfig(String captchaMode, String turnstileSiteKey, boolean googleLoginEnabled) {
-	}
+}
 
-	/** Recusa quando o e-mail, normalizado, já pertence a uma conta. */
-	private void exigeEmailUnico(String email) {
-		String normalized = normalizeEmail(email);
-		if (normalized == null) {
-			return;
-		}
-		if (profiles.findByEmail(email == null ? normalized : email.trim()).isPresent()
-			|| profiles.findByEmail(normalized).isPresent()) {
-			throw new ApiException(409, "EMAIL_IN_USE",
-				"Este e-mail ja tem conta no Enois. Entre ou recupere a senha.");
-		}
-	}
 
 	/**
 	 * Forma canônica do e-mail: minúsculo, sem "+tag" e, nos provedores que ignoram pontos,
@@ -631,6 +619,7 @@ class AuthController {
 			local = local.replace(".", "");
 		}
 		return local + domain;
+
 	}
 
 	private String authScope(String email) {
@@ -660,4 +649,18 @@ class AuthController {
 
 	record PasswordConfirmationRequest(String password) {
 	}
+
+	/** Recusa quando o e-mail, normalizado, já pertence a uma conta. */
+	private void exigeEmailUnico(String email) {
+		String normalized = normalizeEmail(email);
+		if (normalized == null) {
+			return;
+		}
+		if (profiles.findByEmail(email == null ? normalized : email.trim()).isPresent()
+			|| profiles.findByEmail(normalized).isPresent()) {
+			throw new ApiException(409, "EMAIL_IN_USE",
+				"Este e-mail ja tem conta no Enois. Entre ou recupere a senha.");
+		}
+	}
+
 }
