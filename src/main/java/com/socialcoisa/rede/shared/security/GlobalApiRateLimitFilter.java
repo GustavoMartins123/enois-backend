@@ -58,7 +58,15 @@ public class GlobalApiRateLimitFilter extends OncePerRequestFilter {
 	@Override
 	protected boolean shouldNotFilter(HttpServletRequest request) {
 		String uri = request.getRequestURI();
-		return uri.contains("/actuator") || uri.contains("/health");
+		if (uri.contains("/actuator") || uri.contains("/health")) {
+			return true;
+		}
+		// Leitura nao entra no teto. Uma tela do app dispara varias chamadas ao abrir e o feed se
+		// atualiza sozinho: punir GET transformava navegacao normal em 429. O que precisa de teto
+		// e a ESCRITA (POST/PUT/PATCH/DELETE), que e onde ha custo e abuso possivel.
+		String metodo = request.getMethod();
+		return "GET".equalsIgnoreCase(metodo) || "HEAD".equalsIgnoreCase(metodo)
+			|| "OPTIONS".equalsIgnoreCase(metodo);
 	}
 
 	@Override

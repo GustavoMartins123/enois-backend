@@ -77,7 +77,22 @@ public class AbuseGuardFilter extends OncePerRequestFilter {
 	protected boolean shouldNotFilter(HttpServletRequest request) {
 		String uri = request.getRequestURI();
 		// Sonda do cluster não entra: derrubar o health check derruba o pod.
-		return uri.contains("/actuator") || uri.contains("/health");
+		if (uri.contains("/actuator") || uri.contains("/health")) {
+			return true;
+		}
+		// Leitura nunca entra nesta conta. Abrir uma tela dispara várias chamadas, e um visitante
+		// sem sessão produz 401 em toda página — contar GET punha gente comum em bloqueio.
+		String metodo = request.getMethod();
+		if ("GET".equalsIgnoreCase(metodo) || "HEAD".equalsIgnoreCase(metodo)
+				|| "OPTIONS".equalsIgnoreCase(metodo)) {
+			return true;
+		}
+		// Login, cadastro e sessão ficam FORA desta conta. Aqui o erro é normal e frequente: senha
+		// digitada errado, `/auth/me` de visitante (401 esperado em toda página aberta sem conta) e
+		// refresh vencido. Contar isso bloqueava o IP inteiro — e um IP bloqueado não consegue nem
+		// entrar, virando apagão de login para todos que saem pela mesma rede. Essas rotas seguem
+		// protegidas pelo limitador próprio de autenticação.
+		return uri.startsWith("/auth/");
 	}
 
 	@Override

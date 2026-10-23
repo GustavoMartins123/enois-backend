@@ -54,8 +54,9 @@ class AbuseGuardFilterTests {
 	// Teto baixo para o teste fechar rápido; os padrões do app são maiores (20 erros em 3 min).
 	private final AbuseGuardFilter filtro = new AbuseGuardFilter(relogio, ipResolver, 3, 180, 15, 360);
 
+	/** POST: leitura não entra na conta do bloqueio (GET é livre), então a varredura é de escrita. */
 	private static MockHttpServletRequest pedido(String ip, String uri) {
-		MockHttpServletRequest request = new MockHttpServletRequest("GET", uri);
+		MockHttpServletRequest request = new MockHttpServletRequest("POST", uri);
 		request.setRemoteAddr(ip);
 		return request;
 	}
