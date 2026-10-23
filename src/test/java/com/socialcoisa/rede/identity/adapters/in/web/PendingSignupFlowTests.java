@@ -156,6 +156,6 @@ class PendingSignupFlowTests {
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(signupPayload(email)))
 			.andExpect(status().isConflict())
-			.andExpect(jsonPath("$.code").value("EMAIL_ALREADY_REGISTERED"));
+			.andExpect(jsonPath("$.code").value("EMAIL_IN_USE"));
 	}
 }
