@@ -260,26 +260,30 @@ class ModeratorController {
 	/**
 	 * Contas recentes ranqueadas por sinais objetivos (nome em série, e-mail não confirmado,
 	 * perfil vazio, denúncias contra). Não bane ninguém: é a fila de validação humana.
+	 *
+	 * Fica em /moderation (e não em /admin) porque a limpeza de contas em série é trabalho do
+	 * time de moderação — qualquer moderador aprovado vê a fila e pode agir (decisão da dona,
+	 * 2026-10-22).
 	 */
-	@GetMapping("/admin/users/suspicious")
+	@GetMapping("/moderation/users/suspicious")
 	SuspiciousUserService.SuspiciousUsersView suspicious(
 			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken,
 			@RequestParam(defaultValue = "100") int limit,
 			@RequestParam(defaultValue = "30") int days) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		adminGuard.requireAdmin(user);
+		requireModerator(user);
 		return suspiciousUsers.list(limit, days);
 	}
 
 	/** Banimento em lote: cada conta passa pelo fluxo normal de sanção, com resultado por item. */
-	@PostMapping("/admin/users/bulk-ban")
+	@PostMapping("/moderation/users/bulk-ban")
 	BulkBanService.BulkBanResult bulkBan(
 			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken,
 			@RequestBody BulkBanRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		adminGuard.requireAdmin(user);
+		requireModerator(user);
 		return bulkBans.ban(user.id().value(), request.usernames(), request.type(), request.reason());
 	}
 
