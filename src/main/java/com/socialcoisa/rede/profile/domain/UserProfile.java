@@ -48,6 +48,8 @@ public class UserProfile {
 	private List<String> externalLinks;
 	private boolean openToWork;
 	private boolean mentor;
+	/** Papel administrativo imutável: só muda por operação de banco, nunca por edição de perfil. */
+	private boolean admin;
 	private int connectionsCount;
 	private int followersCount;
 	private int reputation;
@@ -585,6 +587,15 @@ public class UserProfile {
 
 	public boolean mentor() {
 		return mentor;
+	}
+
+	public boolean admin() {
+		return admin;
+	}
+
+	/** Hidrata o papel administrativo a partir da coluna; nunca é aceito do cliente. */
+	public void hydrateAdmin(boolean admin) {
+		this.admin = admin;
 	}
 
 	public void setCounts(int connectionsCount, int followersCount, int reputation) {

@@ -37,7 +37,7 @@ interface SpringDataCommentJpaRepository extends JpaRepository<CommentJpaEntity,
 	 */
 	@org.springframework.data.jpa.repository.Query("""
 		select c.content from CommentJpaEntity c
-		where lower(c.content) like lower(concat('%', :term, '%'))
+		where lower(c.content) like lower(:term) escape '\\'
 		  and (lower(c.content) like '%.gif%'
 		       or lower(c.content) like '%media.giphy.com%'
 		       or lower(c.content) like '%c.tenor.com%'

@@ -29,6 +29,7 @@ public class EmailService {
     private final JavaMailSender mailSender;
     private final TemplateEngine templateEngine;
     private final String frontendUrl;
+    private final String backendUrl;
     private final String fromEmail;
     private final EmailLogRepository emailLogs;
 
@@ -36,6 +37,7 @@ public class EmailService {
             JavaMailSender mailSender,
             TemplateEngine templateEngine,
             @Value("${rede.frontend.url}") String frontendUrl,
+            @Value("${rede.backend.url:https://api.enois.ia.br}") String backendUrl,
             @Value("${spring.mail.username}") String fromEmail,
             EmailLogRepository emailLogs) {
         this.mailSender = mailSender;
@@ -43,8 +45,28 @@ public class EmailService {
         this.frontendUrl = frontendUrl.endsWith("/")
                 ? frontendUrl.substring(0, frontendUrl.length() - 1)
                 : frontendUrl;
+        this.backendUrl = backendUrl.endsWith("/")
+                ? backendUrl.substring(0, backendUrl.length() - 1)
+                : backendUrl;
         this.fromEmail = fromEmail;
         this.emailLogs = emailLogs;
+    }
+
+    /**
+     * Confirmação do NOVO e-mail (E-02/E-11). O endereço só passa a valer quando a pessoa clica
+     * neste link — e o clique prova que ela controla a caixa nova.
+     */
+    public boolean sendEmailChangeConfirmation(String toEmail, String userName, String token) {
+        String link = backendUrl + "/api/auth/email/change/confirm?token="
+                + java.net.URLEncoder.encode(token, java.nio.charset.StandardCharsets.UTF_8);
+        String htmlBody = "<p>Olá, " + escape(userName) + ".</p>"
+                + "<p>Recebemos um pedido para trocar o e-mail da sua conta no Énóis para este endereço.</p>"
+                + "<p><a href=\"" + escape(link) + "\" style=\"display:inline-block;padding:12px 24px;"
+                + "background:#6366f1;color:#fff;text-decoration:none;border-radius:999px;font-weight:600\">"
+                + "Confirmar novo e-mail</a></p>"
+                + "<p>Se não foi você, ignore esta mensagem: nada muda até o clique.</p>"
+                + "<p>— Equipe Énóis</p>";
+        return sendHtml(toEmail, "Confirme seu novo e-mail — Énóis", htmlBody);
     }
 
     /**

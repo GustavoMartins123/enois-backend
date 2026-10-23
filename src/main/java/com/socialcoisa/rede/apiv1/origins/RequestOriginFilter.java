@@ -207,6 +207,10 @@ class RequestOriginFilter extends OncePerRequestFilter {
 		if (path.startsWith("/storage/") && ("GET".equalsIgnoreCase(method) || "HEAD".equalsIgnoreCase(method))) {
 			return true;
 		}
+		// Link de confirmação do novo e-mail: clique no cliente de e-mail, sem Origin.
+		if (path.equals("/auth/email/change/confirm") && "GET".equalsIgnoreCase(method)) {
+			return true;
+		}
 		return path.equals("/blogs/descadastrar");
 	}
 
