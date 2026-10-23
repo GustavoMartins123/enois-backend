@@ -61,16 +61,16 @@ public class PanicModeService {
 
 	public synchronized void setActive(boolean value) {
 		Timestamp now = Timestamp.from(clock.instant());
-		int updated = jdbc.update("update system_flags set value = ?, updated_at = ? where name = ?",
+		int updated = jdbc.update("update system_flags set flag_value = ?, updated_at = ? where name = ?",
 			value ? "true" : "false", now, FLAG);
 		if (updated == 0) {
 			try {
-				jdbc.update("insert into system_flags (name, value, updated_at) values (?, ?, ?)", FLAG,
+				jdbc.update("insert into system_flags (name, flag_value, updated_at) values (?, ?, ?)", FLAG,
 					value ? "true" : "false", now);
 			}
 			catch (DataAccessException race) {
 				// Outro pod inseriu ao mesmo tempo: o update agora encontra a linha.
-				jdbc.update("update system_flags set value = ?, updated_at = ? where name = ?",
+				jdbc.update("update system_flags set flag_value = ?, updated_at = ? where name = ?",
 					value ? "true" : "false", now, FLAG);
 			}
 		}
@@ -83,7 +83,7 @@ public class PanicModeService {
 			fixedDelayString = "${rede.panic.refresh-ms:2000}")
 	public synchronized void refresh() {
 		try {
-			List<String> values = jdbc.query("select value from system_flags where name = ?",
+			List<String> values = jdbc.query("select flag_value from system_flags where name = ?",
 				(rs, rowNum) -> rs.getString(1), FLAG);
 			active = !values.isEmpty() && "true".equalsIgnoreCase(values.get(0));
 			refreshedAt = System.currentTimeMillis();
