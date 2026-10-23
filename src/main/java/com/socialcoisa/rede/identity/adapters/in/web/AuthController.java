@@ -78,6 +78,8 @@ class AuthController {
 	private final com.socialcoisa.rede.shared.security.ClientIpResolver ipResolver;
 	/** Cadastros abertos? Desligado, o POST /auth/signup responde 403 SIGNUP_DISABLED. */
 	private final boolean signupEnabled;
+	/** Login social desligável por ambiente (QA sem app OAuth configurado). */
+	private final boolean googleLoginEnabled;
 
 	AuthController(SignupUseCase signupUseCase, VerifyEmailUseCase verifyEmailUseCase,
 			TwoFactorLoginUseCase twoFactorLoginUseCase, TwoFactorUseCase twoFactorUseCase,
@@ -100,7 +102,8 @@ class AuthController {
 			com.socialcoisa.rede.shared.security.SignupAttackGuard signupAttackGuard,
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles,
 			com.socialcoisa.rede.shared.security.ClientIpResolver ipResolver,
-			@Value("${rede.auth.signup-enabled:true}") boolean signupEnabled) {
+			@Value("${rede.auth.signup-enabled:true}") boolean signupEnabled,
+			@Value("${rede.oauth.google.enabled:true}") boolean googleLoginEnabled) {
 		this.signupUseCase = signupUseCase;
 		this.verifyEmailUseCase = verifyEmailUseCase;
 		this.twoFactorLoginUseCase = twoFactorLoginUseCase;
@@ -126,6 +129,7 @@ class AuthController {
 		this.profiles = profiles;
 		this.ipResolver = ipResolver;
 		this.signupEnabled = signupEnabled;
+		this.googleLoginEnabled = googleLoginEnabled;
 	}
 
 	/** Bloqueio de IP pela moderacao (V115): nenhum fluxo de autenticacao emite sessao de IP banido. */
@@ -156,7 +160,7 @@ class AuthController {
 			mode = "NONE";
 			siteKey = null;
 		}
-		return new AuthConfig(mode, siteKey);
+		return new AuthConfig(mode, siteKey, googleLoginEnabled);
 	}
 
 	/** Desafio de soma para o cadastro (usado quando não há Turnstile configurado). */
@@ -313,6 +317,10 @@ class AuthController {
 	@RateLimiter(name = "auth")
 	Object oauthStart(@PathVariable String provider) {
 		OAuthProvider oauthProvider = parseProvider(provider);
+		if (oauthProvider == OAuthProvider.GOOGLE && !googleLoginEnabled) {
+			throw new ApiException(403, "OAUTH_PROVIDER_DISABLED",
+				"Login com Google indisponivel neste ambiente.");
+		}
 		return oAuthUseCase.start(oauthProvider);
 	}
 
@@ -573,7 +581,7 @@ class AuthController {
 	record DeleteAccountRequest(String password) {
 	}
 
-	record AuthConfig(String captchaMode, String turnstileSiteKey) {
+	record AuthConfig(String captchaMode, String turnstileSiteKey, boolean googleLoginEnabled) {
 	}
 
 	/** Recusa quando o e-mail, normalizado, já pertence a uma conta. */
