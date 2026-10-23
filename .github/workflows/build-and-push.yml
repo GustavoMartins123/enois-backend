@@ -127,6 +127,8 @@ jobs:
           PORTAINER_BASE_URL: ${{ secrets.PORTAINER_BASE_URL }}
           PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
           IMAGE_REF: ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.image_tag }}
+          HARBOR_USER: ${{ secrets.HARBOR_USER }}
+          HARBOR_PASSWORD: ${{ secrets.HARBOR_PASSWORD }}
           DB_PASSWORD: ${{ secrets.QA_DB_PASSWORD }}
           REDE_SECURITY_ENCRYPTION_KEY: ${{ secrets.QA_REDE_SECURITY_ENCRYPTION_KEY }}
           TURNSTILE_SITE_KEY: ${{ secrets.QA_TURNSTILE_SITE_KEY }}
@@ -141,7 +143,9 @@ jobs:
           echo "==> Pull ${IMAGE_REF}"
           ENCODED_IMAGE=$(python3 -c "import urllib.parse,os;print(urllib.parse.quote(os.environ['IMAGE_REF'].rsplit(':',1)[0]))")
           TAG=$(echo "${IMAGE_REF}" | rev | cut -d: -f1 | rev)
-          curl -sf -X POST "${AUTH[@]}" "${API}/images/create?fromImage=${ENCODED_IMAGE}&tag=${TAG}"
+          # projeto 'enois' e privado no Harbor -> precisa de X-Registry-Auth no pull via Portainer
+          REGISTRY_AUTH=$(python3 -c "import json,base64,os;print(base64.b64encode(json.dumps({'username':os.environ['HARBOR_USER'],'password':os.environ['HARBOR_PASSWORD'],'serveraddress':'${HARBOR_REGISTRY}'}).encode()).decode())")
+          curl -sf -X POST "${AUTH[@]}" -H "X-Registry-Auth: ${REGISTRY_AUTH}" "${API}/images/create?fromImage=${ENCODED_IMAGE}&tag=${TAG}"
 
           echo "==> Stop + remove container antigo (ignora erro se não existir)"
           curl -s -X POST "${AUTH[@]}" "${API}/containers/${CONTAINER_NAME}/stop" || true
