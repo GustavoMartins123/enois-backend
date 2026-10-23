@@ -44,10 +44,12 @@ public class PublicReadRateLimitFilter extends OncePerRequestFilter {
 	private final int perMinute;
 
 	public PublicReadRateLimitFilter(Clock clock, ClientIpResolver ipResolver,
-			@Value("${rede.rate.public-read-per-minute:120}") int perMinute) {
+			@Value("${rede.rate.public-read-per-minute:600}") int perMinute) {
 		this.clock = clock;
 		this.ipResolver = ipResolver;
-		this.perMinute = Math.max(10, perMinute);
+		// O valor configurado vale como esta: o piso de 10 antigo ignorava o teste e qualquer
+		// ajuste de operacao abaixo disso.
+		this.perMinute = Math.max(1, perMinute);
 	}
 
 	@Override
