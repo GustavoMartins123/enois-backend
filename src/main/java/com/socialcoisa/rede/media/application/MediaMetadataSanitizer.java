@@ -28,10 +28,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import com.drew.imaging.ImageMetadataReader;
-import com.drew.metadata.Metadata;
-import com.drew.metadata.exif.ExifIFD0Directory;
-
 /**
  * Remove metadados (EXIF/GPS/XMP/IPTC, comentários, info de PDF) de mídia antes de gravar no S3 e,
  * oportunisticamente, ao ler um objeto antigo.
@@ -153,15 +149,83 @@ public class MediaMetadataSanitizer {
 		return stripJpegSegments(data);
 	}
 
+	/**
+	 * Lê a tag Orientation (0x0112) do bloco APP1/EXIF sem biblioteca externa. Se o JPEG não tiver
+	 * EXIF válido, devolve 1 (sem rotação).
+	 */
 	private int jpegOrientation(byte[] data) {
-		try {
-			Metadata metadata = ImageMetadataReader.readMetadata(new ByteArrayInputStream(data));
-			ExifIFD0Directory exif = metadata.getFirstDirectoryOfType(ExifIFD0Directory.class);
-			return exif == null ? 1 : exif.getInt(ExifIFD0Directory.TAG_ORIENTATION);
-		}
-		catch (Exception ignored) {
+		if (data.length < 4 || (data[0] & 0xFF) != 0xFF || (data[1] & 0xFF) != 0xD8) {
 			return 1;
 		}
+		int index = 2;
+		while (index + 4 < data.length) {
+			if ((data[index] & 0xFF) != 0xFF) {
+				return 1;
+			}
+			int marker = data[index + 1] & 0xFF;
+			if (marker == 0xDA || marker == 0xD9) {
+				return 1;
+			}
+			int length = ((data[index + 2] & 0xFF) << 8) | (data[index + 3] & 0xFF);
+			if (length < 2 || index + 2 + length > data.length) {
+				return 1;
+			}
+			int start = index + 4;
+			if (marker == 0xE1 && length >= 8
+					&& data[start] == 'E' && data[start + 1] == 'x' && data[start + 2] == 'i'
+					&& data[start + 3] == 'f' && data[start + 4] == 0 && data[start + 5] == 0) {
+				return exifOrientation(data, start + 6, index + 2 + length);
+			}
+			index += 2 + length;
+		}
+		return 1;
+	}
+
+	private int exifOrientation(byte[] data, int tiff, int end) {
+		if (tiff + 8 > end) {
+			return 1;
+		}
+		boolean little = data[tiff] == 'I' && data[tiff + 1] == 'I';
+		boolean big = data[tiff] == 'M' && data[tiff + 1] == 'M';
+		if (!little && !big) {
+			return 1;
+		}
+		int magic = readShort(data, tiff + 2, little);
+		if (magic != 42) {
+			return 1;
+		}
+		int ifd = tiff + readIntEndian(data, tiff + 4, little);
+		if (ifd < tiff || ifd + 2 > end) {
+			return 1;
+		}
+		int entries = readShort(data, ifd, little);
+		for (int i = 0; i < entries; i++) {
+			int entry = ifd + 2 + i * 12;
+			if (entry + 12 > end) {
+				return 1;
+			}
+			int tag = readShort(data, entry, little);
+			if (tag == 0x0112) {
+				// Tipo SHORT (3), COUNT 1: valor nos primeiros 2 bytes do campo de 4.
+				return readShort(data, entry + 8, little);
+			}
+		}
+		return 1;
+	}
+
+	private static int readShort(byte[] data, int offset, boolean little) {
+		int a = data[offset] & 0xFF;
+		int b = data[offset + 1] & 0xFF;
+		return little ? (a | (b << 8)) : ((a << 8) | b);
+	}
+
+	private static int readIntEndian(byte[] data, int offset, boolean little) {
+		int a = data[offset] & 0xFF;
+		int b = data[offset + 1] & 0xFF;
+		int c = data[offset + 2] & 0xFF;
+		int d = data[offset + 3] & 0xFF;
+		return little ? (a | (b << 8) | (c << 16) | (d << 24))
+			: ((a << 24) | (b << 16) | (c << 8) | d);
 	}
 
 	/** Remove EXIF/XMP (APP1), IPTC (APP13), comentários e APP exóticos; mantém JFIF/ICC/Adobe. */
