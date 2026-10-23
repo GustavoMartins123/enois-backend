@@ -27,7 +27,11 @@ import tools.jackson.databind.ObjectMapper;
  * O resto da suíte roda com `rede.origins.enforce=false` (ver src/test/resources/application.properties),
  * porque o MockMvc não simula um navegador; aqui a enforcement é ligada explicitamente.
  */
-@SpringBootTest(properties = "rede.origins.enforce=true")
+@SpringBootTest(properties = {
+		"rede.origins.enforce=true",
+		"rede.origins.suspicious.max-failures=3",
+		"rede.origins.suspicious.window-seconds=60"
+})
 @AutoConfigureMockMvc
 class DeveloperOriginTests {
 
@@ -135,6 +139,127 @@ class DeveloperOriginTests {
 
 		mockMvc.perform(delete("/developers/origins/" + id)
 				.header("X-Session-Token", session)
+				.header("X-Client-Origin", APP_ORIGIN))
+			.andExpect(status().isOk());
+	}
+
+	@Test
+	void adminAndModerationOnlyAcceptTheFrontendOrigin() throws Exception {
+		var user = new TestAuthHelper(mockMvc, objectMapper).authenticate("origin_admin_user");
+		MvcResult created = mockMvc.perform(post("/developers/origins")
+				.header("X-Session-Token", user.token())
+				.header("X-Client-Origin", APP_ORIGIN)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"origin\":\"https://terceiro.example\"}"))
+			.andExpect(status().isCreated())
+			.andReturn();
+		String id = objectMapper.readTree(created.getResponse().getContentAsString()).get("id").asString();
+
+		// Origem de terceiro, mesmo cadastrada e ativa, não entra em admin nem moderação.
+		mockMvc.perform(get("/admin/support").header("Origin", "https://terceiro.example"))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("ORIGIN_NOT_TRUSTED"));
+
+		mockMvc.perform(get("/moderation/me").header("X-Client-Origin", "https://terceiro.example"))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("ORIGIN_NOT_TRUSTED"));
+
+		// Caminho percent-encoded não pode escapar da regra de admin (URI crua, sem o template
+		// do MockMvc reencodar o "%").
+		mockMvc.perform(get(java.net.URI.create("/%61dmin/support")).header("Origin", "https://terceiro.example"))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("ORIGIN_NOT_TRUSTED"));
+
+		// Origem do frontend passa o gate (a recusa seguinte é a falta de sessão, não a origem).
+		mockMvc.perform(get("/admin/support").header("X-Client-Origin", APP_ORIGIN))
+			.andExpect(status().isUnauthorized());
+
+		// Curinga confiável de subdomínio.
+		mockMvc.perform(get("/admin/support").header("X-Client-Origin", "https://painel.b7cloud.com.br"))
+			.andExpect(status().isUnauthorized());
+
+		// O domínio "raiz", sem subdomínio, não casa com https://*.b7cloud.com.br.
+		mockMvc.perform(get("/admin/support").header("X-Client-Origin", "https://b7cloud.com.br"))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("ORIGIN_NOT_ALLOWED"));
+
+		mockMvc.perform(delete("/developers/origins/" + id)
+				.header("X-Session-Token", user.token())
+				.header("X-Client-Origin", APP_ORIGIN))
+			.andExpect(status().isOk());
+	}
+
+	@Test
+	void adminCanBlockAndUnblockAnOrigin() throws Exception {
+		var owner = new TestAuthHelper(mockMvc, objectMapper).authenticate("origin_admin_target");
+		var admin = new TestAuthHelper(mockMvc, objectMapper).authenticate("group-admin");
+		MvcResult created = mockMvc.perform(post("/developers/origins")
+				.header("X-Session-Token", owner.token())
+				.header("X-Client-Origin", APP_ORIGIN)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"origin\":\"https://manual.example\"}"))
+			.andExpect(status().isCreated())
+			.andReturn();
+		String id = objectMapper.readTree(created.getResponse().getContentAsString()).get("id").asString();
+
+		mockMvc.perform(post("/admin/developers/origins/{id}/block", id)
+				.header("X-Session-Token", admin.token())
+				.header("X-Client-Origin", APP_ORIGIN)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"reason\":\"teste de bloqueio manual\"}"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.blocked").value(true));
+
+		mockMvc.perform(get("/v1").header("Origin", "https://manual.example"))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("ORIGIN_BLOCKED"));
+
+		mockMvc.perform(post("/admin/developers/origins/{id}/unblock", id)
+				.header("X-Session-Token", admin.token())
+				.header("X-Client-Origin", APP_ORIGIN))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.blocked").value(false));
+
+		mockMvc.perform(get("/v1").header("Origin", "https://manual.example"))
+			.andExpect(status().isOk());
+
+		mockMvc.perform(delete("/developers/origins/" + id)
+				.header("X-Session-Token", owner.token())
+				.header("X-Client-Origin", APP_ORIGIN))
+			.andExpect(status().isOk());
+	}
+
+	@Test
+	void suspiciousOriginIsBlockedAutomatically() throws Exception {
+		var user = new TestAuthHelper(mockMvc, objectMapper).authenticate("origin_abuse_user");
+		MvcResult created = mockMvc.perform(post("/developers/origins")
+				.header("X-Session-Token", user.token())
+				.header("X-Client-Origin", APP_ORIGIN)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"origin\":\"https://abuso.example\"}"))
+			.andExpect(status().isCreated())
+			.andReturn();
+		String id = objectMapper.readTree(created.getResponse().getContentAsString()).get("id").asString();
+
+		// Sem sessão: cada tentativa responde 401/403 e conta para a reputação da origem.
+		for (int i = 0; i < 3; i++) {
+			mockMvc.perform(get("/developers/origins").header("Origin", "https://abuso.example"))
+				.andExpect(status().is4xxClientError());
+		}
+
+		// Limite de 3 recusas (configurado no @SpringBootTest): a origem cai.
+		mockMvc.perform(get("/v1").header("Origin", "https://abuso.example"))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("ORIGIN_BLOCKED"));
+
+		mockMvc.perform(get("/developers/origins")
+				.header("X-Session-Token", user.token())
+				.header("X-Client-Origin", APP_ORIGIN))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$[0].blocked").value(true));
+
+		mockMvc.perform(delete("/developers/origins/" + id)
+				.header("X-Session-Token", user.token())
 				.header("X-Client-Origin", APP_ORIGIN))
 			.andExpect(status().isOk());
 	}

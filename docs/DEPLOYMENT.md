@@ -175,6 +175,21 @@ services:
 | `REDE_OAUTH_APPLE_KEY_ID` | Apple Key ID |
 | `REDE_OAUTH_APPLE_PRIVATE_KEY` | Apple private key (PKCS#8) |
 
+### URIs de redirecionamento do Google (Console → Credentials)
+
+O backend manda o Google para o callback da **API** (`application-prd.properties` e
+`application-qa.properties` montam `${REDE_BACKEND_URL}/api/auth/oauth/google/callback`). Esses
+URIs precisam estar cadastrados no **mesmo OAuth 2.0 Client ID** (tipo "Web application"), senão o
+Google responde `400 redirect_uri_mismatch`:
+
+- Produção: `https://api.enois.ia.br/api/auth/oauth/google/callback`
+- QA: `https://enois-api-qa.b7cloud.tech/api/auth/oauth/google/callback`
+
+O URI `https://enois.ia.br/auth/callback?provider=GOOGLE` é a tela do app, **não** o redirect que o
+Google recebe neste fluxo — cadastrar só ele não resolve. A comparação é exata (esquema, host,
+caminho; sem barra final). Se cada ambiente usar um client próprio, cadastre o URI correspondente
+no client daquele ambiente.
+
 ## Variáveis de Ambiente (Storage ImageKit)
 
 | Variável | Descrição |
