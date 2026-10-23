@@ -44,8 +44,13 @@ class OriginAbuseGuard {
 			@Value("${rede.origins.suspicious.window-seconds:300}") long windowSeconds,
 			@Value("${rede.origins.suspicious.block-minutes:30}") long blockMinutes) {
 		this.origins = origins;
-		this.appOrigins = com.socialcoisa.rede.apiv1.origins.OriginPatterns.parse(allowedOrigins);
-		this.appOrigins.addAll(com.socialcoisa.rede.apiv1.origins.OriginPatterns.parse(trustedPatterns));
+		// `OriginPatterns.parse` devolve conjunto IMUTAVEL: juntar as duas listas exige uma copia
+		// mutavel primeiro (o `addAll` direto estourava UnsupportedOperationException e derrubava
+		// o boot do app inteiro).
+		java.util.Set<String> appOrigins = new java.util.HashSet<>(
+			com.socialcoisa.rede.apiv1.origins.OriginPatterns.parse(allowedOrigins));
+		appOrigins.addAll(com.socialcoisa.rede.apiv1.origins.OriginPatterns.parse(trustedPatterns));
+		this.appOrigins = java.util.Set.copyOf(appOrigins);
 		this.maxFailures = maxFailures;
 		this.windowMs = Math.max(1, windowSeconds) * 1000;
 		this.blockMinutes = Math.max(1, blockMinutes);
