@@ -95,6 +95,7 @@ class FeedController {
 	private final Clock clock;
 	private final com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseCase mediaOwnershipValidator;
 	private final HoneypotGuard honeypots;
+	private final com.socialcoisa.rede.feed.application.port.out.OutboxEventRepository outboxEventRepository;
 
 	FeedController(PublishPostUseCase publishPostUseCase, GetFeedUseCase getFeedUseCase, GetPostUseCase getPostUseCase,
 			GetProfilePostsUseCase getProfilePostsUseCase, DeletePostUseCase deletePostUseCase,
@@ -108,7 +109,8 @@ class FeedController {
 			com.socialcoisa.rede.feed.application.port.out.PostRepository postRepository,
 			CursorCodec cursorCodec, BlockedUsersReader blockedUsersReader, Clock clock,
 			com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseCase mediaOwnershipValidator,
-			HoneypotGuard honeypots) {
+			HoneypotGuard honeypots,
+			com.socialcoisa.rede.feed.application.port.out.OutboxEventRepository outboxEventRepository) {
 		this.publishPostUseCase = publishPostUseCase;
 		this.getFeedUseCase = getFeedUseCase;
 		this.getPostUseCase = getPostUseCase;
@@ -133,6 +135,7 @@ class FeedController {
 		this.clock = clock;
 		this.mediaOwnershipValidator = mediaOwnershipValidator;
 		this.honeypots = honeypots;
+		this.outboxEventRepository = outboxEventRepository;
 	}
 
 	@PostMapping("/feed/posts")
@@ -532,6 +535,11 @@ class FeedController {
 				boolean added = postInteractionRepository.addCommentReaction(
 					"creact_" + UUID.randomUUID().toString().replace("-", ""),
 					commentId, user.id(), request.type(), Instant.now());
+				if (added) {
+					outboxEventRepository.append("CommentReacted", commentId,
+						"{\"commentId\":\"" + commentId + "\",\"postId\":\"" + postId
+						+ "\",\"authorId\":\"" + user.id().value() + "\"}");
+				}
 				return new CommandResponse(200, Map.of("status", added ? "REACTED" : "REMOVED"));
 			});
 	}
