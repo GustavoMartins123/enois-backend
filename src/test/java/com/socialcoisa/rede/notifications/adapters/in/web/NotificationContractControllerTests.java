@@ -58,7 +58,7 @@ class NotificationContractControllerTests {
 	void marksASingleNotificationReadWithoutError() throws Exception {
 		var session = auth.authenticate("notif_read_one");
 		jdbc.update("""
-				insert into notifications (id, user_id, kind, actor_id, title, body, `read`, created_at)
+				insert into notifications (id, user_id, kind, actor_id, title, body, is_read, created_at)
 				values (?, ?, 'SYSTEM', 'sistema', 'Aviso', 'corpo', false, current_timestamp)
 				""", "notif_read_id_1", session.userId());
 

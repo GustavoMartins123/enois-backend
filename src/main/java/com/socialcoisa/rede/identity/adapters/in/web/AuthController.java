@@ -655,26 +655,14 @@ class AuthController {
 	}
 
 	record AuthConfig(String captchaMode, String turnstileSiteKey, boolean googleLoginEnabled) {
-	}
+}
 
-	/** Recusa quando o e-mail, normalizado, já pertence a uma conta. */
+	/** Resposta neutra para e-mail já cadastrado (E-24): igual a um cadastro novo. */
 	private ResponseEntity<String> fakeSignupAccepted(String email) {
 		return ResponseEntity.status(201)
 			.contentType(org.springframework.http.MediaType.APPLICATION_JSON)
 			.body(objectMapper.writeValueAsString(Map.of("email", email, "verificationRequired", true,
 				"emailSent", true)));
-	}
-
-	private void exigeEmailUnico(String email) {
-		String normalized = normalizeEmail(email);
-		if (normalized == null) {
-			return;
-		}
-		if (profiles.findByEmail(email == null ? normalized : email.trim()).isPresent()
-			|| profiles.findByEmail(normalized).isPresent()) {
-			throw new ApiException(409, "EMAIL_IN_USE",
-				"Este e-mail ja tem conta no Enois. Entre ou recupere a senha.");
-		}
 	}
 
 	/**
@@ -697,6 +685,7 @@ class AuthController {
 			local = local.replace(".", "");
 		}
 		return local + domain;
+
 	}
 
 	private String authScope(String email) {
@@ -729,4 +718,18 @@ class AuthController {
 
 	record PasswordConfirmationRequest(String password) {
 	}
+
+	/** Recusa quando o e-mail, normalizado, já pertence a uma conta. */
+	private void exigeEmailUnico(String email) {
+		String normalized = normalizeEmail(email);
+		if (normalized == null) {
+			return;
+		}
+		if (profiles.findByEmail(email == null ? normalized : email.trim()).isPresent()
+			|| profiles.findByEmail(normalized).isPresent()) {
+			throw new ApiException(409, "EMAIL_IN_USE",
+				"Este e-mail ja tem conta no Enois. Entre ou recupere a senha.");
+		}
+	}
+
 }

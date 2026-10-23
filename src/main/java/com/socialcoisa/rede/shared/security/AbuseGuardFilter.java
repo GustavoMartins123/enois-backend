@@ -77,7 +77,22 @@ public class AbuseGuardFilter extends OncePerRequestFilter {
 	protected boolean shouldNotFilter(HttpServletRequest request) {
 		String uri = request.getRequestURI();
 		// Sonda do cluster não entra: derrubar o health check derruba o pod.
-		return uri.contains("/actuator") || uri.contains("/health");
+		if (uri.contains("/actuator") || uri.contains("/health")) {
+			return true;
+		}
+		// Leitura nunca entra nesta conta. Abrir uma tela dispara várias chamadas, e um visitante
+		// sem sessão produz 401 em toda página — contar GET punha gente comum em bloqueio.
+		String metodo = request.getMethod();
+		if ("GET".equalsIgnoreCase(metodo) || "HEAD".equalsIgnoreCase(metodo)
+				|| "OPTIONS".equalsIgnoreCase(metodo)) {
+			return true;
+		}
+		// Login, cadastro e sessão ficam FORA desta conta. Aqui o erro é normal e frequente: senha
+		// digitada errado, `/auth/me` de visitante (401 esperado em toda página aberta sem conta) e
+		// refresh vencido. Contar isso bloqueava o IP inteiro — e um IP bloqueado não consegue nem
+		// entrar, virando apagão de login para todos que saem pela mesma rede. Essas rotas seguem
+		// protegidas pelo limitador próprio de autenticação.
+		return uri.startsWith("/auth/");
 	}
 
 	@Override
@@ -91,7 +106,7 @@ public class AbuseGuardFilter extends OncePerRequestFilter {
 		long now = clock.millis();
 		Block bloqueio = bloqueios.get(ip);
 		if (bloqueio != null && bloqueio.until() > now) {
-			negar(response, bloqueio.until() - now);
+			negar(request, response, bloqueio.until() - now);
 			return;
 		}
 
@@ -147,10 +162,18 @@ public class AbuseGuardFilter extends OncePerRequestFilter {
 	}
 
 	/** 429 com o tempo de espera: o cliente honesto sabe quando voltar, o scanner não ganha nada. */
-	private void negar(HttpServletResponse response, long restanteMs) throws IOException {
+	private void negar(HttpServletRequest request, HttpServletResponse response, long restanteMs)
+			throws IOException {
 		long segundos = Math.max(1, (restanteMs + 999) / 1000);
 		response.setStatus(429);
 		response.setHeader("Retry-After", Long.toString(segundos));
+		// Sem o cabecalho de CORS o navegador transforma este 429 em `NetworkError` e a pessoa ve
+		// "erro de rede" em vez de "muitas requisicoes invalidas". Devolve a origem que pediu.
+		String origem = request.getHeader("Origin");
+		if (origem != null && !origem.isBlank()) {
+			response.setHeader("Access-Control-Allow-Origin", origem);
+			response.setHeader("Vary", "Origin");
+		}
 		response.setContentType("application/json");
 		response.setCharacterEncoding("UTF-8");
 		response.getWriter().write("{\"code\":\"RATE_LIMITED\",\"message\":\"Muitas requisicoes invalidas. "

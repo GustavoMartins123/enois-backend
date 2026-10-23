@@ -4,7 +4,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import com.socialcoisa.rede.feed.application.port.out.CommentRepository;
 import com.socialcoisa.rede.feed.application.port.out.PostRepository;
+import com.socialcoisa.rede.feed.domain.Comment;
 import com.socialcoisa.rede.feed.domain.Post;
 import com.socialcoisa.rede.feed.domain.PostId;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
@@ -17,12 +19,14 @@ class NotificationOutboxEventHandler implements OutboxEventHandler {
 
 	private final NotificationService notificationService;
 	private final PostRepository postRepository;
+	private final CommentRepository commentRepository;
 	private final UserProfileRepository userProfileRepository;
 
 	NotificationOutboxEventHandler(NotificationService notificationService, PostRepository postRepository,
-			UserProfileRepository userProfileRepository) {
+			CommentRepository commentRepository, UserProfileRepository userProfileRepository) {
 		this.notificationService = notificationService;
 		this.postRepository = postRepository;
+		this.commentRepository = commentRepository;
 		this.userProfileRepository = userProfileRepository;
 	}
 
@@ -32,6 +36,7 @@ class NotificationOutboxEventHandler implements OutboxEventHandler {
 			switch (eventType) {
 				case "PostCommented" -> handlePostCommented(payload);
 				case "PostReacted" -> handlePostReacted(payload);
+				case "CommentReacted" -> handleCommentReacted(payload);
 				default -> {
 				}
 			}
@@ -66,6 +71,21 @@ class NotificationOutboxEventHandler implements OutboxEventHandler {
 		notificationService.create(post.authorId().value(), "NEW_REACTION", authorId,
 			"Nova reação", actorName + " reagiu ao seu post.",
 			"/api/feed/posts/" + postId, "Ver");
+	}
+
+	private void handleCommentReacted(String payload) {
+		String commentId = extractValue(payload, "commentId");
+		String postId = extractValue(payload, "postId");
+		String authorId = extractValue(payload, "authorId");
+		if (commentId == null || authorId == null) return;
+		Comment comment = commentRepository.findById(commentId).orElse(null);
+		if (comment == null) return;
+		if (comment.authorId().value().equals(authorId)) return;
+		String actorName = userProfileRepository.findById(authorId)
+			.map(p -> p.name()).orElse("Alguém");
+		notificationService.create(comment.authorId().value(), "COMMENT_REACTION", authorId,
+			"Reação no comentário", actorName + " reagiu ao seu comentário.",
+			postId != null ? "/api/feed/posts/" + postId : null, "Ver");
 	}
 
 	private String extractValue(String json, String key) {

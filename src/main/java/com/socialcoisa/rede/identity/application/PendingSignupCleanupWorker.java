@@ -34,8 +34,8 @@ public class PendingSignupCleanupWorker {
 		this.enabled = enabled;
 	}
 
-	@Scheduled(initialDelayString = "${rede.auth.pending-signup-cleanup-initial-delay-ms:60000}",
-			fixedDelayString = "${rede.auth.pending-signup-cleanup-interval-ms:900000}")
+	@Scheduled(initialDelayString = "${rede.auth.pending-signup-cleanup-initial-delay-ms:15000}",
+			fixedDelayString = "${rede.auth.pending-signup-cleanup-interval-ms:180000}")
 	public void run() {
 		if (!enabled) {
 			return;

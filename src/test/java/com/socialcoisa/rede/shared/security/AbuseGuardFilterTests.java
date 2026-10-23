@@ -54,8 +54,9 @@ class AbuseGuardFilterTests {
 	// Teto baixo para o teste fechar rápido; os padrões do app são maiores (20 erros em 3 min).
 	private final AbuseGuardFilter filtro = new AbuseGuardFilter(relogio, ipResolver, 3, 180, 15, 360);
 
+	/** POST: leitura não entra na conta do bloqueio (GET é livre), então a varredura é de escrita. */
 	private static MockHttpServletRequest pedido(String ip, String uri) {
-		MockHttpServletRequest request = new MockHttpServletRequest("GET", uri);
+		MockHttpServletRequest request = new MockHttpServletRequest("POST", uri);
 		request.setRemoteAddr(ip);
 		return request;
 	}
@@ -69,6 +70,28 @@ class AbuseGuardFilterTests {
 		MockHttpServletResponse response = new MockHttpServletResponse();
 		filtro.doFilter(pedido(ip, uri), response, respondendo(status));
 		return response.getStatus();
+	}
+
+
+	/**
+	 * O 429 tem de vir com o cabecalho de CORS: sem ele o navegador entrega `NetworkError` e a
+	 * pessoa ve "erro de rede" em vez de "muitas requisicoes invalidas" (visto na QA em 2026-10-23).
+	 */
+	@Test
+	void negacaoDevolveCabecalhoDeCorsDaOrigem() throws Exception {
+		String ip = "198.51.100.77";
+		for (int i = 0; i < 3; i++) {
+			chamar(ip, "/wp-admin", 404);
+		}
+
+		MockHttpServletRequest request = pedido(ip, "/api/feed");
+		request.addHeader("Origin", "https://enois-qa.b7cloud.tech");
+		MockHttpServletResponse response = new MockHttpServletResponse();
+		filtro.doFilter(request, response, respondendo(200));
+
+		assertThat(response.getStatus()).isEqualTo(429);
+		assertThat(response.getHeader("Access-Control-Allow-Origin")).isEqualTo("https://enois-qa.b7cloud.tech");
+		assertThat(response.getHeader("Vary")).isEqualTo("Origin");
 	}
 
 	@Test

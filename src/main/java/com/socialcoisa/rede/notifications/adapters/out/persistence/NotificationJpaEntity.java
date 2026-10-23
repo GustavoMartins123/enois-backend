@@ -11,7 +11,7 @@ import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 
 @Entity
-@Table(name = "notifications", indexes = @Index(name = "idx_notifications_user_read_created", columnList = "user_id, read, created_at"))
+@Table(name = "notifications", indexes = @Index(name = "idx_notifications_user_read_created", columnList = "user_id, is_read, created_at"))
 class NotificationJpaEntity {
 
 	@Id
@@ -38,7 +38,10 @@ class NotificationJpaEntity {
 	@Column(name = "cta_label")
 	private String ctaLabel;
 
-	@Column(nullable = false)
+	// A coluna nasceu como `read`, PALAVRA RESERVADA no MariaDB/MySQL: o Hibernate gerava
+	// `update notifications set ..., read=?, ...` e o banco recusava (erro 1064), derrubando todo
+	// insert/update de notificacao. A V170 renomeia para `is_read` — o nome livre de reserva.
+	@Column(name = "is_read", nullable = false)
 	private boolean read;
 
 	@Column(name = "created_at", nullable = false)
