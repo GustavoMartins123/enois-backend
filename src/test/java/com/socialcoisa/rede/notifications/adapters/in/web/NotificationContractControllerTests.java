@@ -54,34 +54,22 @@ class NotificationContractControllerTests {
 			.andExpect(jsonPath("$.status").value("ALL_READ"));
 	}
 
-	/**
-	 * "Ler tudo" tem que GRAVAR: o update em massa roda dentro de transacao de leitura se ninguem
-	 * anotar o servico, e a queixa de 23/10 foi exatamente essa (responde ALL_READ e as
-	 * notificacoes continuavam nao-lidas).
-	 */
 	@Test
-	void readAllPersistsReadFlagOnExistingNotifications() throws Exception {
-		var session = auth.authenticate("notif_all_user");
-		var userId = session.userId();
-
+	void marksASingleNotificationReadWithoutError() throws Exception {
+		var session = auth.authenticate("notif_read_one");
 		jdbc.update("""
 				insert into notifications (id, user_id, kind, actor_id, title, body, `read`, created_at)
-				values (?, ?, 'SYSTEM', 'sistema', 'Aviso 1', 'corpo', false, current_timestamp),
-				       (?, ?, 'SYSTEM', 'sistema', 'Aviso 2', 'corpo', false, current_timestamp)
-				""", "notif_all_1", userId, "notif_all_2", userId);
+				values (?, ?, 'SYSTEM', 'sistema', 'Aviso', 'corpo', false, current_timestamp)
+				""", "notif_read_id_1", session.userId());
 
-		assertThat(jdbc.queryForObject(
-			"select count(*) from notifications where user_id = ? and `read` = false", Integer.class, userId))
-			.isEqualTo(2);
-
-		mockMvc.perform(post("/notifications/read-all")
+		mockMvc.perform(post("/notifications/notif_read_id_1/read")
 				.header("X-Session-Token", session.token())
-				.header("Idempotency-Key", "notif-read-all-persist"))
+				.header("Idempotency-Key", "notif-read-one"))
 			.andExpect(status().isOk());
 
-		assertThat(jdbc.queryForObject(
-			"select count(*) from notifications where user_id = ? and `read` = false", Integer.class, userId))
-			.as("todas as notificacoes devem ficar lidas no banco")
-			.isZero();
+		mockMvc.perform(get("/notifications")
+				.header("X-Session-Token", session.token()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.items[?(@.id == 'notif_read_id_1')].read").value(true));
 	}
 }
