@@ -145,6 +145,10 @@ docker compose --profile prd up
 | `REDE_STORAGE_IMAGEKIT_URL_ENDPOINT` | Sim (se storage ImageKit) | ImageKit URL endpoint |
 | `REDE_CORS_ALLOWED_ORIGINS` | Não | Origens do app liberadas em todas as rotas (navegador: `Origin`; servidor: `X-Client-Origin`) |
 | `REDE_ORIGINS_ENFORCE` | Não | Gate de origem global (padrão `true`); `false` só para diagnóstico local |
+| `REDE_TRUSTED_ORIGINS` | Não | Padrões confiáveis do frontend, inclusive curinga (`https://*.b7cloud.com.br`); aceitos também em `/admin` e `/moderation` |
+| `REDE_ORIGINS_MAX_FAILURES` | Não | Recusas (401/403/429) que derrubam uma origem de terceiro (padrão `60`; `0` desliga) |
+| `REDE_ORIGINS_WINDOW_SECONDS` | Não | Janela do contador de recusas (padrão `300`) |
+| `REDE_ORIGINS_BLOCK_MINUTES` | Não | Duração do bloqueio automático (padrão `30`; bloqueio manual do admin é permanente) |
 | `DB_HOST` | Sim (qa/hml/prd) | Host do banco |
 | `DB_PORT` | Sim (qa/hml/prd) | Porta do banco |
 | `DB_NAME` | Sim (qa/hml/prd) | Nome do banco |

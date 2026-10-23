@@ -1,10 +1,8 @@
 package com.socialcoisa.rede.apiv1.origins;
 
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.Locale;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.Ordered;
@@ -13,6 +11,7 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.util.UriUtils;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -22,23 +21,22 @@ import jakarta.servlet.http.HttpServletResponse;
 /**
  * Toda requisição precisa de uma origem cadastrada para ser atendida.
  *
- * Navegador manda {@code Origin} em requisições cross-origin (e em POST/PUT/DELETE same-origin);
- * chamadas de servidor (SSR, curl, integrações) sempre podem mandar {@code X-Client-Origin}. As
- * duas formas passam pela mesma lista: origens do próprio app (CORS estático) + origens que o
- * desenvolvedor cadastrou em {@code /developers/origins}.
- *
- * Regras:
+ * Duas classes de origem:
  * <ul>
- * <li>{@code Origin} presente: é a autoridade. Desconhecida → 403 ORIGIN_NOT_ALLOWED; nunca cai
- * para o {@code X-Client-Origin} (senão um site malicioso poderia falsificar a origem).</li>
- * <li>Sem {@code Origin} e com {@code X-Client-Origin}: mesma validação.</li>
- * <li>Sem nenhum dos dois: 403 ORIGIN_REQUIRED, exceto nos fluxos públicos/infra listados em
- * {@link #bypass} e {@link #allowsNoOrigin}.</li>
+ * <li><b>Confiável</b> — as do próprio app ({@code CORS_ALLOWED_ORIGINS}) e os padrões de
+ * {@code rede.origins.trusted} (ex.: {@code https://*.b7cloud.com.br}). Aceitas em todas as rotas,
+ * inclusive {@code /admin/**} e {@code /moderation/**}.</li>
+ * <li><b>Cadastrada</b> — origem de terceiro registrada em {@code /developers/origins}. Aceita nas
+ * rotas normais, mas NUNCA em admin/moderação, e pode ser bloqueada automaticamente pelo
+ * {@link OriginAbuseGuard} se gerar recusas em série.</li>
  * </ul>
  *
- * CORS não é autenticação: um cliente de servidor pode mentir o {@code X-Client-Origin}, mas ele
- * também não é protegido por CORS. O gate protege o navegador (CSRF/leitura cross-origin) e
- * documenta quem consome a API.
+ * Navegador manda {@code Origin}; chamadas de servidor (SSR, curl, integrações) mandam
+ * {@code X-Client-Origin}. Se o {@code Origin} vier, ele é a autoridade e o {@code X-Client-Origin}
+ * não o substitui — só serve para detectar tentativa de falsificação (contada como suspeita).
+ *
+ * Fluxos de terceiros/infra sem origem do app (webhook do GitHub, callbacks OAuth/gov.br,
+ * health/version, páginas públicas, mídia GET e descadastro) ficam isentos.
  */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 4)
@@ -47,18 +45,19 @@ class RequestOriginFilter extends OncePerRequestFilter {
 	static final String CLIENT_ORIGIN_HEADER = "X-Client-Origin";
 
 	private final DeveloperOriginService origins;
+	private final OriginAbuseGuard abuse;
 	private final Set<String> staticOrigins;
+	private final Set<String> trustedPatterns;
 	private final boolean enforce;
 
-	RequestOriginFilter(DeveloperOriginService origins,
+	RequestOriginFilter(DeveloperOriginService origins, OriginAbuseGuard abuse,
 			@Value("${rede.cors.allowed-origins:https://enois.ia.br,http://localhost:5173}") String allowed,
+			@Value("${rede.origins.trusted:https://*.b7cloud.com.br}") String trusted,
 			@Value("${rede.origins.enforce:true}") boolean enforce) {
 		this.origins = origins;
-		this.staticOrigins = Arrays.stream(allowed.split(","))
-			.map(String::trim)
-			.filter(StringUtils::hasText)
-			.map(RequestOriginFilter::matchForm)
-			.collect(Collectors.toUnmodifiableSet());
+		this.abuse = abuse;
+		this.staticOrigins = OriginPatterns.parse(allowed);
+		this.trustedPatterns = OriginPatterns.parse(trusted);
 		this.enforce = enforce;
 	}
 
@@ -79,47 +78,77 @@ class RequestOriginFilter extends OncePerRequestFilter {
 		}
 
 		String origin = request.getHeader("Origin");
-		if (StringUtils.hasText(origin)) {
-			String normalized = matchForm(origin);
-			if (origins.allowedOrigins().contains(normalized)) {
-				// Origem de terceiro cadastrada: o CORS estático não responde por ela.
-				response.setHeader("Access-Control-Allow-Origin", origin);
-				response.setHeader("Vary", "Origin");
-				if (preflight(request, response)) {
-					return;
-				}
-				chain.doFilter(request, response);
-				return;
-			}
-			if (staticOrigins.contains(normalized)) {
-				// Origem do app: o CORS estático (CorsConfig) responde, inclusive no preflight.
-				chain.doFilter(request, response);
-				return;
-			}
-			reject(response, "ORIGIN_NOT_ALLOWED",
-				"Cadastre a origem do seu app em /developers/origins para usar a API.");
-			return;
-		}
-
 		String clientOrigin = request.getHeader(CLIENT_ORIGIN_HEADER);
-		if (StringUtils.hasText(clientOrigin)) {
-			String normalized = matchForm(clientOrigin);
-			if (origins.allowedOrigins().contains(normalized) || staticOrigins.contains(normalized)) {
+		String declared = StringUtils.hasText(origin) ? origin : clientOrigin;
+
+		if (!StringUtils.hasText(declared)) {
+			if (allowsNoOrigin(method, path)) {
 				chain.doFilter(request, response);
 				return;
 			}
-			reject(response, "ORIGIN_NOT_ALLOWED",
-				"Cadastre a origem do seu app em /developers/origins para usar a API.");
+			reject(response, "ORIGIN_REQUIRED",
+				"Toda requisicao precisa de origem cadastrada. O navegador envia Origin; chamadas de "
+					+ "servidor devem enviar X-Client-Origin com uma origem cadastrada.");
 			return;
 		}
 
-		if (allowsNoOrigin(method, path)) {
+		String normalized = matchForm(declared);
+		boolean trusted = isTrusted(normalized);
+		boolean registered = !trusted && origins.allowedOrigins().contains(normalized);
+
+		// Origin presente + X-Client-Origin diferente: tentativa de declarar outra origem.
+		if (StringUtils.hasText(origin) && StringUtils.hasText(clientOrigin)
+				&& !matchForm(origin).equals(matchForm(clientOrigin))
+				&& origins.allowedOrigins().contains(matchForm(origin))) {
+			abuse.recordFailure(matchForm(origin));
+		}
+
+		if (!trusted && !registered) {
+			if (origins.isBlocked(normalized)) {
+				reject(response, "ORIGIN_BLOCKED",
+					"Esta origem foi bloqueada por atividade suspeita. Remova-a em /developers/origins.");
+			}
+			else {
+				reject(response, "ORIGIN_NOT_ALLOWED",
+					"Cadastre a origem do seu app em /developers/origins para usar a API.");
+			}
+			return;
+		}
+
+		// Admin e moderação: só a origem do frontend (confiável), nunca origem de terceiro.
+		if (isAdminPath(path) && !trusted) {
+			if (StringUtils.hasText(origin)) {
+				setCors(response, origin);
+			}
+			abuse.recordFailure(normalized);
+			reject(response, "ORIGIN_NOT_TRUSTED",
+				"Rotas de administracao e moderacao aceitam apenas a origem do frontend.");
+			return;
+		}
+
+		if (trusted) {
+			// A origem do app segue o CORS estático (CorsConfig), inclusive no preflight.
 			chain.doFilter(request, response);
 			return;
 		}
-		reject(response, "ORIGIN_REQUIRED",
-			"Toda requisicao precisa de origem cadastrada. O navegador envia Origin; chamadas de "
-				+ "servidor devem enviar X-Client-Origin com uma origem cadastrada.");
+
+		// Origem de terceiro cadastrada: responde o CORS e conta recusas para o bloqueio automático.
+		if (StringUtils.hasText(origin)) {
+			setCors(response, origin);
+			if (preflight(request, response)) {
+				return;
+			}
+		}
+		chain.doFilter(request, response);
+		int status = response.getStatus();
+		if (status == 401 || status == 403 || status == 429) {
+			abuse.recordFailure(normalized);
+		}
+	}
+
+	private boolean isTrusted(String normalized) {
+		return OriginPatterns.matches(normalized, staticOrigins)
+				|| OriginPatterns.matches(normalized, trustedPatterns);
 	}
 
 	/** Responde o preflight de uma origem de terceiro cadastrada. */
@@ -134,6 +163,11 @@ class RequestOriginFilter extends OncePerRequestFilter {
 		response.setHeader("Access-Control-Max-Age", "600");
 		response.setStatus(204);
 		return true;
+	}
+
+	private static void setCors(HttpServletResponse response, String origin) {
+		response.setHeader("Access-Control-Allow-Origin", origin);
+		response.setHeader("Vary", "Origin");
 	}
 
 	/**
@@ -160,7 +194,7 @@ class RequestOriginFilter extends OncePerRequestFilter {
 
 	/**
 	 * Conteúdo público que pode ser aberto direto no navegador, carregado como imagem ou clicado
-	 * de um e-mail. Se vier uma origem, ela ainda é validada antes (ver {@link #doFilterInternal}).
+	 * de um e-mail. Se vier uma origem, ela ainda é validada antes.
 	 */
 	private static boolean allowsNoOrigin(String method, String path) {
 		if (path.startsWith("/pages/")) {
@@ -170,6 +204,12 @@ class RequestOriginFilter extends OncePerRequestFilter {
 			return true;
 		}
 		return path.equals("/blogs/descadastrar");
+	}
+
+	/** Rotas do painel: somente a origem confiável do frontend. */
+	private static boolean isAdminPath(String path) {
+		return path.equals("/admin") || path.startsWith("/admin/")
+				|| path.equals("/moderation") || path.startsWith("/moderation/");
 	}
 
 	private static void reject(HttpServletResponse response, String code, String message) throws IOException {
@@ -182,11 +222,24 @@ class RequestOriginFilter extends OncePerRequestFilter {
 		response.getWriter().write("{\"code\":\"" + code + "\",\"message\":\"" + message + "\"}");
 	}
 
+	/**
+	 * Caminho DECODIFICADO e dentro da aplicação: sem isso, {@code /%61dmin} escaparia da regra
+	 * de admin (o Spring mapeia para /admin, mas o filtro veria outro texto).
+	 */
 	private static String path(HttpServletRequest request) {
 		String path = request.getRequestURI();
 		String context = request.getContextPath();
 		if (context != null && !context.isEmpty() && path.startsWith(context)) {
 			path = path.substring(context.length());
+		}
+		try {
+			path = UriUtils.decode(path, java.nio.charset.StandardCharsets.UTF_8);
+		}
+		catch (IllegalArgumentException malformed) {
+			return path;
+		}
+		while (path.contains("//")) {
+			path = path.replace("//", "/");
 		}
 		return path;
 	}
