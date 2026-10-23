@@ -69,7 +69,10 @@ class FallbackSurfaceFilter extends OncePerRequestFilter {
 			return;
 		}
 		String caminho = caminho(request);
-		if (superficie.conhecido(caminho)) {
+		String normalizado = RequestPath.routingPath(request);
+		// Um literal codificado pode nao casar com o indice bruto, mas deve chegar aos guards.
+		if (superficie.conhecido(caminho)
+				|| (!normalizado.equals(caminho) && superficie.conhecido(normalizado))) {
 			chain.doFilter(request, response);
 			return;
 		}

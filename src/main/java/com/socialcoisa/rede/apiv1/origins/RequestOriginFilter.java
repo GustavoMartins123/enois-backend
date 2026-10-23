@@ -11,7 +11,8 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
-import org.springframework.web.util.UriUtils;
+
+import com.socialcoisa.rede.shared.web.RequestPath;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -68,7 +69,7 @@ class RequestOriginFilter extends OncePerRequestFilter {
 			chain.doFilter(request, response);
 			return;
 		}
-		String path = path(request);
+		String path = RequestPath.applicationPath(request);
 		String method = request.getMethod();
 
 		// Fluxos controlados por terceiros ou infraestrutura que não têm origem do app.
@@ -236,28 +237,6 @@ class RequestOriginFilter extends OncePerRequestFilter {
 		response.setContentType(MediaType.APPLICATION_JSON_VALUE);
 		response.setCharacterEncoding("UTF-8");
 		response.getWriter().write("{\"code\":\"" + code + "\",\"message\":\"" + message + "\"}");
-	}
-
-	/**
-	 * Caminho DECODIFICADO e dentro da aplicação: sem isso, {@code /%61dmin} escaparia da regra
-	 * de admin (o Spring mapeia para /admin, mas o filtro veria outro texto).
-	 */
-	private static String path(HttpServletRequest request) {
-		String path = request.getRequestURI();
-		String context = request.getContextPath();
-		if (context != null && !context.isEmpty() && path.startsWith(context)) {
-			path = path.substring(context.length());
-		}
-		try {
-			path = UriUtils.decode(path, java.nio.charset.StandardCharsets.UTF_8);
-		}
-		catch (IllegalArgumentException malformed) {
-			return path;
-		}
-		while (path.contains("//")) {
-			path = path.replace("//", "/");
-		}
-		return path;
 	}
 
 	/** Forma de comparação: esquema/host minúsculos e sem barra final. */

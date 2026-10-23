@@ -30,6 +30,15 @@
 |---|---|
 | `corsConfigurer()` | Configura CORS permitindo origens de `rede.cors.allowed-origins` |
 
+### Processamento compartilhado de caminhos
+
+**Arquivo**: `src/main/java/com/socialcoisa/rede/shared/web/RequestPath.java`
+
+Os filtros web e o interceptor administrativo usam uma leitura compartilhada do caminho da
+requisição. A leitura considera o contexto da aplicação e não reescreve URI, query ou corpo.
+A seleção de permissões de administrador e moderador permanece no `AdminRouteInterceptor`.
+As rotas públicas e o comportamento de caminhos fora da superfície continuam cobertos por testes.
+
 ### OpenApiConfig
 
 **Arquivo**: `src/main/java/com/socialcoisa/rede/shared/web/OpenApiConfig.java`
