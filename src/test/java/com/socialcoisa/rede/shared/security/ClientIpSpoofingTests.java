@@ -62,8 +62,9 @@ class ClientIpSpoofingTests {
 		assertThat(lastStatus).isEqualTo(429);
 	}
 
+	/** POST: o teto global agora vale para escrita (leitura é livre). */
 	private static MockHttpServletRequest albRequest() {
-		MockHttpServletRequest request = new MockHttpServletRequest("GET", "/feed");
+		MockHttpServletRequest request = new MockHttpServletRequest("POST", "/feed");
 		request.addHeader("X-Forwarded-For", "9.9.9.9, " + REAL_IP);
 		return request;
 	}
