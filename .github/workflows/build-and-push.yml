@@ -197,5 +197,14 @@ jobs:
 
       - name: 🩺 Health check
         run: |
-          sleep 8
-          curl -sf --max-time 15 https://enois-api-qa.b7cloud.tech/health
+          # boot do Spring Boot (Flyway+Hibernate+Tomcat) pode levar bem mais que 8s, 8s dava flaky-fail
+          for i in $(seq 1 15); do
+            if curl -sf --max-time 10 https://enois-api-qa.b7cloud.tech/health; then
+              echo "OK na tentativa $i"
+              exit 0
+            fi
+            echo "tentativa $i falhou, aguardando..."
+            sleep 5
+          done
+          echo "health check nao respondeu apos 75s"
+          exit 1
