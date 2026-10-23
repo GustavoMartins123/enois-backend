@@ -72,12 +72,15 @@ class AuthController {
 	private final com.socialcoisa.rede.identity.adapters.out.TurnstileValidator turnstile;
 	private final com.socialcoisa.rede.identity.application.SignupChallengeService signupCaptcha;
 	private final com.socialcoisa.rede.identity.application.NewDeviceNotifier newDeviceNotifier;
+	private final com.socialcoisa.rede.identity.application.TwoFactorService twoFactorService;
 	private final com.socialcoisa.rede.shared.security.IpBlockReader ipBlockReader;
 	private final com.socialcoisa.rede.shared.security.SignupAttackGuard signupAttackGuard;
 	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles;
 	private final com.socialcoisa.rede.shared.security.ClientIpResolver ipResolver;
 	/** Cadastros abertos? Desligado, o POST /auth/signup responde 403 SIGNUP_DISABLED. */
 	private final boolean signupEnabled;
+	/** Login social desligável por ambiente (QA sem app OAuth configurado). */
+	private final boolean googleLoginEnabled;
 
 	AuthController(SignupUseCase signupUseCase, VerifyEmailUseCase verifyEmailUseCase,
 			TwoFactorLoginUseCase twoFactorLoginUseCase, TwoFactorUseCase twoFactorUseCase,
@@ -96,11 +99,13 @@ class AuthController {
 			com.socialcoisa.rede.identity.adapters.out.TurnstileValidator turnstile,
 			com.socialcoisa.rede.identity.application.SignupChallengeService signupCaptcha,
 			com.socialcoisa.rede.identity.application.NewDeviceNotifier newDeviceNotifier,
+			com.socialcoisa.rede.identity.application.TwoFactorService twoFactorService,
 			com.socialcoisa.rede.shared.security.IpBlockReader ipBlockReader,
 			com.socialcoisa.rede.shared.security.SignupAttackGuard signupAttackGuard,
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles,
 			com.socialcoisa.rede.shared.security.ClientIpResolver ipResolver,
-			@Value("${rede.auth.signup-enabled:true}") boolean signupEnabled) {
+			@Value("${rede.auth.signup-enabled:true}") boolean signupEnabled,
+			@Value("${rede.oauth.google.enabled:true}") boolean googleLoginEnabled) {
 		this.signupUseCase = signupUseCase;
 		this.verifyEmailUseCase = verifyEmailUseCase;
 		this.twoFactorLoginUseCase = twoFactorLoginUseCase;
@@ -121,11 +126,13 @@ class AuthController {
 		this.turnstile = turnstile;
 		this.signupCaptcha = signupCaptcha;
 		this.newDeviceNotifier = newDeviceNotifier;
+		this.twoFactorService = twoFactorService;
 		this.ipBlockReader = ipBlockReader;
 		this.signupAttackGuard = signupAttackGuard;
 		this.profiles = profiles;
 		this.ipResolver = ipResolver;
 		this.signupEnabled = signupEnabled;
+		this.googleLoginEnabled = googleLoginEnabled;
 	}
 
 	/** Bloqueio de IP pela moderacao (V115): nenhum fluxo de autenticacao emite sessao de IP banido. */
@@ -156,7 +163,7 @@ class AuthController {
 			mode = "NONE";
 			siteKey = null;
 		}
-		return new AuthConfig(mode, siteKey);
+		return new AuthConfig(mode, siteKey, googleLoginEnabled);
 	}
 
 	/** Desafio de soma para o cadastro (usado quando não há Turnstile configurado). */
@@ -313,6 +320,10 @@ class AuthController {
 	@RateLimiter(name = "auth")
 	Object oauthStart(@PathVariable String provider) {
 		OAuthProvider oauthProvider = parseProvider(provider);
+		if (oauthProvider == OAuthProvider.GOOGLE && !googleLoginEnabled) {
+			throw new ApiException(403, "OAUTH_PROVIDER_DISABLED",
+				"Login com Google indisponivel neste ambiente.");
+		}
 		return oAuthUseCase.start(oauthProvider);
 	}
 
@@ -387,6 +398,17 @@ class AuthController {
 	}
 
 	/** Provedores vinculados a conta (a tela mostra e permite desvincular). */
+	/**
+	 * Reset emergencial (23/10): limpa os segredos TOTP que a troca de infra deixou ilegiveis, para
+	 * quem tem 2FA por app voltar a logar com e-mail + senha e reativar em /seguranca.
+	 */
+	@PostMapping("/admin/two-factor/reset-broken")
+	Map<String, Integer> resetBrokenTwoFactor(
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader("X-Session-Token") String sessionToken) {
+		return Map.of("reset", twoFactorService.resetBrokenTotp());
+	}
+
 	@GetMapping("/oauth/providers")
 	Object oauthProviders(@RequestHeader(value = "X-Session-Token", required = false) String token) {
 		return oAuthUseCase.linkedProviders(requireUserId(token));
@@ -573,21 +595,9 @@ class AuthController {
 	record DeleteAccountRequest(String password) {
 	}
 
-	record AuthConfig(String captchaMode, String turnstileSiteKey) {
-	}
+	record AuthConfig(String captchaMode, String turnstileSiteKey, boolean googleLoginEnabled) {
+}
 
-	/** Recusa quando o e-mail, normalizado, já pertence a uma conta. */
-	private void exigeEmailUnico(String email) {
-		String normalized = normalizeEmail(email);
-		if (normalized == null) {
-			return;
-		}
-		if (profiles.findByEmail(email == null ? normalized : email.trim()).isPresent()
-			|| profiles.findByEmail(normalized).isPresent()) {
-			throw new ApiException(409, "EMAIL_IN_USE",
-				"Este e-mail ja tem conta no Enois. Entre ou recupere a senha.");
-		}
-	}
 
 	/**
 	 * Forma canônica do e-mail: minúsculo, sem "+tag" e, nos provedores que ignoram pontos,
@@ -609,6 +619,7 @@ class AuthController {
 			local = local.replace(".", "");
 		}
 		return local + domain;
+
 	}
 
 	private String authScope(String email) {
@@ -638,4 +649,18 @@ class AuthController {
 
 	record PasswordConfirmationRequest(String password) {
 	}
+
+	/** Recusa quando o e-mail, normalizado, já pertence a uma conta. */
+	private void exigeEmailUnico(String email) {
+		String normalized = normalizeEmail(email);
+		if (normalized == null) {
+			return;
+		}
+		if (profiles.findByEmail(email == null ? normalized : email.trim()).isPresent()
+			|| profiles.findByEmail(normalized).isPresent()) {
+			throw new ApiException(409, "EMAIL_IN_USE",
+				"Este e-mail ja tem conta no Enois. Entre ou recupere a senha.");
+		}
+	}
+
 }

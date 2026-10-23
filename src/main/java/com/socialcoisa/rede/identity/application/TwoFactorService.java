@@ -52,18 +52,21 @@ public class TwoFactorService implements TwoFactorUseCase {
 	private final PasswordHasher passwordHasher;
 	private final SecretCipher secretCipher;
 	private final EmailService emailService;
+	private final com.socialcoisa.rede.notifications.application.NotificationService notifications;
 	private final Clock clock;
 	private final SecureRandom secureRandom = new SecureRandom();
 
 	public TwoFactorService(TwoFactorRepository repository, UserProfileRepository userProfileRepository,
 			CredentialRepository credentialRepository, PasswordHasher passwordHasher, SecretCipher secretCipher,
-			EmailService emailService, Clock clock) {
+			EmailService emailService,
+			com.socialcoisa.rede.notifications.application.NotificationService notifications, Clock clock) {
 		this.repository = repository;
 		this.userProfileRepository = userProfileRepository;
 		this.credentialRepository = credentialRepository;
 		this.passwordHasher = passwordHasher;
 		this.secretCipher = secretCipher;
 		this.emailService = emailService;
+		this.notifications = notifications;
 		this.clock = clock;
 	}
 
@@ -139,8 +142,48 @@ public class TwoFactorService implements TwoFactorUseCase {
 		return issueBackupCodes(userId, now);
 	}
 
+	/**
+	 * Reset emergencial (incidente de 23/10): a troca de infra perdeu a chave de criptografia e os
+	 * segredos TOTP viraram ilegiveis — quem tem 2FA por app nao consegue logar.
+	 *
+	 * Para cada segredo que NAO decifra mais: limpa o segundo fator (o perfil volta a logar com
+	 * e-mail + senha), mantem os codigos de recuperacao (que sao hash, nao dependem da chave) e
+	 * avisa o usuario para reativar em /seguranca.
+	 */
 	@Transactional
-	@Override
+	public int resetBrokenTotp() {
+		int reset = 0;
+		for (String userId : repository.findUsersWithActiveTotpSecret()) {
+			Optional<String> secret = repository.findActiveSecret(userId);
+			if (secret.isEmpty()) {
+				continue;
+			}
+			try {
+				secretCipher.decrypt(secret.get());
+				continue; // segredo saudavel: nao mexe
+			}
+			catch (RuntimeException ilegivel) {
+				// e este que a gente veio consertar
+			}
+			try {
+				userProfileRepository.findById(userId).ifPresent(profile -> {
+					profile.disableTotp();
+					userProfileRepository.save(profile);
+				});
+				repository.clearSecrets(userId);
+				notifications.create(userId, "SEGURANCA", "sistema", "Seu 2FA foi redefinido",
+					"Uma troca de infraestrutura invalidou o segundo fator por aplicativo. Reative em Seguranca e verificacao quando entrar.",
+					"/seguranca", "Seguranca");
+				reset++;
+			}
+			catch (RuntimeException failure) {
+				// nao deixa um caso ruim travar os demais
+			}
+		}
+		return reset;
+	}
+
+	@Transactional
 	public void disableTotp(String userId, String password) {
 		UserProfile profile = requireProfile(userId);
 		requirePassword(userId, password);

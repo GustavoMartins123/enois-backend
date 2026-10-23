@@ -13,6 +13,8 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
 
 import tools.jackson.databind.ObjectMapper;
+
+import static org.assertj.core.api.Assertions.assertThat;
 import com.socialcoisa.rede.shared.web.TestAuthHelper;
 
 @SpringBootTest
@@ -25,6 +27,9 @@ class NotificationContractControllerTests {
 	@Autowired
 	private ObjectMapper objectMapper;
 
+	@Autowired
+	private org.springframework.jdbc.core.JdbcTemplate jdbc;
+
 	private TestAuthHelper auth;
 
 	@BeforeEach
@@ -36,6 +41,7 @@ class NotificationContractControllerTests {
 	void listsNotificationsAndMarksAllRead() throws Exception {
 		var session = auth.authenticate("notif_user");
 
+		// Sem conteudo, so o contrato do array vazio.
 		mockMvc.perform(get("/notifications")
 				.header("X-Session-Token", session.token()))
 			.andExpect(status().isOk())
@@ -46,5 +52,24 @@ class NotificationContractControllerTests {
 				.header("Idempotency-Key", "notif-read-all-1"))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.status").value("ALL_READ"));
+	}
+
+	@Test
+	void marksASingleNotificationReadWithoutError() throws Exception {
+		var session = auth.authenticate("notif_read_one");
+		jdbc.update("""
+				insert into notifications (id, user_id, kind, actor_id, title, body, `read`, created_at)
+				values (?, ?, 'SYSTEM', 'sistema', 'Aviso', 'corpo', false, current_timestamp)
+				""", "notif_read_id_1", session.userId());
+
+		mockMvc.perform(post("/notifications/notif_read_id_1/read")
+				.header("X-Session-Token", session.token())
+				.header("Idempotency-Key", "notif-read-one"))
+			.andExpect(status().isOk());
+
+		mockMvc.perform(get("/notifications")
+				.header("X-Session-Token", session.token()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.items[?(@.id == 'notif_read_id_1')].read").value(true));
 	}
 }

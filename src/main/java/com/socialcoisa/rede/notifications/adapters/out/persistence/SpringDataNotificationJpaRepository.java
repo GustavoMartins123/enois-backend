@@ -7,9 +7,11 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 interface SpringDataNotificationJpaRepository extends JpaRepository<NotificationJpaEntity, String> {
 
@@ -18,7 +20,8 @@ interface SpringDataNotificationJpaRepository extends JpaRepository<Notification
 			Pageable pageable);
 
 	@Modifying
-	@Query("UPDATE NotificationJpaEntity n SET n.read = true WHERE n.userId = :userId")
+	@Query(value = "UPDATE NotificationJpaEntity n SET n.read = true WHERE n.userId = :userId")
+	@Transactional
 	void markAllReadByUserId(@Param("userId") String userId);
 
 }
