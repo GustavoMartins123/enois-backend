@@ -158,6 +158,13 @@ class ProfileControllerTests {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.title").value("Senior Software Engineer"));
 
+		// A edição precisa estar no BANCO, não só na resposta: um GET novo tem que trazer o cargo novo.
+		mockMvc.perform(get("/me/experiences")
+				.header("X-User-Id", userId)
+				.header("X-Session-Token", sessionToken))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$[0].title").value("Senior Software Engineer"));
+
 		mockMvc.perform(delete("/me/experiences/{id}", expId)
 				.header("X-User-Id", userId)
 				.header("X-Session-Token", sessionToken)
