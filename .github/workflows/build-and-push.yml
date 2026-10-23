@@ -243,6 +243,17 @@ jobs:
           # GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET: nao existem como secret neste repo ainda
           # (checado 2026-10-23, so LINKEDIN_* existe). Sem valor real pra passar; login Google
           # continua desabilitado em prod até o dono criar o OAuth client e o secret no GitHub.
+          # Storage S3 (object-storage b7cloud, gateway S3-compativel, nao AWS real). Ver PR #81
+          # (S3StorageConfig) — sem REDE_MEDIA_S3_ENDPOINT/FORCE_PATH_STYLE o SDK tentaria AWS real.
+          REDE_MEDIA_STORAGE: ${{ secrets.PROD_REDE_MEDIA_STORAGE }}
+          REDE_MEDIA_S3_BUCKET: ${{ secrets.PROD_REDE_MEDIA_S3_BUCKET }}
+          REDE_MEDIA_S3_REGION: ${{ secrets.PROD_REDE_MEDIA_S3_REGION }}
+          REDE_MEDIA_S3_ENDPOINT: ${{ secrets.PROD_REDE_MEDIA_S3_ENDPOINT }}
+          REDE_MEDIA_S3_FORCE_PATH_STYLE: ${{ secrets.PROD_REDE_MEDIA_S3_FORCE_PATH_STYLE }}
+          REDE_MEDIA_S3_PUBLIC_BASE_URL: ${{ secrets.PROD_REDE_MEDIA_S3_PUBLIC_BASE_URL }}
+          # Credencial lida pela cadeia padrao do AWS SDK (nao existe property Spring pra isso).
+          AWS_ACCESS_KEY_ID: ${{ secrets.PROD_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.PROD_AWS_SECRET_ACCESS_KEY }}
         run: |
           set -euo pipefail
           AUTH=(-H "X-API-Key: ${PORTAINER_API_KEY}" -H "Referer: ${PORTAINER_BASE_URL}")
@@ -271,6 +282,14 @@ jobs:
                 LINKEDIN_CLIENT_ID: ${LINKEDIN_CLIENT_ID}
                 LINKEDIN_CLIENT_SECRET: ${LINKEDIN_CLIENT_SECRET}
                 LINKEDIN_REDIRECT_URI: ${LINKEDIN_REDIRECT_URI}
+                REDE_MEDIA_STORAGE: ${REDE_MEDIA_STORAGE}
+                REDE_MEDIA_S3_BUCKET: ${REDE_MEDIA_S3_BUCKET}
+                REDE_MEDIA_S3_REGION: ${REDE_MEDIA_S3_REGION}
+                REDE_MEDIA_S3_ENDPOINT: ${REDE_MEDIA_S3_ENDPOINT}
+                REDE_MEDIA_S3_FORCE_PATH_STYLE: ${REDE_MEDIA_S3_FORCE_PATH_STYLE}
+                REDE_MEDIA_S3_PUBLIC_BASE_URL: ${REDE_MEDIA_S3_PUBLIC_BASE_URL}
+                AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+                AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
           EOF
 
           echo "==> Montar payload JSON (python escapa o YAML certo pro body)"
