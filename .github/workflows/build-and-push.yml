@@ -282,6 +282,14 @@ jobs:
               container_name: enois-prod-backend
               network_mode: host
               restart: unless-stopped
+              # enois-node2 (6 vCPU/11.67GB) e dedicado so a este projeto (so compartilha host
+              # com o MariaDB bare-metal). Limite anterior era 0 (sem cap, risco de a JVM
+              # engolir toda a RAM e sufocar o MariaDB); agora 4g/2g deixa ~7.5GB livres pro
+              # banco+SO. mem_limit/mem_reservation/memswap_limit (nao deploy.resources, que e
+              # ignorado fora de swarm) sao honrados pelo Docker Compose standalone.
+              mem_limit: 4g
+              mem_reservation: 2g
+              memswap_limit: 4g
               environment:
                 SPRING_PROFILES_ACTIVE: prd
                 DB_PASSWORD: ${DB_PASSWORD}
