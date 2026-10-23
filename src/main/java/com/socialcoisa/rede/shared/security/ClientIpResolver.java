@@ -25,6 +25,12 @@ public class ClientIpResolver {
 	private static final int MAX_IP = 45;
 
 	public String resolve(HttpServletRequest request) {
+		String remote = request.getRemoteAddr();
+		// Só um proxy da nossa rede pode ditar o IP do cliente. Se a conexão vier direto da
+		// internet, X-Forwarded-For/X-Real-IP são do atacante e não valem (E-12/E-27).
+		if (!isTrustedProxy(remote)) {
+			return isPlausible(remote) ? remote.trim() : "desconhecido";
+		}
 		String forwarded = request.getHeader("X-Forwarded-For");
 		if (StringUtils.hasText(forwarded)) {
 			// Behind the ALB the header is always there. If its last hop is not an IP, fall to the
@@ -34,15 +40,42 @@ public class ClientIpResolver {
 			if (isPlausible(candidate)) {
 				return candidate;
 			}
-			String remote = request.getRemoteAddr();
 			return isPlausible(remote) ? remote.trim() : "desconhecido";
 		}
-		String real = request.getHeader("X-Real-IP");
-		if (isPlausible(real)) {
-			return real.trim();
-		}
-		String remote = request.getRemoteAddr();
+		// X-Real-IP NUNCA é usado: o nginx do QA não o sobrescreve, então o cliente escolhia o
+		// próprio IP e escapava de bloqueio/rate limit (N-08). O proxy deve mandar X-Forwarded-For
+		// (com o IP real no FIM); sem ele, vale a conexão.
 		return isPlausible(remote) ? remote.trim() : "desconhecido";
+	}
+
+	/** Loopback e faixas privadas: é onde vivem o nginx/ALB do cluster. */
+	private boolean isTrustedProxy(String ip) {
+		if (!StringUtils.hasText(ip)) {
+			return false;
+		}
+		String value = ip.trim().toLowerCase(java.util.Locale.ROOT);
+		if (value.startsWith("::ffff:")) {
+			value = value.substring(7);
+		}
+		if (value.equals("127.0.0.1") || value.equals("::1") || value.equals("0:0:0:0:0:0:0:1")) {
+			return true;
+		}
+		if (value.startsWith("10.") || value.startsWith("192.168.") || value.startsWith("169.254.")) {
+			return true;
+		}
+		if (value.startsWith("172.")) {
+			String[] parts = value.split("\\.");
+			if (parts.length > 1) {
+				try {
+					int second = Integer.parseInt(parts[1]);
+					return second >= 16 && second <= 31;
+				}
+				catch (NumberFormatException ignored) {
+					return false;
+				}
+			}
+		}
+		return value.startsWith("fc") || value.startsWith("fd") || value.startsWith("fe80:");
 	}
 
 	/**

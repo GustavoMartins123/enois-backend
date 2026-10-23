@@ -33,7 +33,8 @@ class CommunityGifAdapter implements CommunityGifReader {
 	public List<String> search(String term, int limit) {
 		Set<String> urls = new LinkedHashSet<>();
 		for (String content : comments
-			.searchGifContents(term.toLowerCase(), PageRequest.of(0, Math.max(limit * 4, 40)))) {
+			.searchGifContents(com.socialcoisa.rede.shared.web.LikePattern.contains(term),
+				PageRequest.of(0, Math.max(limit * 4, 40)))) {
 			Matcher matcher = GIF_URL.matcher(content);
 			while (matcher.find()) {
 				urls.add(matcher.group());

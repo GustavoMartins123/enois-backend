@@ -23,5 +23,12 @@ interface SpringDataUserProfileJpaRepository extends JpaRepository<UserProfileJp
 	 */
 	List<UserProfileJpaEntity> findByOrderByCreatedAtDesc(org.springframework.data.domain.Pageable pageable);
 
-	List<UserProfileJpaEntity> findTop20ByNameContainingIgnoreCaseOrUsernameContainingIgnoreCaseOrderByReputationDesc(String name, String username);
+	@org.springframework.data.jpa.repository.Query("""
+		select u from UserProfileJpaEntity u
+		where lower(u.name) like :q escape '\\' or lower(u.username) like :q escape '\\'
+		order by u.reputation desc
+		""")
+	List<UserProfileJpaEntity> searchByNameOrUsername(
+		@org.springframework.data.repository.query.Param("q") String q,
+		org.springframework.data.domain.Pageable page);
 }

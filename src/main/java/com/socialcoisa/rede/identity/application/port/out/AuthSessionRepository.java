@@ -15,7 +15,8 @@ public interface AuthSessionRepository {
 
 	void revoke(String token, Instant revokedAt);
 
-	void revokeByRefreshToken(String refreshToken, Instant revokedAt);
+	/** Revoga de forma atômica; false quando outra requisição concorrente já revogou (replay). */
+	boolean revokeByRefreshToken(String refreshToken, Instant revokedAt);
 
 	void revokeAllByUser(String userId, Instant revokedAt);
 

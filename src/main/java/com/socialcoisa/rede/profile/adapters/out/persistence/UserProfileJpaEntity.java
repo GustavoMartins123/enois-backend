@@ -119,6 +119,10 @@ class UserProfileJpaEntity {
 	@Column(name = "show_ranking", nullable = false)
 	private boolean showRanking = true;
 
+	/** Papel administrativo imutável (V170): não vem de e-mail/username mutáveis. */
+	@Column(name = "is_admin", nullable = false)
+	private boolean isAdmin;
+
 	@Column(name = "totp_enabled_at")
 	private Instant totpEnabledAt;
 
@@ -183,6 +187,7 @@ class UserProfileJpaEntity {
 		entity.externalLinks = new ArrayList<>(profile.externalLinks());
 		entity.openToWork = profile.openToWork();
 		entity.mentor = profile.mentor();
+		entity.isAdmin = profile.admin();
 		entity.reputation = profile.reputation();
 		entity.createdAt = profile.createdAt();
 		entity.updatedAt = profile.updatedAt();
@@ -222,6 +227,7 @@ class UserProfileJpaEntity {
 		if (federatedSecondFactorAt != null) {
 			profile.enableFederatedSecondFactor(federatedSecondFactorAt);
 		}
+		profile.hydrateAdmin(isAdmin);
 		profile.hydrateIdentityDisplay(nickname, socialName, pronouns);
 		profile.hydrateAka(aka);
 		profile.hydrateBirthDate(birthDate);
