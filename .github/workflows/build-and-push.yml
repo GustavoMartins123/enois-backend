@@ -254,6 +254,8 @@ jobs:
           # Credencial lida pela cadeia padrao do AWS SDK (nao existe property Spring pra isso).
           AWS_ACCESS_KEY_ID: ${{ secrets.PROD_AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.PROD_AWS_SECRET_ACCESS_KEY }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         run: |
           set -euo pipefail
           AUTH=(-H "X-API-Key: ${PORTAINER_API_KEY}" -H "Referer: ${PORTAINER_BASE_URL}")
@@ -290,6 +292,8 @@ jobs:
                 REDE_MEDIA_S3_PUBLIC_BASE_URL: ${REDE_MEDIA_S3_PUBLIC_BASE_URL}
                 AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
                 AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+                GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+                GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
           EOF
 
           echo "==> Montar payload JSON (python escapa o YAML certo pro body)"
