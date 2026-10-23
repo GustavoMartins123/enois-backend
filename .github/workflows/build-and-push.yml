@@ -240,9 +240,8 @@ jobs:
           LINKEDIN_CLIENT_ID: ${{ secrets.LINKEDIN_CLIENT_ID }}
           LINKEDIN_CLIENT_SECRET: ${{ secrets.LINKEDIN_CLIENT_SECRET }}
           LINKEDIN_REDIRECT_URI: ${{ secrets.LINKEDIN_REDIRECT_URI }}
-          # GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET: nao existem como secret neste repo ainda
-          # (checado 2026-10-23, so LINKEDIN_* existe). Sem valor real pra passar; login Google
-          # continua desabilitado em prod até o dono criar o OAuth client e o secret no GitHub.
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         run: |
           set -euo pipefail
           AUTH=(-H "X-API-Key: ${PORTAINER_API_KEY}" -H "Referer: ${PORTAINER_BASE_URL}")
@@ -271,6 +270,8 @@ jobs:
                 LINKEDIN_CLIENT_ID: ${LINKEDIN_CLIENT_ID}
                 LINKEDIN_CLIENT_SECRET: ${LINKEDIN_CLIENT_SECRET}
                 LINKEDIN_REDIRECT_URI: ${LINKEDIN_REDIRECT_URI}
+                GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+                GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
           EOF
 
           echo "==> Montar payload JSON (python escapa o YAML certo pro body)"
