@@ -254,11 +254,7 @@ jobs:
           {
             "Image": "${IMAGE_REF}",
             "Env": [
-              "SPRING_PROFILES_ACTIVE=prod",
-              "DB_HOST=172.17.0.1",
-              "DB_PORT=3306",
-              "DB_NAME=enois",
-              "DB_USER=enois_svc",
+              "SPRING_PROFILES_ACTIVE=prd",
               "DB_PASSWORD=${DB_PASSWORD}",
               "REDE_FRONTEND_URL=https://enois.ia.br",
               "REDE_BACKEND_URL=https://api.enois.ia.br",
@@ -271,13 +267,12 @@ jobs:
               "REDE_AUTH_SIGNUP_ENABLED=true",
               "SIGNUP_CAPTCHA_ENABLED=true"
             ],
-            "ExposedPorts": {"8081/tcp": {}},
             "HostConfig": {
               "RestartPolicy": {"Name": "unless-stopped"},
               "Memory": 1073741824,
               "MemorySwap": 1073741824,
               "MemoryReservation": 536870912,
-              "PortBindings": {"8081/tcp": [{"HostPort": "8105"}]}
+              "NetworkMode": "host"
             }
           }
           EOF
