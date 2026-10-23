@@ -72,6 +72,7 @@ class AuthController {
 	private final com.socialcoisa.rede.identity.adapters.out.TurnstileValidator turnstile;
 	private final com.socialcoisa.rede.identity.application.SignupChallengeService signupCaptcha;
 	private final com.socialcoisa.rede.identity.application.NewDeviceNotifier newDeviceNotifier;
+	private final com.socialcoisa.rede.identity.application.TwoFactorService twoFactorService;
 	private final com.socialcoisa.rede.shared.security.IpBlockReader ipBlockReader;
 	private final com.socialcoisa.rede.shared.security.ClientIpResolver ipResolver;
 	/** Cadastros abertos? Desligado, o POST /auth/signup responde 403 SIGNUP_DISABLED. */
@@ -96,6 +97,7 @@ class AuthController {
 			com.socialcoisa.rede.identity.adapters.out.TurnstileValidator turnstile,
 			com.socialcoisa.rede.identity.application.SignupChallengeService signupCaptcha,
 			com.socialcoisa.rede.identity.application.NewDeviceNotifier newDeviceNotifier,
+			com.socialcoisa.rede.identity.application.TwoFactorService twoFactorService,
 			com.socialcoisa.rede.shared.security.IpBlockReader ipBlockReader,
 			com.socialcoisa.rede.shared.security.ClientIpResolver ipResolver,
 			@Value("${rede.auth.signup-enabled:true}") boolean signupEnabled,
@@ -120,6 +122,7 @@ class AuthController {
 		this.turnstile = turnstile;
 		this.signupCaptcha = signupCaptcha;
 		this.newDeviceNotifier = newDeviceNotifier;
+		this.twoFactorService = twoFactorService;
 		this.ipBlockReader = ipBlockReader;
 		this.ipResolver = ipResolver;
 		this.signupEnabled = signupEnabled;
@@ -383,6 +386,17 @@ class AuthController {
 	}
 
 	/** Provedores vinculados a conta (a tela mostra e permite desvincular). */
+	/**
+	 * Reset emergencial (23/10): limpa os segredos TOTP que a troca de infra deixou ilegiveis, para
+	 * quem tem 2FA por app voltar a logar com e-mail + senha e reativar em /seguranca.
+	 */
+	@PostMapping("/admin/two-factor/reset-broken")
+	Map<String, Integer> resetBrokenTwoFactor(
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader("X-Session-Token") String sessionToken) {
+		return Map.of("reset", twoFactorService.resetBrokenTotp());
+	}
+
 	@GetMapping("/oauth/providers")
 	Object oauthProviders(@RequestHeader(value = "X-Session-Token", required = false) String token) {
 		return oAuthUseCase.linkedProviders(requireUserId(token));
