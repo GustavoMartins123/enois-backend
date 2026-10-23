@@ -143,7 +143,8 @@ docker compose --profile prd up
 | `REDE_STORAGE_IMAGEKIT_PRIVATE_KEY` | Sim (se storage ImageKit) | ImageKit private key |
 | `REDE_STORAGE_IMAGEKIT_PUBLIC_KEY` | Sim (se storage ImageKit) | ImageKit public key |
 | `REDE_STORAGE_IMAGEKIT_URL_ENDPOINT` | Sim (se storage ImageKit) | ImageKit URL endpoint |
-| `REDE_CORS_ALLOWED_ORIGINS` | Não | Origens CORS permitidas |
+| `REDE_CORS_ALLOWED_ORIGINS` | Não | Origens do app liberadas em todas as rotas (navegador: `Origin`; servidor: `X-Client-Origin`) |
+| `REDE_ORIGINS_ENFORCE` | Não | Gate de origem global (padrão `true`); `false` só para diagnóstico local |
 | `DB_HOST` | Sim (qa/hml/prd) | Host do banco |
 | `DB_PORT` | Sim (qa/hml/prd) | Porta do banco |
 | `DB_NAME` | Sim (qa/hml/prd) | Nome do banco |
