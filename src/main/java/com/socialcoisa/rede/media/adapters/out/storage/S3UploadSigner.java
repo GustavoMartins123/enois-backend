@@ -26,20 +26,40 @@ class S3UploadSigner implements MediaUploadSigner {
 
 	private final S3Presigner presigner;
 	private final String bucket;
-	private final String prefix;
+	/** Quando preenchido, a subida vai pelo proprio app em vez de direto no bucket. */
+	private final String proxyBaseUrl;
 
-	S3UploadSigner(S3Presigner presigner, String bucket, String prefix) {
-		this.presigner = presigner;
-		this.bucket = bucket;
-		this.prefix = prefix == null ? "" : prefix;
+	S3UploadSigner(S3Presigner presigner, String bucket) {
+		this(presigner, bucket, null);
 	}
 
+	S3UploadSigner(S3Presigner presigner, String bucket, String proxyBaseUrl) {
+		this.presigner = presigner;
+		this.bucket = bucket;
+		// Mesma forma do `cdnUrl` (base com barra no fim + chave), para a URL de subida e a de
+		// leitura apontarem para o MESMO caminho.
+		this.proxyBaseUrl = proxyBaseUrl == null || proxyBaseUrl.isBlank() ? null
+			: proxyBaseUrl.endsWith("/") ? proxyBaseUrl : proxyBaseUrl + "/";
+	}
+
+	/**
+	 * A chave recebida JA vem com o prefixo: quem a monta e `S3StorageUrlFactory.objectKey()`, a
+	 * mesma que produz o `cdnUrl` gravado no asset. Prefixar de novo aqui mandava o arquivo para
+	 * `uploads/uploads/...` enquanto o endereco publico apontava para `uploads/...` — o upload
+	 * "dava certo" e a midia nunca aparecia (visto num HAR real em 2026-10-23).
+	 */
 	@Override
 	public SignedUpload sign(String objectKey, String mimeType) {
 		Duration validade = Duration.ofMinutes(60);
+		// Gateway sem CORS: o navegador nao consegue PUT cross-origin, entao a URL devolvida e a do
+		// nosso proxy (mesma origem da API). O app valida a sessao e repassa o corpo ao bucket.
+		if (proxyBaseUrl != null) {
+			return new SignedUpload(proxyBaseUrl + objectKey, "PUT", Map.of("Content-Type", mimeType),
+				Instant.now().plus(validade));
+		}
 		PutObjectRequest request = PutObjectRequest.builder()
 			.bucket(bucket)
-			.key(prefix + objectKey)
+			.key(objectKey)
 			.contentType(mimeType)
 			.build();
 		PresignedPutObjectRequest presigned = presigner.presignPutObject(PutObjectPresignRequest.builder()

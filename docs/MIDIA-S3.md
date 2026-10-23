@@ -9,6 +9,47 @@ depois da virada. É esse o "fallback": ele é estrutural, não um caminho espec
 > real** (o S3 só existe em produção). A primeira virada de ambiente é a estreia — vale ler a seção
 > "Primeira virada, com calma". A migração dos objetos antigos ainda **não** está implementada.
 
+## Midia servida pelo proprio app (2026-10-23)
+
+O gateway do b7cloud nao responde CORS (`PutBucketCors` -> `InternalError`) e o bucket nao e
+publico (GET anonimo -> 403), entao o navegador nao conseguia nem subir nem ler midia direto do
+bucket. A saida foi tirar o bucket do caminho do navegador:
+
+- `GET /api/storage/{chave}` — le o objeto do bucket com a credencial do pod, com `Range` (video
+  arrasta a barra), `Cache-Control` longo e ETag. Publico, como o `GET /media/{id}`.
+- `PUT /api/storage/{chave}` — recebe o arquivo do navegador e repassa ao bucket. Exige sessao e a
+  chave exata registrada para aquele asset (nao da para escrever em qualquer lugar).
+- `S3UploadSigner` devolve a URL do proxy (`publicBaseUrl`) sempre que ha endpoint custom — ou
+  seja, em gateway. Na AWS real continua a URL assinada direto no bucket.
+- `V169` reescreve os prefixos antigos (`https://cdn.enois.ia.br/` e
+  `https://s3.b7cloud.tech/enois-bucket/`) para `https://api.enois.ia.br/api/storage/` nas colunas
+  que guardam midia. O caminho depois do prefixo e o mesmo `objectKey`, entao nada e remapeado.
+
+Consequencia operacional: a largura de banda da midia passa pelo pod. Se um dia o b7 liberar CORS
+e leitura publica, basta apontar `REDE_MEDIA_S3_PUBLIC_BASE_URL` de volta para o bucket/CDN e
+`REDE_MEDIA_S3_UPLOAD_THROUGH_API=false`.
+
+## Estado verificado em 2026-10-23 (bucket b7cloud)
+
+A infraestrutura mudou: o storage agora é um **gateway S3-compatível do b7cloud**
+(`https://s3.b7cloud.tech`), não mais AWS/IRSA. O que um HAR real do navegador mostrou:
+
+- **Prefixo duplicado na URL assinada (corrigido).** `S3UploadSigner` prefixava de novo uma chave
+  que já vinha com o prefixo (`S3StorageUrlFactory.objectKey`), então o `PUT` ia para
+  `.../enois-bucket/uploads/uploads/media_<id>/...` enquanto o `cdnUrl` gravado no asset apontava
+  para `.../uploads/media_<id>/...`. O upload terminava e a mídia nunca aparecia. A chave agora é
+  assinada como veio; `S3UploadSignerTests` compara o caminho assinado com o `cdnUrl`.
+- **CORS do bucket continua bloqueando o upload do navegador.** O preflight `OPTIONS` em
+  `https://s3.b7cloud.tech/enois-bucket/...` responde **403 sem nenhum header `Access-Control-*`**,
+  e é o navegador que faz o `PUT` direto na URL assinada. Falta configurar CORS no bucket para
+  `PUT`/`GET` com origem `https://enois.ia.br` e `content-type` nos headers permitidos.
+- **Leitura pública ainda não existe.** `GET` anônimo em `.../enois-bucket/uploads/...` responde
+  **403**, e a base antiga `cdn.enois.ia.br` está em **NXDOMAIN** no nameserver autoritativo. Os
+  assets migrados continuam gravados com essa base antiga, então só voltam a abrir com o registro
+  de DNS criado (ou reescrevendo o `cdn_url` para a base nova).
+- `GET /api/media/migration` em produção: `total=3502`, `imagekit=1737`, `s3Copied=1765`,
+  `s3Active=1765`, `errors=113`, worker desligado (`enabled=false`).
+
 ## Estado verificado em 2026-10-19
 
 Verificação feita contra a produção e o código deste repo:
