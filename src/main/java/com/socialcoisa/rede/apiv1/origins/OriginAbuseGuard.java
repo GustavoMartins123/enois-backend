@@ -1,0 +1,92 @@
+package com.socialcoisa.rede.apiv1.origins;
+
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+/**
+ * Derruba automaticamente uma origem de terceiro quando ela acumula respostas de recusa
+ * (401/403/429) em uma janela curta — o padrão de quem sonda endpoints ou usa credencial roubada.
+ *
+ * Só conta origens CADASTRADAS e ativas: a origem do próprio app é confiável e nunca é bloqueada.
+ * A janela é em memória (barata, sem escrita no banco por requisição); o banco só é tocado no
+ * momento do bloqueio, que é raro. Em caso de reinício, o bloqueio já persistido continua valendo.
+ */
+@Component
+class OriginAbuseGuard {
+
+	private static final Logger LOG = LoggerFactory.getLogger(OriginAbuseGuard.class);
+
+	private final DeveloperOriginService origins;
+	private final int maxFailures;
+	private final long windowMs;
+	private final long blockMinutes;
+	private final Map<String, Deque<Long>> failures = new ConcurrentHashMap<>();
+
+	OriginAbuseGuard(DeveloperOriginService origins,
+			@Value("${rede.origins.suspicious.max-failures:60}") int maxFailures,
+			@Value("${rede.origins.suspicious.window-seconds:300}") long windowSeconds,
+			@Value("${rede.origins.suspicious.block-minutes:30}") long blockMinutes) {
+		this.origins = origins;
+		this.maxFailures = maxFailures;
+		this.windowMs = Math.max(1, windowSeconds) * 1000;
+		this.blockMinutes = Math.max(1, blockMinutes);
+	}
+
+	void recordFailure(String origin) {
+		if (maxFailures <= 0 || origin == null || origin.isBlank()) {
+			return;
+		}
+		long now = System.currentTimeMillis();
+		Deque<Long> window = failures.computeIfAbsent(origin, key -> new ArrayDeque<>());
+		int count;
+		synchronized (window) {
+			while (!window.isEmpty() && now - window.peekFirst() > windowMs) {
+				window.pollFirst();
+			}
+			window.addLast(now);
+			count = window.size();
+			if (count < maxFailures) {
+				return;
+			}
+		}
+		failures.remove(origin);
+		try {
+			origins.block(origin, "Atividade suspeita: " + count + " respostas 401/403/429 em "
+				+ (windowMs / 1000) + "s", java.time.Duration.ofMinutes(blockMinutes));
+		}
+		catch (RuntimeException failure) {
+			LOG.warn("origin_block_failed origin={} error={}", origin, failure.getClass().getSimpleName());
+		}
+	}
+
+	/** Devolve à allowlist as origens cujo bloqueio temporário venceu. */
+	@Scheduled(fixedDelay = 60_000, initialDelay = 60_000)
+	void releaseExpired() {
+		try {
+			origins.releaseExpired();
+		}
+		catch (RuntimeException failure) {
+			LOG.warn("origin_block_release_failed error={}", failure.getClass().getSimpleName());
+		}
+	}
+
+	/** Evita que origens com poucas falhas fiquem na memória para sempre. */
+	@Scheduled(fixedDelay = 600_000, initialDelay = 600_000)
+	void cleanup() {
+		long now = System.currentTimeMillis();
+		failures.entrySet().removeIf(entry -> {
+			Deque<Long> window = entry.getValue();
+			synchronized (window) {
+				return window.isEmpty() || now - window.peekLast() > windowMs;
+			}
+		});
+	}
+}

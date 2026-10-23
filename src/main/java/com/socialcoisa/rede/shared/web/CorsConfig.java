@@ -1,6 +1,8 @@
 package com.socialcoisa.rede.shared.web;
 
 import java.util.Arrays;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -16,6 +18,10 @@ class CorsConfig {
 	@Value("${rede.cors.allowed-origins:}")
 	private String allowedOrigins;
 
+	/** Padrões confiáveis do app (aceita curinga, ex.: https://*.b7cloud.com.br). */
+	@Value("${rede.origins.trusted:https://*.b7cloud.com.br}")
+	private String trustedOrigins;
+
 	@Bean
 	WebMvcConfigurer corsConfigurer() {
 		return new WebMvcConfigurer() {
@@ -24,11 +30,20 @@ class CorsConfig {
 				// allowedOriginPatterns e obrigatorio para aceitar "*" junto com
 				// allowCredentials(true); allowedOrigins("*") lanca excecao em toda requisicao.
 				// Sem configuracao explicita, restringe as origens conhecidas do app.
-				String[] patterns = allowedOrigins.isBlank()
-					? DEFAULT_ORIGINS
-					: Arrays.stream(allowedOrigins.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toArray(String[]::new);
+				Set<String> patterns = new LinkedHashSet<>();
+				if (allowedOrigins.isBlank()) {
+					patterns.addAll(Arrays.asList(DEFAULT_ORIGINS));
+				}
+				else {
+					patterns.addAll(Arrays.stream(allowedOrigins.split(",")).map(String::trim)
+						.filter(s -> !s.isEmpty()).toList());
+				}
+				// O gate de origem também confia nesses padrões; o CORS precisa liberá-los junto,
+				// senão o navegador do frontend leva "Invalid CORS request" mesmo com origem válida.
+				patterns.addAll(Arrays.stream(trustedOrigins.split(",")).map(String::trim)
+					.filter(s -> !s.isEmpty()).toList());
 				registry.addMapping("/**")
-					.allowedOriginPatterns(patterns)
+					.allowedOriginPatterns(patterns.toArray(String[]::new))
 					.allowedMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
 					.allowedHeaders("*")
 					.exposedHeaders("*")

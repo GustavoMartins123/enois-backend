@@ -8,6 +8,8 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -16,14 +18,16 @@ import org.springframework.util.StringUtils;
 import com.socialcoisa.rede.shared.web.ApiException;
 
 /**
- * Origens autorizadas a chamar a API pública (/v1) de um navegador.
+ * Origens autorizadas a chamar a API a partir de um navegador/cliente.
  *
- * CORS é uma proteção do navegador: sem a origem cadastrada, o preflight não recebe
- * Access-Control-Allow-Origin e o site não consegue ler a resposta. Chamadas servidor-a-servidor
- * (sem Origin) continuam funcionando — CORS não se aplica a elas.
+ * As origens do próprio app (allowlist de configuração, inclusive curinga de subdomínio) são
+ * "confiáveis" e nunca passam por aqui. Esta tabela guarda apenas origens de terceiros, que se
+ * cadastram sozinhas e podem ser bloqueadas automaticamente se gerarem tráfego suspeito.
  */
 @Service
 public class DeveloperOriginService {
+
+	private static final Logger LOG = LoggerFactory.getLogger(DeveloperOriginService.class);
 
 	private static final int MAX_PER_USER = 5;
 	private static final long CACHE_MS = 30_000;
@@ -32,6 +36,7 @@ public class DeveloperOriginService {
 	private final Clock clock;
 
 	private volatile Set<String> cached = Set.of();
+	private volatile Set<String> cachedBlocked = Set.of();
 	private volatile long cachedAt;
 
 	public DeveloperOriginService(JdbcTemplate jdbc, Clock clock) {
@@ -39,15 +44,47 @@ public class DeveloperOriginService {
 		this.clock = clock;
 	}
 
-	public record OriginView(String id, String origin, String createdAt) {
+	public record OriginView(String id, String origin, String createdAt, boolean blocked, String blockedReason,
+			String blockedUntil) {
+	}
+
+	public record AdminOriginView(String id, String origin, String userId, String createdAt, boolean blocked,
+			String blockedReason, String blockedUntil, int strikes) {
 	}
 
 	public List<OriginView> list(String userId) {
 		return jdbc.query("""
-			select id, origin, created_at from developer_origins
+			select id, origin, created_at, blocked, blocked_reason, blocked_until from developer_origins
 			where user_id = ? order by created_at desc
 			""", (rs, rowNum) -> new OriginView(rs.getString(1), rs.getString(2),
-				rs.getTimestamp(3).toInstant().toString()), userId);
+				rs.getTimestamp(3).toInstant().toString(), rs.getBoolean(4), rs.getString(5),
+				timestamp(rs.getTimestamp(6))), userId);
+	}
+
+	public List<AdminOriginView> listAll(int limit) {
+		return jdbc.query("""
+			select id, origin, user_id, created_at, blocked, blocked_reason, blocked_until, strikes
+			from developer_origins order by blocked desc, created_at desc limit ?
+			""", (rs, rowNum) -> new AdminOriginView(rs.getString(1), rs.getString(2), rs.getString(3),
+				rs.getTimestamp(4).toInstant().toString(), rs.getBoolean(5), rs.getString(6),
+				timestamp(rs.getTimestamp(7)), rs.getInt(8)),
+			Math.max(1, Math.min(limit, 200)));
+	}
+
+	public AdminOriginView byId(String id) {
+		return jdbc.query("""
+			select id, origin, user_id, created_at, blocked, blocked_reason, blocked_until, strikes
+			from developer_origins where id = ?
+			""", (rs, rowNum) -> new AdminOriginView(rs.getString(1), rs.getString(2), rs.getString(3),
+				rs.getTimestamp(4).toInstant().toString(), rs.getBoolean(5), rs.getString(6),
+				timestamp(rs.getTimestamp(7)), rs.getInt(8)), id)
+			.stream()
+			.findFirst()
+			.orElseThrow(() -> new ApiException(404, "ORIGIN_NOT_FOUND", "Origem nao encontrada."));
+	}
+
+	private static String timestamp(java.sql.Timestamp value) {
+		return value == null ? null : value.toInstant().toString();
 	}
 
 	public OriginView add(String userId, String rawOrigin) {
@@ -68,7 +105,7 @@ public class DeveloperOriginService {
 			throw new ApiException(409, "ORIGIN_ALREADY_REGISTERED", "Esta origem ja esta cadastrada.");
 		}
 		cachedAt = 0;
-		return new OriginView(id, origin, now.toString());
+		return new OriginView(id, origin, now.toString(), false, null, null);
 	}
 
 	public void remove(String userId, String id) {
@@ -79,17 +116,97 @@ public class DeveloperOriginService {
 		cachedAt = 0;
 	}
 
-	/** Todas as origens cadastradas (cache curto: o preflight não pode bater no banco sempre). */
+	/** Origens de terceiros ativas (cache curto: o gate não pode bater no banco sempre). */
 	public Set<String> allowedOrigins() {
+		refreshIfNeeded();
+		return cached;
+	}
+
+	public boolean isBlocked(String origin) {
+		refreshIfNeeded();
+		return cachedBlocked.contains(origin);
+	}
+
+	/**
+	 * Bloqueio automático (guarda de abuso). É TEMPORÁRIO por padrão: um atacante que falsifique
+	 * o header Origin não pode desligar a origem de terceiro para sempre. O admin pode bloquear
+	 * permanentemente pelo painel.
+	 */
+	public void block(String origin, String reason, java.time.Duration duration) {
+		java.sql.Timestamp until = duration == null ? null : java.sql.Timestamp.from(clock.instant().plus(duration));
+		int updated = jdbc.update("""
+			update developer_origins set blocked = true, blocked_reason = ?, blocked_at = ?,
+				blocked_until = ?, strikes = strikes + 1
+			where origin = ? and blocked = false
+			""", trimReason(reason), java.sql.Timestamp.from(clock.instant()), until, origin);
+		if (updated > 0) {
+			LOG.warn("origin_blocked origin={} until={} reason={}", origin, until, trimReason(reason));
+		}
+		cachedAt = 0;
+	}
+
+	/** Libera os bloqueios temporários que já venceram. */
+	public int releaseExpired() {
+		int released = jdbc.update("""
+			update developer_origins set blocked = false, blocked_reason = null, blocked_at = null,
+				blocked_until = null
+			where blocked = true and blocked_until is not null and blocked_until <= ?
+			""", java.sql.Timestamp.from(clock.instant()));
+		if (released > 0) {
+			LOG.info("origin_block_expired released={}", released);
+			cachedAt = 0;
+		}
+		return released;
+	}
+
+	public void blockById(String id, String reason) {
+		int updated = jdbc.update("""
+			update developer_origins set blocked = true, blocked_reason = ?, blocked_at = ?
+			where id = ? and blocked = false
+			""", trimReason(reason), java.sql.Timestamp.from(clock.instant()), id);
+		if (updated == 0) {
+			throw new ApiException(404, "ORIGIN_NOT_FOUND", "Origem ativa nao encontrada.");
+		}
+		cachedAt = 0;
+	}
+
+	public void unblock(String id) {
+		int updated = jdbc.update("""
+			update developer_origins set blocked = false, blocked_reason = null, blocked_at = null,
+				blocked_until = null
+			where id = ? and blocked = true
+			""", id);
+		if (updated == 0) {
+			throw new ApiException(404, "ORIGIN_NOT_BLOCKED", "Origem bloqueada nao encontrada.");
+		}
+		cachedAt = 0;
+	}
+
+	private static String trimReason(String reason) {
+		if (!StringUtils.hasText(reason)) {
+			return "Atividade suspeita";
+		}
+		String clean = reason.trim();
+		return clean.length() > 200 ? clean.substring(0, 200) : clean;
+	}
+
+	private void refreshIfNeeded() {
 		if (System.currentTimeMillis() - cachedAt > CACHE_MS) {
 			refresh();
 		}
-		return cached;
 	}
 
 	private synchronized void refresh() {
 		try {
-			cached = Set.copyOf(jdbc.queryForList("select distinct origin from developer_origins", String.class));
+			java.sql.Timestamp now = java.sql.Timestamp.from(clock.instant());
+			cached = Set.copyOf(jdbc.queryForList("""
+				select distinct origin from developer_origins
+				where blocked = false or (blocked_until is not null and blocked_until <= ?)
+				""", String.class, now));
+			cachedBlocked = Set.copyOf(jdbc.queryForList("""
+				select distinct origin from developer_origins
+				where blocked = true and (blocked_until is null or blocked_until > ?)
+				""", String.class, now));
 			cachedAt = System.currentTimeMillis();
 		}
 		catch (RuntimeException failure) {

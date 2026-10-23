@@ -136,7 +136,6 @@ jobs:
           LINKEDIN_REDIRECT_URI: ${{ vars.LINKEDIN_REDIRECT_URI_QA }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-          GOOGLE_REDIRECT_URI: ${{ vars.GOOGLE_REDIRECT_URI_QA }}
           # panic:yes => somente leitura; vazio/ausente => online (o botão do painel decide).
           PANIC_MODE: ${{ secrets.PANIC_MODE }}
         run: |
@@ -170,6 +169,7 @@ jobs:
               "REDE_BACKEND_URL=https://enois-api-qa.b7cloud.tech",
               "FRONTEND_URL=https://enois-qa.b7cloud.tech",
               "CORS_ALLOWED_ORIGINS=https://enois-qa.b7cloud.tech",
+              "REDE_ORIGINS_ENFORCE=true",
               "PANIC_MODE=${PANIC_MODE}",
               "REDE_SECURITY_ENCRYPTION_KEY=${REDE_SECURITY_ENCRYPTION_KEY}",
               "TURNSTILE_SITE_KEY=${TURNSTILE_SITE_KEY}",
@@ -177,7 +177,6 @@ jobs:
               "LINKEDIN_REDIRECT_URI=${LINKEDIN_REDIRECT_URI}",
               "GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}",
               "GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}",
-              "GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI}",
               "REDE_AUTH_SIGNUP_ENABLED=true",
               "SIGNUP_CAPTCHA_ENABLED=true"
             ],
@@ -208,6 +207,119 @@ jobs:
           # boot do Spring Boot (Flyway+Hibernate+Tomcat) pode levar bem mais que 8s, 8s dava flaky-fail
           for i in $(seq 1 15); do
             if curl -sf --max-time 10 https://enois-api-qa.b7cloud.tech/health; then
+              echo "OK na tentativa $i"
+              exit 0
+            fi
+            echo "tentativa $i falhou, aguardando..."
+            sleep 5
+          done
+          echo "health check nao respondeu apos 75s"
+          exit 1
+
+  # ===========================================================================
+  # Deploy PROD — SOMENTE branch main, SOMENTE push/workflow_dispatch, self-hosted
+  # ===========================================================================
+  deploy-prod:
+    name: 🚢 Deploy → PROD (enois-node2)
+    needs: build-and-push
+    if: >
+      needs.build-and-push.outputs.branch == 'main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: [self-hosted, enois, docker-prod4]
+    steps:
+      # Deploy sempre via Portainer STACK (nunca container avulso via /containers/create).
+      # Stack "enois-prod-backend" (id 350) no endpoint 11 (enois-node2), criada manualmente
+      # como standalone compose string; aqui so atualizamos o StackFileContent com a nova tag
+      # de imagem e os secrets, via PUT /stacks/{id}, que faz o Portainer recriar o container.
+      - name: 🚢 Atualizar stack via Portainer API (endpoint enois-node2)
+        env:
+          PORTAINER_BASE_URL: ${{ secrets.PORTAINER_BASE_URL }}
+          PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+          PORTAINER_ENDPOINT_ID_PROD: 11
+          PROD_STACK_ID: 350
+          IMAGE_REF: ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.image_tag }}
+          DB_PASSWORD: ${{ secrets.PROD_DB_PASSWORD }}
+          REDE_SECURITY_ENCRYPTION_KEY: ${{ secrets.PROD_REDE_SECURITY_ENCRYPTION_KEY }}
+          TURNSTILE_SITE_KEY: ${{ secrets.PROD_TURNSTILE_SITE_KEY }}
+          TURNSTILE_SECRET_KEY: ${{ secrets.PROD_TURNSTILE_SECRET_KEY }}
+          LINKEDIN_CLIENT_ID: ${{ secrets.LINKEDIN_CLIENT_ID }}
+          LINKEDIN_CLIENT_SECRET: ${{ secrets.LINKEDIN_CLIENT_SECRET }}
+          LINKEDIN_REDIRECT_URI: ${{ secrets.LINKEDIN_REDIRECT_URI }}
+          # GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET: nao existem como secret neste repo ainda
+          # (checado 2026-10-23, so LINKEDIN_* existe). Sem valor real pra passar; login Google
+          # continua desabilitado em prod até o dono criar o OAuth client e o secret no GitHub.
+          # Storage S3 (object-storage b7cloud, gateway S3-compativel, nao AWS real). Ver PR #81
+          # (S3StorageConfig) — sem REDE_MEDIA_S3_ENDPOINT/FORCE_PATH_STYLE o SDK tentaria AWS real.
+          REDE_MEDIA_STORAGE: ${{ secrets.PROD_REDE_MEDIA_STORAGE }}
+          REDE_MEDIA_S3_BUCKET: ${{ secrets.PROD_REDE_MEDIA_S3_BUCKET }}
+          REDE_MEDIA_S3_REGION: ${{ secrets.PROD_REDE_MEDIA_S3_REGION }}
+          REDE_MEDIA_S3_ENDPOINT: ${{ secrets.PROD_REDE_MEDIA_S3_ENDPOINT }}
+          REDE_MEDIA_S3_FORCE_PATH_STYLE: ${{ secrets.PROD_REDE_MEDIA_S3_FORCE_PATH_STYLE }}
+          REDE_MEDIA_S3_PUBLIC_BASE_URL: ${{ secrets.PROD_REDE_MEDIA_S3_PUBLIC_BASE_URL }}
+          # Credencial lida pela cadeia padrao do AWS SDK (nao existe property Spring pra isso).
+          AWS_ACCESS_KEY_ID: ${{ secrets.PROD_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.PROD_AWS_SECRET_ACCESS_KEY }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          AUTH=(-H "X-API-Key: ${PORTAINER_API_KEY}" -H "Referer: ${PORTAINER_BASE_URL}")
+
+          echo "==> Gerar docker-compose da stack com a imagem/secrets atuais"
+          cat > /tmp/enois-prod-backend-stack.yml <<EOF
+          version: "3.8"
+          services:
+            backend:
+              image: ${IMAGE_REF}
+              container_name: enois-prod-backend
+              network_mode: host
+              restart: unless-stopped
+              environment:
+                SPRING_PROFILES_ACTIVE: prd
+                DB_PASSWORD: ${DB_PASSWORD}
+                REDE_FRONTEND_URL: https://enois.ia.br
+                REDE_BACKEND_URL: https://api.enois.ia.br
+                FRONTEND_URL: https://enois.ia.br
+                CORS_ALLOWED_ORIGINS: https://enois.ia.br
+                REDE_SECURITY_ENCRYPTION_KEY: ${REDE_SECURITY_ENCRYPTION_KEY}
+                TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY}
+                TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY}
+                REDE_AUTH_SIGNUP_ENABLED: "true"
+                SIGNUP_CAPTCHA_ENABLED: "true"
+                LINKEDIN_CLIENT_ID: ${LINKEDIN_CLIENT_ID}
+                LINKEDIN_CLIENT_SECRET: ${LINKEDIN_CLIENT_SECRET}
+                LINKEDIN_REDIRECT_URI: ${LINKEDIN_REDIRECT_URI}
+                REDE_MEDIA_STORAGE: ${REDE_MEDIA_STORAGE}
+                REDE_MEDIA_S3_BUCKET: ${REDE_MEDIA_S3_BUCKET}
+                REDE_MEDIA_S3_REGION: ${REDE_MEDIA_S3_REGION}
+                REDE_MEDIA_S3_ENDPOINT: ${REDE_MEDIA_S3_ENDPOINT}
+                REDE_MEDIA_S3_FORCE_PATH_STYLE: ${REDE_MEDIA_S3_FORCE_PATH_STYLE}
+                REDE_MEDIA_S3_PUBLIC_BASE_URL: ${REDE_MEDIA_S3_PUBLIC_BASE_URL}
+                AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+                AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+                GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+                GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+          EOF
+
+          echo "==> Montar payload JSON (python escapa o YAML certo pro body)"
+          python3 -c "
+          import json
+          with open('/tmp/enois-prod-backend-stack.yml') as f:
+              content = f.read()
+          payload = {'stackFileContent': content, 'env': [], 'prune': True, 'pullImage': True}
+          with open('/tmp/stack-update-payload.json', 'w') as f:
+              json.dump(payload, f)
+          "
+
+          echo "==> PUT /stacks/${PROD_STACK_ID} (endpointId=${PORTAINER_ENDPOINT_ID_PROD})"
+          curl -sf -X PUT "${AUTH[@]}" -H "Content-Type: application/json" \
+            "${PORTAINER_BASE_URL}/api/stacks/${PROD_STACK_ID}?endpointId=${PORTAINER_ENDPOINT_ID_PROD}" \
+            -d @/tmp/stack-update-payload.json
+
+      - name: 🩺 Health check
+        run: |
+          for i in $(seq 1 15); do
+            if curl -sf --max-time 10 https://api.enois.ia.br/health; then
               echo "OK na tentativa $i"
               exit 0
             fi
