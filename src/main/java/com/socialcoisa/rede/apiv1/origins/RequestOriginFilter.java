@@ -39,7 +39,7 @@ import jakarta.servlet.http.HttpServletResponse;
  * health/version, páginas públicas, mídia GET e descadastro) ficam isentos.
  */
 @Component
-@Order(Ordered.HIGHEST_PRECEDENCE + 4)
+@Order(Ordered.HIGHEST_PRECEDENCE + 5)
 class RequestOriginFilter extends OncePerRequestFilter {
 
 	static final String CLIENT_ORIGIN_HEADER = "X-Client-Origin";
