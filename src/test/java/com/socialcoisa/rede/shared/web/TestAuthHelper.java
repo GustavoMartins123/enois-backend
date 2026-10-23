@@ -14,6 +14,9 @@ import tools.jackson.databind.ObjectMapper;
 
 public class TestAuthHelper {
 
+	/** Origem do proprio app: os testes que ligam o gate global (rede.origins.enforce) a usam. */
+	static final String APP_ORIGIN = "https://enois.ia.br";
+
 	public record AuthSession(String token, String refreshToken, String userId) {}
 
 	private final MockMvc mockMvc;
@@ -50,8 +53,9 @@ public class TestAuthHelper {
 				"birthDate", "1990-05-10"
 			));
 
-			mockMvc.perform(post("/auth/signup")
-					.header("Idempotency-Key", "signup-" + userId)
+				mockMvc.perform(post("/auth/signup")
+						.header("X-Client-Origin", APP_ORIGIN)
+						.header("Idempotency-Key", "signup-" + userId)
 					.contentType(MediaType.APPLICATION_JSON)
 					.content(payload))
 				.andExpect(status().isCreated());
@@ -61,8 +65,9 @@ public class TestAuthHelper {
 			String confirmToken = "token-teste-" + userId;
 			TestDatabase.setPendingSignupToken(email, confirmToken);
 
-			MvcResult verified = mockMvc.perform(post("/auth/email/verify")
-					.header("Idempotency-Key", "verify-" + userId)
+				MvcResult verified = mockMvc.perform(post("/auth/email/verify")
+						.header("X-Client-Origin", APP_ORIGIN)
+						.header("Idempotency-Key", "verify-" + userId)
 					.contentType(MediaType.APPLICATION_JSON)
 					.content(objectMapper.writeValueAsString(Map.of("token", confirmToken))))
 				.andExpect(status().isOk())
@@ -75,8 +80,9 @@ public class TestAuthHelper {
 		}
 
 		// A conta ja existia (replay do cadastro): entra pelo login normal.
-		MvcResult login = mockMvc.perform(post("/auth/login")
-				.header("Idempotency-Key", "login-" + userId)
+			MvcResult login = mockMvc.perform(post("/auth/login")
+					.header("X-Client-Origin", APP_ORIGIN)
+					.header("Idempotency-Key", "login-" + userId)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(objectMapper.writeValueAsString(Map.of("email", email, "password", "Test1234!"))))
 			.andExpect(status().isOk())
