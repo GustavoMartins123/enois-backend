@@ -4,6 +4,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.Map;
 
@@ -199,6 +200,82 @@ class ServicesFlowTests {
 		long balance = objectMapper.readTree(wallet.getResponse().getContentAsString()).get("balance").asLong();
 		org.assertj.core.api.Assertions.assertThat(balance)
 			.as("saldo: " + wallet.getResponse().getContentAsString()).isEqualTo(expected);
+	}
+
+	@Test
+	void oServicoMostraQuemPrestaEAbreOChatComAssunto() throws Exception {
+		var seller = auth("chat_seller");
+		var buyer = auth("chat_buyer");
+
+		MvcResult created = mockMvc.perform(post("/servicos/ofertas")
+				.header("X-Session-Token", seller.token())
+				.header("Idempotency-Key", "chat-listing-1")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of(
+					"category", "Design", "title", "Identidade visual do time",
+					"description", "Logo, paleta e manual curto para o time.",
+					"deliverables", "Logo + paleta", "price", 79_000, "currency", "BRL", "deliveryDays", 4))))
+			.andExpect(status().isOk())
+			.andReturn();
+		String listingId = objectMapper.readTree(created.getResponse().getContentAsString()).get("id").asText();
+
+		// O catalogo mostra QUEM vai prestar (nome e foto) e a moeda do preco.
+		mockMvc.perform(get("/servicos"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.ofertas[?(@.id == '" + listingId + "')].sellerName").isNotEmpty())
+			.andExpect(jsonPath("$.ofertas[?(@.id == '" + listingId + "')].currency").value("BRL"));
+
+		// O chat abre a conversa com o assunto (o tipo do servico e o titulo) e a primeira
+		// mensagem e o pedido da contratacao.
+		MvcResult chat = mockMvc.perform(post("/servicos/ofertas/" + listingId + "/chat")
+				.header("X-Session-Token", buyer.token())
+				.header("Idempotency-Key", "chat-open-1")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("message", "Quero esse logo para a minha equipe."))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.assunto").value("Design · Identidade visual do time"))
+			.andReturn();
+		String conversationId = objectMapper.readTree(chat.getResponse().getContentAsString())
+			.get("conversationId").asText();
+
+		// O prestador tem a conversa na caixa de entrada, do tipo SERVICO (a aba "Servicos").
+		mockMvc.perform(get("/conversations").header("X-Session-Token", seller.token()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.items[?(@.id == '" + conversationId + "')].kind").value("SERVICE"));
+
+		// Clicar de novo no botao NAO abre outra conversa: reaproveita a mesma.
+		MvcResult again = mockMvc.perform(post("/servicos/ofertas/" + listingId + "/chat")
+				.header("X-Session-Token", buyer.token())
+				.header("Idempotency-Key", "chat-open-2")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("message", "Só confirmando."))))
+			.andExpect(status().isOk())
+			.andReturn();
+		assertThat(objectMapper.readTree(again.getResponse().getContentAsString()).get("conversationId").asText())
+			.isEqualTo(conversationId);
+	}
+
+	@Test
+	void oVendedorNaoAbreChatCom_siProprio() throws Exception {
+		var seller = auth("chat_proprio");
+		MvcResult created = mockMvc.perform(post("/servicos/ofertas")
+				.header("X-Session-Token", seller.token())
+				.header("Idempotency-Key", "chat-proprio-1")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of(
+					"category", "Design", "title", "Servico do proprio dono",
+					"description", "Um servico de teste do proprio dono, para ver o portao.",
+					"deliverables", "Entrega em um dia util", "price", 10_000, "deliveryDays", 2))))
+			.andExpect(status().isOk())
+			.andReturn();
+		String listingId = objectMapper.readTree(created.getResponse().getContentAsString()).get("id").asText();
+
+		mockMvc.perform(post("/servicos/ofertas/" + listingId + "/chat")
+				.header("X-Session-Token", seller.token())
+				.header("Idempotency-Key", "chat-proprio-2")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("message", "oi"))))
+			.andExpect(status().isBadRequest());
 	}
 
 	private TestAuthHelper.AuthSession auth(String name) throws Exception {

@@ -69,6 +69,26 @@ public class BehavioralTimingGuard {
 		}
 	}
 
+	/**
+	 * A cadencia desta conta esta com cara de automacao agora?
+	 *
+	 * <p>É o que o motor de risco pergunta antes de gastar uma consulta: a deteccao e feita em
+	 * memoria (a janela de acoes), e nao publica nada — quem publica a denuncia automatica continua
+	 * sendo este guarda.
+	 */
+	public boolean looksAutomated(String userId) {
+		Deque<Long> timestamps = actions.get(userId);
+		if (timestamps == null) {
+			return false;
+		}
+		synchronized (timestamps) {
+			if (timestamps.size() < WINDOW_SIZE) {
+				return false;
+			}
+			return stdDevOfIntervals(timestamps) < STD_DEV_THRESHOLD_MS;
+		}
+	}
+
 	static double stdDevOfIntervals(Deque<Long> timestamps) {
 		long[] ts = timestamps.stream().mapToLong(Long::longValue).toArray();
 		double[] intervals = new double[ts.length - 1];
@@ -86,19 +106,20 @@ public class BehavioralTimingGuard {
 		return Math.sqrt(varianceSum / intervals.length);
 	}
 
+	/**
+	 * O guarda DETECTA; quem entrega a ocorrencia a moderacao e o motor de risco
+	 * ({@code shared/risk/RiskEngine}), que combina a cadencia com os outros sinais, sabe o nivel e
+	 * registra a decisao. Antes daqui saia uma denuncia por conta propria — e ela era engolida pela
+	 * moderacao como duplicata da do motor, com uma descricao pior (sem o nivel nem o conjunto de
+	 * sinais).
+	 */
 	private void reportIfCooldownExpired(String userId, double stdDev, long now) {
 		Long last = lastReported.get(userId);
 		if (last != null && now - last < REPORT_COOLDOWN_MS) {
 			return;
 		}
 		lastReported.put(userId, now);
-		LOG.warn("Comportamento automatizado detectado para usuario {} (stdDev={}ms)", userId, String.format("%.0f", stdDev));
-		try {
-			events.publishEvent(new AutoReportEvent(userId, TargetType.USER, ReportReason.SPAM,
-				"[auto] Padrao de tempo entre acoes sugere automacao (desvio padrao: "
-					+ String.format("%.0f", stdDev) + "ms, limiar: " + (int) STD_DEV_THRESHOLD_MS + "ms)."));
-		} catch (RuntimeException e) {
-			LOG.debug("Falha ao publicar auto-report para {}: {}", userId, e.getMessage());
-		}
+		LOG.warn("Comportamento automatizado detectado para usuario {} (stdDev={}ms)", userId,
+			String.format("%.0f", stdDev));
 	}
 }

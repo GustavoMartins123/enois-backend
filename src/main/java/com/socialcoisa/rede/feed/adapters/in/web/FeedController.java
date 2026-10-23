@@ -151,7 +151,7 @@ class FeedController {
 		return idempotency.execute(user.id(), "POST", "/api/feed/posts", idempotencyKey, hash, () -> new CommandResponse(201,
 			publishPostUseCase.publish(new PublishPostCommand(user.id(), request.type(), request.content(),
 				request.pageHtml(), request.articleBody(), request.tags(), request.mediaIds(), request.communityId(),
-				request.mentionedUserIds(), request.topic(), request.channelId()))));
+				request.mentionedUserIds(), request.topic(), request.channelId(), Boolean.TRUE.equals(request.mediaSpoiler())))));
 	}
 
 	@GetMapping("/feed")
@@ -301,11 +301,12 @@ class FeedController {
 		payload.put("parentCommentId", request.parentCommentId() == null ? "" : request.parentCommentId());
 		payload.put("content", request.content() == null ? "" : request.content());
 		payload.put("mediaIds", request.mediaIds() == null ? List.of() : request.mediaIds());
+		payload.put("mediaSpoiler", Boolean.TRUE.equals(request.mediaSpoiler()));
 		String hash = idempotency.hash(payload);
 		return idempotency.execute(user.id(), "POST", "/api/feed/posts/{postId}/comments", idempotencyKey, hash,
 			() -> new CommandResponse(201, commentOnPostUseCase.comment(new CommentOnPostCommand(user.id(),
 				new PostId(postId), request.parentCommentId(), request.content(), request.mediaIds(),
-				request.mentionedUserIds()))));
+				request.mentionedUserIds(), Boolean.TRUE.equals(request.mediaSpoiler())))));
 	}
 
 	@GetMapping("/feed/posts/{postId}/comments")
@@ -425,6 +426,63 @@ class FeedController {
 	}
 
 	/** Edicao de comentario proprio: so o autor, com as mesmas regras do comentario novo. */
+	/** Fixa um comentário no topo da lista: autor do post ou do próprio comentário. */
+	@PostMapping("/feed/posts/{postId}/comments/{commentId}/pin")
+	ResponseEntity<String> pinComment(@RequestHeader(value = USER_HEADER, required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@PathVariable String postId, @PathVariable String commentId) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		String hash = idempotency.hash(Map.of("commentId", commentId, "postId", postId, "pinned", true));
+		return idempotency.execute(user.id(), "POST", "/api/feed/posts/{postId}/comments/{commentId}/pin",
+			idempotencyKey, hash, () -> {
+				pinCommentFor(user.id(), postId, commentId, true);
+				return new CommandResponse(200, Map.of("status", "COMMENT_PINNED", "commentId", commentId));
+			});
+	}
+
+	/** Desafixa (o comentário volta à ordem normal). */
+	@DeleteMapping("/feed/posts/{postId}/comments/{commentId}/pin")
+	ResponseEntity<String> unpinComment(@RequestHeader(value = USER_HEADER, required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+			@PathVariable String postId, @PathVariable String commentId) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		String hash = idempotency.hash(Map.of("commentId", commentId, "postId", postId, "pinned", false));
+		return idempotency.execute(user.id(), "DELETE", "/api/feed/posts/{postId}/comments/{commentId}/pin",
+			idempotencyKey, hash, () -> {
+				pinCommentFor(user.id(), postId, commentId, false);
+				return new CommandResponse(200, Map.of("status", "COMMENT_UNPINNED", "commentId", commentId));
+			});
+	}
+
+	private void pinCommentFor(com.socialcoisa.rede.feed.domain.UserId userId, String postId, String commentId,
+			boolean pinned) {
+		postRepository.findById(new PostId(postId))
+			.filter(com.socialcoisa.rede.feed.domain.Post::isActive)
+			.orElseThrow(() -> new ApiException(404, "POST_NOT_FOUND", "Post nao encontrado."));
+		var comment = commentRepository.findById(commentId)
+			.filter(c -> c.postId().value().equals(postId))
+			.filter(c -> c.status() == com.socialcoisa.rede.feed.domain.CommentStatus.ACTIVE)
+			// Só comentário raiz: fixar uma resposta a esconderia do pai no topo.
+			.filter(c -> c.parentCommentId() == null)
+			.orElseThrow(() -> new ApiException(404, "COMMENT_NOT_FOUND", "Comentario nao encontrado."));
+		boolean postOwner = postRepository.findById(new PostId(postId))
+			.map(post -> post.authorId().equals(userId))
+			.orElse(false);
+		if (!postOwner && !comment.authorId().equals(userId)) {
+			throw new ApiException(403, "NOT_AUTHORIZED",
+				"So o autor do post ou do comentario pode fixar este comentario.");
+		}
+		if (pinned) {
+			commentRepository.unpinAllByPost(new PostId(postId));
+			commentRepository.save(comment.withPinned(true));
+		}
+		else if (comment.pinned()) {
+			commentRepository.save(comment.withPinned(false));
+		}
+	}
+
 	@PatchMapping("/feed/posts/{postId}/comments/{commentId}")
 	ResponseEntity<String> editComment(@RequestHeader(value = USER_HEADER, required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,

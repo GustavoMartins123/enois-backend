@@ -50,7 +50,8 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository;
 	private final BlockedUsersReader blockedUsersReader;
 	private final com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseCase validateMediaOwnership;
-	private final com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate;
+	private final com.socialcoisa.rede.shared.sanctions.SanctionGate sanctionGate;
+	private final com.socialcoisa.rede.shared.risk.RiskEngine riskEngine;
 	private final com.socialcoisa.rede.shared.age.AgeGate agePolicy;
 	private final com.socialcoisa.rede.coin.application.CoinService coins;
 	private final NewAccountCooldown newAccountCooldown;
@@ -67,7 +68,8 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository,
 			BlockedUsersReader blockedUsersReader,
 			com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseCase validateMediaOwnership,
-			com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate,
+			com.socialcoisa.rede.shared.sanctions.SanctionGate sanctionGate,
+			com.socialcoisa.rede.shared.risk.RiskEngine riskEngine,
 			com.socialcoisa.rede.coin.application.CoinService coins,
 			NewAccountCooldown newAccountCooldown,
 			UserRateLimiter userRateLimiter,
@@ -85,6 +87,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 		this.blockedUsersReader = blockedUsersReader;
 		this.validateMediaOwnership = validateMediaOwnership;
 		this.sanctionGate = sanctionGate;
+		this.riskEngine = riskEngine;
 		this.agePolicy = agePolicy;
 		this.coins = coins;
 		this.newAccountCooldown = newAccountCooldown;
@@ -98,20 +101,18 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 	public CommentView comment(CommentOnPostCommand command) {
 		// ECA Digital: sem data de nascimento declarada, nao comenta (tela de regularizacao).
 		agePolicy.requireCanWrite(command.authorId().value());
-		if (sanctionGate.restricted(command.authorId().value())) {
-			throw new ApiException(403, "ACCOUNT_RESTRICTED",
-				"Sua conta esta restrita por moderacao. Voce pode recorrer na pagina Penalidades.");
-		}
+		sanctionGate.requireNotRestricted(command.authorId().value());
 		newAccountCooldown.require(command.authorId().value());
 		userRateLimiter.require(command.authorId().value(), UserRateLimiter.CREATE_COMMENT);
 		behavioralTimingGuard.record(command.authorId().value());
+		riskEngine.assess(command.authorId().value(), "comment", command.content());
 		duplicationGuard.require(command.authorId().value(), command.content());
 		Post post = activePost(command.postId());
 		List<String> mediaIds = normalizeCommentMedia(command.mediaIds(), command.authorId());
 		String content = normalizeContent(command.content(), !mediaIds.isEmpty());
 		String parentCommentId = normalizeParentComment(command.parentCommentId(), post.id());
 		Comment comment = Comment.create(newId("comment"), post.id(), command.authorId(), parentCommentId, content,
-			mediaIds, clock.instant());
+			mediaIds, command.mediaSpoiler(), clock.instant());
 		Comment saved = commentRepository.save(comment);
 		post.addComment();
 		postRepository.save(post);
@@ -167,8 +168,14 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 		Set<String> hidden = query.viewerId()
 			.map(viewer -> blockedUsersReader.hiddenIdsFor(viewer.value()))
 			.orElse(Set.of());
-		var fetched = commentRepository.findActiveByPost(query.postId(), before, limit);
-		var comments = fetched.stream()
+		// O fixado vem no TOPO da primeira pagina e sai da paginacao normal (sem duplicar).
+		var pinned = query.before().isEmpty() ? commentRepository.findPinnedByPost(query.postId())
+			: java.util.Optional.<com.socialcoisa.rede.feed.domain.Comment>empty();
+		var fetched = commentRepository.findActiveByPostExcludingPinned(query.postId(), before, limit);
+		var allComments = new java.util.ArrayList<com.socialcoisa.rede.feed.domain.Comment>();
+		pinned.ifPresent(allComments::add);
+		allComments.addAll(fetched);
+		var comments = allComments.stream()
 			.filter(c -> !hidden.contains(c.authorId().value()))
 			.map(c -> {
 				var p = userProfileRepository.findById(c.authorId().value()).orElse(null);

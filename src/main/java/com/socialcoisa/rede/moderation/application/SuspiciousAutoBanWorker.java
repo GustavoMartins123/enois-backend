@@ -12,6 +12,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import com.socialcoisa.rede.identity.application.port.out.AuthSessionRepository;
+import com.socialcoisa.rede.moderation.application.port.out.SuspiciousUserReader;
 import com.socialcoisa.rede.moderation.domain.SanctionType;
 import com.socialcoisa.rede.shared.web.ApiException;
 
@@ -40,19 +41,31 @@ public class SuspiciousAutoBanWorker {
 	/** Referência da sanção: não é uma pessoa, é a automação — aparece na trilha do banco. */
 	static final String ACTOR = "automod:risco";
 	private static final int MAX_SCAN = 200;
+	private static final String PATTERN_REASON =
+		"Conta com o padrão do ataque em série (moderação automática de contenção).";
 
 	private final SuspiciousUserService suspiciousUsers;
 	private final ModeratorService moderators;
 	private final AuthSessionRepository sessions;
 	private final IpBlockService ipBlocks;
+	private final SuspiciousUserReader reader;
+	private final List<String> patterns;
+	private final java.time.Clock clock;
 	private final boolean enabled;
 	private final int threshold;
 	private final int maxPerRun;
 	private final int ipsToInspect;
 	private final int accountsPerIpToBlock;
+	// Último resultado da rodada: é o que o painel mostra para não ficarmos no escuro
+	// (o post-mortem de 22/10 apontou "não sabemos o que aconteceu" como o problema).
+	private volatile java.time.Instant lastRunAt;
+	private volatile Report lastReport;
+	private volatile String lastError;
 
 	public SuspiciousAutoBanWorker(SuspiciousUserService suspiciousUsers, ModeratorService moderators,
-			AuthSessionRepository sessions, IpBlockService ipBlocks,
+			AuthSessionRepository sessions, IpBlockService ipBlocks, SuspiciousUserReader reader,
+			java.time.Clock clock,
+			@Value("${rede.security.suspicious.name-patterns:probe}") String patternList,
 			@Value("${rede.moderation.auto-ban.enabled:true}") boolean enabled,
 			@Value("${rede.moderation.auto-ban.risk:60}") int threshold,
 			@Value("${rede.moderation.auto-ban.max-per-run:50}") int maxPerRun,
@@ -62,6 +75,13 @@ public class SuspiciousAutoBanWorker {
 		this.moderators = moderators;
 		this.sessions = sessions;
 		this.ipBlocks = ipBlocks;
+		this.reader = reader;
+		this.clock = clock;
+		this.patterns = java.util.Arrays.stream(patternList.split(","))
+			.map(String::trim)
+			.filter(pattern -> !pattern.isEmpty())
+			.map(pattern -> pattern.toLowerCase(java.util.Locale.ROOT))
+			.toList();
 		this.enabled = enabled;
 		this.threshold = Math.max(1, Math.min(threshold, 200));
 		this.maxPerRun = Math.max(1, Math.min(maxPerRun, 200));
@@ -69,18 +89,72 @@ public class SuspiciousAutoBanWorker {
 		this.accountsPerIpToBlock = Math.max(2, Math.min(accountsPerIpToBlock, 100));
 	}
 
-	@Scheduled(initialDelayString = "${rede.moderation.auto-ban.initial-delay-ms:300000}",
-			fixedDelayString = "${rede.moderation.auto-ban.interval-ms:900000}")
+	// Contenção rápida: 1 min depois do boot e a cada 3 min. A varredura olha só as 500 contas
+	// mais recentes da janela, então rodar miúdo custa pouco — e o ataque não cresce por 15 min.
+	@Scheduled(initialDelayString = "${rede.moderation.auto-ban.initial-delay-ms:15000}",
+			fixedDelayString = "${rede.moderation.auto-ban.interval-ms:180000}")
 	public void run() {
 		if (!enabled) {
 			return;
 		}
 		try {
-			sweep();
+			// Contenção DIRETA do padrão conhecido: sem score, sem exceção de equipe. Roda 15s
+			// depois do boot e a cada ciclo, mesmo que a triagem por risco falhe.
+			purgeAttackPatterns();
+			Report report = sweep();
+			lastReport = report;
+			lastError = null;
 		}
 		catch (RuntimeException failure) {
+			lastError = failure.getClass().getSimpleName() + ": " + failure.getMessage();
 			LOG.error("Triagem automática falhou nesta rodada: {}", failure.getMessage());
 		}
+		finally {
+			lastRunAt = clock.instant();
+		}
+	}
+
+	/** Estado da automação para o painel: rodou quando, o que fez e o último erro (se houve). */
+	public Status status() {
+		Report report = lastReport;
+		java.time.Instant run = lastRunAt;
+		return new Status(enabled, run == null ? null : run.toString(),
+			report == null ? 0 : report.banned(), report == null ? 0 : report.failed(),
+			report == null ? java.util.List.of() : report.blockedIps(), lastError);
+	}
+
+	public record Status(boolean enabled, String lastRunAt, int banned, int failed,
+			java.util.List<String> blockedIps, String lastError) {
+	}
+
+	/**
+	 * Bane e limpa TODA conta cujo nome/username carrega o padrão do ataque — inclusive conta
+	 * marcada como equipe (foi assim que a conta do atacante escapou em 22/10).
+	 *
+	 * Não usa o score de propósito: se a triagem por risco falhar, esta varredura funciona sozinha.
+	 */
+	public int purgeAttackPatterns() {
+		// O portão de liga/desliga é o do agendador (run); aqui a varredura pode ser chamada direto.
+		if (patterns.isEmpty()) {
+			return 0;
+		}
+		var since = clock.instant().minus(java.time.Duration.ofDays(365));
+		int purged = 0;
+		for (var candidate : reader.findMatching(patterns, since, 200)) {
+			try {
+				var result = moderators.sanctionUser(ACTOR, candidate.username(), SanctionType.PERMABAN,
+					PATTERN_REASON);
+				if (!"ALREADY_BANNED".equals(result.status())) {
+					moderators.sanitizeUser(ACTOR, candidate.username(), PATTERN_REASON);
+					purged++;
+					LOG.warn("Padrão de ataque: conta {} banida e conteúdo limpo", candidate.username());
+				}
+			}
+			catch (RuntimeException failure) {
+				LOG.warn("Padrão de ataque: falha ao banir {}: {}", candidate.username(), failure.getMessage());
+			}
+		}
+		return purged;
 	}
 
 	/**
@@ -97,6 +171,17 @@ public class SuspiciousAutoBanWorker {
 			}
 			if (target.riskScore() <= threshold) {
 				continue;
+			}
+			if (target.staff() && !target.signals().contains("NOME_SUSPEITO")) {
+				LOG.warn("Auto-ban: {} tem risco {} mas é da equipe — automação não pune; revise no painel.",
+					target.username(), target.riskScore());
+				continue;
+			}
+			if (target.staff()) {
+				// Equipe COM a assinatura do ataque não é equipe: é conta comprometida (o atacante
+				// de 22/10 usou uma conta que a triagem tratava como moderadora para não ser punida).
+				LOG.error("Auto-ban: {} tem selo de equipe E assinatura de ataque — punindo mesmo assim.",
+					target.username());
 			}
 			String reason = reasonFor(target);
 			try {

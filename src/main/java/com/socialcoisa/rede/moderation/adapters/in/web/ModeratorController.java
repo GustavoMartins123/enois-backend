@@ -16,6 +16,7 @@ import com.socialcoisa.rede.games.domain.Game;
 import com.socialcoisa.rede.moderation.application.BulkBanService;
 import com.socialcoisa.rede.moderation.application.ModeratorService;
 import com.socialcoisa.rede.moderation.application.SanctionProposalService;
+import com.socialcoisa.rede.moderation.application.SuspiciousAutoBanWorker;
 import com.socialcoisa.rede.moderation.application.SuspiciousUserService;
 import com.socialcoisa.rede.moderation.domain.ModerationVoteType;
 import com.socialcoisa.rede.moderation.domain.ModeratorApplicationStatus;
@@ -44,7 +45,9 @@ class ModeratorController {
 	private final SanctionProposalService sanctionProposals;
 	private final SuspiciousUserService suspiciousUsers;
 	private final BulkBanService bulkBans;
+	private final SuspiciousAutoBanWorker autoBan;
 	private final com.socialcoisa.rede.moderation.application.IpBlockService ipBlocks;
+	private final com.socialcoisa.rede.moderation.application.port.out.RiskAssessmentReader riskAssessments;
 	private final GameService games;
 	private final ServiceOfferService serviceOffers;
 	private final UserProfileRepository profiles;
@@ -52,15 +55,18 @@ class ModeratorController {
 	private final AdminGuard adminGuard;
 
 	ModeratorController(ModeratorService moderators, SanctionProposalService sanctionProposals,
-			SuspiciousUserService suspiciousUsers, BulkBanService bulkBans,
+			SuspiciousUserService suspiciousUsers, BulkBanService bulkBans, SuspiciousAutoBanWorker autoBan,
 			com.socialcoisa.rede.moderation.application.IpBlockService ipBlocks,
+			com.socialcoisa.rede.moderation.application.port.out.RiskAssessmentReader riskAssessments,
 			GameService games, ServiceOfferService serviceOffers, UserProfileRepository profiles,
 			CurrentUserResolver currentUserResolver, AdminGuard adminGuard) {
 		this.moderators = moderators;
 		this.sanctionProposals = sanctionProposals;
 		this.suspiciousUsers = suspiciousUsers;
 		this.bulkBans = bulkBans;
+		this.autoBan = autoBan;
 		this.ipBlocks = ipBlocks;
+		this.riskAssessments = riskAssessments;
 		this.games = games;
 		this.serviceOffers = serviceOffers;
 		this.profiles = profiles;
@@ -214,6 +220,23 @@ class ModeratorController {
 			"ageBand", minor ? (age <= 13 ? "ATE_13" : "14_17") : "ADULTO");
 	}
 
+	/**
+	 * O histórico de risco da conta: o que o motor de risco combinou, com nível, sinais e versão da
+	 * regra. É o que responde "por que esta pessoa foi sinalizada?" — a decisão do motor fica
+	 * reconstruível, sem depender de memória de ninguém.
+	 */
+	@GetMapping("/admin/users/{username}/risco")
+	List<com.socialcoisa.rede.shared.risk.RiskAssessment> riskHistory(
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String username,
+			@RequestParam(defaultValue = "20") int limit) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		adminGuard.requireAdmin(user);
+		var profile = profiles.findByUsername(username.trim())
+			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuário não encontrado."));
+		return riskAssessments.recentFor(profile.id(), Math.min(100, Math.max(1, limit)));
+	}
+
 	/** IPs recentes de onde o usuário entrou — fonte para o bloqueio de IP. */
 	@GetMapping("/admin/users/{username}/ips")
 	List<com.socialcoisa.rede.moderation.application.IpBlockService.UserIpView> userIps(
@@ -285,6 +308,16 @@ class ModeratorController {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
 		requireModerator(user);
 		return bulkBans.ban(user.id().value(), request.usernames(), request.type(), request.reason());
+	}
+
+	/** Última rodada da automação (o "não sabemos o que aconteceu" do incidente). */
+	@GetMapping("/admin/automod/status")
+	SuspiciousAutoBanWorker.Status automodStatus(
+			@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader("X-Session-Token") String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		adminGuard.requireAdmin(user);
+		return autoBan.status();
 	}
 
 	@GetMapping("/moderation/sanction-proposals")

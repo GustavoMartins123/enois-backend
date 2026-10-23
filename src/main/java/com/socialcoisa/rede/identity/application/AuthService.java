@@ -10,6 +10,8 @@ import java.util.Locale;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -46,6 +48,9 @@ import com.socialcoisa.rede.shared.web.ApiException;
 public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, GetAuthenticatedUserUseCase,
 		RequestPasswordResetUseCase, ResetPasswordUseCase, RefreshSessionUseCase, ChangeEmailUseCase,
 		ChangePasswordUseCase, DeleteAccountUseCase, VerifyEmailUseCase, TwoFactorLoginUseCase {
+
+	private static final Logger LOG = LoggerFactory.getLogger(AuthService.class);
+
 
 	private static final Duration RESET_TOKEN_TTL = Duration.ofHours(24);
 
@@ -124,6 +129,7 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 			hashToken(rawToken), now.plus(VERIFICATION_TOKEN_TTL), now, 1, now);
 		pendingSignups.save(pending);
 		boolean emailSent = emailService.sendVerificationEmail(email, name, rawToken);
+		LOG.info("auth_signup_pending emailSent={}", emailSent);
 		return new SignupResult(email, true, emailSent);
 	}
 
@@ -165,12 +171,15 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 			// entenderia o que fazer) — o certo e pedir a confirmacao do e-mail.
 			var pending = pendingSignups.findByEmail(email);
 			if (pending.isPresent() && !pending.get().isExpired(clock.instant())) {
+				LOG.warn("auth_login_failed reason=email_not_verified");
 				return new ApiException(403, "EMAIL_NOT_VERIFIED",
 					"Confirme o e-mail que enviamos para ativar a conta.");
 			}
+			LOG.warn("auth_login_failed reason=unknown_email");
 			return new ApiException(401, "INVALID_CREDENTIALS", "Email ou senha invalidos.");
 		});
 		if (!passwordHasher.matches(command.password(), credential.passwordHash())) {
+			LOG.warn("auth_login_failed reason=invalid_password");
 			throw new ApiException(401, "INVALID_CREDENTIALS", "Email ou senha invalidos.");
 		}
 		UserProfile profile = userProfileRepository.findById(credential.userId())
@@ -178,6 +187,7 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		requireVerifiedIdentity(profile);
 		// Ban (recurso negado) trava ate o login: a conta nao emite sessao nova.
 		if (sanctionGate.banned(profile.id())) {
+			LOG.warn("auth_login_blocked reason=account_banned userId={}", profile.id());
 			throw new ApiException(403, "ACCOUNT_BANNED",
 				"Esta conta foi banida apos revisao do recurso. Fale com o suporte se precisar.");
 		}
@@ -185,9 +195,11 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		// Senha correta e o primeiro passo: com segundo fator ativo, aqui sai um desafio, nao sessao.
 		var requiredMethod = twoFactorService.requiredMethod(profile.id());
 		if (requiredMethod.isPresent()) {
+			LOG.info("auth_login_two_factor_required userId={} method={}", profile.id(), requiredMethod.get());
 			TwoFactorChallenge challenge = twoFactorService.startChallenge(profile.id(), requiredMethod.get());
 			return LoginResult.twoFactorRequired(challenge.id(), challenge.method().name(), challenge.expiresAt());
 		}
+		LOG.info("auth_login_success userId={}", profile.id());
 		return LoginResult.authenticated(createResponse(profile, command.ip()));
 	}
 
@@ -205,6 +217,7 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 			throw new ApiException(403, "ACCOUNT_BANNED",
 				"Esta conta foi banida apos revisao do recurso. Fale com o suporte se precisar.");
 		}
+		LOG.info("auth_login_success userId={} via=2fa", profile.id());
 		return createResponse(profile, null);
 	}
 

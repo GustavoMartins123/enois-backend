@@ -28,10 +28,16 @@ public class EventService {
 	private static final java.time.Duration RETENTION = java.time.Duration.ofDays(365);
 
 	private final EventRepository repository;
+	private final com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate;
+	private final com.socialcoisa.rede.shared.security.SuspiciousText suspiciousText;
 	private final Clock clock;
 
-	public EventService(EventRepository repository, Clock clock) {
+	public EventService(EventRepository repository,
+			com.socialcoisa.rede.shared.sanctions.SanctionGateReader sanctionGate,
+			com.socialcoisa.rede.shared.security.SuspiciousText suspiciousText, Clock clock) {
 		this.repository = repository;
+		this.sanctionGate = sanctionGate;
+		this.suspiciousText = suspiciousText;
 		this.clock = clock;
 	}
 
@@ -134,6 +140,11 @@ public class EventService {
 	public EventPage list(String format, java.time.Instant before, int limit, boolean includePast) {
 		List<Event> fetched = repository.findAll(format, before, limit);
 		List<Event> visible = includePast ? fetched : fetched.stream().filter(event -> !hasEnded(event)).toList();
+		// Evento de conta banida sai da vitrine (o conteúdo dela já está sendo limpo).
+		visible = visible.stream()
+			.filter(event -> !sanctionGate.banned(event.createdBy()))
+			.filter(event -> !suspiciousText.matches(event.title(), event.host()))
+			.toList();
 		return new EventPage(visible, fetched);
 	}
 

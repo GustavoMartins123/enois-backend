@@ -40,6 +40,20 @@ public class ContentDuplicationGuard {
 	}
 
 	/**
+	 * O mesmo texto já saiu desta conta na janela? (consulta pura: não registra nada)
+	 *
+	 * <p>É o que o motor de risco pergunta para combinar sinais; o {@code require} abaixo continua
+	 * sendo quem recusa a publicação e quem guarda o texto.
+	 */
+	public boolean isDuplicate(String userId, String content) {
+		if (seen == null || content == null) {
+			return false;
+		}
+		String hash = Hashes.sha256Hex(normalize(content));
+		return seen.getIfPresent(userId + "|" + hash) != null;
+	}
+
+	/**
 	 * Verifica se o conteúdo já foi publicado por este usuário recentemente. Lança 409 se duplicado.
 	 */
 	public void require(String userId, String content) {

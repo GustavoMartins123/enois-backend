@@ -1,0 +1,27 @@
+# Overlay OPCIONAL para ferramentas de desenvolvimento local. O fluxo mínimo continua sendo
+# `docker compose up` (docker-compose.yml); para usar as ferramentas:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#
+# Mailpit = SMTP fake (captura TODO e-mail que o app manda) + UI para ler as mensagens:
+#   UI:   http://localhost:8025
+#   SMTP: mailpit:1025 (dentro da rede do compose)
+services:
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: rede-mailpit
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+  rede:
+    environment:
+      # O app fala com o Mailpit pelo nome do serviço, sem TLS nem login.
+      MAIL_HOST: mailpit
+      MAIL_PORT: 1025
+      MAIL_USERNAME: ""
+      MAIL_PASSWORD: ""
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH: "false"
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: "false"
+    depends_on:
+      - mailpit

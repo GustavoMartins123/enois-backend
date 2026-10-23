@@ -1,6 +1,8 @@
 package com.socialcoisa.rede.services.application;
 
 import java.time.Clock;
+import java.util.List;
+import java.util.Map;
 import java.time.Instant;
 import java.util.List;
 
@@ -28,12 +30,77 @@ public class ServicesService {
 
 	private final ServiceRepository services;
 	private final CoinService coins;
+	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles;
+	private final com.socialcoisa.rede.messaging.application.MessagingService messaging;
+	private final com.socialcoisa.rede.shared.security.SuspiciousText suspiciousText;
 	private final Clock clock;
 
-	public ServicesService(ServiceRepository services, CoinService coins, Clock clock) {
+	public ServicesService(ServiceRepository services, CoinService coins,
+			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles,
+			com.socialcoisa.rede.messaging.application.MessagingService messaging,
+			com.socialcoisa.rede.shared.security.SuspiciousText suspiciousText, Clock clock) {
 		this.services = services;
 		this.coins = coins;
-		this.clock = clock;
+		this.profiles = profiles;
+		this.messaging = messaging;
+		this.suspiciousText = suspiciousText;		this.clock = clock;
+	}
+
+	/**
+	 * Quem oferece os servicos (nome e foto), uma vez por prestador.
+	 *
+	 * <p>Uma consulta por prestador, nao uma por servico: o catalogo mostra dezenas de ofertas e
+	 * o mesmo prestador pode ter varias. A conta que nao existe mais devolve null (a oferta orfa
+	 * e removida pela migracao de limpeza).
+	 */
+	public Map<String, Seller> sellersOf(List<ServiceListing> listings) {
+		Map<String, Seller> sellers = new java.util.LinkedHashMap<>();
+		for (ServiceListing listing : listings) {
+			if (sellers.containsKey(listing.sellerId())) {
+				continue;
+			}
+			profiles.findById(listing.sellerId()).ifPresentOrElse(
+				profile -> sellers.put(listing.sellerId(), new Seller(profile.name(), profile.avatar())),
+				() -> sellers.put(listing.sellerId(), new Seller(null, null)));
+		}
+		return sellers;
+	}
+
+	/** Quem presta o servico: nome e foto (null quando a conta nao existe mais). */
+	public record Seller(String name, String avatar) {
+	}
+
+	/**
+	 * Abre (ou reaproveita) a conversa de servico entre quem contrata e quem presta.
+	 *
+	 * <p>É o caminho do serviço cobrado em REAIS: o dinheiro nao entra no ledger de faíscas, então
+	 * o jeito de combinar é falar — e a conversa fica com assunto (o tipo do servico e o pedido),
+	 * numa aba propria da caixa de entrada do prestador. O serviço pago em faíscas usa o mesmo
+	 * caminho (o escrow cuida do dinheiro, a conversa cuida do combinado).
+	 *
+	 * @return o id da conversa e o assunto
+	 */
+	@Transactional
+	public ServiceChat openChat(String listingId, String hirerId, String pedido) {
+		ServiceListing listing = listing(listingId);
+		if (listing.status() != ServiceListing.Status.ACTIVE) {
+			throw new ApiException(409, "SERVICE_NOT_ACTIVE", "Este serviço não está mais aberto.");
+		}
+		if (listing.ownedBy(hirerId)) {
+			throw new ApiException(400, "OWN_SERVICE", "Não dá para contratar o seu próprio serviço.");
+		}
+		String assunto = listing.category() + " · " + listing.title();
+		String conversationId = messaging.serviceConversationBetween(hirerId, listing.sellerId(), assunto);
+		String texto = pedido == null || pedido.isBlank()
+			? "Olá! Quero contratar o serviço " + listing.title() + " (" + listing.category() + ")."
+			: pedido.strip();
+		// A primeira mensagem e o pedido da contratacao: e ela que da o assunto a conversa.
+		messaging.sendMessage(conversationId, hirerId, texto);
+		return new ServiceChat(conversationId, assunto, listing.id(), listing.sellerId());
+	}
+
+	/** A conversa de servico que foi aberta. */
+	public record ServiceChat(String conversationId, String assunto, String listingId, String sellerId) {
 	}
 
 	// --- D2.2: ofertar (o profissional publica) ---
@@ -160,6 +227,8 @@ public class ServicesService {
 
 	public List<ServiceListing> listingCatalog(int limit, String query, String category) {
 		return services.findActiveListings(Math.min(200, Math.max(1, limit) * 4)).stream()
+			// Conteúdo com o padrão do ataque não aparece no catálogo público.
+			.filter(l -> !suspiciousText.matches(l.title(), l.description(), l.deliverables()))
 			.filter(l -> matches(query, l.title(), l.description(), l.deliverables()))
 			.filter(l -> matchesCategory(category, l.category()))
 			.limit(Math.min(60, Math.max(1, limit))).toList();
@@ -171,6 +240,7 @@ public class ServicesService {
 
 	public List<ServiceRequest> requestCatalog(int limit, String query, String category) {
 		return services.findOpenRequests(Math.min(200, Math.max(1, limit) * 4)).stream()
+			.filter(r -> !suspiciousText.matches(r.title(), r.description(), r.deliverables()))
 			.filter(r -> matches(query, r.title(), r.description(), r.deliverables()))
 			.filter(r -> matchesCategory(category, r.category()))
 			.limit(Math.min(60, Math.max(1, limit))).toList();

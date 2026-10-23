@@ -11,6 +11,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.socialcoisa.rede.coin.application.port.out.CoinLedgerRepository;
 import com.socialcoisa.rede.coin.domain.CoinAccount;
 import com.socialcoisa.rede.coin.domain.CoinEntry;
+import com.socialcoisa.rede.shared.security.ActionThrottle;
 import com.socialcoisa.rede.shared.web.ApiException;
 
 /**
@@ -33,6 +37,8 @@ import com.socialcoisa.rede.shared.web.ApiException;
  */
 @Service
 public class CoinService {
+
+	private static final Logger LOG = LoggerFactory.getLogger(CoinService.class);
 
 	public static final String TREASURY_ACCOUNT = "coin_tesouraria";
 	/** Conta de RETENÇÃO do escrow: não pertence a ninguém; as faíscas ficam paradas aqui. */
@@ -66,14 +72,25 @@ public class CoinService {
 	private final CoinLedgerRepository ledger;
 	private final CoinRateService rateService;
 	private final com.socialcoisa.rede.shared.security.SecretCipher cipher;
+	private final ActionThrottle throttle;
+	private final TransferDedupe dedupe;
+	private final int transfersPerMinute;
+	private final int transfersPerHour;
 	private final Clock clock;
 
 	public CoinService(CoinLedgerRepository ledger, CoinRateService rateService,
-			com.socialcoisa.rede.shared.security.SecretCipher cipher, Clock clock) {
+			com.socialcoisa.rede.shared.security.SecretCipher cipher, ActionThrottle throttle,
+			TransferDedupe dedupe, Clock clock,
+			@Value("${rede.coin.transfer-per-minute:10}") int transfersPerMinute,
+			@Value("${rede.coin.transfer-per-hour:60}") int transfersPerHour) {
 		this.ledger = ledger;
 		this.rateService = rateService;
 		this.cipher = cipher;
+		this.throttle = throttle;
+		this.dedupe = dedupe;
 		this.clock = clock;
+		this.transfersPerMinute = Math.max(1, Math.min(transfersPerMinute, 1_000));
+		this.transfersPerHour = Math.max(this.transfersPerMinute, Math.min(transfersPerHour, 10_000));
 	}
 
 	public record Wallet(long balance, String chave, long escala, long cotacaoBrlCents, List<CoinEntry> entries) {
@@ -90,6 +107,22 @@ public class CoinService {
 			.toList();
 		return new Wallet(ensureAccount(accountId).balance(), username, SCALE,
 			rateService.currentBrlCents(), extrato);
+	}
+
+	/**
+	 * Extrato para AUDITORIA (incidente/painel): lê o que existe e NÃO credita nada.
+	 *
+	 * O `wallet()` normal garante genesis e presença (efeito colateral de abrir a carteira) — numa
+	 * auditoria isso criaria conta e airdrop para quem estava sendo investigado.
+	 */
+	public Wallet walletSnapshot(String accountId, String username, int limit) {
+		var account = ledger.findAccount(accountId);
+		long balance = account.map(CoinAccount::balance).orElse(0L);
+		List<CoinEntry> entries = account.isEmpty() ? List.of()
+			: ledger.recentEntries(accountId, Math.max(1, Math.min(limit, 200))).stream()
+				.map(e -> e.withMessage(decifrar(e.message())))
+				.toList();
+		return new Wallet(balance, username, SCALE, rateService.currentBrlCents(), entries);
 	}
 
 	/**
@@ -241,11 +274,27 @@ public class CoinService {
 		if (from.balance() < amount) {
 			throw new ApiException(400, "INSUFFICIENT_SPARKS", "Faíscas insuficientes.");
 		}
+		// O MESMO Pix repetido em segundos (duplo clique/retry) devolve a entrada da primeira vez.
+		CoinEntry repetida = dedupe.recent(fromAccountId, toUserId, amount, message);
+		if (repetida != null) {
+			LOG.info("faisca: transferencia repetida ignorada de {} para {} de {} mf (ref {})",
+				fromAccountId, toUserId, amount, repetida.refId());
+			return repetida;
+		}
+		// Teto por conta: 141 POSTs em rajada (incidente 22/10) param aqui, antes do ledger.
+		throttle.exigePermitido("transferencia-minuto", fromAccountId, transfersPerMinute, Duration.ofMinutes(1));
+		throttle.exigePermitido("transferencia-hora", fromAccountId, transfersPerHour, Duration.ofHours(1));
+
 		String transferRef = "p2p_" + UUID.randomUUID().toString().replace("-", "");
 		Instant now = clock.instant();
 		CoinEntry out = grant(fromAccountId, -amount, CoinEntry.Kind.TRANSFER_OUT, transferRef,
 			message == null ? "" : message, now);
 		grant(toUserId, amount, CoinEntry.Kind.TRANSFER_IN, transferRef, message == null ? "" : message, now);
+		dedupe.remember(fromAccountId, toUserId, amount, message, out);
+		// Auditoria do dinheiro: sem a mensagem (dado pessoal), com o suficiente para reconstruir
+		// o que aconteceu quando os logs estiverem sendo guardados de verdade.
+		LOG.info("faisca: transferencia de {} para {} de {} mf (ref {})", fromAccountId, toUserId, amount,
+			transferRef);
 		return out;
 	}
 
@@ -292,7 +341,12 @@ public class CoinService {
 			throw new ApiException(400, "INVALID_AMOUNT", "O preço precisa ser positivo.");
 		}
 		Instant now = clock.instant();
-		grant(ESCROW_ACCOUNT, -amount, CoinEntry.Kind.ESCROW_RELEASE, purchaseRef + ":refund",
+		// A saida do escrow usa o MESMO ref da liberacao (escrowRelease): a chave de idempotencia
+		// (kind:ref, unica por conta) fica igual nos dois caminhos, e o banco recusa o segundo.
+		// Com refs diferentes, liberar e reembolsar a mesma compra ao mesmo tempo (o comprador
+		// pedindo reembolso enquanto o job libera, ou aceitar e recusar em duas abas) pagava o
+		// vendedor E devolvia ao comprador, tirando do escrow o dinheiro de outras compras.
+		grant(ESCROW_ACCOUNT, -amount, CoinEntry.Kind.ESCROW_RELEASE, purchaseRef,
 			message == null ? "" : message, now);
 		grant(buyerAccountId, amount, CoinEntry.Kind.REFUND_IN, purchaseRef + ":refund",
 			message == null ? "" : message, now);
@@ -390,8 +444,8 @@ public class CoinService {
 		for (CoinAccount account : ledger.allAccounts()) {
 			long rebuilt = ledger.balanceFromLedger(account.accountId());
 			if (rebuilt != account.balance()) {
-				System.out.println("[FAISCA][RECONCILIACAO] DIVERGENCIA conta=" + account.accountId()
-					+ " snapshot=" + account.balance() + " ledger=" + rebuilt);
+				LOG.error("coin_reconciliation_divergence accountId={} snapshot={} ledger={}", account.accountId(),
+					account.balance(), rebuilt);
 			}
 		}
 	}

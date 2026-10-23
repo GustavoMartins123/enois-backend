@@ -99,9 +99,28 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
     (`JobPublishingPolicy`: reputação > 150 e identidade verificada quando a exigência está
     ligada). A vaga importada é listagem de terceiro (o botão vai para o link de origem), não
     publicação de membro — por isso ela não passa por aquele gate.
-11. **API `/api/v1` + OpenAPI validado no CI** — alias versionado dos endpoints existentes + DTOs
-    explícitos + erros/paginação padronizados; springdoc já plugado. *Aceite:* OpenAPI bate com os
-    endpoints (falha o CI se divergir); v1 responde igual v0.
+11. **[x] ENTREGUE 2026-10-21 (o ALIAS) — API `/api/v1` versionada.** A API tinha um endereço só,
+    que muda junto com o produto: quem constrói um app em cima do Énóis não tinha como saber se a
+    resposta de hoje é a de amanhã. Agora existe o caminho fixado: `/api/v1/...` responde **o mesmo
+    que** `/api/...` (mesmo status, mesmo corpo, mesmo envelope de erro `{code, message, timestamp}`)
+    e `GET /api/v1` responde o **índice da versão** — a lista de endpoints montada a partir do
+    roteador de verdade (`RequestMappingHandlerMapping`), que não pode divergir das rotas. O
+    envelope de erro é o mesmo (`{code, message, timestamp}`).
+    *Como foi feito:* um filtro (`apiv1/V1AliasFilter.java`) reescreve o caminho e entrega o pedido
+    ao mesmo handler do v0 — sem controller duplicado e sem cópia da regra de negócio, então a
+    igualdade das respostas é por construção, não por promessa. O filtro roda em `@Order(0)`,
+    **antes** dos limitadores de taxa: se rodasse depois, o limitador de força bruta do login não
+    reconheceria o caminho `/v1/auth/login` e a proteção viraria uma porta dos fundos (há teste
+    fechando isso: `V1LoginRateLimitTests`).
+    *Testes:* `V1ApiAliasTests` (9) — leitura pública, leitura autenticada, escrita com sessão,
+    escrita sem sessão (continua recusada), erro, índice, caminho inexistente e "v1x" (que não é
+    versão) — e `V1LoginRateLimitTests` (1).
+    *No app:* a página pública de desenvolvedores (`/developers`) mostra a base versionada, o
+    exemplo de chamada e o que a v1 significa (front `cf6d580d`).
+    *O que NÃO está feito (e é decisão de produto):* o v1 é o **alias** do v0, não uma cópia
+    congelada — quando o v0 muda, o v1 muda junto. Congelar exige DTO próprio por endpoint e uma
+    política de depreciação do v0. A outra metade do item (**OpenAPI gerado e comparado no CI**)
+    continua com o raposo: a esteira só constrói a imagem.
     *(no ROADMAP são dois itens: 1 = a API v1, 2 = o OpenAPI no CI.)*
 12. **[x] ENTREGUE 2026-10-21 — Portal de docs no app + matriz de escopos.** A página pública
     `/developers` (`src/routes/developers.tsx` + `src/constants/developers-api.ts`) traz a
@@ -155,6 +174,24 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
 17. **LinkedIn** — app aprovado (`w_member_social`); sem isso, sem publicação legítima.
 18. **Sanitizar usuários/posts de teste em produção** — sem acesso ao banco e sem endpoint admin.
 
+- **[x] ENTREGUE 2026-10-21 — O teste de upload do LinkedIn era uma corrida: a suíte falhava
+  sozinha, sem nada mudado.** O teste sobe um Tomcat de verdade e manda um ZIP de 12 MB para
+  `/me/import/linkedin` esperando o 413 do limite de multipart (8 MB no perfil de teste). O
+  servidor recusa o upload **no meio da stream** — é assim que o multipart funciona — e o cliente
+  ainda tinha megabytes para escrever: quando a máquina estava carregada, o servidor fechava a
+  conexão antes de o cliente terminar de enviar, e o teste morria com "pipe quebrado" em vez de
+  ver o 413. O defeito é do teste, não do limite.
+  *Corrigido em duas partes.* (1) O ZIP do teste passou a ter tamanho **exato** (entrada
+  armazenada, sem compressão: o deflate do texto aleatório diminuía o arquivo, e o teste media o
+  limite errado) e a passar do limite de 8 MB por pouco. (2) O envio do arquivo que estoura o
+  limite passou a usar um **socket cru**: o corpo vai numa thread e a resposta é lida na outra,
+  porque o servidor recusa o upload **no meio da stream** e fecha a conexão — com um cliente HTTP
+  comum, o cliente ainda estava escrevendo e tomava "pipe quebrado" antes de conseguir ler o 413.
+  Agora o teste vê sempre o 413 com `FILE_TOO_LARGE` (que é o que importa: erro claro, não 500).
+  Nada foi desligado nem afrouxado: o teste continua subindo um Tomcat de verdade.
+  *Comprovado:* a suíte completa no `main` publicado, **sem nenhuma mudança minha**, falha do
+  mesmo jeito (718 testes, 1 erro, "pipe quebrado") — a corrida é do main, não do trabalho da API
+  v1. *Achado pela auditoria da API `/api/v1`* (rodada de 2026-10-21), que roda a suíte inteira.
 - **[x] ENTREGUE 2026-10-21 — A migração V140 (pré-triagem de moderação) não rodava no
   MariaDB: o pod da produção não subia.** A migração criava a tabela
   `moderation_signal_weights` com uma coluna chamada **`signal`**, que é **palavra reservada no
@@ -172,6 +209,123 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   container MariaDB aplicando as migrações (o do front, o `ci.yml`, já roda lint, typecheck e
   vitest).
 ## Higiene do backend (entregue 2026-10-21)
+- **[x] ENTREGUE 2026-10-22 — A recorrência do banimento JÁ estava coberta (o plano ainda
+  dizia que faltava).** Conferido no código: o banimento revoga **todas** as sessões da conta
+  (`revokeAllByUser` — access e refresh na mesma linha de sessão), o **login** é recusado com 403
+  `ACCOUNT_BANNED`, o **desafio de 2FA** também, e o refresh de token revogado responde 401. A
+  prova está em `BulkBanAndSuspiciousTests` (a sessão antiga deixa de valer e o login novo é
+  bloqueado) e `SanctionFlowTests` (ban do recurso negado, com sessões revogadas e login travado).
+  *O que de fato falta (e fica anotado):* no banimento, o vínculo de **integração** (o token do
+  LinkedIn e os vínculos OAuth) continua valendo — o `BanCleanupService` apaga o conteúdo da
+  conta, não as credenciais de terceiros. O plano de segurança registra isso como a parte que
+  sobra da lacuna.
+- **[x] ENTREGUE 2026-10-22 — O histórico de risco ficou legível para a moderação.** O motor
+  grava cada avaliação (nível, sinais, versão da regra) para a decisão poder ser reconstruída, mas
+  o histórico só existia na tabela: ninguém consultava. Agora o admin tem
+  `GET /admin/users/{username}/risco` (o histórico da conta, do mais novo para o mais antigo, com
+  nível, sinais e versão da regra) — é o que responde "por que esta pessoa foi sinalizada?". O
+  mesmo formato do `/age` e do `/ips` do painel: sessão + `AdminGuard`.
+  *Testes:* `RiskHistoryEndpointTests` (2) — o admin vê o histórico com nível e sinais, e quem não
+  é admin não enxerga. *(A tela do painel para exibir isso ainda não foi feita — o endpoint é o
+  passo que a destrava.)*
+- **[x] ENTREGUE 2026-10-22 — O motor de risco passou a ENTREGAR a ocorrência à moderação (não
+  só registrar).** O passo 1 do motor (nível + registro) existia, mas ninguém ficava sabendo: a
+  avaliação ia para a tabela e morria ali. Agora, nível **MEDIUM ou acima**, o motor entrega a
+  ocorrência à moderação com o nível, os sinais e a versão da regra na descrição — e a denúncia
+  automática **não depende de alguém ter denunciado**, que é o que o plano mestre pede ("o próprio
+  Énóis deve identificar e encaminhar incidentes proativamente"). Intervalo de 1 h por conta, para
+  um robô não virar uma tentativa de inserção por post.
+  *E o guarda de cadência deixou de denunciar sozinho:* ele **detecta**, o motor **entrega**. Antes
+  a denúncia do guarda saía primeiro e a do motor chegava depois como duplicata (a moderação
+  recusa repetida com 409) — a moderação ficava com a descrição pobre, sem nível e sem o conjunto
+  de sinais. O comportamento antigo (cadência detectada → moderação avisada) continua de pé, agora
+  com o nível junto.
+  *Testes:* `RiskEngineTests` (6) — nível grave vira ocorrência com nível e sinais, cadência
+  sozinha (MEDIUM) também vira ocorrência com o nível, e o modo de observação continua sem barrar
+  ninguém.
+- **[x] ENTREGUE 2026-10-22 — A varredura de rotas não custava nada ao atacante.** Um scanner
+  martelando todas as rotas produzia 404 atrás de 404 (e 401/403/400 ao sondar acesso e payload) e
+  o único freio era o limitador global, que conta REQUISIÇÕES: dava para errar dezenas de vezes
+  antes de bater no teto, e cada erro não deixava consequência nenhuma.
+  *Corrigido:* `shared/security/AbuseGuardFilter` conta **respostas de erro** por IP numa janela
+  curta (padrão: 20 erros em 3 min) e, ao estourar, nega tudo daquele IP com **429 +
+  `Retry-After`** por 15 minutos — dobrando a cada reincidência (até 6 h). Quem usa o app produz
+  200 e, no máximo, um 409 de estado, que não conta; `health`/`actuator` fica fora, porque
+  derrubar a sonda derruba o pod.
+  *Testes:* `shared/security/AbuseGuardFilterTests` (5) — a varredura acaba em negação com prazo,
+  o bloqueio expira sozinho, a reincidência dura mais, uso normal (200/409) não conta e a sonda do
+  cluster nunca entra. O perfil de teste deixa a defesa ligada com teto alto (1000), para uma
+  classe que exercita 401/404 de propósito não derrubar as seguintes.
+  *Achado pelo relato da dona* ("nosso amigo probe está atacando em todas as rotas").
+- **[x] ENTREGUE 2026-10-22 — O serviço não dizia quem prestava, não tinha conversa com quem
+  prestava, e os serviços de teste que sobraram na produção continuavam no catálogo.**
+  Três coisas da mesma feature (o marketplace de serviços, Fase 5), pedidas pela dona:
+  1. **Serviços de teste no catálogo:** as ofertas de teste que rodaram contra a API de produção
+     ficaram lá depois que as contas de teste sumiram — oferta sem nome, sem foto e sem chat com
+     ninguém. A V155 limpa as ofertas (e os pedidos e propostas) cujo dono **não existe mais**; a
+     conta que a pessoa apaga pelo app é anonimizada e continua no catálogo, com o nome
+     anonimizado — essa não é órfã e a migração não mexe nela. *Validada na bancada MariaDB: a
+     cadeia inteira de migrações aplica numa base nova e a V155 aplica 2x sem erro; num teste com
+     uma oferta de conta real e uma de conta inexistente, a primeira fica e a segunda sai.*
+  2. **O serviço não mostrava quem presta:** o card tinha só o título. Agora a oferta carrega o
+     nome e a foto de quem prestador (uma consulta por prestador, não por oferta) e o preço
+     respeita a moeda do serviço (reais ou faíscas — o card mostrava sempre faíscas).
+  3. **O chat de serviço:** `POST /servicos/ofertas/{id}/chat` abre (ou reaproveita) uma conversa
+     do tipo **SERVICE**, com **assunto** (o tipo do serviço e o título da oferta) e a primeira
+     mensagem sendo o pedido da contratação. O prestador recebe numa aba **“Serviços”** da caixa
+     de entrada (as conversas de serviço não se misturam com as de vaga nem com as de pessoa), e
+     no compositor quem presta pode anexar o link de um serviço seu.
+     *Testes:* `ServicesFlowTests` (+2) — o catálogo mostra quem presta e a moeda, o chat abre com o
+     assunto e a primeira mensagem, clicar de novo não abre outra conversa, e o prestador não
+     abre chat consigo mesmo.
+- **[x] ENTREGUE 2026-10-22 — O motor central de risco (plano mestre de segurança humana,
+  item 7): os sinais viram nível, e a decisão fica registrada.** Até aqui cada guarda olhava um
+  sinal sozinho e agia sozinho — o de cadência denunciava, o de duplicidade recusava, o de conta
+  nova segurava. O plano pede o contrário: **combinar** sinais independentes, transformar a soma em
+  um **nível** e aplicar a resposta correspondente, com o motivo e a versão da regra registrados
+  para a decisão poder ser reconstruída.
+  *Entregue agora (passo 1, em modo de observação):* `shared/risk/RiskEngine` (o motor), com
+  `RiskLevel` (LOW/MEDIUM/HIGH/CRITICAL), `RiskSignal` (cadência de robô, conteúdo repetido, conta
+  nova, sanção ativa), `RiskDecision` (ALLOW/MONITOR/ESCALATE/RESTRICT) e `RiskAssessment` (o
+  registro). O motor pergunta aos guardas (memória, sem consulta), junta o contexto (conta nova e
+  sanção ativa), soma os pesos (`rede.risk.weights.*`) e compara com os limiares
+  (`rede.risk.thresholds.*`); a avaliação vai para a tabela nova `risk_assessments` (V154) com o
+  nível, os sinais, a versão da regra e a resposta. Ele **não barra ninguém** por enquanto
+  (`rede.risk.enforce=false`): o plano pede medir antes de endurecer, e a contenção
+  (RESTRICT) está no código com o seu teste, esperando a linha de base.
+  *Onde roda:* na publicação e no comentário do feed — e só quando há sinal (o motor não custa uma
+  consulta a cada post).
+  *Testes:* `shared/risk/RiskEngineTests` (4) — a cadência de robô registra a avaliação com o
+  sinal, a escrita normal não suja o histórico, o conteúdo repetido entra como sinal, e o modo de
+  observação não restringe ninguém.
+  *O que fica para o próximo passo:* a escalada pelo motor (hoje a denúncia automática continua
+  saindo dos guardas, para não duplicar denúncia e inflar o score da triagem) e a leitura do
+  histórico na tela da moderação.
+- **[x] ENTREGUE 2026-10-21 — Os portões de escrita não cobriam todos os caminhos: uma conta
+  restrita ainda publicava em grupo, comentava em grupo e mandava mensagem privada.** A sanção de
+  moderação (a RESTRICTION — decisão humana de "não publica nem comenta", com recurso) era
+  conferida em **dois** lugares: o post e o comentário do feed. A mesma conta restrita continuava
+  alcançando pessoas pelos outros caminhos, e o canal privado é justamente onde a moderação não
+  enxerga. Pior: as escritas de grupo nem passavam pelo **portão de idade (ECA Digital)**, então uma
+  conta de menor sem autorização do responsável publicava e comentava em grupo normalmente — o
+  feed barra, o grupo não.
+  *Corrigido:* o portão virou um componente compartilhado (`shared/sanctions/SanctionGate`, no
+  mesmo formato do `AgeGate`), com **código e mensagem únicos** (`ACCOUNT_RESTRICTED`), e passou a
+  ser chamado em toda escrita que produz conteúdo ou fala com outra pessoa: post e comentário do
+  feed, post e comentário de grupo e mensagem privada. O blog já estava coberto (o post do blog
+  nasce como post do feed). As escritas de grupo ganharam também o portão de idade.
+  *Testes:* `shared/sanctions/WriteGateCoverageTests` (5) — conta restrita não publica em grupo,
+  não comenta em grupo, não manda mensagem, menor sem autorização não publica em grupo, e a
+  conta sem nada contra ela continua escrevendo. A suíte inteira continua verde.
+  *No app:* o chat não mostrava **nada** quando o envio falhava (a pessoa clicava em enviar e o
+  app ficava quieto) e a publicação de grupo mostrava um erro genérico que escondia o motivo.
+  Agora os dois mostram a mensagem do servidor — que é a que diz o motivo (conta restrita, ECA,
+  tópico arquivado) e onde recorrer.
+  *Fica em aberto (decisão de produto):* as escritas de **anúncio** (vaga, freelance, serviço,
+  projeto, evento, comunidade, microprojeto) seguem sem o portão da sanção — hoje elas têm
+  portões próprios (reputação, identidade verificada, revisão). Se a restrição deve alcançar também
+  esse tipo de publicação, é decisão da dona: pode ser que uma empresa restrita por um comentário
+  não deva perder o cadastro de vaga.
 - **[x] ENTREGUE 2026-10-21 — A suíte voltou a ficar verde, e 2 das 9 falhas eram defeitos do
   app (não dos testes).** O cadastro em duas etapas (V134, 2026-10-20) deixou 5 classes de teste
   desatualizadas e, no caminho, **abriu dois buracos no código de produção**:
@@ -314,6 +468,61 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   `@tanstack` foram travadas na que o lock ja resolvia (react-start 1.168.22, react-router
   1.170.13, router-plugin 1.168.16) e o `npm install` puro voltou a resolver.
   Front: `847adfc8` (branch `fix/lint-higiene-front`).
+- **[x] ENTREGUE 2026-10-21 — O manifesto do PWA tinha dois donos, e o vivo era o congelado.**
+  `/manifest.webmanifest` (o arquivo que o navegador lê para montar o pedido de instalação do
+  app) era servido por **duas** fontes: o arquivo estatico `public/manifest.webmanifest` e a
+  rota `src/routes/manifest[.]webmanifest.ts`. O estatico ganha (o servidor responde `public/`
+  antes de chegar na rota), entao a rota era **codigo morto** — foi la que o texto novo da
+  identidade foi escrito na passagem anterior e nunca chegava no navegador. Em producao o
+  manifesto ainda dizia "Rede profissional para conexões autenticas: vagas, mentoria,
+  comunidades e eventos", com `categories` "business"/"productivity" e os icones da outra
+  familia. Agora a rota foi apagada, o arquivo estatico e o dono unico, a frase vem de
+  `texts.pwa.manifestDescription` e as categorias sao "social"/"lifestyle"/"games".
+  O novo `src/pwa-manifest.test.ts` (6 verificacoes) amarra o JSON: a descricao tem de ser a
+  mesma do `texts.ts`, nenhum icone apontado pode faltar no disco, o tamanho declarado tem de
+  bater com o nome do arquivo e a cor de fundo do splash tem de ser o token `--background` do
+  app (o `--background` e `#faf9ff`; a rota morta usava `#f9f8ff`, que e o `--surface-1`).
+  *Verificado:* `Page.getAppManifest` no Chrome headless devolve **0 erros** e a descricao nova;
+  `curl` de producao confirma que o estatico e o que responde.
+- **[x] ENTREGUE 2026-10-21 — As superficies de entrada ainda falavam em rede profissional.**
+  A varredura das telas que a pessoa ve na entrada (login, reset de senha, convite de instalar
+  o app, rodape, manifesto) achou a frase antiga em tres lugares: a descricao de SEO do login
+  ("comece sua jornada profissional na Einois"), o copyright do rodape ("Rede profissional
+  gratuita e humana") e o manifesto do PWA. E achou **6 deslizes de artigo da marca**: a marca e
+  "**o** Einois" (135 usos no front contra 6 no feminino), mas o reset de senha dizia "sua conta
+  na Einois" e o convite de instalar dizia "Instale o app da Einois". Agora: "Acesse sua conta ou
+  entre para o Einois, uma rede humana feita por gente", "© {ano} Einois · Rede humana gratuita",
+  "Defina uma nova senha para sua conta no Einois" e "Instale o app do Einois".
+  O `src/texts.test.ts` ganhou duas travas: "nao chama o Einois de rede profissional" (a frase
+  inteira, porque "perfil profissional" continua existindo — e e a feature do alter ego
+  corporativo) e "usa o artigo masculino da marca".
+  *Verificado:* `vitest` 342/342, `tsc --noEmit` sem erro, `eslint` limpo, `vite build` ok, e o
+  HTML do SSR do login ja entrega a descricao nova.
+- **[x] ENTREGUE 2026-10-22 — As abas da caixa de entrada cortavam no celular.** Com a quinta aba
+  ("Serviços", que veio do chat de serviço), a faixa de abas da caixa de entrada ficava sem
+  respiro a 390px e cortava "Arquivadas" na borda a 360px — cortada sem nenhuma pista de que
+  havia mais. Agora a faixa quebra a linha no celular (`flex-wrap`) e as cinco abas continuam
+  visíveis em 360, 390 e 1280px.
+  *Achado pela verificação de responsividade* (Chrome headless com sessão, backend local):
+  overflow horizontal 0 e nenhuma aba cortada nas três larguras; o card de serviço também foi
+  conferido com dado real (nome do prestador, foto, preço em reais e em faíscas, os dois botões
+  lado a lado). Front: `a seguir`.
+- **[x] ENTREGUE 2026-10-22 — O preview de rede social das rotas continua genérico: agora cada
+  página mostra a si mesma quando alguém compartilha o link.** Só 4 rotas definiam
+  `og:title`/`og:description` (landing, post, Apoiar, root). As outras 12 que têm `description`
+  (login, reset, sobre, termos, privacidade, diretrizes, feed, blogs, developers, perfil
+  profissional, projetos, responsável) eram compartilhadas com a cópia do site inteiro
+  ("Énóis · Rede humana" / "Construa relações de verdade, não apenas conexões"), então o preview
+  de quem abria o link no WhatsApp ou no X não era da página.
+  *Decidido e feito:* a `description` de cada rota vira também o `og:description`, com o título
+  próprio da rota no `og:title` (o helper `src/lib/seo.ts` — `ogMetas(titulo, descricao)`). As
+  rotas que têm imagem própria (post, blog, perfil) continuam definindo o `og:image` delas; as
+  demais herdam a do root.
+  *Teste:* `src/lib/seo.test.ts` (2) — o helper devolve o par certo e **as 12 rotas** com título e
+  descrição têm o `og:title`/`og:description` da própria página (o teste falha se uma rota
+  voltar a herdar a cópia do site).
+  *Verificado no HTML do SSR:* `/sobre` entrega `<title>Sobre o énóis · …</title>` com o
+  `og:title` e o `og:description` da própria página.
 
 ## Regras que valem para tudo
 - **Proibido automatizar a criação/publicação de posts** (IA/bots/integrações/endpoints alternativos/

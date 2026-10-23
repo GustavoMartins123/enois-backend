@@ -15,6 +15,7 @@ import com.socialcoisa.rede.profile.application.port.out.SocialPostCountReader;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.profile.domain.UserProfile;
 import com.socialcoisa.rede.shared.html.SafeHtml;
+import com.socialcoisa.rede.shared.sanctions.SanctionGateReader;
 import com.socialcoisa.rede.shared.web.ApiException;
 
 @Service
@@ -25,18 +26,20 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 	private final org.springframework.beans.factory.ObjectProvider<com.socialcoisa.rede.media.application.LazyUrlMigrationService> lazyMedia;
 	private final com.socialcoisa.rede.age.application.port.out.ParentalLinkRepository parentalLinks;
 	private final SocialPostCountReader postCounts;
+	private final SanctionGateReader sanctionGate;
 	private final Clock clock;
 
 	public ProfileService(UserProfileRepository repository, ReputationService reputationService,
 			org.springframework.beans.factory.ObjectProvider<com.socialcoisa.rede.media.application.LazyUrlMigrationService> lazyMedia,
 			com.socialcoisa.rede.age.application.port.out.ParentalLinkRepository parentalLinks,
-			SocialPostCountReader postCounts,
+			SocialPostCountReader postCounts, SanctionGateReader sanctionGate,
 			Clock clock) {
 		this.repository = repository;
 		this.reputationService = reputationService;
 		this.lazyMedia = lazyMedia;
 		this.parentalLinks = parentalLinks;
 		this.postCounts = postCounts;
+		this.sanctionGate = sanctionGate;
 		this.clock = clock;
 	}
 
@@ -64,6 +67,10 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 		UserProfile profile = repository.findByUsername(username)
 			.map(this::populateCounts)
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
+		// Conta banida some da leitura publica como se nao existisse (link direto incluso).
+		if (sanctionGate.banned(profile.id())) {
+			throw new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado.");
+		}
 		agendarMigracaoDeMidia(profile);
 		return UserProfileView.from(profile).withBioHtml(profile.bioHtml()).withBannerHtml(profile.bannerHtml());
 	}
@@ -137,8 +144,10 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 		return profile;
 	}
 
+	/** Busca pública de perfis: conta banida não é sugestão de conexão (mesma regra da vitrine). */
 	public List<UserProfileView> search(String query) {
 		return repository.searchByQuery(query).stream()
+			.filter(profile -> !sanctionGate.banned(profile.id()))
 			.map(UserProfileView::from)
 			.toList();
 	}
@@ -147,9 +156,16 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 	 * O "ranking" público é a vitrine de QUEM ACABOU DE CHEGAR (mudança de 2026-10-20): os perfis
 	 * mais recentes primeiro, e o rótulo na tela diz isso. A credibilidade continua sendo o número
 	 * do perfil e o critério da busca — ela não ordena mais esta lista.
+	 *
+	 * Conta banida sai da vitrine: depois da limpeza dos cadastros em série (2026-10-22) elas
+	 * continuavam aparecendo como "chegando agora" — a conta está punida, o perfil é que ficava.
 	 */
 	public List<UserProfileView> getRanking(int limit) {
-		return repository.findNewestProfiles(limit).stream()
+		int wanted = Math.max(1, limit);
+		// A vitrine é curta: buscar um pouco além do pedido cobre as banidas sem varrer a tabela.
+		return repository.findNewestProfiles(wanted * 3).stream()
+			.filter(profile -> !sanctionGate.banned(profile.id()))
+			.limit(wanted)
 			.map(UserProfileView::from)
 			.toList();
 	}

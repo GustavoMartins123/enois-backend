@@ -15,6 +15,7 @@ import org.thymeleaf.context.Context;
 import com.socialcoisa.rede.ops.application.port.out.EmailLogRepository;
 import com.socialcoisa.rede.ops.domain.EmailLog;
 import com.socialcoisa.rede.ops.domain.EmailLogStatus;
+import com.socialcoisa.rede.shared.web.PiiMask;
 
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.InternetAddress;
@@ -59,8 +60,8 @@ public class EmailService {
                 truncate(toEmail, 180), truncate(safeSubject, 200), kind,
                 sent ? EmailLogStatus.SENT : EmailLogStatus.FAILED, truncate(error, 500), Instant.now()));
         } catch (RuntimeException logFailure) {
-            LOG.warn("Nao foi possivel registrar o envio de e-mail para {}: {}", toEmail,
-                logFailure.getMessage());
+            LOG.warn("Nao foi possivel registrar o envio de e-mail para {}: {}", PiiMask.email(toEmail),
+                PiiMask.text(logFailure.getMessage()));
         }
     }
 
@@ -87,7 +88,7 @@ public class EmailService {
             recordEmail(toEmail, subject, "PASSWORD_RESET", true, null);
         } catch (Exception e) {
             recordEmail(toEmail, subject, "PASSWORD_RESET", false, e.getMessage());
-            LOG.error("Falha ao enviar email de reset para {}: {}", toEmail, e.getMessage(), e);
+            LOG.error("Falha ao enviar email de reset para {}: {} ({})", PiiMask.email(toEmail), PiiMask.text(e.getMessage()), e.getClass().getSimpleName());
         }
     }
 
@@ -115,7 +116,7 @@ public class EmailService {
             return true;
         } catch (Exception e) {
             recordEmail(toEmail, "Confirme seu e-mail no Énóis", "EMAIL_VERIFICATION", false, e.getMessage());
-            LOG.error("Falha ao enviar email de confirmacao para {}: {}", toEmail, e.getMessage(), e);
+            LOG.error("Falha ao enviar email de confirmacao para {}: {} ({})", PiiMask.email(toEmail), PiiMask.text(e.getMessage()), e.getClass().getSimpleName());
             return false;
         }
     }
@@ -144,7 +145,7 @@ public class EmailService {
             return true;
         } catch (Exception e) {
             recordEmail(toEmail, "Seu código de acesso ao Énóis", "TWO_FACTOR", false, e.getMessage());
-            LOG.error("Falha ao enviar o codigo do segundo fator para {}: {}", toEmail, e.getMessage(), e);
+            LOG.error("Falha ao enviar o codigo do segundo fator para {}: {} ({})", PiiMask.email(toEmail), PiiMask.text(e.getMessage()), e.getClass().getSimpleName());
             return false;
         }
     }
@@ -172,7 +173,7 @@ public class EmailService {
         } catch (Exception e) {
             recordEmail(guardianEmail, "Autorizacao de responsavel no Enois", "PARENTAL_CONSENT", false,
                 e.getMessage());
-            LOG.error("Falha ao enviar o convite de supervisao parental: {}", e.getMessage());
+            LOG.error("Falha ao enviar o convite de supervisao parental: {}", PiiMask.text(e.getMessage()));
             return false;
         }
     }
@@ -198,7 +199,7 @@ public class EmailService {
             return true;
         } catch (Exception e) {
             recordEmail(toEmail, subject, "HTML", false, e.getMessage());
-            LOG.error("Falha ao enviar email para {}: {}", toEmail, e.getMessage(), e);
+            LOG.error("Falha ao enviar email para {}: {} ({})", PiiMask.email(toEmail), PiiMask.text(e.getMessage()), e.getClass().getSimpleName());
             return false;
         }
     }
@@ -233,7 +234,7 @@ public class EmailService {
             return true;
         } catch (Exception e) {
             recordEmail(toEmail, subject, kind, false, e.getMessage());
-            LOG.error("Falha ao enviar email para {}: {}", toEmail, e.getMessage(), e);
+            LOG.error("Falha ao enviar email para {}: {} ({})", PiiMask.email(toEmail), PiiMask.text(e.getMessage()), e.getClass().getSimpleName());
             return false;
         }
     }
@@ -292,7 +293,7 @@ public class EmailService {
 		} catch (Exception e) {
 			recordEmail(toEmail, "[Suporte] " + requestSubject, "SUPPORT", false, e.getMessage());
 			// O pedido ja esta persistido (aparece em /admin/support): apenas registramos a falha.
-			LOG.error("Falha ao notificar o suporte ({}) sobre o pedido: {}", toEmail, e.getMessage(), e);
+			LOG.error("Falha ao notificar o suporte ({}) sobre o pedido: {} ({})", PiiMask.email(toEmail), PiiMask.text(e.getMessage()), e.getClass().getSimpleName());
 		}
 	}
 
@@ -318,7 +319,7 @@ public class EmailService {
 			recordEmail(toEmail, subject, "SUPPORT_REPLY", true, null);
 		} catch (Exception e) {
 			recordEmail(toEmail, subject, "SUPPORT_REPLY", false, e.getMessage());
-			LOG.error("Falha ao enviar resposta do suporte para {}: {}", toEmail, e.getMessage(), e);
+			LOG.error("Falha ao enviar resposta do suporte para {}: {} ({})", PiiMask.email(toEmail), PiiMask.text(e.getMessage()), e.getClass().getSimpleName());
 		}
 	}
 
@@ -344,7 +345,7 @@ public class EmailService {
 			recordEmail(toEmail, subject, "SUPPORT_CLOSED", true, null);
 		} catch (Exception e) {
 			recordEmail(toEmail, subject, "SUPPORT_CLOSED", false, e.getMessage());
-			LOG.error("Falha ao avisar o encerramento do suporte para {}: {}", toEmail, e.getMessage(), e);
+			LOG.error("Falha ao avisar o encerramento do suporte para {}: {} ({})", PiiMask.email(toEmail), PiiMask.text(e.getMessage()), e.getClass().getSimpleName());
 		}
 	}
 
@@ -361,7 +362,7 @@ public class EmailService {
 			recordEmail(toEmail, subject, "HTML", true, null);
 		} catch (Exception e) {
 			recordEmail(toEmail, subject, "HTML", false, e.getMessage());
-			LOG.error("Falha ao enviar e-mail para {}: {}", toEmail, e.getMessage(), e);
+			LOG.error("Falha ao enviar e-mail para {}: {} ({})", PiiMask.email(toEmail), PiiMask.text(e.getMessage()), e.getClass().getSimpleName());
 		}
 	}
 

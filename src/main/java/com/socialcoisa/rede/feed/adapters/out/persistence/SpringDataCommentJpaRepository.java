@@ -14,6 +14,19 @@ interface SpringDataCommentJpaRepository extends JpaRepository<CommentJpaEntity,
 	List<CommentJpaEntity> findByPostIdAndStatusAndCreatedAtBeforeOrderByCreatedAtDesc(String postId,
 			CommentStatus status, Instant before, Pageable pageable);
 
+	java.util.Optional<CommentJpaEntity> findFirstByPostIdAndStatusAndPinnedTrueOrderByCreatedAtDesc(String postId,
+			CommentStatus status);
+
+	List<CommentJpaEntity> findByPostIdAndStatusAndPinnedFalseAndCreatedAtBeforeOrderByCreatedAtDesc(String postId,
+			CommentStatus status, Instant before, Pageable pageable);
+
+	@org.springframework.data.jpa.repository.Modifying(clearAutomatically = true)
+	@org.springframework.data.jpa.repository.Query("""
+		update CommentJpaEntity c set c.pinned = false
+		where c.postId = :postId and c.pinned = true
+		""")
+	int unpinAll(@org.springframework.data.repository.query.Param("postId") String postId);
+
 	List<CommentJpaEntity> findByAuthorId(String authorId);
 
 	List<CommentJpaEntity> findByPostIdIn(Collection<String> postIds);

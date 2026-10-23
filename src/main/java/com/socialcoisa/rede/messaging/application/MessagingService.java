@@ -28,11 +28,13 @@ public class MessagingService {
 	private final BehavioralTimingGuard behavioralTimingGuard;
 	private final com.socialcoisa.rede.shared.age.AgePolicyReader agePolicy;
 	private final com.socialcoisa.rede.shared.age.AgeGate ageGate;
+	private final com.socialcoisa.rede.shared.sanctions.SanctionGate sanctionGate;
 	private final com.socialcoisa.rede.network.application.port.out.ConnectionRepository connections;
 
 	public MessagingService(MessagingRepository repository, NotificationService notificationService, Clock clock,
 			UserRateLimiter userRateLimiter, BehavioralTimingGuard behavioralTimingGuard,
 			com.socialcoisa.rede.shared.age.AgePolicyReader agePolicy, com.socialcoisa.rede.shared.age.AgeGate ageGate,
+			com.socialcoisa.rede.shared.sanctions.SanctionGate sanctionGate,
 			com.socialcoisa.rede.network.application.port.out.ConnectionRepository connections) {
 		this.repository = repository;
 		this.notificationService = notificationService;
@@ -41,6 +43,7 @@ public class MessagingService {
 		this.behavioralTimingGuard = behavioralTimingGuard;
 		this.agePolicy = agePolicy;
 		this.ageGate = ageGate;
+		this.sanctionGate = sanctionGate;
 		this.connections = connections;
 	}
 
@@ -85,6 +88,27 @@ public class MessagingService {
 		return id;
 	}
 
+	/**
+	 * Conversa de SERVICO entre duas pessoas: a que o botao do card de servico abre.
+	 *
+	 * <p>Ela e separada da conversa direta porque tem ASSUNTO (o tipo do servico e o pedido da
+	 * contratacao) e porque o prestador precisa de uma aba propria na caixa de entrada — a conversa
+	 * direta nao diz do que se trata. Clicar duas vezes no botao nao abre duas conversas: a
+	 * existente e reaproveitada.
+	 */
+	@Transactional
+	public String serviceConversationBetween(String userA, String userB, String assunto) {
+		var existing = repository.findServiceBetween(userA, userB);
+		if (existing.isPresent()) {
+			return existing.get().id();
+		}
+		String id = "conversation_" + java.util.UUID.randomUUID().toString().replace("-", "");
+		repository.saveConversation(Conversation.create(id, "SERVICE", assunto, userA, clock.instant()));
+		repository.saveParticipant(ConversationParticipant.create(id, userA, clock.instant()));
+		repository.saveParticipant(ConversationParticipant.create(id, userB, clock.instant()));
+		return id;
+	}
+
 	@Transactional
 	public Message sendMessage(String conversationId, String senderId, String text) {
 		return sendMessage(conversationId, senderId, text, java.util.List.of());
@@ -93,8 +117,18 @@ public class MessagingService {
 	@Transactional
 	public Message sendMessage(String conversationId, String senderId, String text,
 			java.util.List<String> mediaIds) {
+		return sendMessage(conversationId, senderId, text, mediaIds, false);
+	}
+
+	@Transactional
+	public Message sendMessage(String conversationId, String senderId, String text,
+			java.util.List<String> mediaIds, boolean mediaSpoiler) {
 		// ECA Digital: sem data de nascimento declarada, nao envia mensagem (tela de regularizacao).
 		ageGate.requireCanWrite(senderId);
+		// Sancao de moderacao: conta restrita nao manda mensagem. O canal privado e onde a
+		// moderacao nao enxerga, entao deixar a conversa aberta era a forma mais facil de a
+		// restricao ser contornada.
+		sanctionGate.requireNotRestricted(senderId);
 		userRateLimiter.require(senderId, UserRateLimiter.SEND_MESSAGE);
 		behavioralTimingGuard.record(senderId);
 		Conversation conversation = repository.findConversationById(conversationId)
@@ -116,11 +150,12 @@ public class MessagingService {
 		// minutos devolve a linha já criada em vez de duplicar e notificar de novo.
 		var duplicate = repository.findRecentDuplicate(conversationId, senderId, corpo,
 			clock.instant().minusSeconds(10));
-		if (duplicate.isPresent() && duplicate.get().mediaIds().equals(midias)) {
+		if (duplicate.isPresent() && duplicate.get().mediaIds().equals(midias)
+				&& duplicate.get().mediaSpoiler() == mediaSpoiler) {
 			return duplicate.get();
 		}
 		String id = "message_" + UUID.randomUUID().toString().replace("-", "");
-		Message message = Message.create(id, conversationId, senderId, corpo, midias, clock.instant());
+		Message message = Message.create(id, conversationId, senderId, corpo, midias, mediaSpoiler, clock.instant());
 		repository.saveMessage(message);
 		// Ao enviar, a conversa fica lida para QUEM ENVIOU (PR #15) — antes o contador continuava
 		// aceso mesmo com a conversa aberta.

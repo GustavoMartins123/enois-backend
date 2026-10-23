@@ -1,5 +1,7 @@
 package com.socialcoisa.rede.dailygames;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -9,6 +11,9 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class DailyGameRewardsScheduler {
+
+	private static final Logger LOG = LoggerFactory.getLogger(DailyGameRewardsScheduler.class);
+
 
 	/** Dias para trás que a rodada varre (o dia de ontem ainda aceita retomada, então começa em -2). */
 	private static final int LOOKBACK_DAYS = 7;
@@ -23,7 +28,7 @@ public class DailyGameRewardsScheduler {
 	public void payClosedDays() {
 		int paid = rewards.settleClosedDays(LOOKBACK_DAYS);
 		if (paid > 0) {
-			System.out.println("[JOGOS][PREMIO] creditados " + paid + " prêmios de jogos diários");
+			LOG.info("daily_game_rewards_paid count={}", paid);
 		}
 	}
 }

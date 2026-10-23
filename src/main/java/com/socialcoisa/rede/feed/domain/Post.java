@@ -14,6 +14,7 @@ public class Post {
 	private final String pageHtml;
 	private final List<String> tags;
 	private final List<String> mediaIds;
+	private final boolean mediaSpoiler;
 	private final String communityId;
 	private final Instant createdAt;
 	private final Visibility visibility;
@@ -40,6 +41,14 @@ public class Post {
 			List<String> mediaIds, String communityId, String topic, String channelId, Instant createdAt,
 			Visibility visibility, Counters counters, PostStatus status, Instant deletedAt, Instant editedAt,
 			Instant expiresAt, AuthorIdentity authorIdentity) {
+		this(id, authorId, type, content, pageHtml, tags, mediaIds, communityId, topic, channelId, createdAt,
+			visibility, counters, status, deletedAt, editedAt, expiresAt, authorIdentity, false);
+	}
+
+	private Post(PostId id, UserId authorId, PostType type, String content, String pageHtml, List<String> tags,
+			List<String> mediaIds, String communityId, String topic, String channelId, Instant createdAt,
+			Visibility visibility, Counters counters, PostStatus status, Instant deletedAt, Instant editedAt,
+			Instant expiresAt, AuthorIdentity authorIdentity, boolean mediaSpoiler) {
 		this.id = id;
 		this.authorId = authorId;
 		this.type = type;
@@ -47,6 +56,7 @@ public class Post {
 		this.pageHtml = pageHtml;
 		this.tags = List.copyOf(tags);
 		this.mediaIds = List.copyOf(mediaIds);
+		this.mediaSpoiler = mediaSpoiler;
 		this.communityId = communityId;
 		this.createdAt = createdAt;
 		this.visibility = visibility;
@@ -95,9 +105,17 @@ public class Post {
 	public static Post publish(PostId id, UserId authorId, PostType type, String content, String pageHtml,
 			List<String> tags, List<String> mediaIds, String communityId, String topic, String channelId,
 			Instant createdAt, AuthorIdentity authorIdentity) {
+		return publish(id, authorId, type, content, pageHtml, tags, mediaIds, communityId, topic, channelId,
+			createdAt, authorIdentity, false);
+	}
+
+	public static Post publish(PostId id, UserId authorId, PostType type, String content, String pageHtml,
+			List<String> tags, List<String> mediaIds, String communityId, String topic, String channelId,
+			Instant createdAt, AuthorIdentity authorIdentity, boolean mediaSpoiler) {
 		Instant expiresAt = type == PostType.MOMENT ? createdAt.plus(Duration.ofHours(24)) : null;
 		return new Post(id, authorId, type, content, pageHtml, tags, mediaIds, communityId, topic, channelId,
-			createdAt, Visibility.PUBLIC, Counters.zero(), PostStatus.ACTIVE, null, null, expiresAt, authorIdentity);
+			createdAt, Visibility.PUBLIC, Counters.zero(), PostStatus.ACTIVE, null, null, expiresAt, authorIdentity,
+			mediaSpoiler);
 	}
 
 	public static Post restore(PostId id, UserId authorId, PostType type, String content, String pageHtml,
@@ -120,8 +138,16 @@ public class Post {
 			List<String> tags, List<String> mediaIds, String communityId, String topic, String channelId,
 			Instant createdAt, Visibility visibility, Counters counters, PostStatus status, Instant deletedAt,
 			Instant editedAt, Instant expiresAt, AuthorIdentity authorIdentity) {
+		return restore(id, authorId, type, content, pageHtml, tags, mediaIds, communityId, topic, channelId,
+			createdAt, visibility, counters, status, deletedAt, editedAt, expiresAt, authorIdentity, false);
+	}
+
+	public static Post restore(PostId id, UserId authorId, PostType type, String content, String pageHtml,
+			List<String> tags, List<String> mediaIds, String communityId, String topic, String channelId,
+			Instant createdAt, Visibility visibility, Counters counters, PostStatus status, Instant deletedAt,
+			Instant editedAt, Instant expiresAt, AuthorIdentity authorIdentity, boolean mediaSpoiler) {
 		return new Post(id, authorId, type, content, pageHtml, tags, mediaIds, communityId, topic, channelId,
-			createdAt, visibility, counters, status, deletedAt, editedAt, expiresAt, authorIdentity);
+			createdAt, visibility, counters, status, deletedAt, editedAt, expiresAt, authorIdentity, mediaSpoiler);
 	}
 
 	/** Restore sem identidade explícita: post antigo/legado é sempre SOCIAL. */
@@ -162,7 +188,8 @@ public class Post {
 			: null;
 		// Editar nunca muda a autoria: tipo, conteúdo, tags e assunto são editáveis.
 		return new Post(id, authorId, newType, newContent, newPageHtml, newTags, mediaIds, communityId, newTopic,
-			channelId, createdAt, visibility, counters, status, deletedAt, editedAt, newExpiresAt, authorIdentity);
+			channelId, createdAt, visibility, counters, status, deletedAt, editedAt, newExpiresAt, authorIdentity,
+			mediaSpoiler);
 	}
 
 	public boolean isActive() {
@@ -297,6 +324,10 @@ public class Post {
 
 	public List<String> mediaIds() {
 		return mediaIds;
+	}
+
+	public boolean mediaSpoiler() {
+		return mediaSpoiler;
 	}
 
 	public String communityId() {
