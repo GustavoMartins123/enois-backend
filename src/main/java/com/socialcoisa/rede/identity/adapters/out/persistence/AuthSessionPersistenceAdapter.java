@@ -54,11 +54,11 @@ class AuthSessionPersistenceAdapter implements AuthSessionRepository {
 	}
 
 	@Override
-	public void revokeByRefreshToken(String refreshToken, Instant revokedAt) {
-		findSessionByRefresh(refreshToken).ifPresent(session -> {
-			session.revoke(revokedAt);
-			repository.save(session);
-		});
+	@org.springframework.transaction.annotation.Transactional
+	public boolean revokeByRefreshToken(String refreshToken, Instant revokedAt) {
+		return findSessionByRefresh(refreshToken)
+			.map(session -> repository.revokeIfActive(session.token(), revokedAt) > 0)
+			.orElse(false);
 	}
 
 	/**

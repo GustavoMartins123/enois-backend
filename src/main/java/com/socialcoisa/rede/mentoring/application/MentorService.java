@@ -80,6 +80,11 @@ public class MentorService {
 		}
 		MentorSlot slot = repository.findSlotById(slotId)
 			.orElseThrow(() -> new ApiException(404, "SLOT_NOT_FOUND", "Horario nao encontrado."));
+		// O slot tem que pertencer ao mentor da URL; sem isso, o dono de um mentor apagava o
+		// horario de outro passando o próprio mentorId (EN-03).
+		if (!slot.mentorId().equals(mentor.id())) {
+			throw new ApiException(404, "SLOT_NOT_FOUND", "Horario nao encontrado.");
+		}
 		if (!slot.available()) {
 			throw new ApiException(409, "SLOT_BOOKED", "Este horario ja foi reservado.");
 		}
@@ -92,6 +97,9 @@ public class MentorService {
 			.orElseThrow(() -> new ApiException(404, "MENTOR_NOT_FOUND", "Mentor nao encontrado."));
 		MentorSlot slot = repository.findSlotById(slotId)
 			.orElseThrow(() -> new ApiException(404, "SLOT_NOT_FOUND", "Horario nao encontrado."));
+		if (!slot.mentorId().equals(mentor.id())) {
+			throw new ApiException(404, "SLOT_NOT_FOUND", "Horario nao encontrado.");
+		}
 		if (!slot.available()) {
 			throw new ApiException(409, "SLOT_UNAVAILABLE", "Horario nao esta mais disponivel.");
 		}

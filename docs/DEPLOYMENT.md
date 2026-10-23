@@ -198,6 +198,21 @@ no client daquele ambiente.
 | `REDE_STORAGE_IMAGEKIT_PUBLIC_KEY` | ImageKit public key |
 | `REDE_STORAGE_IMAGEKIT_URL_ENDPOINT` | ImageKit URL endpoint |
 
+## Metadados de mídia (privacidade)
+
+A mídia S3 passa pelo proxy `GET/PUT /api/storage/{chave}`. Na **escrita**, o backend remove
+EXIF/GPS/XMP/IPTC antes de gravar no bucket; na **leitura**, objetos antigos são limpos de forma
+oportunista e regravados com a mesma chave. Imagens/PDF são processados em memória (até 40 MB);
+vídeo/áudio usam `ffmpeg -map_metadata -1 -c copy` (a imagem instala o ffmpeg) e arquivos maiores
+passam por arquivo temporário. A mídia legada do ImageKit não é reescrita — ela não passa pelo
+proxy do bucket.
+
+| Variável | Descrição |
+|---|---|
+| `REDE_MEDIA_FFMPEG_PATH` | Caminho do ffmpeg (padrão `ffmpeg`) |
+| `TURNSTILE_REJECT_TEST_KEYS` | Trata chaves de teste `1x000…` como captcha indisponível (padrão `true`) |
+| `REDE_VERSION_DETAILS_TOKEN` | Token do header `X-Version-Details` para ver uptime/Flyway/storage em `/version` |
+
 ## Migrações de Banco
 
 As migrações Flyway em `src/main/resources/db/migration/` são executadas automaticamente na inicialização da aplicação.

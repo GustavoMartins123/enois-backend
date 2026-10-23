@@ -24,8 +24,9 @@ interface SpringDataCommunityProjectJpaRepository extends JpaRepository<Communit
 
 	@Query("""
 		select p from CommunityProjectJpaEntity p where p.status = :status
-		and (:q is null or lower(p.title) like :q or lower(coalesce(p.description, '')) like :q
-		or lower(coalesce(p.tags, '')) like :q)
+		and (:q is null or lower(p.title) like :q escape '\\'
+			or lower(coalesce(p.description, '')) like :q escape '\\'
+			or lower(coalesce(p.tags, '')) like :q escape '\\')
 		order by p.publishedAt desc
 		""")
 	List<CommunityProjectJpaEntity> searchRecent(@Param("status") CommunityProjectStatus status, @Param("q") String query,
@@ -33,8 +34,9 @@ interface SpringDataCommunityProjectJpaRepository extends JpaRepository<Communit
 
 	@Query("""
 		select p from CommunityProjectJpaEntity p where p.status = :status
-		and (:q is null or lower(p.title) like :q or lower(coalesce(p.description, '')) like :q
-		or lower(coalesce(p.tags, '')) like :q)
+		and (:q is null or lower(p.title) like :q escape '\\'
+			or lower(coalesce(p.description, '')) like :q escape '\\'
+			or lower(coalesce(p.tags, '')) like :q escape '\\')
 		order by lower(p.title) asc
 		""")
 	List<CommunityProjectJpaEntity> searchByTitle(@Param("status") CommunityProjectStatus status, @Param("q") String query,

@@ -42,7 +42,11 @@ public class AuthThrottle {
 		this.signupMaxPorJanela = signupMaxPorJanela;
 	}
 
-	/** O login pode tentar? (a conta não está em lock por falhas recentes) */
+	/**
+	 * Atraso progressivo, nunca bloqueio: o lockout por conta deixava qualquer pessoa derrubar a
+	 * vítima com 5 senhas erradas, inclusive impedindo a senha CORRETA (E-13). O atraso encarece
+	 * o bruteforce sem negar acesso a quem sabe a senha; o Turnstile e os limites por IP seguem.
+	 */
 	public void exigeLoginPermitido(String email) {
 		Janela janela = falhasLogin.get(normaliza(email));
 		if (janela == null) {
@@ -50,10 +54,14 @@ public class AuthThrottle {
 		}
 		Instant agora = Instant.now();
 		janela.podado(agora, LOGIN_WINDOW);
-		Instant fimDoLock = janela.ultimo().plus(LOGIN_LOCK);
-		if (janela.contagem() >= loginMaxFalhas && agora.isBefore(fimDoLock)) {
-			throw new ApiException(429, "LOGIN_THROTTLED",
-				"Muitas tentativas para esta conta. Tenta de novo em um minuto.");
+		if (janela.contagem() >= loginMaxFalhas) {
+			long millis = Math.min(2_000L, 200L * janela.contagem());
+			try {
+				Thread.sleep(millis);
+			}
+			catch (InterruptedException interrupted) {
+				Thread.currentThread().interrupt();
+			}
 		}
 	}
 

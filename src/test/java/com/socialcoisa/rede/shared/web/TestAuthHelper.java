@@ -75,6 +75,7 @@ public class TestAuthHelper {
 
 			String createdUserId = TestDatabase.userIdByEmail(email)
 				.orElseThrow(() -> new IllegalStateException("usuario nao criado: " + email));
+			markTestAdmin(email, createdUserId);
 			JsonNode node = objectMapper.readTree(verified.getResponse().getContentAsString());
 			return new AuthSession(node.get("token").asText(), node.get("refreshToken").asText(), createdUserId);
 		}
@@ -90,7 +91,15 @@ public class TestAuthHelper {
 
 		String createdUserId = TestDatabase.userIdByEmail(email)
 			.orElseThrow(() -> new IllegalStateException("usuario nao criado: " + email));
+		markTestAdmin(email, createdUserId);
 		JsonNode node = objectMapper.readTree(login.getResponse().getContentAsString());
 		return new AuthSession(node.get("token").asText(), node.get("refreshToken").asText(), createdUserId);
+	}
+
+	/** O papel admin é uma flag no banco; a conta de teste da equipe é promovida aqui. */
+	private static void markTestAdmin(String email, String userId) {
+		if ("group-admin@test.com".equalsIgnoreCase(email)) {
+			TestDatabase.setAdmin(userId);
+		}
 	}
 }

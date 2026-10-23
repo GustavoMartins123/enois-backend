@@ -117,7 +117,9 @@ public class TwoFactorService implements TwoFactorUseCase {
 	/** Confirma o setup com um codigo do app e devolve os codigos de recuperacao (mostrados uma vez). */
 	@Transactional
 	@Override
-	public List<String> enableTotp(String userId, String code) {
+	public List<String> enableTotp(String userId, String code, String password) {
+		// Reautenticação: uma sessão roubada sozinha não configura um fator controlado pelo atacante.
+		requirePassword(userId, password);
 		secretCipher.requireEnabled();
 		String pendingEncrypted = repository.findPendingSecret(userId)
 			.orElseThrow(() -> new ApiException(400, "TOTP_SETUP_NOT_STARTED",
@@ -309,7 +311,9 @@ public class TwoFactorService implements TwoFactorUseCase {
 	 * Aceita codigo do aplicativo (TOTP) ou um codigo de recuperacao. Erro de codigo incrementa as
 	 * tentativas do mesmo desafio: sem isso, daria para testar codigos indefinidamente.
 	 */
-	@Transactional
+	// Sem @Transactional de propósito: a tentativa falha é gravada e precisa SOBREVIVER ao erro
+	// (EN-08/E-09). Dentro de uma transação, o save era revertido junto com a exceção e o contador
+	// nunca subia.
 	public String verifyChallenge(String challengeId, String code) {
 		Instant now = clock.instant();
 		TwoFactorChallenge challenge = repository.findChallenge(challengeId)

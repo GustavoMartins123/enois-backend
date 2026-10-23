@@ -21,7 +21,8 @@ class FreelancePersistenceAdapter implements FreelanceRepository {
 		PageRequest pageable = PageRequest.of(page, size);
 		List<FreelanceJpaEntity> found = query == null || query.isBlank()
 			? repo.findByStatusOrderByCreatedAtDesc(Freelance.Status.OPEN, pageable)
-			: repo.searchOpen(Freelance.Status.OPEN, query, pageable);
+			: repo.searchOpen(Freelance.Status.OPEN,
+				com.socialcoisa.rede.shared.web.LikePattern.contains(query), pageable);
 		return found.stream().skip(Math.max(0, offset) % size).map(FreelanceJpaEntity::toDomain).toList();
 	}
 	@Override public List<Freelance> findByUser(String userId) {
