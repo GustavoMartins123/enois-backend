@@ -13,6 +13,8 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
 
 import tools.jackson.databind.ObjectMapper;
+
+import static org.assertj.core.api.Assertions.assertThat;
 import com.socialcoisa.rede.shared.web.TestAuthHelper;
 
 @SpringBootTest
@@ -39,6 +41,7 @@ class NotificationContractControllerTests {
 	void listsNotificationsAndMarksAllRead() throws Exception {
 		var session = auth.authenticate("notif_user");
 
+		// Sem conteudo, so o contrato do array vazio.
 		mockMvc.perform(get("/notifications")
 				.header("X-Session-Token", session.token()))
 			.andExpect(status().isOk())
