@@ -324,7 +324,7 @@ jobs:
                 # Spring caia em localhost:587 e NENHUM e-mail saia (2FA, reset, confirmacao).
                 SPRING_MAIL_HOST: mail.b7cloud.tech
                 SPRING_MAIL_PORT: "587"
-                SPRING_MAIL_USERNAME: noreply@enois.ia.br
+                SPRING_MAIL_USERNAME: suporte@enois.ia.br
                 SPRING_MAIL_PASSWORD: ${MAIL_PASSWORD}
                 SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: "true"
                 SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_REQUIRED: "true"
