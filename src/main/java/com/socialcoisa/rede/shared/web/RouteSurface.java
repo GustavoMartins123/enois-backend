@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.server.PathContainer;
 import org.springframework.stereotype.Component;
@@ -28,7 +29,10 @@ import org.springframework.web.util.pattern.PathPatternParser;
 @Component
 class RouteSurface {
 
-	private final RequestMappingHandlerMapping mappings;
+	// Preguiçoso de propósito: filtros são criados antes do resto do contexto no boot, e puxar o
+	// roteador nessa fase arrasta a configuração WebMvc/JPA inteira para antes da hora. O índice
+	// só precisa existir quando a primeira requisição chega.
+	private final ObjectProvider<RequestMappingHandlerMapping> mappings;
 
 	private static final String V1_ALIAS = "/v1";
 
@@ -36,7 +40,7 @@ class RouteSurface {
 	private volatile List<PathPattern> variaveis;
 	private volatile boolean completo;
 
-	RouteSurface(@Qualifier("requestMappingHandlerMapping") RequestMappingHandlerMapping mappings) {
+	RouteSurface(@Qualifier("requestMappingHandlerMapping") ObjectProvider<RequestMappingHandlerMapping> mappings) {
 		this.mappings = mappings;
 	}
 
@@ -75,12 +79,16 @@ class RouteSurface {
 		if (completo) {
 			return;
 		}
+		RequestMappingHandlerMapping roteador = mappings.getIfAvailable();
+		if (roteador == null) {
+			return;
+		}
 		try {
 			Set<String> literaisNovos = new HashSet<>();
 			List<PathPattern> variaveisNovas = new ArrayList<>();
 			final boolean[] irregular = { false };
 			PathPatternParser parser = PathPatternParser.defaultInstance;
-			mappings.getHandlerMethods().keySet().forEach(info -> {
+			roteador.getHandlerMethods().keySet().forEach(info -> {
 				for (String padrao : info.getPatternValues()) {
 					if (padrao == null || padrao.isBlank()) {
 						continue;
