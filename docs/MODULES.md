@@ -982,3 +982,240 @@ Implementa: `CreateMediaUploadUseCase`, `GetMediaAssetUseCase`, `RequestMediaDel
 | `IdempotencyStatus` | Enum: `IN_PROGRESS`, `COMPLETED`, `CONFLICT` |
 | `CommandResponse` | Record: statusCode, body |
 | `IdempotencyKeyEntity` | JPA entity para tabela idempotency_keys |
+
+---
+
+## 17. Coin (Carteira e disputas)
+
+Carteira em "faíscas" (a moeda da comunidade) com transferências diretas, prêmios, contestação de
+transações (golpe) e fila de disputas para a moderação. A contagem e o formato dos valores usam o
+mesmo formato pt-BR do frontend (`50.000 mf` = "50").
+
+| Rota | Descrição |
+|---|---|
+| `GET /carteira` | Carteira do usuário logado (saldo, histórico, prizes) |
+| `POST /carteira/transferencias` | Transferência direta para outro usuário |
+| `POST /carteira/premios` | Crédito de prêmio |
+| `POST /carteira/transacoes/{refId}/contestar` | Contestar uma transação (suspeita de golpe) |
+| `GET /carteira/contestacoes` | Minhas contestações |
+| `GET /coin/cotacao` / `POST /coin/cotacao` | Cotação da moeda (leitura pública / atualização) |
+| `GET /admin/carteira/disputas` | Fila de disputas para a moderação |
+| `POST /admin/carteira/disputas/{id}/deferir` | Disputa verdadeira: reverte a transferência e restringe o golpista |
+| `POST /admin/carteira/disputas/{id}/rejeitar` | Disputa falsa: restringe quem contestou de má-fé |
+| `GET /admin/carteira/usuarios/{username}/extrato` | Extrato completo de um usuário (moderação) |
+
+Arquivos: `CoinController`, `CoinService`, `CoinRateService`, `coin/dispute/CoinDisputeService`.
+
+## 18. Marketplace
+
+Loja de itens digitais: anúncios criados pela comunidade, compra com escrow (o valor só é liberado ao
+vendedor após a confirmação do comprador) e sanitização pela moderação.
+
+| Rota | Descrição |
+|---|---|
+| `GET /marketplace` / `GET /marketplace/mine` / `GET /marketplace/vendas` | Catálogo, meus anúncios, minhas vendas |
+| `POST /marketplace/items` / `POST /marketplace/{listingId}/buy` | Criar anúncio / comprar (escrow) |
+| `GET /marketplace/compras` / `GET /marketplace/purchases/{id}/content` | Minhas compras / conteúdo da compra |
+| `POST /marketplace/purchases/{id}/confirm` / `.../refund` | Confirmar recebimento / reembolso |
+| `POST /admin/marketplace/sanitize` | Sanitizar anúncio (moderação) |
+
+## 19. Games (Jogos da comunidade)
+
+Catálogo de jogos criados pela comunidade, jogáveis no site (sandbox), com biblioteca, favoritos,
+avaliações, comentários, analíticos de uso e fila de revisão pela moderação.
+
+| Rota | Descrição |
+|---|---|
+| `GET /games` / `GET /games/colecoes` / `GET /games/hoje` / `GET /games/library` | Catálogo, coleções, jogados hoje, biblioteca |
+| `POST /games` (implícito no painel) / `DELETE /games/{gameId}` | Publicar / excluir jogo |
+| `GET /games/{gameId}/stats` / `.../analytics` / `.../updates` | Uso (jogadores distintos), analíticos, novidades |
+| `GET /comments` / `DELETE /comments/{commentId}` | Comentários do jogo |
+| `GET /admin/games` | Fila de revisão (moderação) |
+
+O jogo roda em `sandboxed-html-frame` com tela cheia; o dono tem painel de administração em
+`/games/painel` (ver a documentação do frontend).
+
+## 20. Services (Serviços: contratar e gerenciar)
+
+Serviços profissionais entre membros: ofertas com preço em faíscas (escrow) ou BRL (direto),
+contratos com aceite/entrega/reembolso e chat por oferta.
+
+| Rota | Descrição |
+|---|---|
+| `GET /servicos` / `GET /servicos/minhas` | Catálogo com busca / minhas ofertas |
+| `POST /servicos/ofertas` / `PATCH /{serviceId}` / `DELETE /{serviceId}` | Criar, editar, excluir oferta |
+| `GET /{username}/{serviceSlug}` | Página pública da oferta |
+| `POST /servicos/ofertas/{listingId}/contratar` / `.../chat` | Contratar / abrir conversa |
+| `POST /servicos/contratos/{contractId}/aceitar` / `.../entregar` / `.../reembolso` | Ciclo do contrato |
+| `POST /{serviceId}/resubmit` | Reenviar oferta rejeitada pela moderação |
+
+## 21. Freelances
+
+Vagas freelancer da comunidade (separadas das vagas de emprego em `/vagas`): sem barreira de
+reputação, mesmas regras de moderação.
+
+| Rota | Descrição |
+|---|---|
+| `GET /freelances` / `GET /me/freelances` | Catálogo / meus freelances |
+| `POST /freelances` / `POST /freelances/{id}/close` | Publicar / encerrar |
+
+## 22. Support (Suporte e tickets)
+
+Canal de contato categorizado: pedidos de suporte viram tickets com status, resposta da equipe,
+integração com issues do GitHub e log de e-mails no painel.
+
+| Rota | Descrição |
+|---|---|
+| `GET /support/config` | Configuração pública (e-mail do time, categorias) |
+| `POST /support/requests` / `GET /support/requests/mine` | Abrir pedido / meus pedidos |
+| `GET /admin/support` / `PATCH /admin/support/{id}` / `POST /admin/support/{id}/reply` | Fila, atualizar status, responder (equipe de moderação) |
+| `GET /admin/support/github` / `PUT /admin/support/github` / `POST /webhooks/github` | Integração de issues |
+| `GET /admin/emails` | Log de metadados de e-mails enviados (sem conteúdo de 2FA) |
+
+## 23. Ops (Monitoramento e operação)
+
+Painel de monitorabilidade: KPIs de tráfego, latência, recursos do pod, pool do banco, e a lista de
+eventos/logs/erros. Documentação completa em [`MONITORAMENTO.md`](MONITORAMENTO.md).
+
+| Rota | Descrição |
+|---|---|
+| `GET /admin/monitoring/overview` | KPIs, séries por minuto, recursos, eventos recentes |
+| `GET /admin/monitoring/events` | Lista de eventos com filtros (nível, tipo, busca, **intervalo de data/hora**, paginação por cursor) |
+| `GET /admin/emails` | Log de e-mails enviados |
+
+O painel de log aceita "mostrar mais", cópia individual e cópia completa, e o modo pânico (chave de
+sistema que responde 429 em toda escrita) fica no módulo shared (`PanicController`).
+
+## 24. Themes + Cosmetics (Aparência)
+
+Temas da galeria (criados pela comunidade, instaláveis com um clique) e cosméticos do perfil
+(bordas, name-style, itens equipáveis comprados na loja).
+
+| Rota | Descrição |
+|---|---|
+| `GET /temas/galeria` / `.../mine` / `.../{themeId}` | Galeria pública / meus temas / detalhe |
+| `POST /temas/galeria` / `.../install` / `.../hide` / `.../report` | Publicar, instalar, ocultar, denunciar |
+| `GET /cosmetics/catalog` / `.../loja` / `.../mine` | Catálogo, loja, meus itens |
+| `POST /cosmetics/loja/{itemId}/comprar` / `.../equipar` | Comprar / equipar item |
+| `PUT /cosmetics/profile/name-style` | Estilo do nome no perfil |
+
+## 25. DailyGames (Jogos diários)
+
+Jogos com desafio por dia (palavra, labirinto, blocos) e recompensas em faíscas com scheduler de
+distribuição.
+
+Arquivos: `DailyWordController`, `DailyMazeController`, `DailyBlocksController`,
+`DailyGameRewardsController` + `DailyGameRewardsScheduler`.
+
+## 26. Push (Notificações web push)
+
+Notificações push no navegador (VAPID): inscrição, cancelamento e configuração.
+
+| Rota | Descrição |
+|---|---|
+| `GET /push/config` | Chave pública VAPID |
+| `POST /push/subscriptions` / `DELETE /push/subscriptions` | Inscrever / cancelar dispositivo |
+
+## 27. Gifs (Busca de GIFs)
+
+Busca de GIFs para os comentários, via provedores externos (Tenor/Giphy).
+
+| Rota | Descrição |
+|---|---|
+| `GET /gifs/search` | Busca por termo (resultados do provedor configurado) |
+
+## 28. Groups (Grupos)
+
+Grupos da comunidade: membership, tópicos, posts, comentários, reações, posts fixados e moderação
+interna (remover membro, remover post).
+
+| Rota | Descrição |
+|---|---|
+| `GET /{slug}` | Página pública do grupo |
+| `GET /{groupId}/posts` / `.../comments` / `.../reactions` | Conteúdo do grupo |
+| `GET /{groupId}/members` / `.../requests` / `.../topics` | Membros, pedidos de entrada, tópicos |
+| `PATCH /{groupId}` / `DELETE /{groupId}/members/{memberId}` | Editar grupo / remover membro |
+| `DELETE /{groupId}/posts/{postId}` / `.../pin` | Remover / fixar post (moderação interna) |
+
+## 29. Companies + Corporate (Empresas)
+
+Páginas de empresa (derivadas das vagas ou criadas diretamente), membros, microprojetos e perfil
+corporativo do usuário (importável do LinkedIn).
+
+| Rota | Descrição |
+|---|---|
+| `GET /empresas` / `GET /empresa/{slug}` / `GET /empresas/mine` | Catálogo (derivado de vagas), página, minhas |
+| `POST /empresas` / `PATCH /empresas/{companyId}` / `.../members` | Criar, editar, membros |
+| `GET /microprojetos` / `POST /empresas/{companyId}/microprojetos` | Catálogo / criar microprojeto |
+| `POST /microprojetos/{projectId}/proposals` / `.../complete` / `.../select` | Propostas, concluir, selecionar |
+| `POST /me/business-profile` / `.../import` / `.../activate` | Perfil corporativo, importar, ativar |
+
+## 30. CommunityProjects + Projects (Projetos)
+
+Projetos da comunidade (páginas públicas com moderação própria) e projetos no perfil do usuário.
+
+| Rota | Descrição |
+|---|---|
+| `GET /community-projects` / `.../{username}` / `.../{username}/{projectSlug}` | Catálogo e páginas públicas |
+| `POST /community-projects` / `PATCH /{projectId}` / `POST /{projectId}/resubmit` | Criar, editar, reenviar |
+| `GET /moderation/community-projects` / `POST /moderation/.../approve` / `.../reject` | Fila de revisão |
+| `POST /admin/.../suspend` / `.../unsuspend` | Suspender (admin) |
+| `GET /me/projects` / `POST /me/projects` / `PUT /me/projects/{projectId}` | Projetos do perfil |
+
+## 31. Preferences (Preferências)
+
+Preferências do usuário: tema, modo de exibição, notificações e toggles de experiência.
+
+| Rota | Descrição |
+|---|---|
+| `GET /me/preferences` / `PUT /me/preferences` | Ler / salvar preferências |
+| `PUT /me/theme` | Salvar tema selecionado |
+
+## 32. Stats (Estatísticas públicas)
+
+Números públicos da comunidade para a página inicial e o hero.
+
+| Rota | Descrição |
+|---|---|
+| `GET /stats/community` | Estatísticas agregadas da comunidade |
+
+## 33. Age (Faixa etária)
+
+Fluxo de faixa etária e responsabilidade parental (ECA/Lei 15.211): aceite, convite de responsável,
+aceite/recusa/revoada. O admin vê o estado e a faixa, nunca a data exata.
+
+| Rota | Descrição |
+|---|---|
+| `POST /age/parental/accept` / `.../invite` / `.../reject` / `.../revoke` | Fluxo de responsável |
+| `GET /age/parental/mine` | Estado do fluxo |
+
+## 34. Apiv1 (API versionada)
+
+A versão fixada da API: `/api/v1/...` responde o mesmo que `/api/...` (o filtro reescreve o caminho),
+e `GET /api/v1` lista o que existe — montado do roteador em tempo real, nunca de lista manual.
+
+Arquivos: `V1ApiController`, `V1AliasFilter`.
+
+## 35. Blog
+
+Blogs com assinatura: posts por usuário, página pública, assinantes e newsletter por e-mail no
+publish.
+
+| Rota | Descrição |
+|---|---|
+| `GET /blogs/{slug}` | Blog público |
+| `POST /me/posts` / `PATCH /me/posts/{postId}` / `DELETE /me/posts/{postId}` | Publicar, editar, excluir |
+| `POST /{slug}/subscription` / `DELETE /{slug}/subscription` | Assinar / cancelar assinatura |
+
+## 36. Import (LinkedIn e currículo)
+
+Importação de dados do LinkedIn (ZIP do arquivo exportado) e do currículo (PDF) para preencher o
+perfil e o diário, com tetos de tamanho e dedupe.
+
+| Rota | Descrição |
+|---|---|
+| `POST /me/import/linkedin/texto` | Importar texto do export do LinkedIn |
+| `POST /me/import/resume` | Importar currículo |
+| `POST /me/integrations/linkedin` | Integração com a conta do LinkedIn |
+
+Documentação detalhada do fluxo de import em [`JOB_IMPORT_JOBRADAR.md`](JOB_IMPORT_JOBRADAR.md).
