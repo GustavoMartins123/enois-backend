@@ -52,6 +52,7 @@ class CoinController {
 	 * A MINI BOLSA (monitor público): a cotação de referência da faísca em BRL e o
 	 * histórico que alimenta o gráfico. NÃO é câmbio — não compra faísca com dinheiro.
 	 */
+
 	@GetMapping("/coin/cotacao")
 	Map<String, Object> quote(@RequestParam(defaultValue = "90") int history) {
 		var current = rates.latest();
