@@ -33,6 +33,17 @@ interface SpringDataUserConnectionJpaRepository extends JpaRepository<UserConnec
 	int markRemoved(@Param("id") Long id, @Param("status") ConnectionStatus status,
 			@Param("removedAt") Instant removedAt);
 
+	/**
+	 * Aceite condicional: só uma chamada concorrente encontra a linha PENDING. A que perder a
+	 * corrida recebe 0 e não repete a notificação.
+	 */
+	@Modifying(clearAutomatically = true, flushAutomatically = true)
+	@Query("""
+			UPDATE UserConnectionJpaEntity c
+			SET c.status = 'ACCEPTED', c.acceptedAt = :acceptedAt
+			WHERE c.id = :id AND c.status = 'PENDING'""")
+	int markAccepted(@Param("id") Long id, @Param("acceptedAt") Instant acceptedAt);
+
 	List<UserConnectionJpaEntity> findByRequesterUserIdAndStatus(String requesterUserId, ConnectionStatus status);
 
 	List<UserConnectionJpaEntity> findByReceiverUserIdAndStatus(String receiverUserId, ConnectionStatus status);

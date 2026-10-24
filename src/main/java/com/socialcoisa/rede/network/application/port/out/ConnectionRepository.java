@@ -21,6 +21,13 @@ public interface ConnectionRepository {
 	 */
 	void markRemoved(Long id, Instant removedAt);
 
+	/**
+	 * Aceita a solicitação com UPDATE condicional (só se ainda estiver PENDING). Devolve 1 quando
+	 * esta chamada venceu a corrida e 0 quando outra já aceitou — dois cliques simultâneos não
+	 * podem gerar "Record has changed since last read" nem notificação duplicada.
+	 */
+	int markAccepted(Long id, Instant acceptedAt);
+
 	Optional<UserConnection> findBetweenUsers(String requesterUserId, String receiverUserId);
 
 	List<UserConnection> findConnections(String userId, ConnectionStatus status);
