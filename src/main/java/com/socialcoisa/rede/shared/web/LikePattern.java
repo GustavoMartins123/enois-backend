@@ -6,7 +6,7 @@ import java.util.Locale;
  * Padrão "contém" para LIKE sem injeção de curinga (E-32).
  *
  * Uma busca por {@code %} virava {@code %%} e devolvia TODOS os itens. Escapamos {@code \},
- * {@code %} e {@code _} e limitamos o termo; as queries usam {@code escape '\\'}.
+ * {@code %} e {@code _} e limitamos o termo; as queries usam {@code escape '!'}.
  */
 public final class LikePattern {
 
@@ -23,6 +23,8 @@ public final class LikePattern {
 		if (term.length() > MAX_TERM) {
 			term = term.substring(0, MAX_TERM);
 		}
-		return "%" + term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+		// `!` como escape (e não `\`): o literal SQL de uma barra invertida muda entre H2 e
+		// MariaDB e fazia o `escape '\'` falhar silenciosamente no H2.
+		return "%" + term.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%";
 	}
 }
