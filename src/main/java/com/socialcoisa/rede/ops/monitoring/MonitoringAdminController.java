@@ -45,9 +45,11 @@ class MonitoringAdminController {
 			@RequestParam(required = false) String level,
 			@RequestParam(required = false) String type,
 			@RequestParam(required = false, name = "q") String query,
+			@RequestParam(required = false) String from,
+			@RequestParam(required = false) String to,
 			@RequestParam(required = false) String before,
 			@RequestParam(defaultValue = "100") int limit) {
 		moderatorGuard.requireModerator(currentUserResolver.resolve(userId, sessionToken));
-		return monitoring.events(level, type, query, before, limit);
+		return monitoring.events(level, type, query, from, to, before, limit);
 	}
 }
