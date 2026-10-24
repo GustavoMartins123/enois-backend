@@ -374,7 +374,7 @@ public class MonitoringService {
 			methodCounts, resources);
 	}
 
-	public List<EventView> events(String level, String type, String q, String before, int limit) {
+	public List<EventView> events(String level, String type, String q, String from, String to, String before, int limit) {
 		StringBuilder sql = new StringBuilder("""
 			select id, created_at, level, type, message, request_id, method, path, route, status, duration_ms,
 				user_id, client_ip, device_id from system_events where 1=1
@@ -394,7 +394,25 @@ public class MonitoringService {
 			params.add(pattern);
 			params.add(pattern);
 		}
-		if (StringUtils.hasText(before)) {
+		if (StringUtils.hasText(from)) {
+			try {
+				sql.append(" and created_at >= ?");
+				params.add(java.sql.Timestamp.from(Instant.parse(from.trim())));
+			}
+			catch (RuntimeException ignored) {
+				// Data inicial inválida é ignorada; o filtro fica com o que veio válido.
+			}
+		}
+		if (StringUtils.hasText(to)) {
+			try {
+				sql.append(" and created_at <= ?");
+				params.add(java.sql.Timestamp.from(Instant.parse(to.trim())));
+			}
+			catch (RuntimeException ignored) {
+				// Data final inválida é ignorada; o filtro fica com o que veio válido.
+			}
+		}
+				if (StringUtils.hasText(before)) {
 			try {
 				sql.append(" and created_at < ?");
 				params.add(java.sql.Timestamp.from(Instant.parse(before.trim())));
