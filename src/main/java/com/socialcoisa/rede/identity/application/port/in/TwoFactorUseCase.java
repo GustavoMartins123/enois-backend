@@ -16,7 +16,7 @@ public interface TwoFactorUseCase {
 	TotpSetup startTotpSetup(String userId);
 
 	/** Confirma o codigo do app, ativa o TOTP e devolve os codigos de recuperacao (mostrados uma vez). */
-	List<String> enableTotp(String userId, String code);
+	List<String> enableTotp(String userId, String code, String password);
 
 	void disableTotp(String userId, String password);
 

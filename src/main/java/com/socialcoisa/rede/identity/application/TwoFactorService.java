@@ -117,7 +117,8 @@ public class TwoFactorService implements TwoFactorUseCase {
 	/** Confirma o setup com um codigo do app e devolve os codigos de recuperacao (mostrados uma vez). */
 	@Transactional
 	@Override
-	public List<String> enableTotp(String userId, String code) {
+	public List<String> enableTotp(String userId, String code, String password) {
+		requirePassword(userId, password);
 		secretCipher.requireEnabled();
 		String pendingEncrypted = repository.findPendingSecret(userId)
 			.orElseThrow(() -> new ApiException(400, "TOTP_SETUP_NOT_STARTED",

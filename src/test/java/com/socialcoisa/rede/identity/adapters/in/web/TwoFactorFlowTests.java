@@ -76,7 +76,7 @@ class TwoFactorFlowTests {
 		mockMvc.perform(post("/auth/2fa/totp/enable").header("X-Session-Token", session.token())
 				.header("Idempotency-Key", "totp-enable-bad")
 				.contentType(MediaType.APPLICATION_JSON)
-				.content(code("000000")))
+				.content(codeWithPassword("000000", "Test1234!")))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("INVALID_TWO_FACTOR_CODE"));
 
@@ -84,7 +84,7 @@ class TwoFactorFlowTests {
 		MvcResult enabled = mockMvc.perform(post("/auth/2fa/totp/enable").header("X-Session-Token", session.token())
 				.header("Idempotency-Key", "totp-enable-ok")
 				.contentType(MediaType.APPLICATION_JSON)
-				.content(code(validCode(secret))))
+				.content(codeWithPassword(validCode(secret), "Test1234!")))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.status").value("TOTP_ENABLED"))
 			.andExpect(jsonPath("$.backupCodes.length()").value(8))
@@ -194,7 +194,7 @@ class TwoFactorFlowTests {
 		String secret = objectMapper.readTree(setup.getResponse().getContentAsString()).get("secret").asText();
 		mockMvc.perform(post("/auth/2fa/totp/enable").header("X-Session-Token", session.token())
 				.header("Idempotency-Key", "disable-enable")
-				.contentType(MediaType.APPLICATION_JSON).content(code(validCode(secret))))
+				.contentType(MediaType.APPLICATION_JSON).content(codeWithPassword(validCode(secret), "Test1234!")))
 			.andExpect(status().isOk());
 
 		// Sem a senha, ninguem desliga o segundo fator.
@@ -260,6 +260,10 @@ class TwoFactorFlowTests {
 
 	private String code(String value) throws Exception {
 		return objectMapper.writeValueAsString(Map.of("code", value));
+	}
+
+	private String codeWithPassword(String value, String password) throws Exception {
+		return objectMapper.writeValueAsString(Map.of("code", value, "password", password));
 	}
 
 	private String challenge(String challengeId, String value) throws Exception {
