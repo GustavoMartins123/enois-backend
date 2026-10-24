@@ -214,8 +214,8 @@ public class TwoFactorService implements TwoFactorUseCase {
 		repository.saveChallenge(TwoFactorChallenge.create(newChallengeId(), userId, TwoFactorMethod.EMAIL,
 			Hashes.sha256Hex(code), now.plus(CHALLENGE_TTL), now));
 		if (!emailService.sendTwoFactorCode(profile.email(), profile.name(), code)) {
-			throw new ApiException(502, "EMAIL_SEND_FAILED",
-				"Nao foi possivel enviar o codigo agora. Tente novamente em instantes.");
+			throw new ApiException(503, "EMAIL_SEND_FAILED",
+				"Nao foi possivel enviar o codigo por e-mail agora. Use um codigo de recuperacao ou tente de novo em alguns minutos.");
 		}
 	}
 
@@ -274,8 +274,8 @@ public class TwoFactorService implements TwoFactorUseCase {
 		if (method == TwoFactorMethod.EMAIL) {
 			UserProfile profile = requireProfile(userId);
 			if (!emailService.sendTwoFactorCode(profile.email(), profile.name(), code)) {
-				throw new ApiException(502, "EMAIL_SEND_FAILED",
-					"Nao foi possivel enviar o codigo agora. Tente de novo em instantes.");
+				throw new ApiException(503, "EMAIL_SEND_FAILED",
+				"Nao foi possivel enviar o codigo por e-mail agora. Use um codigo de recuperacao ou tente de novo em alguns minutos.");
 			}
 		}
 		return challenge;
@@ -300,7 +300,8 @@ public class TwoFactorService implements TwoFactorUseCase {
 		repository.saveChallenge(challenge.replaceCode(Hashes.sha256Hex(code), now.plus(CHALLENGE_TTL)));
 		UserProfile profile = requireProfile(challenge.userId());
 		if (!emailService.sendTwoFactorCode(profile.email(), profile.name(), code)) {
-			throw new ApiException(502, "EMAIL_SEND_FAILED", "Nao foi possivel enviar o codigo agora.");
+			throw new ApiException(503, "EMAIL_SEND_FAILED",
+					"Nao foi possivel enviar o codigo por e-mail agora. Use um codigo de recuperacao ou tente de novo em alguns minutos.");
 		}
 	}
 
