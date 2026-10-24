@@ -106,15 +106,19 @@ class S3StorageConfig {
 		private String endpoint = "";
 		private boolean forcePathStyle = false;
 		private String publicBaseUrl = "";
-		/** null = automatico: sobe pelo app quando ha endpoint custom (gateway), direto na AWS. */
+		/** null = padrao SEGURO: toda subida passa pelo app (onde os metadados sao limpos). */
 		private Boolean uploadThroughApi;
 
-		/** O gateway do b7cloud recusa PutBucketCors, entao o navegador nao sobe direto nele. */
+		/**
+		 * O gateway do b7cloud recusa PutBucketCors, então o navegador não sobe direto nele. Mesmo
+		 * num S3 AWS real o padrão é subir pelo app: o PUT direto assinado pularia a limpeza de
+		 * EXIF/GPS. Para abrir mão disso, defina `upload-through-api=false` conscientemente.
+		 */
 		boolean uploadThroughApi() {
 			if (uploadThroughApi != null) {
 				return uploadThroughApi;
 			}
-			return StringUtils.hasText(endpoint);
+			return true;
 		}
 
 		Boolean getUploadThroughApi() { return uploadThroughApi; }

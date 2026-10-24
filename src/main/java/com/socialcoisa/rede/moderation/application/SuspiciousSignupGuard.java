@@ -36,6 +36,10 @@ public class SuspiciousSignupGuard implements SignupAttackGuard {
 	private final IpBlockService ipBlocks;
 	private final boolean enabled;
 	private final List<String> patterns;
+	/** Um único nome suspeito não pode derrubar o IP de uma rede inteira (N-08). */
+	private final java.util.Map<String, java.util.Deque<Long>> recentByIp = new java.util.concurrent.ConcurrentHashMap<>();
+	private static final int STRIKES_TO_BLOCK = 3;
+	private static final long STRIKE_WINDOW_MS = 10 * 60 * 1000;
 
 	public SuspiciousSignupGuard(IpBlockService ipBlocks,
 			@Value("${rede.security.signup-guard-enabled:true}") boolean enabled,
@@ -58,11 +62,32 @@ public class SuspiciousSignupGuard implements SignupAttackGuard {
 		if (patterns.stream().noneMatch(typed::contains)) {
 			return;
 		}
-		blockIp(ip);
+		if (registerStrike(ip)) {
+			blockIp(ip);
+		}
 		LOG.warn("Cadastro recusado por padrão de ataque (ip={}, email={})", ip, mask(email));
 		// Mensagem genérica: o atacante não descobre qual palavra disparou o bloqueio.
 		throw new ApiException(403, "SIGNUP_REFUSED",
 			"Não foi possível criar a conta agora. Tente novamente mais tarde.");
+	}
+
+	private boolean registerStrike(String ip) {
+		if (!StringUtils.hasText(ip) || "desconhecido".equals(ip)) {
+			return false;
+		}
+		long now = System.currentTimeMillis();
+		java.util.Deque<Long> strikes = recentByIp.computeIfAbsent(ip, key -> new java.util.ArrayDeque<>());
+		synchronized (strikes) {
+			while (!strikes.isEmpty() && now - strikes.peekFirst() > STRIKE_WINDOW_MS) {
+				strikes.pollFirst();
+			}
+			strikes.addLast(now);
+			if (strikes.size() < STRIKES_TO_BLOCK) {
+				return false;
+			}
+		}
+		recentByIp.remove(ip);
+		return true;
 	}
 
 	private void blockIp(String ip) {

@@ -32,6 +32,8 @@ class SecurityHeadersFilter extends OncePerRequestFilter {
 		}
 		response.setHeader("X-Content-Type-Options", "nosniff");
 		response.setHeader("X-Frame-Options", "DENY");
+		response.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+		response.setHeader("Cross-Origin-Resource-Policy", "same-site");
 		response.setHeader("Referrer-Policy", "no-referrer");
 		response.setHeader("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
 		// O trafego chega pelo ALB (HTTPS); includeSubDomains protege os subdominios do mesmo host.

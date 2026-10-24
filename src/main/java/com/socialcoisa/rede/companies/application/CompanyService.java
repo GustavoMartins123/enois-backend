@@ -38,12 +38,15 @@ public class CompanyService {
 			throw new ApiException(400, "INVALID_COMPANY_NAME", "Nome da empresa e obrigatorio.");
 		}
 		String slug = uniqueSlug(slugFrom(name));
+		String safeWebsite = StringUtils.hasText(website)
+			? com.socialcoisa.rede.shared.web.SafeUrl.requireHttpUrl(website.trim(), "website")
+			: null;
 		Company company = Company.create("comp_" + UUID.randomUUID().toString().replace("-", ""), slug,
 			name.trim(), StringUtils.hasText(description) ? description.trim() : null,
 			StringUtils.hasText(sector) ? sector.trim() : null,
 			StringUtils.hasText(size) ? size.trim() : null,
 			StringUtils.hasText(location) ? location.trim() : null,
-			StringUtils.hasText(website) ? website.trim() : null,
+			safeWebsite,
 			userId, clock.instant());
 		Company saved = companies.save(company);
 		companies.saveMember(CompanyMember.create("cmemb_" + UUID.randomUUID().toString().replace("-", ""),
@@ -60,7 +63,9 @@ public class CompanyService {
 			StringUtils.hasText(name) ? name.trim() : null,
 			StringUtils.hasText(description) ? description.trim() : description,
 			sector, size, location,
-			StringUtils.hasText(website) ? website.trim() : website,
+			StringUtils.hasText(website)
+				? com.socialcoisa.rede.shared.web.SafeUrl.requireHttpUrl(website.trim(), "website")
+				: website,
 			StringUtils.hasText(logo) ? logo.trim() : logo,
 			StringUtils.hasText(cover) ? cover.trim() : cover,
 			clock.instant());
@@ -123,6 +128,10 @@ public class CompanyService {
 	@Transactional
 	public CompanyMember addMember(String companyId, String userId, CompanyRole role) {
 		Company company = company(companyId);
+		// OWNER é o dono da página (owner_user_id), não um papel concedível por convite (E-57).
+		if (role == CompanyRole.OWNER) {
+			throw new ApiException(400, "INVALID_ROLE", "O papel de proprietario nao pode ser concedido por convite.");
+		}
 		if (companies.findMember(companyId, userId).isPresent()) {
 			throw new ApiException(409, "ALREADY_MEMBER", "Esta pessoa ja faz parte da pagina.");
 		}

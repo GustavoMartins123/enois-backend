@@ -53,7 +53,7 @@ public class SignupChallengeService {
 			@Value("${rede.security.encryption-key:}") String encryptionKey) {
 		this.enabled = enabled;
 		this.clock = clock;
-		this.secret = resolveSecret(encryptionKey);
+		this.secret = resolveSecret(encryptionKey, enabled);
 	}
 
 	public boolean isEnabled() {
@@ -158,7 +158,7 @@ public class SignupChallengeService {
 		return Base64.getUrlEncoder().withoutPadding().encodeToString(value);
 	}
 
-	private static byte[] resolveSecret(String encryptionKey) {
+	private static byte[] resolveSecret(String encryptionKey, boolean enabled) {
 		if (StringUtils.hasText(encryptionKey)) {
 			try {
 				byte[] decoded = Base64.getDecoder().decode(encryptionKey.trim());
@@ -167,12 +167,19 @@ public class SignupChallengeService {
 				}
 			}
 			catch (IllegalArgumentException ignored) {
-				// Chave fora do formato base64: cai na chave efêmera abaixo.
+				// Chave fora do formato base64: tratada abaixo.
 			}
+		}
+		if (enabled) {
+			// Chave efêmera por pod quebra o desafio entre instâncias e é previsível para o atacante
+			// que compartilha o processo? Não: é aleatória, mas o desafio de um pod não vale no
+			// outro. Em produção, exija a chave estável (E-36).
+			throw new IllegalStateException(
+				"REDE_SECURITY_ENCRYPTION_KEY obrigatoria para o desafio de cadastro (32 bytes em base64).");
 		}
 		byte[] generated = new byte[32];
 		new SecureRandom().nextBytes(generated);
-		LOG.warn("Chave de criptografia ausente: o desafio de cadastro usa uma chave efêmera por pod.");
+		LOG.warn("Desafio de cadastro desligado sem chave de criptografia: usando segredo efêmero.");
 		return generated;
 	}
 

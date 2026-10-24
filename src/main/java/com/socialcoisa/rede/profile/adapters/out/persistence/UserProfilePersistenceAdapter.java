@@ -201,7 +201,9 @@ class UserProfilePersistenceAdapter implements UserProfileRepository {
 
 	@Override
 	public List<UserProfile> searchByQuery(String query) {
-		return repository.findTop20ByNameContainingIgnoreCaseOrUsernameContainingIgnoreCaseOrderByReputationDesc(query, query)
+		return repository.searchByNameOrUsername(
+				com.socialcoisa.rede.shared.web.LikePattern.contains(query),
+				org.springframework.data.domain.PageRequest.of(0, 20))
 			.stream()
 			.map(UserProfileJpaEntity::toDomain)
 			.toList();

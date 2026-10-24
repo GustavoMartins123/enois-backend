@@ -310,7 +310,9 @@ public class TwoFactorService implements TwoFactorUseCase {
 	 * Aceita codigo do aplicativo (TOTP) ou um codigo de recuperacao. Erro de codigo incrementa as
 	 * tentativas do mesmo desafio: sem isso, daria para testar codigos indefinidamente.
 	 */
-	@Transactional
+	// Sem @Transactional de propósito: a tentativa falha é gravada e precisa SOBREVIVER ao erro
+	// (EN-08/E-09). Dentro de uma transação, o save era revertido junto com a exceção e o contador
+	// nunca subia.
 	public String verifyChallenge(String challengeId, String code) {
 		Instant now = clock.instant();
 		TwoFactorChallenge challenge = repository.findChallenge(challengeId)

@@ -55,7 +55,7 @@ class GroupPersistenceAdapter implements GroupRepository {
 
 	@Override
 	public List<Group> listVisible(String query, Instant before, int limit) {
-		String like = query == null ? null : "%" + query.toLowerCase(Locale.ROOT) + "%";
+		String like = com.socialcoisa.rede.shared.web.LikePattern.contains(query);
 		return groups.listVisible(DISCOVERABLE, like, before, PageRequest.of(0, limit))
 			.stream()
 			.map(GroupJpaEntity::toDomain)

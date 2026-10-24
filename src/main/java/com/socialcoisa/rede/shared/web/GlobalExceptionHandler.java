@@ -26,13 +26,21 @@ public class GlobalExceptionHandler {
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+	private final com.socialcoisa.rede.ops.monitoring.MonitoringService monitoring;
+
+	GlobalExceptionHandler(com.socialcoisa.rede.ops.monitoring.MonitoringService monitoring) {
+		this.monitoring = monitoring;
+	}
+
 	@ExceptionHandler(ApiException.class)
-	ResponseEntity<ErrorResponse> handleApiException(ApiException exception) {
+	ResponseEntity<ErrorResponse> handleApiException(ApiException exception,
+			jakarta.servlet.http.HttpServletRequest request) {
 		// 4xx é fluxo normal (validação, permissão); 5xx é falha do servidor e precisa aparecer
 		// no CloudWatch com o código do erro, sem corpo de requisição nem dado pessoal.
 		if (exception.status() >= 500) {
 			LOGGER.error("api_error status={} code={} message={}", exception.status(), exception.code(),
 				exception.getMessage());
+			recordException(exception.status(), exception.code(), exception.getMessage(), request);
 		}
 		else {
 			LOGGER.debug("api_client_error status={} code={}", exception.status(), exception.code());
@@ -123,9 +131,22 @@ public class GlobalExceptionHandler {
 	}
 
 	@ExceptionHandler(Exception.class)
-	ResponseEntity<ErrorResponse> handleUnexpected(Exception exception) {
+	ResponseEntity<ErrorResponse> handleUnexpected(Exception exception,
+			jakarta.servlet.http.HttpServletRequest request) {
 		LOGGER.error("unhandled_exception", exception);
+		recordException(500, exception.getClass().getSimpleName(), exception.getMessage(), request);
 		return ResponseEntity.internalServerError()
 			.body(new ErrorResponse("INTERNAL_ERROR", "Erro interno inesperado.", Instant.now()));
+	}
+
+	private void recordException(int status, String code, String message,
+			jakarta.servlet.http.HttpServletRequest request) {
+		try {
+			monitoring.recordException(status, code, message, request.getMethod(), request.getRequestURI(),
+				org.slf4j.MDC.get("requestId"), org.slf4j.MDC.get("userId"));
+		}
+		catch (RuntimeException ignored) {
+			// Monitoração nunca pode mascarar o erro original.
+		}
 	}
 }

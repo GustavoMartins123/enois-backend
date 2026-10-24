@@ -76,8 +76,7 @@ public class SuspiciousUserService {
 			// Conta da EQUIPE entra na lista (marcada) em vez de desaparecer: no incidente de
 			// 22/10 uma conta do atacante ficou invisível por ser tratada como moderador. A
 			// automação continua sem punir a equipe; quem decide é um humano, no painel.
-			boolean staff = candidate.moderator()
-				|| adminGuard.isAdmin(candidate.email(), candidate.username());
+			boolean staff = candidate.moderator() || adminGuard.isAdminId(candidate.id());
 			Scored item = score(candidate, repeatedNames.getOrDefault(normalize(candidate.name()), 0L), staff);
 			if (item.risk() >= MIN_SCORE) {
 				scored.add(item);
