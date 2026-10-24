@@ -68,10 +68,47 @@ class MonitoringTests {
 	}
 
 	@Test
+	void eventsAcceptDateTimeRange() throws Exception {
+		var admin = new TestAuthHelper(mockMvc, objectMapper).authenticate("group-admin");
+		String marker = "monitor-range-" + UUID.randomUUID();
+		try {
+			monitoring.recordEvent("WARN", "TEST", marker, Map.of("origem", "teste"));
+			Thread.sleep(800);
+
+			// Intervalo que inclui agora: o evento aparece.
+			String de = java.time.Instant.now().minus(java.time.Duration.ofHours(1)).toString();
+			String ate = java.time.Instant.now().plus(java.time.Duration.ofHours(1)).toString();
+			mockMvc.perform(get("/admin/monitoring/events")
+					.header("X-Session-Token", admin.token())
+					.param("q", marker)
+					.param("from", de)
+					.param("to", ate))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].message").value(marker));
+
+			// Intervalo no futuro: o evento não aparece.
+			String futuro = java.time.Instant.now().plus(java.time.Duration.ofHours(2)).toString();
+			mockMvc.perform(get("/admin/monitoring/events")
+					.header("X-Session-Token", admin.token())
+					.param("q", marker)
+					.param("from", futuro))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$").isEmpty());
+		}
+		finally {
+			jdbc.update("delete from system_events where message = ?", marker);
+		}
+	}
+
+	@Test
 	void requestMetricsAndExceptionsFeedTheOverview() {
 		long before = monitoring.overview().errors5xxLastMinute();
-		monitoring.recordRequest("GET", "/monitor-probe", "/monitor-probe", 500, 42, "req-monitor",
-			null, "127.0.0.1", null);
+		// Varios registros para a sonda vencer o top-8: o singleton e compartilhado por toda a
+		// suíte e o tráfego de outros testes empurra rotas com contagem baixa para fora.
+		for (int i = 0; i < 12; i++) {
+			monitoring.recordRequest("GET", "/monitor-probe", "/monitor-probe", 500, 42,
+				"req-monitor-" + i, null, "127.0.0.1", null);
+		}
 		var after = monitoring.overview();
 
 		assertThat(after.errors5xxLastMinute()).isGreaterThanOrEqualTo(before + 1);

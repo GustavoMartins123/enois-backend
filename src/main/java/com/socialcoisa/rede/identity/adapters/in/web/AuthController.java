@@ -266,9 +266,10 @@ class AuthController {
 			jakarta.servlet.http.HttpServletRequest httpRequest) {
 		String ip = ipResolver.resolve(httpRequest);
 		exigeIpNaoBloqueado(ip);
-		if (turnstile.isAvailable()) {
-			turnstile.require(body.turnstileToken());
-		}
+		// Login NÃO exige Turnstile: o widget invisível não gera token em tempo (bloqueador de
+		// scripts, Cloudflare lento, submit rápido) e travava login de gente de verdade. A porta
+		// fica fechada por IP bloqueado, limite por conta e travamento de tentativas — o captcha
+		// anti-bot fica no cadastro, que é onde nascem as contas falsas.
 		throttle.exigeLoginPermitido(body.email());
 		// SEM idempotência persistida: a resposta contém access/refresh token e o hash do corpo
 		// incluiria a senha (E-03/E-19). Repetir um login é seguro — gera outra sessão.

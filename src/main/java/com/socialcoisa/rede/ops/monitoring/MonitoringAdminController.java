@@ -8,8 +8,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.socialcoisa.rede.shared.web.AdminGuard;
 import com.socialcoisa.rede.shared.web.CurrentUserResolver;
+import com.socialcoisa.rede.shared.web.ModeratorGuard;
 
 /**
  * Painel de monitorabilidade (somente admin). O gate de origem também restringe /admin/** à origem
@@ -21,20 +21,20 @@ class MonitoringAdminController {
 
 	private final MonitoringService monitoring;
 	private final CurrentUserResolver currentUserResolver;
-	private final AdminGuard adminGuard;
+	private final ModeratorGuard moderatorGuard;
 
 	MonitoringAdminController(MonitoringService monitoring, CurrentUserResolver currentUserResolver,
-			AdminGuard adminGuard) {
+			ModeratorGuard moderatorGuard) {
 		this.monitoring = monitoring;
 		this.currentUserResolver = currentUserResolver;
-		this.adminGuard = adminGuard;
+		this.moderatorGuard = moderatorGuard;
 	}
 
 	@GetMapping("/overview")
 	MonitoringService.OverviewView overview(
 			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		adminGuard.requireAdmin(currentUserResolver.resolve(userId, sessionToken));
+		moderatorGuard.requireModerator(currentUserResolver.resolve(userId, sessionToken));
 		return monitoring.overview();
 	}
 
@@ -45,9 +45,11 @@ class MonitoringAdminController {
 			@RequestParam(required = false) String level,
 			@RequestParam(required = false) String type,
 			@RequestParam(required = false, name = "q") String query,
+			@RequestParam(required = false) String from,
+			@RequestParam(required = false) String to,
 			@RequestParam(required = false) String before,
 			@RequestParam(defaultValue = "100") int limit) {
-		adminGuard.requireAdmin(currentUserResolver.resolve(userId, sessionToken));
-		return monitoring.events(level, type, query, before, limit);
+		moderatorGuard.requireModerator(currentUserResolver.resolve(userId, sessionToken));
+		return monitoring.events(level, type, query, from, to, before, limit);
 	}
 }

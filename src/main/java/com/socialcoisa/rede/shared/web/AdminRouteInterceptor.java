@@ -1,5 +1,7 @@
 package com.socialcoisa.rede.shared.web;
 
+import java.util.List;
+
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
@@ -21,10 +23,28 @@ class AdminRouteInterceptor implements HandlerInterceptor {
 
 	private final CurrentUserResolver currentUserResolver;
 	private final AdminGuard adminGuard;
+	private final ModeratorGuard moderatorGuard;
 
-	AdminRouteInterceptor(CurrentUserResolver currentUserResolver, AdminGuard adminGuard) {
+	/**
+	 * Caminhos de /admin que o painel de moderação abre para MODERADORES (além do admin):
+	 * filas, recursos, disputas, ações de usuário, IPs e o painel de monitoramento. Tudo o que
+	 * não está aqui permanece exclusivo do admin — inclusive a candidatura e a gestão de
+	 * moderadores, que nem aparecem nesta lista.
+	 */
+	private static final List<String> CAMINHOS_DE_MODERADOR = List.of(
+		"/admin/appeals", "/admin/support", "/admin/emails",
+		"/admin/blocked-ips", "/admin/monitoring");
+
+	/** Subcaminhos de /admin/support que continuam exclusivos do admin (infraestrutura). */
+	private static final List<String> SUPPORT_ADMIN_ONLY = List.of("/admin/support/github");
+
+	private static final List<String> ACOES_DE_USUARIO = List.of("sanction", "sanitize", "ips");
+
+	AdminRouteInterceptor(CurrentUserResolver currentUserResolver, AdminGuard adminGuard,
+			ModeratorGuard moderatorGuard) {
 		this.currentUserResolver = currentUserResolver;
 		this.adminGuard = adminGuard;
+		this.moderatorGuard = moderatorGuard;
 	}
 
 	@Override
@@ -39,16 +59,47 @@ class AdminRouteInterceptor implements HandlerInterceptor {
 			return true;
 		}
 		CurrentUser user = currentUserResolver.resolve(request.getHeader("X-Session-Token"));
+		String path = caminho(request);
+		if (abertoAoModerador(path)) {
+			moderatorGuard.requireModerator(user);
+			return true;
+		}
 		adminGuard.requireAdmin(user);
 		return true;
 	}
 
+	private boolean abertoAoModerador(String path) {
+		for (String bloqueado : SUPPORT_ADMIN_ONLY) {
+			if (path.equals(bloqueado) || path.startsWith(bloqueado + "/")) {
+				return false;
+			}
+		}
+		for (String prefixo : CAMINHOS_DE_MODERADOR) {
+			if (path.equals(prefixo) || path.startsWith(prefixo + "/")) {
+				return true;
+			}
+		}
+		if (path.startsWith("/admin/users/")) {
+			for (String acao : ACOES_DE_USUARIO) {
+				if (path.endsWith("/" + acao)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
 	private boolean isAdminPath(HttpServletRequest request) {
+		String path = caminho(request);
+		return path.startsWith("/admin/") || path.equals("/admin");
+	}
+
+	private String caminho(HttpServletRequest request) {
 		String path = request.getRequestURI();
 		String context = request.getContextPath();
 		if (context != null && !context.isEmpty() && path.startsWith(context)) {
 			path = path.substring(context.length());
 		}
-		return path.startsWith("/admin/") || path.equals("/admin");
+		return path;
 	}
 }

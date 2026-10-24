@@ -7,6 +7,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 interface SpringDataUserProfileJpaRepository extends JpaRepository<UserProfileJpaEntity, String> {
 
+	List<UserProfileJpaEntity> findByIsAdminTrue();
+
 	Optional<UserProfileJpaEntity> findByUsername(String username);
 
 	Optional<UserProfileJpaEntity> findByEmail(String email);

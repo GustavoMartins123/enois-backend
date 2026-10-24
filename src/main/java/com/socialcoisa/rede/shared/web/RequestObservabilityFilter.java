@@ -70,6 +70,16 @@ public class RequestObservabilityFilter extends OncePerRequestFilter {
 			MDC.put(MDC_DEVICE_ID, deviceId);
 		}
 		response.setHeader(REQUEST_ID_HEADER, requestId);
+		boolean tracked = !isProbe(request.getRequestURI())
+			&& !request.getRequestURI().startsWith("/admin/monitoring");
+		if (tracked) {
+			try {
+				monitoring.requestStarted();
+			}
+			catch (RuntimeException ignored) {
+				// Métrica não pode impedir a requisição.
+			}
+		}
 		try {
 			filterChain.doFilter(request, response);
 		}
@@ -106,10 +116,15 @@ public class RequestObservabilityFilter extends OncePerRequestFilter {
 			}
 			// Monitorabilidade: métricas de toda requisição (exceto a própria tela de monitoração,
 			// que inflaria o gráfico com o polling do painel) e evento em 4xx/5xx.
-			if (!clientDisconnected && !probe && !request.getRequestURI().startsWith("/admin/monitoring")) {
+			if (tracked) {
 				try {
-					monitoring.recordRequest(method, request.getRequestURI(), route, status, durationMs, requestId,
-						userId, clientIp, deviceId);
+					if (clientDisconnected) {
+						monitoring.recordClientDisconnect();
+					}
+					else {
+						monitoring.recordRequest(method, request.getRequestURI(), route, status, durationMs, requestId,
+							userId, clientIp, deviceId);
+					}
 				}
 				catch (RuntimeException ignored) {
 					// Nunca derruba a requisição real por causa da monitoração.

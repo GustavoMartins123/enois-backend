@@ -52,6 +52,7 @@ class CoinController {
 	 * A MINI BOLSA (monitor público): a cotação de referência da faísca em BRL e o
 	 * histórico que alimenta o gráfico. NÃO é câmbio — não compra faísca com dinheiro.
 	 */
+
 	@GetMapping("/coin/cotacao")
 	Map<String, Object> quote(@RequestParam(defaultValue = "90") int history) {
 		var current = rates.latest();
@@ -138,6 +139,18 @@ class CoinController {
 			"balance", wallet.balance(),
 			"escala", wallet.escala(),
 			"entries", wallet.entries().stream().map(EntryView::from).toList());
+	}
+
+	/** Supply da faísca: total fixo, o que está no cofre e o que circula (observabilidade). */
+	@GetMapping("/admin/carteira/supply")
+	Map<String, Object> supply(@RequestHeader(value = "X-User-Id", required = false) String userId,
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser admin = currentUserResolver.resolve(userId, sessionToken);
+		// Saldo do cofre é dado financeiro: só a administração vê.
+		adminGuard.requireAdmin(admin);
+		CoinService.SupplyView supply = coins.supply();
+		return Map.of("total", supply.total(), "cofre", supply.cofre(), "circulacao", supply.circulacao(),
+			"somaSaldos", supply.somaSaldos(), "coerente", supply.coerente());
 	}
 
 	@GetMapping("/admin/carteira/disputas")
