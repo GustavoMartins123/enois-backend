@@ -29,6 +29,11 @@ public final class TestDatabase {
 		require().update("update users set email_verified_at = ? where id = ?", at, userId);
 	}
 
+	/** Promove a conta no banco (o papel admin é imutável e não vem de e-mail/username). */
+	public static void setAdmin(String userId) {
+		require().update("update users set is_admin = true where id = ?", userId);
+	}
+
 	/** Devolve a conta ao estado "sem e-mail confirmado" (para testar a regra de credibilidade). */
 	public static void clearEmailVerification(String userId) {
 		require().update("update users set email_verified_at = null where id = ?", userId);

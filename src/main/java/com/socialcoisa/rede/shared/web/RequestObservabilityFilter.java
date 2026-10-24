@@ -45,9 +45,12 @@ public class RequestObservabilityFilter extends OncePerRequestFilter {
 	private static final Logger AUDIT = LoggerFactory.getLogger("audit");
 
 	private final ClientIpResolver clientIpResolver;
+	private final com.socialcoisa.rede.ops.monitoring.MonitoringService monitoring;
 
-	RequestObservabilityFilter(ClientIpResolver clientIpResolver) {
+	RequestObservabilityFilter(ClientIpResolver clientIpResolver,
+			com.socialcoisa.rede.ops.monitoring.MonitoringService monitoring) {
 		this.clientIpResolver = clientIpResolver;
+		this.monitoring = monitoring;
 	}
 
 	@Override
@@ -67,6 +70,16 @@ public class RequestObservabilityFilter extends OncePerRequestFilter {
 			MDC.put(MDC_DEVICE_ID, deviceId);
 		}
 		response.setHeader(REQUEST_ID_HEADER, requestId);
+		boolean tracked = !isProbe(request.getRequestURI())
+			&& !request.getRequestURI().startsWith("/admin/monitoring");
+		if (tracked) {
+			try {
+				monitoring.requestStarted();
+			}
+			catch (RuntimeException ignored) {
+				// Métrica não pode impedir a requisição.
+			}
+		}
 		try {
 			filterChain.doFilter(request, response);
 		}
@@ -97,6 +110,17 @@ public class RequestObservabilityFilter extends OncePerRequestFilter {
 					.addKeyValue("durationMs", durationMs)
 					.log("slow_request requestId={} method={} route={} status={} durationMs={}", requestId, method,
 						route, status, durationMs);
+			}
+			// Monitorabilidade: métricas de toda requisição (exceto a própria tela de monitoração,
+			// que inflaria o gráfico com o polling do painel) e evento em 4xx/5xx.
+			if (tracked) {
+				try {
+					monitoring.recordRequest(method, request.getRequestURI(), route, status, durationMs, requestId,
+						userId, clientIp, deviceId);
+				}
+				catch (RuntimeException ignored) {
+					// Nunca derruba a requisição real por causa da monitoração.
+				}
 			}
 			if (isAdminMutation(method, request.getRequestURI())) {
 				AUDIT.atInfo()

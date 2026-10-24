@@ -21,7 +21,8 @@ import ch.qos.logback.core.read.ListAppender;
 
 class RequestObservabilityFilterTests {
 
-	private final RequestObservabilityFilter filter = new RequestObservabilityFilter(new ClientIpResolver());
+	private final RequestObservabilityFilter filter = new RequestObservabilityFilter(new ClientIpResolver(),
+		org.mockito.Mockito.mock(com.socialcoisa.rede.ops.monitoring.MonitoringService.class));
 	private final ListAppender<ILoggingEvent> audit = new ListAppender<>();
 
 	@BeforeEach

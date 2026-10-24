@@ -132,7 +132,7 @@ public class SuspiciousContentSweepWorker {
 				if (profile == null) {
 					continue;
 				}
-				if (adminGuard.isAdmin(profile.email(), profile.username())) {
+				if (adminGuard.isAdminProfile(profile)) {
 					LOG.error("content_sweep_skip_admin username={} (assinatura de ataque, revise manualmente)",
 						profile.username());
 					continue;

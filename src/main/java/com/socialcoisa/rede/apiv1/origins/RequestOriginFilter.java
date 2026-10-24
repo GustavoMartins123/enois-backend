@@ -39,7 +39,7 @@ import jakarta.servlet.http.HttpServletResponse;
  * health/version, páginas públicas, mídia GET e descadastro) ficam isentos.
  */
 @Component
-@Order(Ordered.HIGHEST_PRECEDENCE + 4)
+@Order(Ordered.HIGHEST_PRECEDENCE + 5)
 class RequestOriginFilter extends OncePerRequestFilter {
 
 	static final String CLIENT_ORIGIN_HEADER = "X-Client-Origin";
@@ -213,6 +213,10 @@ class RequestOriginFilter extends OncePerRequestFilter {
 		}
 		// A midia servida pelo proprio app (proxy do bucket): `<img>` e `<video>` nao mandam Origin.
 		if (path.startsWith("/storage/") && ("GET".equalsIgnoreCase(method) || "HEAD".equalsIgnoreCase(method))) {
+			return true;
+		}
+		// Link de confirmação do novo e-mail: clique no cliente de e-mail, sem Origin.
+		if (path.equals("/auth/email/change/confirm") && "GET".equalsIgnoreCase(method)) {
 			return true;
 		}
 		return path.equals("/blogs/descadastrar");

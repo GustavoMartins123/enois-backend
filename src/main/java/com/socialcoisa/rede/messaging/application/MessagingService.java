@@ -30,12 +30,14 @@ public class MessagingService {
 	private final com.socialcoisa.rede.shared.age.AgeGate ageGate;
 	private final com.socialcoisa.rede.shared.sanctions.SanctionGate sanctionGate;
 	private final com.socialcoisa.rede.network.application.port.out.ConnectionRepository connections;
+	private final com.socialcoisa.rede.shared.blocks.BlockedUsersReader blockedUsers;
 
 	public MessagingService(MessagingRepository repository, NotificationService notificationService, Clock clock,
 			UserRateLimiter userRateLimiter, BehavioralTimingGuard behavioralTimingGuard,
 			com.socialcoisa.rede.shared.age.AgePolicyReader agePolicy, com.socialcoisa.rede.shared.age.AgeGate ageGate,
 			com.socialcoisa.rede.shared.sanctions.SanctionGate sanctionGate,
-			com.socialcoisa.rede.network.application.port.out.ConnectionRepository connections) {
+			com.socialcoisa.rede.network.application.port.out.ConnectionRepository connections,
+			com.socialcoisa.rede.shared.blocks.BlockedUsersReader blockedUsers) {
 		this.repository = repository;
 		this.notificationService = notificationService;
 		this.clock = clock;
@@ -45,18 +47,45 @@ public class MessagingService {
 		this.ageGate = ageGate;
 		this.sanctionGate = sanctionGate;
 		this.connections = connections;
+		this.blockedUsers = blockedUsers;
 	}
 
 	@Transactional
 	public Conversation createConversation(String kind, String title, List<String> participantIds, String createdBy) {
-		if (!participantIds.contains(createdBy)) {
-			participantIds = new ArrayList<>(participantIds);
-			participantIds.add(createdBy);
+		// Validação comum a TODO kind (DIRECT, GROUP, SERVICE...). Antes, só o fluxo direct checava
+		// bloqueio; criar um "grupo" com kind=GROUP furava bloqueio e proteção de menores (EN-05/E-16).
+		if (participantIds == null || participantIds.isEmpty()) {
+			throw new com.socialcoisa.rede.shared.web.ApiException(400, "INVALID_PARTICIPANTS",
+				"Informe pelo menos um participante.");
+		}
+		java.util.LinkedHashSet<String> unique = new java.util.LinkedHashSet<>();
+		for (String raw : participantIds) {
+			if (org.springframework.util.StringUtils.hasText(raw)) {
+				unique.add(raw.trim());
+			}
+		}
+		if (unique.isEmpty()) {
+			throw new com.socialcoisa.rede.shared.web.ApiException(400, "INVALID_PARTICIPANTS",
+				"Informe pelo menos um participante.");
+		}
+		if (unique.size() > 100) {
+			throw new com.socialcoisa.rede.shared.web.ApiException(400, "TOO_MANY_PARTICIPANTS",
+				"Uma conversa pode ter no maximo 100 participantes.");
+		}
+		ageGate.requireCanWrite(createdBy);
+		unique.add(createdBy);
+		var creatorHidden = blockedUsers.hiddenIdsFor(createdBy);
+		for (String pid : unique) {
+			if (!pid.equals(createdBy)
+					&& (creatorHidden.contains(pid) || blockedUsers.hiddenIdsFor(pid).contains(createdBy))) {
+				throw new com.socialcoisa.rede.shared.web.ApiException(403, "USER_BLOCKED",
+					"Nao e possivel conversar com este usuario.");
+			}
 		}
 		String id = "conversation_" + UUID.randomUUID().toString().replace("-", "");
 		Conversation conversation = Conversation.create(id, kind, title, createdBy, clock.instant());
 		repository.saveConversation(conversation);
-		for (String pid : participantIds) {
+		for (String pid : unique) {
 			repository.saveParticipant(ConversationParticipant.create(id, pid, clock.instant()));
 		}
 		return conversation;

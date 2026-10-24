@@ -51,15 +51,18 @@ class SuspiciousSignupGuardTests {
 	void attackPatternSignupIsRefusedAndTheIpIsBlocked() throws Exception {
 		jdbc.update("delete from blocked_ips where ip = ?", LOOPBACK);
 		try {
-			// Cadastro com o nome do ataque: 403 genérico (não revela a regra).
-			mockMvc.perform(post("/auth/signup")
-					.header("Idempotency-Key", "guard-signup-1")
-					.contentType(MediaType.APPLICATION_JSON)
-					.content(objectMapper.writeValueAsString(Map.of(
-						"name", "Probe radica", "role", "USER", "email", "radica@test.com",
-						"password", "Test1234!", "acceptedTerms", true, "birthDate", "1990-05-10"))))
-				.andExpect(status().isForbidden())
-				.andExpect(jsonPath("$.code").value("SIGNUP_REFUSED"));
+			// Cadastro com o nome do ataque: 403 genérico (não revela a regra). Um único nome
+			// não fecha a rede inteira: são precisos 3 indícios em 10 minutos (N-08).
+			for (int i = 1; i <= 3; i++) {
+				mockMvc.perform(post("/auth/signup")
+						.header("Idempotency-Key", "guard-signup-" + i)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(objectMapper.writeValueAsString(Map.of(
+							"name", "Probe radica", "role", "USER", "email", "radica" + i + "@test.com",
+							"password", "Test1234!", "acceptedTerms", true, "birthDate", "1990-05-10"))))
+					.andExpect(status().isForbidden())
+					.andExpect(jsonPath("$.code").value("SIGNUP_REFUSED"));
+			}
 
 			// O IP entrou na lista: o próximo login/cadastro daqui nem chega na senha.
 			assertThat(jdbc.queryForList("select ip from blocked_ips where ip = ?", String.class, LOOPBACK))

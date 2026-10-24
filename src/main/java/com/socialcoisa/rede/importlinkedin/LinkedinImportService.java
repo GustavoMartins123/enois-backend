@@ -1,6 +1,7 @@
 package com.socialcoisa.rede.importlinkedin;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -30,6 +31,10 @@ import com.socialcoisa.rede.shared.web.ApiException;
 public class LinkedinImportService {
 
 	private static final int MAX_ZIP_BYTES = 5 * 1024 * 1024;
+	/** Orçamento de descompressão (EN-10/E-08): ZIP pequeno pode expandir para centenas de MB. */
+	private static final int MAX_ENTRIES = 50;
+	private static final long MAX_ENTRY_BYTES = 2L * 1024 * 1024;
+	private static final long MAX_TOTAL_BYTES = 8L * 1024 * 1024;
 
 	// ===== retrato devolvido para revisão no front =====
 
@@ -75,15 +80,21 @@ public class LinkedinImportService {
 		Map<String, String> csvs = new LinkedHashMap<>();
 		try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(file.getBytes()))) {
 			ZipEntry entry;
+			int entries = 0;
+			long totalRead = 0;
 			while ((entry = zip.getNextEntry()) != null) {
+				if (++entries > MAX_ENTRIES) {
+					throw new ApiException(400, "FILE_TOO_LARGE", "O ZIP tem entradas demais para um export do LinkedIn.");
+				}
 				String name = entry.getName();
 				if (entry.isDirectory() || !name.endsWith(".csv")) {
 					continue;
 				}
 				// O ZIP do LinkedIn guarda os CSVs numa pasta (".../Positions.csv") — casa pelo nome.
 				String simple = name.substring(name.lastIndexOf('/') + 1);
-				String content = new String(zip.readAllBytes(), StandardCharsets.UTF_8);
-				csvs.putIfAbsent(simple, stripBom(content));
+				byte[] bytes = readBounded(zip, MAX_TOTAL_BYTES - totalRead);
+				totalRead += bytes.length;
+				csvs.putIfAbsent(simple, stripBom(new String(bytes, StandardCharsets.UTF_8)));
 				zip.closeEntry();
 			}
 		} catch (IOException error) {
@@ -656,5 +667,22 @@ public class LinkedinImportService {
 	/** "São Paulo, Brasil" e afins: poucas palavras, sem dígitos, com vírgula — nunca descrição. */
 	private boolean pareceLocal(String linha) {
 		return linha.matches("[\\p{L}\\p{M}' .,-]{2,60}") && !linha.matches(".*\\d.*") && linha.contains(", ");
+	}
+
+	/** Lê uma entrada com teto por entrada e pelo orçamento total restante (anti ZIP bomb). */
+	private static byte[] readBounded(ZipInputStream zip, long remaining) throws IOException {
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+		byte[] buffer = new byte[8192];
+		long total = 0;
+		int read;
+		while ((read = zip.read(buffer)) != -1) {
+			total += read;
+			if (total > MAX_ENTRY_BYTES || total > remaining) {
+				throw new ApiException(400, "FILE_TOO_LARGE",
+					"O conteudo descompactado do ZIP e grande demais para um export do LinkedIn.");
+			}
+			out.write(buffer, 0, read);
+		}
+		return out.toByteArray();
 	}
 }

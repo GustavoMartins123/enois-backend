@@ -1,0 +1,671 @@
+package com.socialcoisa.rede.ops.monitoring;
+
+import java.io.File;
+import java.lang.management.ClassLoadingMXBean;
+import java.lang.management.GarbageCollectorMXBean;
+import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryMXBean;
+import java.lang.management.ThreadMXBean;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Deque;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.LongAdder;
+
+import javax.sql.DataSource;
+
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+
+import com.zaxxer.hikari.HikariDataSource;
+
+/**
+ * Monitorabilidade do painel admin: carga, latência, recursos, eventos persistidos e logs.
+ *
+ * <p>As métricas são em memória (séries de 60 minutos) e por pod; os eventos/erros/logs vão para
+ * o banco de forma assíncrona. Nada bloqueia a requisição: a fila tem teto e o excedente é contado
+ * em {@code droppedEvents}. Dados sensíveis são redigidos antes de persistir.</p>
+ */
+@Service
+public class MonitoringService {
+
+	private static final int RECENT_LIMIT = 500;
+	private static final int QUEUE_LIMIT = 5000;
+	private static final int MAX_MESSAGE = 1000;
+	private static final long MINUTE = 60_000L;
+	private static final long SLOW_MS = 2000L;
+
+	private final JdbcTemplate jdbc;
+	private final Clock clock;
+	private final int retentionDays;
+	private final int maxEventsPerMinute;
+	private final ObjectProvider<DataSource> dataSource;
+	private final ArrayBlockingQueue<EventRow> queue = new ArrayBlockingQueue<>(QUEUE_LIMIT);
+	private final ConcurrentLinkedDeque<EventView> recent = new ConcurrentLinkedDeque<>();
+	private final ConcurrentHashMap<Long, MinuteMetrics> minutes = new ConcurrentHashMap<>();
+	private final ConcurrentHashMap<Long, LongAdder> seconds = new ConcurrentHashMap<>();
+	private final AtomicLong dropped = new AtomicLong();
+	private final AtomicLong requestsTotal = new AtomicLong();
+	private final AtomicInteger inFlight = new AtomicInteger();
+	private final AtomicInteger peakInFlight = new AtomicInteger();
+	private long eventMinute = -1;
+	private int eventCount;
+	private volatile List<CountView> levelCounts = List.of();
+	private volatile List<CountView> typeCounts = List.of();
+	private volatile long countsAt;
+
+	MonitoringService(JdbcTemplate jdbc, Clock clock, ObjectProvider<DataSource> dataSource,
+			@Value("${rede.monitoring.retention-days:7}") int retentionDays,
+			@Value("${rede.monitoring.max-events-per-minute:1000}") int maxEventsPerMinute) {
+		this.jdbc = jdbc;
+		this.clock = clock;
+		this.dataSource = dataSource;
+		this.retentionDays = Math.max(1, retentionDays);
+		this.maxEventsPerMinute = Math.max(1, maxEventsPerMinute);
+	}
+
+	// ------------------------------------------------------------------ ingestão
+
+	public void requestStarted() {
+		int current = inFlight.incrementAndGet();
+		peakInFlight.accumulateAndGet(current, Math::max);
+	}
+
+	/** Chamado pelo filtro: métricas de TODA requisição; 4xx/5xx também viram evento. */
+	public void recordRequest(String method, String path, String route, int status, long durationMs,
+			String requestId, String userId, String clientIp, String deviceId) {
+		inFlight.updateAndGet(value -> Math.max(0, value - 1));
+		requestsTotal.incrementAndGet();
+		long now = clock.millis();
+		long bucket = now / MINUTE;
+		MinuteMetrics metrics = minutes.computeIfAbsent(bucket, key -> new MinuteMetrics());
+		metrics.requests.increment();
+		if (status >= 500) {
+			metrics.errors5xx.increment();
+		}
+		else if (status >= 400) {
+			metrics.errors4xx.increment();
+		}
+		else if (status >= 300) {
+			metrics.errors3xx.increment();
+		}
+		else {
+			metrics.errors2xx.increment();
+		}
+		if (status == 429) {
+			metrics.rateLimited.increment();
+		}
+		if (durationMs >= SLOW_MS) {
+			metrics.slow.increment();
+		}
+		metrics.durations.addLast(durationMs);
+		while (metrics.durations.size() > 2000) {
+			metrics.durations.pollFirst();
+		}
+		metrics.maxDuration.accumulateAndGet(durationMs, Math::max);
+		metrics.methods.computeIfAbsent(method == null ? "?" : method, key -> new LongAdder()).increment();
+		metrics.routes.computeIfAbsent(route == null ? "UNMATCHED" : route, key -> new LongAdder()).increment();
+		seconds.computeIfAbsent(now / 1000, key -> new LongAdder()).increment();
+		if (status >= 400) {
+			String level = status >= 500 ? "ERROR" : "WARN";
+			String message = method + " " + (route == null ? path : route) + " -> " + status;
+			enqueue(new EventRow(id(), clock.instant(), level, "REQUEST", message, requestId, method, path,
+				route, status, durationMs, userId, clientIp, deviceId, null));
+		}
+	}
+
+	public void recordException(int status, String code, String message, String method, String path,
+			String requestId, String userId) {
+		enqueue(new EventRow(id(), clock.instant(), status >= 500 ? "ERROR" : "WARN", "EXCEPTION",
+			code + ": " + safe(message), requestId, method, path, null, status, null, userId, null, null, null));
+	}
+
+	public void recordEvent(String level, String type, String message, Map<String, Object> metadata) {
+		enqueue(new EventRow(id(), clock.instant(), normalizeLevel(level), normalizeType(type), safe(message),
+			null, null, null, null, null, null, null, null, null, metadata == null ? null : metadata.toString()));
+	}
+
+	public void recordLog(String level, String logger, String message, String requestId, String userId, String path) {
+		String type = logger != null && logger.equals("audit") ? "AUDIT" : "LOG";
+		enqueue(new EventRow(id(), clock.instant(), normalizeLevel(level), type,
+			safe((logger == null ? "" : logger + ": ") + message), requestId, null, path, null, null, null,
+			userId, null, null, null));
+	}
+
+	private synchronized boolean allowEvent() {
+		long minute = clock.millis() / MINUTE;
+		if (eventMinute != minute) {
+			eventMinute = minute;
+			eventCount = 0;
+		}
+		if (eventCount >= maxEventsPerMinute) {
+			return false;
+		}
+		eventCount++;
+		return true;
+	}
+
+	private void enqueue(EventRow row) {
+		if (!allowEvent()) {
+			dropped.incrementAndGet();
+			return;
+		}
+		EventView view = row.view();
+		recent.addFirst(view);
+		while (recent.size() > RECENT_LIMIT) {
+			recent.pollLast();
+		}
+		if (!queue.offer(row)) {
+			dropped.incrementAndGet();
+		}
+	}
+
+	@Scheduled(fixedDelay = 500)
+	void flush() {
+		List<EventRow> batch = new ArrayList<>(200);
+		queue.drainTo(batch, 200);
+		if (batch.isEmpty()) {
+			return;
+		}
+		try {
+			jdbc.batchUpdate("""
+				insert into system_events (id, created_at, level, type, message, request_id, method, path, route,
+					status, duration_ms, user_id, client_ip, device_id, metadata)
+				values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				""", batch, 100, (statement, row) -> {
+					statement.setString(1, row.id());
+					statement.setTimestamp(2, java.sql.Timestamp.from(row.createdAt()));
+					statement.setString(3, row.level());
+					statement.setString(4, row.type());
+					statement.setString(5, row.message());
+					statement.setString(6, row.requestId());
+					statement.setString(7, row.method());
+					statement.setString(8, row.path());
+					statement.setString(9, row.route());
+					if (row.status() == null) {
+						statement.setNull(10, java.sql.Types.INTEGER);
+					}
+					else {
+						statement.setInt(10, row.status());
+					}
+					if (row.durationMs() == null) {
+						statement.setNull(11, java.sql.Types.BIGINT);
+					}
+					else {
+						statement.setLong(11, row.durationMs());
+					}
+					statement.setString(12, row.userId());
+					statement.setString(13, row.clientIp());
+					statement.setString(14, row.deviceId());
+					statement.setString(15, row.metadata());
+				});
+		}
+		catch (RuntimeException failure) {
+			dropped.addAndGet(batch.size());
+		}
+	}
+
+	/** Amostra CPU/heap por minuto para o gráfico de recursos. */
+	@Scheduled(fixedDelay = 60_000, initialDelay = 5_000)
+	void sampleResources() {
+		long bucket = clock.millis() / MINUTE;
+		MinuteMetrics metrics = minutes.computeIfAbsent(bucket, key -> new MinuteMetrics());
+		metrics.cpuPercent = Math.round(processCpuPercent());
+		metrics.heapUsed = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
+	}
+
+	@Scheduled(fixedDelay = 300_000, initialDelay = 300_000)
+	void pruneMinutes() {
+		long nowBucket = clock.millis() / MINUTE;
+		for (Long bucket : minutes.keySet()) {
+			if (bucket < nowBucket - 61) {
+				minutes.remove(bucket);
+			}
+		}
+		long nowSecond = clock.millis() / 1000;
+		for (Long second : seconds.keySet()) {
+			if (second < nowSecond - 120) {
+				seconds.remove(second);
+			}
+		}
+	}
+
+	@Scheduled(fixedDelay = 3_600_000, initialDelay = 60_000)
+	void purgeOld() {
+		try {
+			jdbc.update("delete from system_events where created_at < ?",
+				java.sql.Timestamp.from(clock.instant().minus(retentionDays, ChronoUnit.DAYS)));
+		}
+		catch (RuntimeException ignored) {
+			// Banco indisponível: tenta de novo no próximo ciclo.
+		}
+	}
+
+	// ------------------------------------------------------------------ leitura
+
+	public OverviewView overview() {
+		long nowBucket = clock.millis() / MINUTE;
+		long nowSecond = clock.millis() / 1000;
+		for (Long bucket : minutes.keySet()) {
+			if (bucket < nowBucket - 61) {
+				minutes.remove(bucket);
+			}
+		}
+		for (Long second : seconds.keySet()) {
+			if (second < nowSecond - 120) {
+				seconds.remove(second);
+			}
+		}
+
+		List<MinutePoint> series = new ArrayList<>(60);
+		long totalRequests = 0;
+		long total2xx = 0;
+		long total3xx = 0;
+		long total4xx = 0;
+		long total5xx = 0;
+		long totalSlow = 0;
+		long totalRateLimited = 0;
+		List<Long> latencySamples = new ArrayList<>();
+		Map<String, Long> methods = new LinkedHashMap<>();
+		for (long bucket = nowBucket - 59; bucket <= nowBucket; bucket++) {
+			MinuteMetrics metrics = minutes.get(bucket);
+			if (metrics == null) {
+				series.add(new MinutePoint(Instant.ofEpochMilli(bucket * MINUTE).toString(), 0, 0, 0, 0, 0,
+					0, 0, 0, 0, 0, 0, 0));
+				continue;
+			}
+			long requests = metrics.requests.sum();
+			long e2 = metrics.errors2xx.sum();
+			long e3 = metrics.errors3xx.sum();
+			long e4 = metrics.errors4xx.sum();
+			long e5 = metrics.errors5xx.sum();
+			totalRequests += requests;
+			total2xx += e2;
+			total3xx += e3;
+			total4xx += e4;
+			total5xx += e5;
+			totalSlow += metrics.slow.sum();
+			totalRateLimited += metrics.rateLimited.sum();
+			if (bucket >= nowBucket - 4) {
+				latencySamples.addAll(metrics.durations);
+			}
+			metrics.methods.forEach((method, count) -> methods.merge(method, count.sum(), Long::sum));
+			series.add(new MinutePoint(Instant.ofEpochMilli(bucket * MINUTE).toString(), requests, e2, e3, e4,
+				e5, p95(metrics.durations), p99(metrics.durations), metrics.maxDuration.get(), metrics.slow.sum(),
+				metrics.rateLimited.sum(), Math.max(0, metrics.cpuPercent),
+				metrics.heapUsed <= 0 ? 0 : metrics.heapUsed / 1024 / 1024));
+		}
+
+		MinutePoint last = series.get(series.size() - 1);
+		double errorRate = totalRequests == 0 ? 0 : (total4xx + total5xx) * 100.0 / totalRequests;
+
+		Map<String, Long> routes = new LinkedHashMap<>();
+		for (long bucket = Math.max(nowBucket - 15, 0); bucket <= nowBucket; bucket++) {
+			MinuteMetrics metrics = minutes.get(bucket);
+			if (metrics == null) {
+				continue;
+			}
+			metrics.routes.forEach((route, count) -> routes.merge(route, count.sum(), Long::sum));
+		}
+		List<CountView> topRoutes = routes.entrySet().stream()
+			.sorted(Map.Entry.<String, Long>comparingByValue(Comparator.reverseOrder()))
+			.limit(10)
+			.map(entry -> new CountView(entry.getKey(), entry.getValue()))
+			.toList();
+		List<CountView> methodCounts = methods.entrySet().stream()
+			.sorted(Map.Entry.<String, Long>comparingByValue(Comparator.reverseOrder()))
+			.map(entry -> new CountView(entry.getKey(), entry.getValue()))
+			.toList();
+
+		long last10s = 0;
+		for (long second = nowSecond - 9; second <= nowSecond; second++) {
+			LongAdder count = seconds.get(second);
+			if (count != null) {
+				last10s += count.sum();
+			}
+		}
+
+		refreshCounts();
+		ResourceView resources = resources();
+		return new OverviewView(clock.instant().toString(),
+			ManagementFactory.getRuntimeMXBean().getUptime() / 1000,
+			last.requests(), last.errors4xx(), last.errors5xx(), errorRate, p95(latencySamples),
+			dropped.get(), series, levelCounts, typeCounts, topRoutes, recentEvents(100),
+			new JvmView(resources.heapUsedBytes(), resources.heapMaxBytes(), resources.threads(),
+				resources.processors()),
+			last10s / 10.0, inFlight.get(), peakInFlight.get(), requestsTotal.get(),
+			p50(latencySamples), p99(latencySamples), max(latencySamples), last.slowRequests(),
+			last.rateLimited(), List.of(new CountView("2xx", total2xx), new CountView("3xx", total3xx),
+				new CountView("4xx", total4xx), new CountView("5xx", total5xx)),
+			methodCounts, resources);
+	}
+
+	public List<EventView> events(String level, String type, String q, String before, int limit) {
+		StringBuilder sql = new StringBuilder("""
+			select id, created_at, level, type, message, request_id, method, path, route, status, duration_ms,
+				user_id, client_ip, device_id from system_events where 1=1
+			""");
+		List<Object> params = new ArrayList<>();
+		if (StringUtils.hasText(level)) {
+			sql.append(" and level = ?");
+			params.add(level.trim().toUpperCase(Locale.ROOT));
+		}
+		if (StringUtils.hasText(type)) {
+			sql.append(" and type = ?");
+			params.add(type.trim().toUpperCase(Locale.ROOT));
+		}
+		String pattern = com.socialcoisa.rede.shared.web.LikePattern.contains(q);
+		if (pattern != null) {
+			sql.append(" and (lower(message) like ? escape '!' or lower(path) like ? escape '!')");
+			params.add(pattern);
+			params.add(pattern);
+		}
+		if (StringUtils.hasText(before)) {
+			try {
+				sql.append(" and created_at < ?");
+				params.add(java.sql.Timestamp.from(Instant.parse(before.trim())));
+			}
+			catch (RuntimeException ignored) {
+				// `before` inválido é ignorado; a lista continua com os mais recentes.
+			}
+		}
+		sql.append(" order by created_at desc limit ?");
+		params.add(Math.max(1, Math.min(limit, 200)));
+		try {
+			return jdbc.query(sql.toString(), (rs, rowNum) -> new EventView(rs.getString(1),
+				rs.getTimestamp(2).toInstant().toString(), rs.getString(3), rs.getString(4), rs.getString(5),
+				rs.getString(6), rs.getString(7), rs.getString(8), rs.getString(9),
+				(Integer) rs.getObject(10), (Long) rs.getObject(11), rs.getString(12), rs.getString(13),
+				rs.getString(14)), params.toArray());
+		}
+		catch (RuntimeException failure) {
+			return List.of();
+		}
+	}
+
+	public List<EventView> recentEvents(int limit) {
+		return recent.stream().limit(Math.max(1, Math.min(limit, RECENT_LIMIT))).toList();
+	}
+
+	/** Contagens de 24h não precisam bater no banco a cada polling de 2,5s. */
+	private void refreshCounts() {
+		if (clock.millis() - countsAt < 30_000) {
+			return;
+		}
+		synchronized (this) {
+			if (clock.millis() - countsAt < 30_000) {
+				return;
+			}
+			levelCounts = countBy("level");
+			typeCounts = countBy("type");
+			countsAt = clock.millis();
+		}
+	}
+
+	private List<CountView> countBy(String column) {
+		try {
+			return jdbc.query("""
+				select %s, count(*) from system_events
+				where created_at >= ? group by %s order by count(*) desc limit 12
+				""".formatted(column, column), (rs, rowNum) -> new CountView(rs.getString(1), rs.getLong(2)),
+				java.sql.Timestamp.from(clock.instant().minus(24, ChronoUnit.HOURS)));
+		}
+		catch (RuntimeException failure) {
+			return List.of();
+		}
+	}
+
+	// ------------------------------------------------------------------ recursos
+
+	private ResourceView resources() {
+		Runtime runtime = Runtime.getRuntime();
+		MemoryMXBean memory = ManagementFactory.getMemoryMXBean();
+		ThreadMXBean threads = ManagementFactory.getThreadMXBean();
+		ClassLoadingMXBean classes = ManagementFactory.getClassLoadingMXBean();
+		long gcCount = 0;
+		long gcTime = 0;
+		for (GarbageCollectorMXBean gc : ManagementFactory.getGarbageCollectorMXBeans()) {
+			if (gc.getCollectionCount() > 0) {
+				gcCount += gc.getCollectionCount();
+			}
+			if (gc.getCollectionTime() > 0) {
+				gcTime += gc.getCollectionTime();
+			}
+		}
+
+		double processCpu = -1;
+		double systemCpu = -1;
+		long systemTotal = -1;
+		long systemFree = -1;
+		double loadAverage = -1;
+		java.lang.management.OperatingSystemMXBean os = ManagementFactory.getOperatingSystemMXBean();
+		loadAverage = os.getSystemLoadAverage();
+		if (os instanceof com.sun.management.OperatingSystemMXBean sun) {
+			processCpu = sun.getProcessCpuLoad() * 100;
+			systemCpu = sun.getCpuLoad() * 100;
+			systemTotal = sun.getTotalMemorySize();
+			systemFree = sun.getFreeMemorySize();
+		}
+
+		File disk = new File(System.getProperty("user.dir", "/app"));
+		DbPoolView pool = pool();
+		return new ResourceView(memory.getHeapMemoryUsage().getUsed(), memory.getHeapMemoryUsage().getCommitted(),
+			memory.getHeapMemoryUsage().getMax(), memory.getNonHeapMemoryUsage().getUsed(), gcCount, gcTime,
+			threads.getThreadCount(), threads.getPeakThreadCount(), threads.getDaemonThreadCount(),
+			classes.getLoadedClassCount(), processCpu, systemCpu, loadAverage, runtime.availableProcessors(),
+			systemTotal, systemFree, disk.getTotalSpace(), disk.getUsableSpace(),
+			cgroupLong("/sys/fs/cgroup/memory.current", "/sys/fs/cgroup/memory/memory.usage_in_bytes"),
+			cgroupLong("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"),
+			cgroupCpu(), pool);
+	}
+
+	private DbPoolView pool() {
+		DataSource source = dataSource.getIfAvailable();
+		if (!(source instanceof HikariDataSource hikari) || hikari.getHikariPoolMXBean() == null) {
+			return null;
+		}
+		var mx = hikari.getHikariPoolMXBean();
+		return new DbPoolView(mx.getActiveConnections(), mx.getIdleConnections(), mx.getTotalConnections(),
+			mx.getThreadsAwaitingConnection(), hikari.getMaximumPoolSize(), hikari.getMinimumIdle());
+	}
+
+	private static long cgroupLong(String v2, String v1) {
+		Long value = readLong(v2);
+		return value != null ? value : (readLong(v1) == null ? -1 : readLong(v1));
+	}
+
+	private static Long readLong(String path) {
+		try {
+			String value = Files.readString(Path.of(path)).trim();
+			if ("max".equals(value)) {
+				return -1L;
+			}
+			return Long.parseLong(value);
+		}
+		catch (Exception ignored) {
+			return null;
+		}
+	}
+
+	private static double cgroupCpu() {
+		try {
+			String[] parts = Files.readString(Path.of("/sys/fs/cgroup/cpu.max")).trim().split("\\s+");
+			if (parts.length >= 2 && !"max".equals(parts[0])) {
+				return Double.parseDouble(parts[0]) / Double.parseDouble(parts[1]);
+			}
+		}
+		catch (Exception ignored) {
+			// cgroup v1 ou indisponível.
+		}
+		try {
+			Long quota = readLong("/sys/fs/cgroup/cpu/cpu.cfs_quota_us");
+			Long period = readLong("/sys/fs/cgroup/cpu/cpu.cfs_period_us");
+			if (quota != null && period != null && quota > 0 && period > 0) {
+				return (double) quota / period;
+			}
+		}
+		catch (Exception ignored) {
+			// sem cgroup.
+		}
+		return -1;
+	}
+
+	private double processCpuPercent() {
+		var os = ManagementFactory.getOperatingSystemMXBean();
+		if (os instanceof com.sun.management.OperatingSystemMXBean sun) {
+			double value = sun.getProcessCpuLoad() * 100;
+			return value < 0 ? -1 : value;
+		}
+		return -1;
+	}
+
+	// ------------------------------------------------------------------ util
+
+	private static long p50(List<Long> values) {
+		return percentile(values, 0.50);
+	}
+
+	private static long p95(List<Long> values) {
+		return percentile(values, 0.95);
+	}
+
+	private static long p99(List<Long> values) {
+		return percentile(values, 0.99);
+	}
+
+	private static long p95(Deque<Long> values) {
+		return values == null ? 0 : percentile(new ArrayList<>(values), 0.95);
+	}
+
+	private static long p99(Deque<Long> values) {
+		return values == null ? 0 : percentile(new ArrayList<>(values), 0.99);
+	}
+
+	private static long percentile(List<Long> values, double percentile) {
+		if (values == null || values.isEmpty()) {
+			return 0;
+		}
+		List<Long> copy = new ArrayList<>(values);
+		copy.sort(Long::compareTo);
+		int index = Math.min(copy.size() - 1, (int) Math.ceil(copy.size() * percentile) - 1);
+		return copy.get(Math.max(0, index));
+	}
+
+	private static long max(List<Long> values) {
+		return values == null || values.isEmpty() ? 0 : values.stream().mapToLong(Long::longValue).max().orElse(0);
+	}
+
+	private static String id() {
+		return "evt_" + UUID.randomUUID().toString().replace("-", "");
+	}
+
+	private static String normalizeLevel(String level) {
+		if (!StringUtils.hasText(level)) {
+			return "INFO";
+		}
+		String value = level.trim().toUpperCase(Locale.ROOT);
+		return switch (value) {
+			case "ERROR", "WARN", "INFO", "DEBUG" -> value;
+			default -> "INFO";
+		};
+	}
+
+	private static String normalizeType(String type) {
+		if (!StringUtils.hasText(type)) {
+			return "SYSTEM";
+		}
+		String value = type.trim().toUpperCase(Locale.ROOT);
+		return value.length() > 32 ? value.substring(0, 32) : value;
+	}
+
+	static String safe(String message) {
+		if (message == null) {
+			return "";
+		}
+		String clean = message
+			.replaceAll("(?i)[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}", "***@***")
+			.replaceAll("(?i)(bearer|authorization|token|refresh_token|senha|password)([=: ]+)[^ ,;]+",
+				"$1$2***")
+			.replaceAll("\\p{Cntrl}", " ");
+		return clean.length() > MAX_MESSAGE ? clean.substring(0, MAX_MESSAGE) : clean;
+	}
+
+	private record EventRow(String id, Instant createdAt, String level, String type, String message,
+			String requestId, String method, String path, String route, Integer status, Long durationMs,
+			String userId, String clientIp, String deviceId, String metadata) {
+		EventView view() {
+			return new EventView(id, createdAt.toString(), level, type, message, requestId, method, path, route,
+				status, durationMs, userId, clientIp, deviceId);
+		}
+	}
+
+	private static final class MinuteMetrics {
+		private final LongAdder requests = new LongAdder();
+		private final LongAdder errors2xx = new LongAdder();
+		private final LongAdder errors3xx = new LongAdder();
+		private final LongAdder errors4xx = new LongAdder();
+		private final LongAdder errors5xx = new LongAdder();
+		private final LongAdder slow = new LongAdder();
+		private final LongAdder rateLimited = new LongAdder();
+		private final Deque<Long> durations = new ConcurrentLinkedDeque<>();
+		private final AtomicLong maxDuration = new AtomicLong();
+		private final ConcurrentHashMap<String, LongAdder> methods = new ConcurrentHashMap<>();
+		private final ConcurrentHashMap<String, LongAdder> routes = new ConcurrentHashMap<>();
+		private volatile long cpuPercent = -1;
+		private volatile long heapUsed = -1;
+	}
+
+	public record EventView(String id, String createdAt, String level, String type, String message,
+			String requestId, String method, String path, String route, Integer status, Long durationMs,
+			String userId, String clientIp, String deviceId) {
+	}
+
+	public record MinutePoint(String minute, long requests, long requests2xx, long requests3xx, long errors4xx,
+			long errors5xx, long p95Ms, long p99Ms, long maxMs, long slowRequests, long rateLimited,
+			long cpuPercent, long heapMb) {
+	}
+
+	public record CountView(String label, long count) {
+	}
+
+	public record JvmView(long heapUsedBytes, long heapMaxBytes, int threads, int processors) {
+	}
+
+	public record DbPoolView(int active, int idle, int total, int waiting, int max, int min) {
+	}
+
+	public record ResourceView(long heapUsedBytes, long heapCommittedBytes, long heapMaxBytes,
+			long nonHeapUsedBytes, long gcCount, long gcTimeMs, int threads, int peakThreads, int daemonThreads,
+			int loadedClasses, double processCpuPercent, double systemCpuPercent, double loadAverage,
+			int processors, long systemMemoryTotalBytes, long systemMemoryFreeBytes, long diskTotalBytes,
+			long diskFreeBytes, long cgroupMemoryUsedBytes, long cgroupMemoryMaxBytes, double cgroupCpuCores,
+			DbPoolView dbPool) {
+	}
+
+	public record OverviewView(String generatedAt, long uptimeSeconds, long requestsLastMinute,
+			long errors4xxLastMinute, long errors5xxLastMinute, double errorRate, long p95Ms, long droppedEvents,
+			List<MinutePoint> series, List<CountView> levels24h, List<CountView> types24h,
+			List<CountView> topRoutes, List<EventView> recent, JvmView jvm, double requestsPerSecond,
+			int inFlight, int peakInFlight, long requestsTotal, long p50Ms, long p99Ms, long maxMs,
+			long slowLastMinute, long rateLimitedLastMinute, List<CountView> statusCounts,
+			List<CountView> methodCounts, ResourceView resources) {
+	}
+}
