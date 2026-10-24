@@ -111,8 +111,7 @@ public class NetworkService {
 		if (connection.status() == ConnectionStatus.REMOVED) {
 			return;
 		}
-		var removed = connection.remove(clock.instant());
-		connectionRepository.save(removed);
+		connectionRepository.markRemoved(connection.id(), clock.instant());
 	}
 
 	public String getConnectionStatus(String currentUserId, String targetUserId) {

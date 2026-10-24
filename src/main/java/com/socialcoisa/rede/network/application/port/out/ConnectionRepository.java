@@ -1,5 +1,6 @@
 package com.socialcoisa.rede.network.application.port.out;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -12,6 +13,13 @@ import com.socialcoisa.rede.network.domain.UserConnection;
 public interface ConnectionRepository {
 
 	void save(UserConnection connection);
+
+	/**
+	 * Marca a linha como removida sem carregar/regravar a entidade. Dois DELETE concorrentes do
+	 * mesmo par davam "Record has changed since last read" (update de 0 linhas); o UPDATE direto
+	 * é idempotente e não disputa o estado antigo.
+	 */
+	void markRemoved(Long id, Instant removedAt);
 
 	Optional<UserConnection> findBetweenUsers(String requesterUserId, String receiverUserId);
 
