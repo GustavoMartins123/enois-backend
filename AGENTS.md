@@ -7,10 +7,10 @@ regras valem para agentes autônomos, sessões assistidas e contribuições huma
 ## Papel e autoridade
 
 - **IA acelera a implementação; IA não define arquitetura, produto nem política.**
-- Design, prioridades e merge para a branch de produção são decisão da mantenedora.
+- Design, prioridades e merge para a branch de produção são decisão dos mantenedores.
 - Fluxo de entrega: **feature → `qa` → `main`** (ver [`docs/GITFLOW.md`](docs/GITFLOW.md)). PR precisa
   de aprovação de alguém que não empurrou o código.
-- Toda mudança relevante tem origem rastreável (issue, tarefa do backlog ou pedido da mantenedora).
+- Toda mudança relevante tem origem rastreável (issue, tarefa do backlog ou pedido dos mantenedores).
 - **Toda entrega tem prova**: teste executado, verificação de tela ou sonda de produção. Concluído
   significa comprovado, não pretendido.
 
@@ -68,7 +68,7 @@ regras valem para agentes autônomos, sessões assistidas e contribuições huma
 - **Filtros nascem antes do contexto completar.** Filtro que injeta bean de WebMvc/JPA no
   construtor derruba o boot inteiro (aconteceu). Em filtro, dependência pesada é `ObjectProvider`
   resolvido na primeira requisição.
-- **Rotas fora da superfície respondem 200 com corpo vazio** (anti-enumerção). Teste novo que
+- **Rotas fora da superfície respondem 200 com corpo vazio** (anti-enumeração). Teste novo que
   espera 404 de caminho inexistente deve esperar 200 vazio.
 - O gateway tira o prefixo `/api`: controller serve na raiz, não em `/api/**`.
 - O `currentUserResolver.resolve(...)` lança sem sessão (use para escrita); o `viewerId` tolerante é
