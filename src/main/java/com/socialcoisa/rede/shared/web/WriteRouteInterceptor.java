@@ -38,6 +38,8 @@ class WriteRouteInterceptor implements HandlerInterceptor {
 		"/auth/2fa/resend",
 		"/auth/2fa/email/request",
 		"/auth/2fa/email/confirm",
+		// Formulário público de contribuição da landing: limitado por IP e pelo gate de origem.
+		"/contributors/applications",
 		"/auth/oauth/*/callback",
 		"/auth/oauth/*/token",
 		"/games/tokens/validate",
