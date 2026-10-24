@@ -58,6 +58,7 @@ class AutomatedWritePathsTests {
 		"/auth/2fa/resend",
 		"/auth/2fa/email/request",
 		"/auth/2fa/email/confirm",
+		"/contributors/applications",
 		"/auth/oauth/*/callback",
 		"/auth/oauth/*/token",
 		"/games/tokens/validate",
