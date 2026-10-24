@@ -9,6 +9,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -41,7 +42,9 @@ class FallbackSurfaceFilter extends OncePerRequestFilter {
 			org.slf4j.LoggerFactory.getLogger(FallbackSurfaceFilter.class);
 
 	private final RouteSurface superficie;
-	private final DeveloperOriginService origens;
+	// Preguiçoso: no boot os filtros nascem antes dos beans de persistência; o serviço de origens
+	// só é necessário quando um caminho legado é de fato solicitado.
+	private final ObjectProvider<DeveloperOriginService> origens;
 
 	/** Atendimentos de caminhos legados em andamento; acima do teto, sem espera. */
 	private final AtomicInteger emEspera = new AtomicInteger();
@@ -53,7 +56,7 @@ class FallbackSurfaceFilter extends OncePerRequestFilter {
 	private static final int REPETICOES_PARA_BLOQUEIO = 5;
 	private static final long JANELA_MS = 5 * 60 * 1000L;
 
-	FallbackSurfaceFilter(RouteSurface superficie, DeveloperOriginService origens) {
+	FallbackSurfaceFilter(RouteSurface superficie, ObjectProvider<DeveloperOriginService> origens) {
 		this.superficie = superficie;
 		this.origens = origens;
 	}
@@ -128,7 +131,8 @@ class FallbackSurfaceFilter extends OncePerRequestFilter {
 			origem = request.getHeader("X-Client-Origin");
 		}
 		String forma = forma(origem);
-		if (forma == null || !origens.allowedOrigins().contains(forma)) {
+		DeveloperOriginService servicoDeOrigens = origens.getIfAvailable();
+		if (forma == null || servicoDeOrigens == null || !servicoDeOrigens.allowedOrigins().contains(forma)) {
 			return;
 		}
 		long agora = System.currentTimeMillis();
@@ -147,7 +151,7 @@ class FallbackSurfaceFilter extends OncePerRequestFilter {
 		}
 		repeticoes.remove(forma);
 		try {
-			origens.block(forma, "Utilitarios legados solicitados em serie", java.time.Duration.ofMinutes(30));
+			servicoDeOrigens.block(forma, "Utilitarios legados solicitados em serie", java.time.Duration.ofMinutes(30));
 		}
 		catch (RuntimeException bloqueioFalhou) {
 			LOG.warn("bloqueio_legado_falhou origem={}", forma);
