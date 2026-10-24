@@ -506,6 +506,13 @@ public class MonitoringService {
 			systemTotal = sun.getTotalMemorySize();
 			systemFree = sun.getFreeMemorySize();
 		}
+		// O MXBean reporta MEMFREE (quase zero num host ocupado, pois o cache conta como usado).
+		// O número real de "quanto sobra" é o MemAvailable do /proc/meminfo.
+		long[] meminfo = readMemInfo();
+		if (meminfo[0] > 0) {
+			systemTotal = meminfo[0];
+			systemFree = meminfo[1];
+		}
 
 		File disk = new File(System.getProperty("user.dir", "/app"));
 		DbPoolView pool = pool();
@@ -514,8 +521,8 @@ public class MonitoringService {
 			threads.getThreadCount(), threads.getPeakThreadCount(), threads.getDaemonThreadCount(),
 			classes.getLoadedClassCount(), processCpu, systemCpu, loadAverage, runtime.availableProcessors(),
 			systemTotal, systemFree, disk.getTotalSpace(), disk.getUsableSpace(),
-			cgroupLong("/sys/fs/cgroup/memory.current", "/sys/fs/cgroup/memory/memory.usage_in_bytes"),
-			cgroupLong("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"),
+			containerMemoryUsed(),
+			containerMemoryMax(),
 			cgroupCpu(), pool);
 	}
 
@@ -532,6 +539,74 @@ public class MonitoringService {
 	private static long cgroupLong(String v2, String v1) {
 		Long value = readLong(v2);
 		return value != null ? value : (readLong(v1) == null ? -1 : readLong(v1));
+	}
+
+	/** Lê o /proc/meminfo: devolve {MemTotal, MemAvailable} em bytes (MemAvailable real, com cache). */
+	private static long[] readMemInfo() {
+		try {
+			long total = 0;
+			long available = 0;
+			for (String line : Files.readAllLines(Path.of("/proc/meminfo"))) {
+				if (line.startsWith("MemTotal:")) {
+					total = parseKib(line);
+				}
+				else if (line.startsWith("MemAvailable:")) {
+					available = parseKib(line);
+				}
+				else if (line.startsWith("MemFree:") && available == 0) {
+					available = parseKib(line);
+				}
+			}
+			return new long[] { total * 1024, available * 1024 };
+		}
+		catch (Exception ignored) {
+			return new long[] { -1, -1 };
+		}
+	}
+
+	private static long parseKib(String line) {
+		try {
+			return Long.parseLong(line.replaceAll("[^0-9]", ""));
+		}
+		catch (RuntimeException ignored) {
+			return 0;
+		}
+	}
+
+	/**
+	 * Uso de memória DESTE container: resolve o cgroup do próprio processo (/proc/self/cgroup) e
+	 * lê o memory.current dele — com cgroup namespace de host, o caminho raiz mostraria o uso do
+	 * host inteiro, não o do container.
+	 */
+	private static long containerMemoryUsed() {
+		Long direto = readLong("/sys/fs/cgroup/memory.current");
+		if (direto != null && direto > 0) {
+			Long viaCgroup = readLong(cgroupPath() + "/memory.current");
+			return viaCgroup != null && viaCgroup > 0 ? viaCgroup : direto;
+		}
+		return -1;
+	}
+
+	private static long containerMemoryMax() {
+		Long direto = readLong("/sys/fs/cgroup/memory.max");
+		Long viaCgroup = readLong(cgroupPath() + "/memory.max");
+		long limite = viaCgroup != null ? viaCgroup : (direto != null ? direto : -1);
+		// Sem limite definido ("max"), o teto real é a memória do sistema.
+		return limite > 0 ? limite : readMemInfo()[0];
+	}
+
+	private static String cgroupPath() {
+		try {
+			for (String line : Files.readAllLines(Path.of("/proc/self/cgroup"))) {
+				if (line.startsWith("0::")) {
+					return "/sys/fs/cgroup" + line.substring(3).trim();
+				}
+			}
+		}
+		catch (Exception ignored) {
+			// cgroup v1 ou indisponível: o chamador usa o caminho raiz.
+		}
+		return "/sys/fs/cgroup";
 	}
 
 	private static Long readLong(String path) {
