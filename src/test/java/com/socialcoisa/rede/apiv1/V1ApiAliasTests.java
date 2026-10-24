@@ -3,6 +3,7 @@ package com.socialcoisa.rede.apiv1;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -138,13 +139,18 @@ class V1ApiAliasTests {
 		MvcResult comVersao = mockMvc.perform(get("/v1/nao-existe-mesmo")).andReturn();
 
 		assertThat(comVersao.getResponse().getStatus()).isEqualTo(semVersao.getResponse().getStatus());
-		assertThat(comVersao.getResponse().getStatus()).isEqualTo(404);
+		// Caminho fora da superficie: a resposta padronizada (200, corpo em branco) vale para
+		// a versao e para o caminho sem versao, igualzinhos.
+		assertThat(comVersao.getResponse().getStatus()).isEqualTo(200);
 	}
 
 	@Test
 	void versaoNomeadaNaoEhVersao() throws Exception {
-		// "/v1x" nao e a versao 1: o alias so reescreve "/v1" seguido de caminho.
-		mockMvc.perform(get("/v1x/stats/community")).andExpect(status().isNotFound());
+		// "/v1x" nao e a versao 1: o alias so reescreve "/v1" seguido de caminho, e o caminho
+		// fora da superficie recebe a resposta padronizada, nunca os dados da rota real.
+		mockMvc.perform(get("/v1x/stats/community"))
+			.andExpect(status().isOk())
+			.andExpect(content().string(""));
 	}
 
 	@Test
