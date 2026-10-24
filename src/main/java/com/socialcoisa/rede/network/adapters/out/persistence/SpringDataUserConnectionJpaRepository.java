@@ -1,9 +1,11 @@
 package com.socialcoisa.rede.network.adapters.out.persistence;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -18,6 +20,18 @@ interface SpringDataUserConnectionJpaRepository extends JpaRepository<UserConnec
 			ORDER BY c.createdAt DESC
 			LIMIT 1""")
 	Optional<UserConnectionJpaEntity> findBetweenUsers(@Param("user1") String user1, @Param("user2") String user2);
+
+	/**
+	 * UPDATE direto: dois "remover conexão" simultâneos não podem falhar com
+	 * "Record has changed since last read" (o segundo update encontrava a linha já alterada).
+	 */
+	@Modifying(clearAutomatically = true, flushAutomatically = true)
+	@Query("""
+			UPDATE UserConnectionJpaEntity c
+			SET c.status = :status, c.removedAt = :removedAt
+			WHERE c.id = :id""")
+	int markRemoved(@Param("id") Long id, @Param("status") ConnectionStatus status,
+			@Param("removedAt") Instant removedAt);
 
 	List<UserConnectionJpaEntity> findByRequesterUserIdAndStatus(String requesterUserId, ConnectionStatus status);
 

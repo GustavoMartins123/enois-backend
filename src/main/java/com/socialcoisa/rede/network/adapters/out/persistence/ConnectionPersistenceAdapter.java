@@ -1,5 +1,6 @@
 package com.socialcoisa.rede.network.adapters.out.persistence;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -31,6 +32,11 @@ class ConnectionPersistenceAdapter implements ConnectionRepository {
 	@Override
 	public void save(UserConnection connection) {
 		springData.save(UserConnectionJpaEntity.fromDomain(connection));
+	}
+
+	@Override
+	public void markRemoved(Long id, Instant removedAt) {
+		springData.markRemoved(id, ConnectionStatus.REMOVED, removedAt);
 	}
 
 	@Override

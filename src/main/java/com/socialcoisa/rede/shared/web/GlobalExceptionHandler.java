@@ -13,6 +13,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
+import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -128,6 +130,16 @@ public class GlobalExceptionHandler {
 	ResponseEntity<ErrorResponse> handleMethodNotAllowed(Exception exception) {
 		return ResponseEntity.status(405)
 			.body(new ErrorResponse("METHOD_NOT_ALLOWED", "Metodo nao suportado para este recurso.", Instant.now()));
+	}
+
+	/**
+	 * Cliente que fecha o vídeo no meio do stream (seek/pause) ou conexão lenta que estoura o
+	 * timeout assíncrono não é erro do servidor: a resposta já estava comprometida e não há o que
+	 * corrigir. Antes isso caía no handler genérico e enchia a monitoração de 500 falsos.
+	 */
+	@ExceptionHandler({ AsyncRequestNotUsableException.class, AsyncRequestTimeoutException.class })
+	void handleAsyncRequestEnded(Exception exception) {
+		LOGGER.debug("async_request_ended type={}", exception.getClass().getSimpleName());
 	}
 
 	@ExceptionHandler(Exception.class)
