@@ -611,7 +611,7 @@ class AuthController {
 		}
 		catch (ApiException failure) {
 			return emailPage(failure.status(), "Não foi possível confirmar",
-				failure.getMessage() == null ? "Link inválido." : failure.getMessage());
+				"Link inválido ou expirado.");
 		}
 	}
 
