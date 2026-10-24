@@ -316,6 +316,15 @@ jobs:
                 TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY}
                 REDE_AUTH_SIGNUP_ENABLED: "true"
                 SIGNUP_CAPTCHA_ENABLED: "true"
+                # SMTP do dominio (mail.b7cloud.tech). O servidor anuncia STARTTLS e nao AUTH;
+                # o relay e liberado por IP para os hosts da b7cloud. Sem estas variaveis o
+                # Spring caia em localhost:587 e NENHUM e-mail saia (2FA, reset, confirmacao).
+                SPRING_MAIL_HOST: mail.b7cloud.tech
+                SPRING_MAIL_PORT: "587"
+                SPRING_MAIL_USERNAME: noreply@enois.ia.br
+                SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH: "false"
+                SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: "true"
+                SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_REQUIRED: "true"
                 LINKEDIN_CLIENT_ID: ${LINKEDIN_CLIENT_ID}
                 LINKEDIN_CLIENT_SECRET: ${LINKEDIN_CLIENT_SECRET}
                 LINKEDIN_REDIRECT_URI: ${LINKEDIN_REDIRECT_URI}
