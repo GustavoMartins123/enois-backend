@@ -27,8 +27,8 @@ interface SpringDataGroupJpaRepository extends JpaRepository<GroupJpaEntity, Str
 		SELECT g FROM GroupJpaEntity g
 		WHERE g.status IN :statuses
 		  AND (:before IS NULL OR g.createdAt < :before)
-		  AND (:query IS NULL OR LOWER(g.name) LIKE :query ESCAPE '\\'
-		       OR LOWER(g.description) LIKE :query ESCAPE '\\')
+		  AND (:query IS NULL OR LOWER(g.name) LIKE :query ESCAPE '!'
+		       OR LOWER(g.description) LIKE :query ESCAPE '!')
 		ORDER BY g.createdAt DESC""")
 	List<GroupJpaEntity> listVisible(@Param("statuses") List<GroupStatus> statuses, @Param("query") String query,
 			@Param("before") Instant before, Pageable pageable);

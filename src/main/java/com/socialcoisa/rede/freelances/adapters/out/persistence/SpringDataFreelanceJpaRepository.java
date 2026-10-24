@@ -15,8 +15,8 @@ interface SpringDataFreelanceJpaRepository extends JpaRepository<FreelanceJpaEnt
 	@Query("""
 		select f from FreelanceJpaEntity f
 		where f.status = :status
-		  and (lower(f.title) like lower(:q) escape '\\'
-		    or lower(f.scope) like lower(:q) escape '\\')
+		  and (lower(f.title) like lower(:q) escape '!'
+		    or lower(f.scope) like lower(:q) escape '!')
 		order by f.createdAt desc
 		""")
 	List<FreelanceJpaEntity> searchOpen(@Param("status") com.socialcoisa.rede.freelances.domain.Freelance.Status status,
