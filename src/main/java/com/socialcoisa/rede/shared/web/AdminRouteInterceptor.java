@@ -5,8 +5,6 @@ import java.util.List;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
-import com.socialcoisa.rede.moderation.application.ModeratorService;
-
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
@@ -25,7 +23,7 @@ class AdminRouteInterceptor implements HandlerInterceptor {
 
 	private final CurrentUserResolver currentUserResolver;
 	private final AdminGuard adminGuard;
-	private final ModeratorService moderators;
+	private final ModeratorGuard moderatorGuard;
 
 	/**
 	 * Caminhos de /admin que o painel de moderação abre para MODERADORES (além do admin):
@@ -35,15 +33,18 @@ class AdminRouteInterceptor implements HandlerInterceptor {
 	 */
 	private static final List<String> CAMINHOS_DE_MODERADOR = List.of(
 		"/admin/appeals", "/admin/support", "/admin/emails",
-		"/admin/carteira/disputas", "/admin/blocked-ips", "/admin/monitoring");
+		"/admin/blocked-ips", "/admin/monitoring");
+
+	/** Subcaminhos de /admin/support que continuam exclusivos do admin (infraestrutura). */
+	private static final List<String> SUPPORT_ADMIN_ONLY = List.of("/admin/support/github");
 
 	private static final List<String> ACOES_DE_USUARIO = List.of("sanction", "sanitize", "ips");
 
 	AdminRouteInterceptor(CurrentUserResolver currentUserResolver, AdminGuard adminGuard,
-			ModeratorService moderators) {
+			ModeratorGuard moderatorGuard) {
 		this.currentUserResolver = currentUserResolver;
 		this.adminGuard = adminGuard;
-		this.moderators = moderators;
+		this.moderatorGuard = moderatorGuard;
 	}
 
 	@Override
@@ -60,9 +61,7 @@ class AdminRouteInterceptor implements HandlerInterceptor {
 		CurrentUser user = currentUserResolver.resolve(request.getHeader("X-Session-Token"));
 		String path = caminho(request);
 		if (abertoAoModerador(path)) {
-			if (!adminGuard.isAdmin(user) && !moderators.isModerator(user.id().value())) {
-				throw new ApiException(403, "FORBIDDEN", "Acesso restrito a moderadores.");
-			}
+			moderatorGuard.requireModerator(user);
 			return true;
 		}
 		adminGuard.requireAdmin(user);
@@ -70,8 +69,13 @@ class AdminRouteInterceptor implements HandlerInterceptor {
 	}
 
 	private boolean abertoAoModerador(String path) {
+		for (String bloqueado : SUPPORT_ADMIN_ONLY) {
+			if (path.equals(bloqueado) || path.startsWith(bloqueado + "/")) {
+				return false;
+			}
+		}
 		for (String prefixo : CAMINHOS_DE_MODERADOR) {
-			if (path.startsWith(prefixo)) {
+			if (path.equals(prefixo) || path.startsWith(prefixo + "/")) {
 				return true;
 			}
 		}

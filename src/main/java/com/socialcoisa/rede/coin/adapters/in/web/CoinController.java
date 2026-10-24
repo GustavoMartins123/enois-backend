@@ -33,13 +33,11 @@ class CoinController {
 	private final IdempotencyApplicationService idempotency;
 	private final UserProfileRepository profiles;
 	private final com.socialcoisa.rede.shared.web.AdminGuard adminGuard;
-	private final com.socialcoisa.rede.moderation.application.ModeratorService moderators;
 	private final com.socialcoisa.rede.coin.dispute.CoinDisputeService disputes;
 
 	CoinController(CoinService coins, com.socialcoisa.rede.coin.application.CoinRateService rates,
 			CurrentUserResolver currentUserResolver, IdempotencyApplicationService idempotency,
 			UserProfileRepository profiles, com.socialcoisa.rede.shared.web.AdminGuard adminGuard,
-			com.socialcoisa.rede.moderation.application.ModeratorService moderators,
 			com.socialcoisa.rede.coin.dispute.CoinDisputeService disputes) {
 		this.coins = coins;
 		this.rates = rates;
@@ -47,7 +45,6 @@ class CoinController {
 		this.idempotency = idempotency;
 		this.profiles = profiles;
 		this.adminGuard = adminGuard;
-		this.moderators = moderators;
 		this.disputes = disputes;
 	}
 
@@ -55,12 +52,6 @@ class CoinController {
 	 * A MINI BOLSA (monitor público): a cotação de referência da faísca em BRL e o
 	 * histórico que alimenta o gráfico. NÃO é câmbio — não compra faísca com dinheiro.
 	 */
-	private void requireModerator(com.socialcoisa.rede.shared.web.CurrentUser user) {
-		if (!adminGuard.isAdmin(user) && !moderators.isModerator(user.id().value())) {
-			throw new com.socialcoisa.rede.shared.web.ApiException(403, "FORBIDDEN",
-				"Acesso restrito a moderadores.");
-		}
-	}
 
 	@GetMapping("/coin/cotacao")
 	Map<String, Object> quote(@RequestParam(defaultValue = "90") int history) {
@@ -155,7 +146,7 @@ class CoinController {
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestParam(defaultValue = "30") int limit) {
 		CurrentUser admin = currentUserResolver.resolve(userId, sessionToken);
-		requireModerator(admin);
+		adminGuard.requireAdmin(admin);
 		return disputes.pending(limit).stream().map(CoinDisputeService::disputeView).toList();
 	}
 
@@ -165,7 +156,7 @@ class CoinController {
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String disputeId, @RequestBody(required = false) DisputeDecisionRequest request) {
 		CurrentUser admin = currentUserResolver.resolve(userId, sessionToken);
-		requireModerator(admin);
+		adminGuard.requireAdmin(admin);
 		var saved = disputes.uphold(disputeId, admin.id().value(),
 			request == null ? null : request.note());
 		return Map.of("id", saved.id(), "state", saved.state().name());
@@ -177,7 +168,7 @@ class CoinController {
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String disputeId, @RequestBody(required = false) DisputeDecisionRequest request) {
 		CurrentUser admin = currentUserResolver.resolve(userId, sessionToken);
-		requireModerator(admin);
+		adminGuard.requireAdmin(admin);
 		var saved = disputes.reject(disputeId, admin.id().value(),
 			request == null ? null : request.note());
 		return Map.of("id", saved.id(), "state", saved.state().name());

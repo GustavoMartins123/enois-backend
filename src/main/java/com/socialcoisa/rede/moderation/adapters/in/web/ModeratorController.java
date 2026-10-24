@@ -29,6 +29,7 @@ import com.socialcoisa.rede.shared.web.AdminGuard;
 import com.socialcoisa.rede.shared.web.ApiException;
 import com.socialcoisa.rede.shared.web.CurrentUser;
 import com.socialcoisa.rede.shared.web.CurrentUserResolver;
+import com.socialcoisa.rede.shared.web.ModeratorGuard;
 
 /**
  * Candidatura a moderador + painel de votação + ações de admin do painel.
@@ -53,13 +54,14 @@ class ModeratorController {
 	private final UserProfileRepository profiles;
 	private final CurrentUserResolver currentUserResolver;
 	private final AdminGuard adminGuard;
+	private final ModeratorGuard moderatorGuard;
 
 	ModeratorController(ModeratorService moderators, SanctionProposalService sanctionProposals,
 			SuspiciousUserService suspiciousUsers, BulkBanService bulkBans, SuspiciousAutoBanWorker autoBan,
 			com.socialcoisa.rede.moderation.application.IpBlockService ipBlocks,
 			com.socialcoisa.rede.moderation.application.port.out.RiskAssessmentReader riskAssessments,
 			GameService games, ServiceOfferService serviceOffers, UserProfileRepository profiles,
-			CurrentUserResolver currentUserResolver, AdminGuard adminGuard) {
+			CurrentUserResolver currentUserResolver, AdminGuard adminGuard, ModeratorGuard moderatorGuard) {
 		this.moderators = moderators;
 		this.sanctionProposals = sanctionProposals;
 		this.suspiciousUsers = suspiciousUsers;
@@ -72,6 +74,7 @@ class ModeratorController {
 		this.profiles = profiles;
 		this.currentUserResolver = currentUserResolver;
 		this.adminGuard = adminGuard;
+		this.moderatorGuard = moderatorGuard;
 	}
 
 	@GetMapping("/moderation/me")
@@ -99,7 +102,7 @@ class ModeratorController {
 			@RequestHeader("X-Session-Token") String sessionToken,
 			@RequestParam(defaultValue = "20") int limit) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		requireModerator(user);
+		moderatorGuard.requireModerator(user);
 		return moderators.panelReports(user.id().value(), limit);
 	}
 
@@ -108,7 +111,7 @@ class ModeratorController {
 			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String reportId,
 			@RequestBody VoteRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		requireModerator(user);
+		moderatorGuard.requireModerator(user);
 		return moderators.vote(reportId, user.id().value(), request.vote(), request.note());
 	}
 
@@ -181,7 +184,7 @@ class ModeratorController {
 			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String username,
 			@RequestBody SanctionRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		requireModerator(user);
+		moderatorGuard.requireModerator(user);
 		return moderators.sanctionUser(user.id().value(), username, request.type(), request.reason());
 	}
 
@@ -192,7 +195,7 @@ class ModeratorController {
 			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String username,
 			@RequestBody(required = false) DecisionRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		requireModerator(user);
+		moderatorGuard.requireModerator(user);
 		return moderators.sanitizeUser(user.id().value(), username,
 			request == null ? "Limpeza por spam (motivo não informado)" : request.note());
 	}
@@ -243,7 +246,7 @@ class ModeratorController {
 			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String username) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		requireModerator(user);
+		moderatorGuard.requireModerator(user);
 		return ipBlocks.ipsOfUser(username);
 	}
 
@@ -253,7 +256,7 @@ class ModeratorController {
 			@RequestHeader("X-Session-Token") String sessionToken,
 			@RequestBody BlockIpRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		requireModerator(user);
+		moderatorGuard.requireModerator(user);
 		return ipBlocks.block(user.id().value(), request.ip(), request.reason());
 	}
 
@@ -263,7 +266,7 @@ class ModeratorController {
 			@RequestHeader("X-Session-Token") String sessionToken,
 			@RequestParam(defaultValue = "100") int limit) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		requireModerator(user);
+		moderatorGuard.requireModerator(user);
 		return ipBlocks.list(limit);
 	}
 
@@ -272,7 +275,7 @@ class ModeratorController {
 			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String ip) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		requireModerator(user);
+		moderatorGuard.requireModerator(user);
 		ipBlocks.unblock(ip);
 		return Map.of("ip", ip, "blocked", "false");
 	}
@@ -295,7 +298,7 @@ class ModeratorController {
 			@RequestParam(defaultValue = "100") int limit,
 			@RequestParam(defaultValue = "30") int days) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		requireModerator(user);
+		moderatorGuard.requireModerator(user);
 		return suspiciousUsers.list(limit, days);
 	}
 
@@ -306,7 +309,7 @@ class ModeratorController {
 			@RequestHeader("X-Session-Token") String sessionToken,
 			@RequestBody BulkBanRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		requireModerator(user);
+		moderatorGuard.requireModerator(user);
 		return bulkBans.ban(user.id().value(), request.usernames(), request.type(), request.reason());
 	}
 
@@ -326,7 +329,7 @@ class ModeratorController {
 			@RequestHeader("X-Session-Token") String sessionToken,
 			@RequestParam(defaultValue = "50") int limit) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		requireModerator(user);
+		moderatorGuard.requireModerator(user);
 		return sanctionProposals.pending(user.id().value(), limit);
 	}
 
@@ -336,7 +339,7 @@ class ModeratorController {
 			@RequestHeader("X-Session-Token") String sessionToken,
 			@RequestBody SanctionProposalRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		requireModerator(user);
+		moderatorGuard.requireModerator(user);
 		return sanctionProposals.propose(user.id().value(), request.username(), request.type(), request.reason());
 	}
 
@@ -346,7 +349,7 @@ class ModeratorController {
 			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String proposalId,
 			@RequestBody SanctionProposalVoteRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		requireModerator(user);
+		moderatorGuard.requireModerator(user);
 		return sanctionProposals.vote(proposalId, user.id().value(), request.vote(), request.note());
 	}
 
@@ -364,7 +367,7 @@ class ModeratorController {
 			@RequestHeader("X-Session-Token") String sessionToken,
 			@RequestParam(defaultValue = "30") int limit) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		requireModerator(user);
+		moderatorGuard.requireModerator(user);
 		return games.pending(limit).stream().map(this::gameView).toList();
 	}
 
@@ -373,7 +376,7 @@ class ModeratorController {
 			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String gameId,
 			@RequestBody(required = false) DecisionRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		requireModerator(user);
+		moderatorGuard.requireModerator(user);
 		if (!adminGuard.isAdmin(user)) {
 			games.requireNotOwnSubmission(gameId, user.id().value());
 		}
@@ -386,7 +389,7 @@ class ModeratorController {
 			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String gameId,
 			@RequestBody(required = false) DecisionRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		requireModerator(user);
+		moderatorGuard.requireModerator(user);
 		Game rejected = games.reject(gameId, user.id().value(), request == null ? null : request.note());
 		return Map.of("id", rejected.id(), "status", rejected.status().name());
 	}
@@ -400,11 +403,6 @@ class ModeratorController {
 			game.submittedAt() == null ? null : game.submittedAt().toString());
 	}
 
-	private void requireModerator(CurrentUser user) {
-		if (!adminGuard.isAdmin(user) && !moderators.isModerator(user.id().value())) {
-			throw new ApiException(403, "FORBIDDEN", "Acesso restrito a moderadores.");
-		}
-	}
 
 	record MeResponse(int reputation, int minReputation, boolean eligible, boolean moderator,
 			boolean admin, long moderatorCount, int minModeratorsForSanction,
@@ -421,7 +419,7 @@ class ModeratorController {
 			@RequestHeader("X-Session-Token") String sessionToken,
 			@RequestParam(defaultValue = "30") int limit) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		requireModerator(user);
+		moderatorGuard.requireModerator(user);
 		return serviceOffers.pending(limit).stream()
 			.map(offer -> ServiceView.of(offer, serviceOffers.usernameOf(offer), user.id().value()))
 			.toList();
@@ -432,7 +430,7 @@ class ModeratorController {
 			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String serviceId,
 			@RequestBody(required = false) DecisionRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		requireModerator(user);
+		moderatorGuard.requireModerator(user);
 		if (!adminGuard.isAdmin(user)) {
 			serviceOffers.requireNotOwnSubmission(serviceId, user.id().value());
 		}
@@ -446,7 +444,7 @@ class ModeratorController {
 			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String serviceId,
 			@RequestBody DecisionRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		requireModerator(user);
+		moderatorGuard.requireModerator(user);
 		var rejected = serviceOffers.reject(serviceId, user.id().value(),
 			request == null ? null : request.note());
 		// O motivo vai junto na resposta: é o que o painel mostra e o prestador vai ler.
@@ -459,7 +457,7 @@ class ModeratorController {
 			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String serviceId,
 			@RequestBody(required = false) DecisionRequest request) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		requireModerator(user);
+		moderatorGuard.requireModerator(user);
 		var suspended = serviceOffers.suspend(serviceId, user.id().value(),
 			request == null ? null : request.note());
 		return Map.of("id", suspended.id(), "status", suspended.status().name());

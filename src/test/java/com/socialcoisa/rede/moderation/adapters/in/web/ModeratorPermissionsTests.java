@@ -114,7 +114,6 @@ class ModeratorPermissionsTests {
 			"/admin/appeals",
 			"/admin/support",
 			"/admin/emails",
-			"/admin/carteira/disputas",
 			"/admin/blocked-ips",
 			"/admin/users/" + plainUsername + "/ips",
 			"/admin/monitoring/overview",
@@ -156,6 +155,25 @@ class ModeratorPermissionsTests {
 			.andExpect(status().isForbidden());
 		mockMvc.perform(post("/admin/moderator-applications/nao-existe/approve")
 				.header("X-Session-Token", mod.token()))
+			.andExpect(status().isForbidden());
+	}
+
+	@Test
+	void moderadorNaoAcessaGithubSettings() throws Exception {
+		var mod = moderador();
+		mockMvc.perform(get("/admin/support/github").header("X-Session-Token", mod.token()))
+			.andExpect(status().isForbidden());
+		mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/admin/support/github")
+				.header("X-Session-Token", mod.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"token\":\"hack\",\"repo\":\"evil/repo\",\"webhookSecret\":\"x\"}"))
+			.andExpect(status().isForbidden());
+	}
+
+	@Test
+	void moderadorNaoAcessaDisputasFinanceiras() throws Exception {
+		var mod = moderador();
+		mockMvc.perform(get("/admin/carteira/disputas").header("X-Session-Token", mod.token()))
 			.andExpect(status().isForbidden());
 	}
 
