@@ -118,7 +118,6 @@ public class TwoFactorService implements TwoFactorUseCase {
 	@Transactional
 	@Override
 	public List<String> enableTotp(String userId, String code, String password) {
-		// Reautenticação: uma sessão roubada sozinha não configura um fator controlado pelo atacante.
 		requirePassword(userId, password);
 		secretCipher.requireEnabled();
 		String pendingEncrypted = repository.findPendingSecret(userId)

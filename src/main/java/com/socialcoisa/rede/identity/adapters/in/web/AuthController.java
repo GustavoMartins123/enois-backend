@@ -376,9 +376,8 @@ class AuthController {
 	@PostMapping("/2fa/totp/enable")
 	@RateLimiter(name = "twofa")
 	Map<String, Object> enableTotp(@RequestHeader(value = "X-Session-Token", required = false) String token,
-			@RequestBody TwoFactorEnableRequest request) {
-		List<String> backupCodes = twoFactorUseCase.enableTotp(requireUserId(token), request.code(),
-			request.password());
+			@RequestBody EnableTotpRequest request) {
+		List<String> backupCodes = twoFactorUseCase.enableTotp(requireUserId(token), request.code(), request.password());
 		return Map.of("status", "TOTP_ENABLED", "backupCodes", backupCodes);
 	}
 
@@ -714,6 +713,9 @@ class AuthController {
 	}
 
 	record TwoFactorCodeRequest(String code) {
+	}
+
+	record EnableTotpRequest(String code, String password) {
 	}
 
 	record PasswordConfirmationRequest(String password) {
