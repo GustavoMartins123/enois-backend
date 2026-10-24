@@ -82,7 +82,10 @@ public class RequestObservabilityFilter extends OncePerRequestFilter {
 			// Health probes do Kubernetes batem a cada 10s: em INFO eles inundariam (e encareceriam)
 			// o CloudWatch sem dizer nada sobre o produto. Continuam disponíveis em DEBUG.
 			boolean probe = isProbe(request.getRequestURI());
-			var event = probe ? LOGGER.atDebug() : status >= 500 ? LOGGER.atError() : LOGGER.atInfo();
+			boolean clientDisconnected = Boolean.TRUE
+				.equals(request.getAttribute(GlobalExceptionHandler.CLIENT_DISCONNECTED_ATTRIBUTE));
+			var event = clientDisconnected || probe ? LOGGER.atDebug()
+				: status >= 500 ? LOGGER.atError() : LOGGER.atInfo();
 			event.addKeyValue("http.method", method)
 				.addKeyValue("http.route", route)
 				.addKeyValue("http.path", request.getRequestURI())
@@ -92,7 +95,7 @@ public class RequestObservabilityFilter extends OncePerRequestFilter {
 				.addKeyValue("deviceId", deviceId)
 				.log("http_request requestId={} method={} path={} status={} durationMs={} clientIp={} userId={} deviceId={}",
 					requestId, method, request.getRequestURI(), status, durationMs, clientIp, userId, deviceId);
-			if (!probe && durationMs >= SLOW_REQUEST_MS) {
+			if (!clientDisconnected && !probe && durationMs >= SLOW_REQUEST_MS) {
 				LOGGER.atWarn()
 					.addKeyValue("http.method", method)
 					.addKeyValue("http.route", route)
@@ -103,7 +106,7 @@ public class RequestObservabilityFilter extends OncePerRequestFilter {
 			}
 			// Monitorabilidade: métricas de toda requisição (exceto a própria tela de monitoração,
 			// que inflaria o gráfico com o polling do painel) e evento em 4xx/5xx.
-			if (!probe && !request.getRequestURI().startsWith("/admin/monitoring")) {
+			if (!clientDisconnected && !probe && !request.getRequestURI().startsWith("/admin/monitoring")) {
 				try {
 					monitoring.recordRequest(method, request.getRequestURI(), route, status, durationMs, requestId,
 						userId, clientIp, deviceId);
