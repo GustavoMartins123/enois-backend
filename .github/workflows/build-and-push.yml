@@ -247,6 +247,9 @@ jobs:
           PROD_STACK_ID: 350
           IMAGE_REF: ${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.image_tag }}
           DB_PASSWORD: ${{ secrets.PROD_DB_PASSWORD }}
+          # Senha da caixa noreply@enois.ia.br no mail.b7cloud.tech. Sem ela o servidor
+          # responde "Authentication failed" e nenhum e-mail de 2FA/reset sai.
+          MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
           REDE_SECURITY_ENCRYPTION_KEY: ${{ secrets.PROD_REDE_SECURITY_ENCRYPTION_KEY }}
           TURNSTILE_SITE_KEY: ${{ secrets.PROD_TURNSTILE_SITE_KEY }}
           TURNSTILE_SECRET_KEY: ${{ secrets.PROD_TURNSTILE_SECRET_KEY }}
@@ -322,7 +325,7 @@ jobs:
                 SPRING_MAIL_HOST: mail.b7cloud.tech
                 SPRING_MAIL_PORT: "587"
                 SPRING_MAIL_USERNAME: noreply@enois.ia.br
-                SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH: "false"
+                SPRING_MAIL_PASSWORD: ${MAIL_PASSWORD}
                 SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: "true"
                 SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_REQUIRED: "true"
                 LINKEDIN_CLIENT_ID: ${LINKEDIN_CLIENT_ID}
