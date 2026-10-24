@@ -40,6 +40,11 @@ class ConnectionPersistenceAdapter implements ConnectionRepository {
 	}
 
 	@Override
+	public int markAccepted(Long id, Instant acceptedAt) {
+		return springData.markAccepted(id, acceptedAt);
+	}
+
+	@Override
 	public Optional<UserConnection> findBetweenUsers(String requesterUserId, String receiverUserId) {
 		return springData.findBetweenUsers(requesterUserId, receiverUserId)
 			.map(UserConnectionJpaEntity::toDomain);

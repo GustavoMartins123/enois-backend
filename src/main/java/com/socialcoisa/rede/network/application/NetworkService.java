@@ -93,7 +93,15 @@ public class NetworkService {
 			throw new ApiException(403, "BLOCKED", "Esta conexao nao esta disponivel.");
 		}
 		var accepted = connection.accept(clock.instant());
-		connectionRepository.save(accepted);
+		if (connectionRepository.markAccepted(connection.id(), accepted.acceptedAt()) == 0) {
+			// Outra chamada aceitou (ou removeu) a mesma solicitação primeiro. Não repete a
+			// notificação e devolve o estado que venceu a corrida.
+			var current = connectionRepository.findBetweenUsers(targetUserId, currentUserId).orElse(accepted);
+			if (current.status() != ConnectionStatus.ACCEPTED) {
+				throw new ApiException(409, "INVALID_STATUS", "Solicitacao de conexao nao esta mais pendente.");
+			}
+			return current;
+		}
 		userProfileRepository.findById(currentUserId).ifPresent(accepter ->
 			notificationService.create(targetUserId, "CONNECTION_ACCEPTED", currentUserId,
 				"Conexão aceita",
