@@ -81,3 +81,9 @@
   services, freelances, support, ops, themes/cosmetics, dailygames, push, gifs, groups,
   companies/corporate, projects, preferences, stats, age, apiv1, blog, import (backend); rotas do
   frontend atualizadas; temas documentados.
+
+## Como continuar
+
+Este esforço continua por rodadas automáticas (20 em 20 minutos) enquanto houver itens pendentes.
+Se uma rodada não estiver rodando: abra uma nova conversa e peça "retomar a documentação dos
+módulos/páginas" — o agente lê este painel e segue daqui, marcando o log abaixo a cada rodada.
