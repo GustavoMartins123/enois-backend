@@ -92,6 +92,14 @@ public class MonitoringService {
 		peakInFlight.accumulateAndGet(current, Math::max);
 	}
 
+	/**
+	 * Requisição abortada pelo cliente (aba fechada, vídeo interrompido): só encerra o in-flight.
+	 * Contar como 5xx/4xx ou gravar evento transformaria desconexão normal em alarme falso.
+	 */
+	public void recordClientDisconnect() {
+		inFlight.updateAndGet(value -> Math.max(0, value - 1));
+	}
+
 	/** Chamado pelo filtro: métricas de TODA requisição; 4xx/5xx também viram evento. */
 	public void recordRequest(String method, String path, String route, int status, long durationMs,
 			String requestId, String userId, String clientIp, String deviceId) {

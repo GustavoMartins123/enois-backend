@@ -1,6 +1,7 @@
 package com.socialcoisa.rede.shared.web;
 
 import java.time.Instant;
+import java.util.Locale;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -8,11 +9,14 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.InvalidDataAccessApiUsageException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.http.converter.HttpMessageNotWritableException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
+import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -23,6 +27,9 @@ import io.github.resilience4j.ratelimiter.RequestNotPermitted;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+	/** Marca a requisição quando o cliente fechou a conexão; o filtro de acesso usa para não gravar 500. */
+	static final String CLIENT_DISCONNECTED_ATTRIBUTE = "rede.clientDisconnected";
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
@@ -128,6 +135,53 @@ public class GlobalExceptionHandler {
 	ResponseEntity<ErrorResponse> handleMethodNotAllowed(Exception exception) {
 		return ResponseEntity.status(405)
 			.body(new ErrorResponse("METHOD_NOT_ALLOWED", "Metodo nao suportado para este recurso.", Instant.now()));
+	}
+
+	/**
+	 * Cliente que fecha o vídeo no meio do stream (seek/pause) ou conexão lenta que estoura o
+	 * timeout assíncrono não é erro do servidor: a resposta já estava comprometida e não há o que
+	 * corrigir. Antes isso caía no handler genérico e enchia a monitoração de 500 falsos.
+	 */
+	@ExceptionHandler({ AsyncRequestNotUsableException.class, AsyncRequestTimeoutException.class })
+	void handleAsyncRequestEnded(Exception exception, jakarta.servlet.http.HttpServletRequest request) {
+		request.setAttribute(CLIENT_DISCONNECTED_ATTRIBUTE, Boolean.TRUE);
+		LOGGER.debug("async_request_ended type={}", exception.getClass().getSimpleName());
+	}
+
+	/**
+	 * A resposta JSON também pode morrer no meio: o navegador fecha a aba ou cancela o fetch e o
+	 * Tomcat devolve "Broken pipe" ao serializar. Isso não é falha do servidor. Um erro real de
+	 * serialização (Jackson) continua sendo 500 e registrado.
+	 */
+	@ExceptionHandler(HttpMessageNotWritableException.class)
+	ResponseEntity<ErrorResponse> handleNotWritable(HttpMessageNotWritableException exception,
+			jakarta.servlet.http.HttpServletRequest request) {
+		if (isClientDisconnect(exception)) {
+			request.setAttribute(CLIENT_DISCONNECTED_ATTRIBUTE, Boolean.TRUE);
+			LOGGER.debug("client_disconnected type={}", exception.getClass().getSimpleName());
+			return null;
+		}
+		LOGGER.error("response_write_failed", exception);
+		recordException(500, "RESPONSE_WRITE_FAILED", exception.getMessage(), request);
+		return ResponseEntity.internalServerError()
+			.body(new ErrorResponse("INTERNAL_ERROR", "Erro interno inesperado.", Instant.now()));
+	}
+
+	private static boolean isClientDisconnect(Throwable exception) {
+		Throwable cause = exception;
+		while (cause != null) {
+			String message = cause.getMessage();
+			if (message != null) {
+				String lower = message.toLowerCase(Locale.ROOT);
+				if (lower.contains("broken pipe") || lower.contains("connection reset")
+						|| lower.contains("disconnected client") || lower.contains("closedchannel")
+						|| lower.contains("failed to write") || lower.contains("eofexception")) {
+					return true;
+				}
+			}
+			cause = cause.getCause();
+		}
+		return false;
 	}
 
 	@ExceptionHandler(Exception.class)

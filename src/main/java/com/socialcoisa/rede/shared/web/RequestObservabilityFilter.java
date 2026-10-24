@@ -92,7 +92,10 @@ public class RequestObservabilityFilter extends OncePerRequestFilter {
 			// Health probes do Kubernetes batem a cada 10s: em INFO eles inundariam (e encareceriam)
 			// o CloudWatch sem dizer nada sobre o produto. Continuam disponíveis em DEBUG.
 			boolean probe = isProbe(request.getRequestURI());
-			var event = probe ? LOGGER.atDebug() : status >= 500 ? LOGGER.atError() : LOGGER.atInfo();
+			boolean clientDisconnected = Boolean.TRUE
+				.equals(request.getAttribute(GlobalExceptionHandler.CLIENT_DISCONNECTED_ATTRIBUTE));
+			var event = clientDisconnected || probe ? LOGGER.atDebug()
+				: status >= 500 ? LOGGER.atError() : LOGGER.atInfo();
 			event.addKeyValue("http.method", method)
 				.addKeyValue("http.route", route)
 				.addKeyValue("http.path", request.getRequestURI())
@@ -102,7 +105,7 @@ public class RequestObservabilityFilter extends OncePerRequestFilter {
 				.addKeyValue("deviceId", deviceId)
 				.log("http_request requestId={} method={} path={} status={} durationMs={} clientIp={} userId={} deviceId={}",
 					requestId, method, request.getRequestURI(), status, durationMs, clientIp, userId, deviceId);
-			if (!probe && durationMs >= SLOW_REQUEST_MS) {
+			if (!clientDisconnected && !probe && durationMs >= SLOW_REQUEST_MS) {
 				LOGGER.atWarn()
 					.addKeyValue("http.method", method)
 					.addKeyValue("http.route", route)
@@ -115,8 +118,13 @@ public class RequestObservabilityFilter extends OncePerRequestFilter {
 			// que inflaria o gráfico com o polling do painel) e evento em 4xx/5xx.
 			if (tracked) {
 				try {
-					monitoring.recordRequest(method, request.getRequestURI(), route, status, durationMs, requestId,
-						userId, clientIp, deviceId);
+					if (clientDisconnected) {
+						monitoring.recordClientDisconnect();
+					}
+					else {
+						monitoring.recordRequest(method, request.getRequestURI(), route, status, durationMs, requestId,
+							userId, clientIp, deviceId);
+					}
 				}
 				catch (RuntimeException ignored) {
 					// Nunca derruba a requisição real por causa da monitoração.

@@ -18,6 +18,7 @@ import com.socialcoisa.rede.moderation.domain.UserSanction;
 import com.socialcoisa.rede.shared.web.AdminGuard;
 import com.socialcoisa.rede.shared.web.CurrentUser;
 import com.socialcoisa.rede.shared.web.CurrentUserResolver;
+import com.socialcoisa.rede.shared.web.ModeratorGuard;
 
 /**
  * Penalidades do proprio usuario (com recurso) e a fila de recursos para o admin.
@@ -29,13 +30,15 @@ class SanctionController {
 	private final SanctionService sanctions;
 	private final CurrentUserResolver currentUserResolver;
 	private final AdminGuard adminGuard;
+	private final ModeratorGuard moderatorGuard;
 	private final AuthSessionRepository sessions;
 
 	SanctionController(SanctionService sanctions, CurrentUserResolver currentUserResolver, AdminGuard adminGuard,
-			AuthSessionRepository sessions) {
+			ModeratorGuard moderatorGuard, AuthSessionRepository sessions) {
 		this.sanctions = sanctions;
 		this.currentUserResolver = currentUserResolver;
 		this.adminGuard = adminGuard;
+		this.moderatorGuard = moderatorGuard;
 		this.sessions = sessions;
 	}
 
@@ -65,7 +68,7 @@ class SanctionController {
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestParam(defaultValue = "30") int limit) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		adminGuard.requireAdmin(user);
+		moderatorGuard.requireModerator(user);
 		return sanctions.pendingAppeals(limit).stream().map(AppealView::from).toList();
 	}
 
@@ -75,7 +78,7 @@ class SanctionController {
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String appealId) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		adminGuard.requireAdmin(user);
+		moderatorGuard.requireModerator(user);
 		UserSanction sanction = sanctions.approveAppeal(appealId, user.id().value());
 		return Map.of("status", "APPROVED", "sanction", SanctionView.from(sanction));
 	}
@@ -86,10 +89,11 @@ class SanctionController {
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String appealId) {
 		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		adminGuard.requireAdmin(user);
+		moderatorGuard.requireModerator(user);
 		UserSanction sanction = sanctions.denyAppeal(appealId, user.id().value(), sessions);
 		return Map.of("status", "DENIED", "sanction", SanctionView.from(sanction));
 	}
+
 
 	record CreateAppealRequest(String message) {
 	}
