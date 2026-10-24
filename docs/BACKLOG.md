@@ -433,6 +433,33 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   corporativo, objetivos profissionais no perfil, termos de limitação de responsabilidade).
   Front: `cb9b38aa` + esta rodada; back: templates dos e-mails.
 ## Higiene do front (entregue 2026-10-21)
+- **[x] ENTREGUE 2026-10-24 — O app oferecia login com Google mesmo num ambiente onde a API o
+  desliga.** A API tem o flag `rede.oauth.google.enabled`: quando está desligado, `/auth/config`
+  avisa (`googleLoginEnabled: false`) e `/oauth/google/start` **recusa** com 403
+  `OAUTH_PROVIDER_DISABLED`. O front **ignorava esse campo** — o tipo `AuthConfig` nem o declarava
+  e a tela de entrada desenha o botão do Google em código fixo. Na prática, desligar o Google no
+  ambiente não tirava o botão da frente da pessoa: ela clicava e só recebia um erro (e a
+  mensagem que aparecia era a do Google mesmo quando a falha era do LinkedIn).
+  *Como o problema foi achado:* as **382 chamadas de API do front** foram extraídas do código e
+  os **tipos de resposta** (em `src/types/**`) comparados com o JSON **real** que a API devolve —
+  foi assim que apareceu o `googleLoginEnabled` que a API entrega e o front não tipa. (O mesmo
+  cruzamento achou, na rodada anterior, a rota `/admin/carteira/supply` faltando na API.)
+  *O que foi feito:* `AuthConfig` declara `googleLoginEnabled`; `availableSocialProviders()`
+  (`src/constants/auth-providers.ts`) decide o que a tela oferece — o Google só entra na lista
+  quando a API diz que está ligado (a mesma regra do captcha, que também espera a configuração) —
+  e o botão deixou de ser escrito em código fixo. A falha da entrada social passou a citar o
+  provedor certo, e a recusa da API (`OAUTH_PROVIDER_DISABLED`) ganha a mensagem dela, que é mais
+  útil que o texto genérico.
+  *Testes:* `src/constants/auth-providers.test.ts` (7) — o Google some quando a API diz que está
+  desligado, aparece quando diz que está ligado, não aparece antes da resposta da API, os demais
+  provedores continuam, o tipo declara o campo (trava do contrato) e a tela consulta a config.
+  *Verificado:* `vitest` 390/390, `eslint` limpo nos arquivos tocados, `tsc` sem erro NOVO (o
+  `originBlocked` de `developer-origins-section.tsx` já existia na base), `vite build` ok, e a tela
+  conferida no Chrome headless a 390px e 1280px nos dois estados do flag (sem overflow horizontal).
+  Front: `6fc43bdd` (branch `fix/login-google-desligado`, sobre a `qa`).
+  *Fica de fora (decisão de produto):* o diálogo "contas vinculadas" continua oferecendo o Google
+  mesmo com o flag desligado — a API **não** recusa o vínculo (só o `/start` do login), então ali
+  não há contrato quebrado.
 - **[x] ENTREGUE 2026-10-21 — A tela de entrada parou de afirmar o que o produto não tem.**
   O painel de marca do login (e do reset de senha, que tinha o mesmo bloco) trazia **números
   fixos no texto** — "120k+ profissionais", "2.8k mentores ativos", "640 comunidades" — numa
