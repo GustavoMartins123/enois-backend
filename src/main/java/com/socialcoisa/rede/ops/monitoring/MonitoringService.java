@@ -57,6 +57,7 @@ public class MonitoringService {
 	private final Clock clock;
 	private final int retentionDays;
 	private final int maxEventsPerMinute;
+	private final long maxRows;
 	private final ObjectProvider<DataSource> dataSource;
 	private final ArrayBlockingQueue<EventRow> queue = new ArrayBlockingQueue<>(QUEUE_LIMIT);
 	private final ConcurrentLinkedDeque<EventView> recent = new ConcurrentLinkedDeque<>();
@@ -74,12 +75,14 @@ public class MonitoringService {
 
 	MonitoringService(JdbcTemplate jdbc, Clock clock, ObjectProvider<DataSource> dataSource,
 			@Value("${rede.monitoring.retention-days:7}") int retentionDays,
-			@Value("${rede.monitoring.max-events-per-minute:1000}") int maxEventsPerMinute) {
+			@Value("${rede.monitoring.max-events-per-minute:1000}") int maxEventsPerMinute,
+			@Value("${rede.monitoring.max-rows:250000}") long maxRows) {
 		this.jdbc = jdbc;
 		this.clock = clock;
 		this.dataSource = dataSource;
 		this.retentionDays = Math.max(1, retentionDays);
 		this.maxEventsPerMinute = Math.max(1, maxEventsPerMinute);
+		this.maxRows = Math.max(0, maxRows);
 	}
 
 	// ------------------------------------------------------------------ ingestão
@@ -253,10 +256,23 @@ public class MonitoringService {
 		try {
 			jdbc.update("delete from system_events where created_at < ?",
 				java.sql.Timestamp.from(clock.instant().minus(retentionDays, ChronoUnit.DAYS)));
+			// Redes contra volume patológico: mesmo com o teto por minuto, uma semana cheia
+			// poderia somar milhões de linhas. Acima do limite, as mais antigas saem primeiro.
+			if (maxRows > 0) {
+				jdbc.update("""
+					delete from system_events where id in (
+						select id from system_events order by created_at asc offset ? rows
+					)""", Math.max(0, countRows() - maxRows));
+			}
 		}
 		catch (RuntimeException ignored) {
 			// Banco indisponível: tenta de novo no próximo ciclo.
 		}
+	}
+
+	private long countRows() {
+		Long total = jdbc.queryForObject("select count(*) from system_events", Long.class);
+		return total == null ? 0 : total;
 	}
 
 	// ------------------------------------------------------------------ leitura
