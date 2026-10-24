@@ -68,6 +68,9 @@ public class MonitoringService {
 	private final AtomicInteger peakInFlight = new AtomicInteger();
 	private long eventMinute = -1;
 	private int eventCount;
+	private volatile List<CountView> levelCounts = List.of();
+	private volatile List<CountView> typeCounts = List.of();
+	private volatile long countsAt;
 
 	MonitoringService(JdbcTemplate jdbc, Clock clock, ObjectProvider<DataSource> dataSource,
 			@Value("${rede.monitoring.retention-days:7}") int retentionDays,
@@ -340,11 +343,12 @@ public class MonitoringService {
 			}
 		}
 
+		refreshCounts();
 		ResourceView resources = resources();
 		return new OverviewView(clock.instant().toString(),
 			ManagementFactory.getRuntimeMXBean().getUptime() / 1000,
 			last.requests(), last.errors4xx(), last.errors5xx(), errorRate, p95(latencySamples),
-			dropped.get(), series, countBy("level"), countBy("type"), topRoutes, recentEvents(100),
+			dropped.get(), series, levelCounts, typeCounts, topRoutes, recentEvents(100),
 			new JvmView(resources.heapUsedBytes(), resources.heapMaxBytes(), resources.threads(),
 				resources.processors()),
 			last10s / 10.0, inFlight.get(), peakInFlight.get(), requestsTotal.get(),
@@ -399,6 +403,21 @@ public class MonitoringService {
 
 	public List<EventView> recentEvents(int limit) {
 		return recent.stream().limit(Math.max(1, Math.min(limit, RECENT_LIMIT))).toList();
+	}
+
+	/** Contagens de 24h não precisam bater no banco a cada polling de 2,5s. */
+	private void refreshCounts() {
+		if (clock.millis() - countsAt < 30_000) {
+			return;
+		}
+		synchronized (this) {
+			if (clock.millis() - countsAt < 30_000) {
+				return;
+			}
+			levelCounts = countBy("level");
+			typeCounts = countBy("type");
+			countsAt = clock.millis();
+		}
 	}
 
 	private List<CountView> countBy(String column) {
