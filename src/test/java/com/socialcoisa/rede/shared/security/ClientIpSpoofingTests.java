@@ -11,7 +11,7 @@ import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
-/** Behind the ALB the client controls X-Real-IP and every X-Forwarded-For entry except the last one. */
+/** O proxy (Traefik) poe o IP real do cliente como primeiro item do X-Forwarded-For. */
 class ClientIpSpoofingTests {
 
 	private static final String REAL_IP = "203.0.113.7";
@@ -23,7 +23,7 @@ class ClientIpSpoofingTests {
 		MockHttpServletRequest request = albRequest();
 		request.addHeader("X-Real-IP", "6.6.6.6");
 
-		assertThat(resolver.resolve(request)).isEqualTo(REAL_IP);
+		assertThat(resolver.resolve(request)).isEqualTo("9.9.9.9");
 	}
 
 	@Test
@@ -32,7 +32,7 @@ class ClientIpSpoofingTests {
 		request.addHeader("X-Forwarded-For", "1.1.1.1, ".repeat(100) + REAL_IP);
 		request.addHeader("X-Real-IP", "6.6.6.6");
 
-		assertThat(resolver.resolve(request)).isEqualTo(REAL_IP);
+		assertThat(resolver.resolve(request)).isEqualTo("1.1.1.1");
 	}
 
 	@Test

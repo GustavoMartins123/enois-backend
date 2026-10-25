@@ -152,9 +152,16 @@ public class MonitoringService {
 	// da tentativa que gerou o erro, não do erro em si.
 	public void recordException(int status, String code, String message, String method, String path,
 			String requestId, String userId) {
+		recordException(status, code, message, method, path, requestId, userId, null);
+	}
+
+	/** Exceções com pilha: o painel mostra a causa sem expor corpo de requisição nem segredo. */
+	public void recordException(int status, String code, String message, String method, String path,
+			String requestId, String userId, Throwable failure) {
 		enqueue(new EventRow(id(), clock.instant(), status >= 500 ? "ERROR" : "WARN", "EXCEPTION",
 			code + ": " + safe(message), requestId, method, path, null, status, null, userId,
-			org.slf4j.MDC.get(RequestObservabilityFilter.MDC_CLIENT_IP), null, null));
+			org.slf4j.MDC.get(RequestObservabilityFilter.MDC_CLIENT_IP), null,
+			safeStackTrace(failure, 4000)));
 	}
 
 	public void recordEvent(String level, String type, String message, Map<String, Object> metadata) {
@@ -393,7 +400,7 @@ public class MonitoringService {
 	public List<EventView> events(String level, String type, String q, String from, String to, String before, int limit) {
 		StringBuilder sql = new StringBuilder("""
 			select id, created_at, level, type, message, request_id, method, path, route, status, duration_ms,
-				user_id, client_ip, device_id from system_events where 1=1
+				user_id, client_ip, device_id, metadata from system_events where 1=1
 			""");
 		List<Object> params = new ArrayList<>();
 		if (StringUtils.hasText(level)) {
@@ -444,7 +451,7 @@ public class MonitoringService {
 				rs.getTimestamp(2).toInstant().toString(), rs.getString(3), rs.getString(4), rs.getString(5),
 				rs.getString(6), rs.getString(7), rs.getString(8), rs.getString(9),
 				(Integer) rs.getObject(10), (Long) rs.getObject(11), rs.getString(12), rs.getString(13),
-				rs.getString(14)), params.toArray());
+				rs.getString(14), rs.getString(15)), params.toArray());
 		}
 		catch (RuntimeException failure) {
 			return List.of();
@@ -770,12 +777,41 @@ public class MonitoringService {
 		return clean.length() > MAX_MESSAGE ? clean.substring(0, MAX_MESSAGE) : clean;
 	}
 
+	/** Pilha de erro redigida para o painel: passa pelo mesmo filtro da mensagem. */
+	static String safeStackTrace(Throwable failure, int maxChars) {
+		if (failure == null) {
+			return null;
+		}
+		StringBuilder pilha = new StringBuilder();
+		java.util.Set<Throwable> visitados = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+		Throwable atual = failure;
+		while (atual != null && visitados.add(atual)) {
+			if (pilha.length() > 0) {
+				pilha.append("Caused by: ");
+			}
+			pilha.append(atual.getClass().getName());
+			if (atual.getMessage() != null) {
+				pilha.append(": ").append(atual.getMessage());
+			}
+			pilha.append('\n');
+			StackTraceElement[] elementos = atual.getStackTrace();
+			int teto = Math.min(elementos.length, 40);
+			for (int i = 0; i < teto; i++) {
+				pilha.append("\tat ").append(elementos[i]).append('\n');
+			}
+			atual = atual.getCause();
+		}
+		String limpa = safe(pilha.toString());
+		int teto = Math.max(500, Math.min(maxChars, 8000));
+		return limpa.length() > teto ? limpa.substring(0, teto) : limpa;
+	}
+
 	private record EventRow(String id, Instant createdAt, String level, String type, String message,
 			String requestId, String method, String path, String route, Integer status, Long durationMs,
 			String userId, String clientIp, String deviceId, String metadata) {
 		EventView view() {
 			return new EventView(id, createdAt.toString(), level, type, message, requestId, method, path, route,
-				status, durationMs, userId, clientIp, deviceId);
+				status, durationMs, userId, clientIp, deviceId, metadata);
 		}
 	}
 
@@ -797,7 +833,7 @@ public class MonitoringService {
 
 	public record EventView(String id, String createdAt, String level, String type, String message,
 			String requestId, String method, String path, String route, Integer status, Long durationMs,
-			String userId, String clientIp, String deviceId) {
+			String userId, String clientIp, String deviceId, String metadata) {
 	}
 
 	public record MinutePoint(String minute, long requests, long requests2xx, long requests3xx, long errors4xx,
