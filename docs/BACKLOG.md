@@ -471,6 +471,40 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   *Nota de operação (front):* todos os PRs abertos estão `MERGEABLE`; o `BLOCKED` que o GitHub
   mostra em cada um é só o **pedido de 1 aprovação** que a proteção das branches exige (ninguém
   mais está exigindo check de status).
+- **[x] ENTREGUE 2026-10-25 — O plano dizia que o OpenAPI estava plugado: não está, e o pipeline
+  do front estava quebrado em três pontos.** O ROADMAP afirmava que o springdoc estava no
+  `pom.xml` (`springdoc.api-docs.path=/api/openapi.json`, ligado por `SPRINGDOC_ENABLED`) e que só
+  faltava o passo da esteira. **Conferido no código: o springdoc saiu no `pom.xml` no lote de
+  segurança (`302b7690`)** — incompatível com o Boot 4 e a UI dele expunha a superfície inteira
+  da API. Não existe `/openapi.json`: o caminho responde como qualquer rota desconhecida (200 sem
+  corpo). O mesmo evento apagou do `OperationalController` o único registro de que o documento
+  existia, e o front ficou com um pipeline que não podia funcionar:
+  1. o `specs/openapi.json` commitado é um **esqueleto** — zero rotas, mas com cara de documento;
+  2. o gerador importava `generate` do `@orval/core`, que **não existe** na versão travada do lock
+     (7.21.0 — o `generate` está no pacote `orval`): `npm run generate:api` quebrava com
+     "generate is not a function";
+  3. mesmo com um documento em mãos, a URL buscada (`/api/openapi.json`) não responderia nada.
+  *O que foi feito.* **No back:** o comentário do `OperationalController` passou a dizer a verdade
+  (não há OpenAPI, não há `SPRINGDOC_ENABLED` que ligue algo) e o índice `GET /api/v1` — que é o
+  contrato legível por máquina, montado a partir do roteador — passou a declarar em texto que o
+  documento OpenAPI não existe e onde está o contrato (`/developers` do app e o próprio índice).
+  *No front:* o `specs/openapi.json` se declara esqueleto e aponta para o contrato real (com
+  `x-enois`); os scripts de fetch e de geração **recusam o esqueleto** com mensagem que aponta o
+  caminho (em vez de pilha de erro do orval); o gerador passou a usar a CLI (que funciona na
+  versão travada) e `scripts/**/*.ts` entrou no `tsc` (antes o typecheck não via os scripts).
+  *E a lacuna que mais importava:* a matriz documentada da página `/developers` (157 pares) era
+  conferida **à mão**, em roteiro de auditoria — ou seja, uma vez por rodada, e cada_ENDPOINT novo
+  podia deixá-la velha. Agora é código: `npm run check:api-matrix` busca o índice ao vivo e
+  compara par a par (path e método, com variável de caminho casada por segmento como o roteador
+  faz). *Verificado contra a QA:* 157 pares documentados × 494 rotas do índice — tudo bate.
+  *Testes:* `src/lib/developers/api-matrix-check.test.ts` (8) e `src/lib/developers/openapi-spec.test.ts`
+  (5) no front; `V1ApiAliasTests` (11, era 9) no back — o índice afirma que não há OpenAPI e o
+  backend não serve documento nem em `/openapi.json`.
+  *Verificado:* front `vitest` 414/414, `eslint` limpo, `tsc --noEmit` limpo (com os scripts
+  dentro), `vite build` ok; back `V1ApiAliasTests` 11/11.
+  Front: #247 (`fix/contrato-publico-da-api`, sobre a `qa`). Back: #181 (mesmo branch).
+  *O que continua aberto (não é código meu):* gerar um OpenAPI de verdade exige um documento
+  gerado e revisado (escrever à mão não é caminho) e um passo na esteira — que é do raposo.
 - **[x] ENTREGUE 2026-10-24 — O app oferecia login com Google mesmo num ambiente onde a API o
   desliga.** A API tem o flag `rede.oauth.google.enabled`: quando está desligado, `/auth/config`
   avisa (`googleLoginEnabled: false`) e `/oauth/google/start` **recusa** com 403
