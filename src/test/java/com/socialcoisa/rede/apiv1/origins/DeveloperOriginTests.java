@@ -166,12 +166,38 @@ class DeveloperOriginTests {
 
 		// Caminho percent-encoded não pode escapar da regra de admin (URI crua, sem o template
 		// do MockMvc reencodar o "%").
-		mockMvc.perform(get(java.net.URI.create("/%61dmin/support")).header("Origin", "https://terceiro.example"))
-			.andExpect(status().isForbidden())
-			.andExpect(jsonPath("$.code").value("ORIGIN_NOT_TRUSTED"));
+		// Cada caminho usa uma origem propria para o limite de abuso nao mascarar o guard.
+		for (String path : java.util.List.of("/%61dmin/support", "/admin/%73upport",
+				"/%6doderation/me", "/api/%61dmin/support",
+				"/admin;v=1/support/github", "/admin/support/github;v=1")) {
+			String origin = "https://encoded-" + Integer.toHexString(path.hashCode()) + ".example";
+			MvcResult registered = mockMvc.perform(post("/developers/origins")
+					.header("X-Session-Token", user.token())
+					.header("X-Client-Origin", APP_ORIGIN)
+					.contentType(MediaType.APPLICATION_JSON)
+					.content(objectMapper.writeValueAsString(java.util.Map.of("origin", origin))))
+				.andExpect(status().isCreated()).andReturn();
+			String registeredId = objectMapper.readTree(registered.getResponse().getContentAsString())
+				.get("id").asString();
+			var request = get(java.net.URI.create(path));
+			if (path.startsWith("/api/")) {
+				request.contextPath("/api");
+			}
+			mockMvc.perform(request.header("Origin", origin))
+				.andExpect(status().isForbidden())
+				.andExpect(jsonPath("$.code").value("ORIGIN_NOT_TRUSTED"));
+			mockMvc.perform(delete("/developers/origins/" + registeredId)
+					.header("X-Session-Token", user.token())
+					.header("X-Client-Origin", APP_ORIGIN))
+				.andExpect(status().isOk());
+		}
 
 		// Origem do frontend passa o gate (a recusa seguinte é a falta de sessão, não a origem).
 		mockMvc.perform(get("/admin/support").header("X-Client-Origin", APP_ORIGIN))
+			.andExpect(status().isUnauthorized());
+
+		mockMvc.perform(get(java.net.URI.create("/%61dmin/support"))
+				.header("X-Client-Origin", APP_ORIGIN))
 			.andExpect(status().isUnauthorized());
 
 		// Curinga confiável de subdomínio.

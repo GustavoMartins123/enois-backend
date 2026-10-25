@@ -209,6 +209,52 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   container MariaDB aplicando as migrações (o do front, o `ci.yml`, já roda lint, typecheck e
   vitest).
 ## Higiene do backend (entregue 2026-10-21)
+- **[x] ENTREGUE 2026-10-25 — O endpoint de push não podia passar do que a coluna guarda.** Auditoria
+  do contrato entre a **entidade** e a **coluna** (356 colunas com `length` declarado, comparadas
+  com o schema que as migrations criaram): uma só estava errada — e no sentido perigoso, a entidade
+  prometendo **mais** do que a coluna guarda.
+  `push_subscriptions.endpoint` é `varchar(700)` (o número não é arbitrário: 700 caracteres cabem no
+  limite de chave do InnoDB — 3072 bytes em utf8mb4 — sem precisar de índice com prefixo, e o H2 dos
+  testes não aceita o prefixo). A entidade declarava `@Column(length = 1000)`.
+  *O efeito:* um endpoint maior passava pela API (que só checava o "https://") e quebrava no INSERT
+  com "Data too long" — que o tradutor de exceções devolve como **409 CONFLICT**, "Operação
+  conflita com o estado atual dos dados". O `ddl-auto=validate` do projeto compara o tipo, não o
+  comprimento, então esse descasamento passava batido.
+  *O que será feito:* a API recusa com **400** dizendo o que é ("Endpoint de push longo demais
+  (máximo 700 caracteres)") e a entidade passa a declarar o tamanho real.
+  *Teste:* `PushControllerTests` (5) — um endpoint de 700 caracteres recusa com 400 dizendo o campo.
+  Back: `3e0136c5` (branch `fix/config-qa-sem-duplicata`, sobre a `qa`).
+- **[x] ENTREGUE 2026-10-25 — Campo de texto que passa do teto da coluna recusa com 409 "conflita
+  com o estado atual dos dados" — agora é 400 dizendo o campo.** Toda coluna de texto no banco tem um
+  teto (`varchar(160)`, `varchar(255)`...). Passar dele faz o INSERT falhar com "Data too long for
+  column", que o tradutor de exceções devolve como **409 CONFLICT** — "Operação conflita com o estado
+  atual dos dados". Para quem publica uma empresa ou um evento, a mensagem não significa nada: que
+  conflito, com qual estado? (No log do servidor o motivo ficava, invisível para a pessoa.)
+  *A auditoria:* as colunas `varchar` curtas do schema (mediadas na bancada) cruzadas com a
+  validação de cada serviço. **Dez módulos não checavam o teto** — **empresas**, **eventos**,
+  **freelas**, **serviços**, **jogos**, **microprojetos**, **contestação da carteira**,
+  **comunidades**, **coleções de jogo** e a **nota de revisão do jogo** (o perfil corporativo trunca
+  em silêncio; blogs e canais já validam). No app, os campos de empresa, evento, serviço, jogo,
+  microprojeto e contestação não tinham limite: a pessoa podia digitar mais e tomar o 409.
+  *O caso mais spoilsado:* a API de serviço aceitava descrição de até **4000** caracteres e a coluna
+  é `varchar(2000)` — o banco recusava com "Data too long" e a pessoa levava o 409 sem saber que o
+  campo era a descrição.
+  *O que foi feito:* `TextFieldLimit` (`shared/web`) com a mensagem no formato da casa, e a checagem
+  antes de gravar em `CompanyService`, `EventService`, `FreelanceService`, `ServiceModels`,
+  `GameService`, `MicroProjectService`, `CoinDisputeService`, `CommunityService` e na nota de
+  revisão do jogo. Os tetos são os das colunas (nome 160,
+  setor 80, porte 40, localização 160, site 300, descrição 4000, título de evento 255, título de
+  freela 200, escopo 4000, serviço 160/2000/1000/40, jogo 200/4000/500, microprojeto 200,
+  contestação 400/1000, comunidade 255/2000, coleção de jogo 160/500, nota de revisão 500). No app,
+  os mesmos números aparecem no campo — e o contador junto.
+  *Testes:* `TextFieldLimitTests` (9, no back) e `company-edit-dialog.limits.test.ts` (5, no front).
+  *Comprovado que pegam:* sem a checagem, os três testes do back falham com
+  `Status expected:<400> but was:<409>`.
+  *Verificado:* back 27 testes (novos + de serviço, freela, evento, jogo, empresa, microprojeto e
+  disputa) e front `vitest` 406/406,
+  `eslint` limpo, `tsc --noEmit` sem erro, `vite build` ok — tudo com 0 falhas.
+  Back: `2c824222` + `81a2c3bc` + `b27260ba` (branch `fix/limite-campos-texto`, sobre a `qa`).
+  Front: `73a03d9c` + `73b347d8` (mesmo nome de branch, sobre a `qa`).
 - **[x] ENTREGUE 2026-10-22 — A recorrência do banimento JÁ estava coberta (o plano ainda
   dizia que faltava).** Conferido no código: o banimento revoga **todas** as sessões da conta
   (`revokeAllByUser` — access e refresh na mesma linha de sessão), o **login** é recusado com 403
