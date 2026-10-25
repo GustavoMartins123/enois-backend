@@ -57,7 +57,7 @@ public class AbuseGuardFilter extends OncePerRequestFilter {
 	private final long bloqueioMaximoMs;
 
 	public AbuseGuardFilter(java.time.Clock clock, ClientIpResolver ipResolver,
-			@Value("${rede.security.abuse.max-errors:40}") int limiteDeErros,
+			@Value("${rede.security.abuse.max-errors:0}") int limiteDeErros,
 			@Value("${rede.security.abuse.window-seconds:180}") long janelaSegundos,
 			@Value("${rede.security.abuse.first-block-minutes:15}") long primeiroBloqueioMinutos,
 			@Value("${rede.security.abuse.max-block-minutes:360}") long bloqueioMaximoMinutos) {
