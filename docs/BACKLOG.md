@@ -209,6 +209,43 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   container MariaDB aplicando as migrações (o do front, o `ci.yml`, já roda lint, typecheck e
   vitest).
 ## Higiene do backend (entregue 2026-10-21)
+- **[x] ENTREGUE 2026-10-25 — O IP que o app resolvia era o do proxy (na QA) ou o da borda do
+  Cloudflare (na prod): todo mundo parecia a mesma pessoa.** A variável `TRUSTED_PROXY_IPS` não
+  estava no ambiente — a lista de proxies confiáveis nasceu vazia e o IP do proxy não é loopback
+  nem RFC1918, então o app **rejeitava** o `X-Forwarded-For` e respondia com o
+  `getRemoteAddr()`: o IP do proxy, idêntico para todas as requisições. Todo limite por IP
+  (login, cadastro, leitura) e o bloqueio da moderação passavam a valer para a plataforma inteira
+  como se fosse uma pessoa só — o mesmo defeito que derrubou o app antes, agora pela metade
+  resolvida (a lista configurável existia, mas ninguém a configurou).
+  *A evidência (logs dos containers, agregados):* na **QA**, `TRUSTED_PROXY_IPS` **ausente** e
+  **1 único IP distinto** em todas as requisições; na **prod**, a variável existia (o IP do
+  Traefik) mas os IPs resolvidos eram faixas **172.6x/172.7x — do próprio Cloudflare**, que fica
+  na frente: 91 de 131 requisições vindas de 3 endereços de borda. O IP real da pessoa estava no
+  cabeçalho que o Cloudflare escreve (`CF-Connecting-IP`) e o app não lia.
+  *A segunda metade do defeito (código):* o `ClientIpResolver` passou a ler o **primeiro** item do
+  `X-Forwarded-For` — e o primeiro item é o único que o **cliente** controla: cada pessoa podia
+  escolher com que IP os limites a viam. O próprio teste que existia para provar que o cliente não
+  escolhe o próprio IP tinha sido invertido para afirmar o contrário.
+  *O conserto:*
+  - o app resolve o IP nesta ordem: (1) `CF-Connecting-IP`, quando existe — é o IP que o
+    Cloudflare viu e ele o sobrescreve a cada requisição, então o cliente não o forja (e só vale
+    vindo de um proxy confiável); (2) a cadeia do `X-Forwarded-For`, lida **da direita para a
+    esquerda**, pulando os proxies confiáveis — assim o item forjado nunca é alcançado e a
+    leitura serve às duas convenções (proxy que substitui o cabeçalho e proxy que o acrescenta);
+    (3) o `getRemoteAddr()`;
+  - `TRUSTED_PROXY_IPS` entrou no deploy da **QA** (que não tinha a variável) e no da **prod** —
+    onde ela existia só digitada à mão no Portainer, fora do arquivo: um deploy da stack apagaria
+    e o defeito voltaria sozinho.
+  *A prova (o teste que falhou antes do conserto):* com o código como estava, `ClientIpSpoofingTests`
+  dava **5 falhas em 9** — e a mais grave mostrava que quatro requisições seguidas, cada uma com
+  um `X-Forwarded-For` diferente, passavam **sem** bater no teto global (200 em vez de 429): o
+  limite por IP tinha virado decorativo.
+  *Testes:* `ClientIpSpoofingTests` (9) — o item forjado não vale; as duas convenções de proxy
+  servem; proxy confiável no meio da cadeia é pulado; cabeçalho inchado não faz o forjado valer;
+  o cabeçalho do Cloudflare tem precedência e só vale de proxy confiável; e girar o header do
+  cliente não escapa do teto global (429).
+  *Verificado:* `ClientIpSpoofingTests` 9/9; contra o código anterior os mesmos testes falham
+  5/9 (a prova de que o defeito era real, não impressão); suíte do backend verde.
 - **[x] ENTREGUE 2026-10-25 — O plano do perfil corporativo ainda dizia "pendente" no que já estava
   entregue.** Cruzamento dos planos contra o código (a regra: conferir no código antes de dizer que
   falta — a lista do repo já mentiu várias vezes) achou dois marcadores desatualizados:
