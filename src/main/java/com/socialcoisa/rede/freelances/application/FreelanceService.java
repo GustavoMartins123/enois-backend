@@ -16,6 +16,7 @@ import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.shared.age.AgeGate;
 import com.socialcoisa.rede.shared.security.ActionThrottle;
 import com.socialcoisa.rede.shared.web.ApiException;
+import com.socialcoisa.rede.shared.web.TextFieldLimit;
 
 /** Freelance: escopo fechado + faixa de valor + prazo. Sem nível/local/vaga externa. */
 @Service
@@ -45,6 +46,11 @@ public class FreelanceService {
 		if (!StringUtils.hasText(title) || title.trim().length() < 3) {
 			throw new ApiException(400, "INVALID_TITLE", "Título do freela precisa de pelo menos 3 caracteres.");
 		}
+		// Os mesmos tetos das colunas (`freelances.title varchar(200)`, `scope varchar(4000)`...):
+		// sem esta checagem o banco recusava a gravacao com "Data too long" e a pessoa recebia 409
+		// "Operacao conflita com o estado atual dos dados" — que nao diz qual campo passou do limite.
+		TextFieldLimit.check("FREELANCE_FIELD_TOO_LONG", "titulo", title, 200);
+		TextFieldLimit.check("FREELANCE_FIELD_TOO_LONG", "escopo", scope, 4000);
 		if (!StringUtils.hasText(scope) || scope.trim().length() < 20) {
 			throw new ApiException(400, "INVALID_SCOPE",
 				"Descreva o escopo fechado em pelo menos 20 caracteres.");

@@ -16,6 +16,7 @@ import com.socialcoisa.rede.feed.application.port.out.PostRepository;
 import com.socialcoisa.rede.feed.domain.Post;
 import com.socialcoisa.rede.feed.domain.PostId;
 import com.socialcoisa.rede.shared.web.ApiException;
+import com.socialcoisa.rede.shared.web.TextFieldLimit;
 
 @Service
 public class CommunityService {
@@ -38,6 +39,11 @@ public class CommunityService {
 
 	@Transactional
 	public Community create(String name, String description, String topic, String cover, String avatar, String userId) {
+		// Os tetos sao os das COLUNAS (`communities.name varchar(255)`, `description varchar(2000)`):
+		// sem a checagem o banco recusava com "Data too long" e a pessoa levava 409 "conflita com o
+		// estado atual dos dados".
+		TextFieldLimit.check("COMMUNITY_FIELD_TOO_LONG", "nome", name, 255);
+		TextFieldLimit.check("COMMUNITY_FIELD_TOO_LONG", "descricao", description, 2000);
 		String id = "community_" + UUID.randomUUID().toString().replace("-", "");
 		// Descrição é opcional: em branco vira NULL (o banco guarda "sem descrição", não texto vazio).
 		String finalDescription = org.springframework.util.StringUtils.hasText(description) ? description.trim()
@@ -57,6 +63,8 @@ public class CommunityService {
 		if (!community.createdBy().equals(userId)) {
 			throw new ApiException(403, "FORBIDDEN", "So o criador pode atualizar a comunidade.");
 		}
+		TextFieldLimit.check("COMMUNITY_FIELD_TOO_LONG", "nome", name, 255);
+		TextFieldLimit.check("COMMUNITY_FIELD_TOO_LONG", "descricao", description, 2000);
 		String finalName = name != null ? name : community.name();
 		String finalDesc = description != null ? description : community.description();
 		String finalTopic = topic != null ? topic : community.topic();

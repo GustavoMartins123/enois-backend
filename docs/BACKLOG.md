@@ -449,6 +449,24 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   corporativo, objetivos profissionais no perfil, termos de limitação de responsabilidade).
   Front: `cb9b38aa` + esta rodada; back: templates dos e-mails.
 ## Higiene do front (entregue 2026-10-21)
+- **[x] ENTREGUE 2026-10-25 — Três notificações tinham clique mudo (segurança e marketplace).** O
+  clique numa notificação só leva a lugar se o `href` dela casar com a tabela de rotas do app
+  (`src/utils/navigation.ts`); fora dela, `navigateToHref` não navega — a pessoa toca e **nada
+  acontece**. Fui pelos `href` que o backend realmente gera (as 32 chamadas de
+  `notifications.create`) e três não casavam:
+
+  | notificação | `href` do backend | destino |
+  |---|---|---|
+  | 2FA redefinido | `/seguranca` | `/seguranca` |
+  | novo dispositivo | `/configuracoes/seguranca` | `/seguranca` |
+  | pedido de desculpa de comunidade banida por engano | `/marketplace` | `/marketplace` |
+
+  As três rotas **existem** no app (`/seguranca`, `/marketplace`) — era só a tabela de rotas que
+  não as conhecia. Agora o clique leva ao lugar certo.
+  *Teste:* `src/utils/navigation.test.ts` (7) — as três entradas novas abrem a rota certa.
+  *Comprovado que pega:* sem a correção, os dois casos novos falham (o clique mudo).
+  *Verificado:* `vitest` 403/403, `eslint` limpo, `tsc --noEmit` sem erro, `vite build` ok.
+  Front: `b14806fb` (branch `fix/clique-notificacao-rotea`, sobre a `qa`).
 - **[x] ENTREGUE 2026-10-24 — O app oferecia login com Google mesmo num ambiente onde a API o
   desliga.** A API tem o flag `rede.oauth.google.enabled`: quando está desligado, `/auth/config`
   avisa (`googleLoginEnabled: false`) e `/oauth/google/start` **recusa** com 403

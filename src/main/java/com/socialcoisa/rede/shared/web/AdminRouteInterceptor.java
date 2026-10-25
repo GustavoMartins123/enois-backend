@@ -3,6 +3,9 @@ package com.socialcoisa.rede.shared.web;
 import java.util.List;
 
 import org.springframework.stereotype.Component;
+import org.springframework.http.server.PathContainer;
+import org.springframework.web.util.pattern.PathPattern;
+import org.springframework.web.util.pattern.PathPatternParser;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -31,14 +34,18 @@ class AdminRouteInterceptor implements HandlerInterceptor {
 	 * não está aqui permanece exclusivo do admin — inclusive a candidatura e a gestão de
 	 * moderadores, que nem aparecem nesta lista.
 	 */
-	private static final List<String> CAMINHOS_DE_MODERADOR = List.of(
-		"/admin/appeals", "/admin/support", "/admin/emails",
-		"/admin/blocked-ips", "/admin/monitoring");
+	private static final PathPattern ADMIN_PATH = pattern("/admin/**");
+
+	private static final List<PathPattern> CAMINHOS_DE_MODERADOR = List.of(
+		"/admin/appeals/**", "/admin/support/**", "/admin/emails/**",
+		"/admin/blocked-ips/**", "/admin/monitoring/**").stream()
+		.map(AdminRouteInterceptor::pattern).toList();
 
 	/** Subcaminhos de /admin/support que continuam exclusivos do admin (infraestrutura). */
-	private static final List<String> SUPPORT_ADMIN_ONLY = List.of("/admin/support/github");
+	private static final List<PathPattern> SUPPORT_ADMIN_ONLY = List.of(pattern("/admin/support/github/**"));
 
-	private static final List<String> ACOES_DE_USUARIO = List.of("sanction", "sanitize", "ips");
+	private static final List<PathPattern> ACOES_DE_USUARIO = List.of("sanction", "sanitize", "ips")
+		.stream().map(action -> pattern("/admin/users/*/" + action)).toList();
 
 	AdminRouteInterceptor(CurrentUserResolver currentUserResolver, AdminGuard adminGuard,
 			ModeratorGuard moderatorGuard) {
@@ -55,11 +62,11 @@ class AdminRouteInterceptor implements HandlerInterceptor {
 		if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
 			return true;
 		}
-		if (!isAdminPath(request)) {
+		PathContainer path = RequestPath.segments(request);
+		if (!ADMIN_PATH.matches(path)) {
 			return true;
 		}
 		CurrentUser user = currentUserResolver.resolve(request.getHeader("X-Session-Token"));
-		String path = caminho(request);
 		if (abertoAoModerador(path)) {
 			moderatorGuard.requireModerator(user);
 			return true;
@@ -68,38 +75,15 @@ class AdminRouteInterceptor implements HandlerInterceptor {
 		return true;
 	}
 
-	private boolean abertoAoModerador(String path) {
-		for (String bloqueado : SUPPORT_ADMIN_ONLY) {
-			if (path.equals(bloqueado) || path.startsWith(bloqueado + "/")) {
-				return false;
-			}
+	private boolean abertoAoModerador(PathContainer path) {
+		if (SUPPORT_ADMIN_ONLY.stream().anyMatch(pattern -> pattern.matches(path))) {
+			return false;
 		}
-		for (String prefixo : CAMINHOS_DE_MODERADOR) {
-			if (path.equals(prefixo) || path.startsWith(prefixo + "/")) {
-				return true;
-			}
-		}
-		if (path.startsWith("/admin/users/")) {
-			for (String acao : ACOES_DE_USUARIO) {
-				if (path.endsWith("/" + acao)) {
-					return true;
-				}
-			}
-		}
-		return false;
+		return CAMINHOS_DE_MODERADOR.stream().anyMatch(pattern -> pattern.matches(path))
+			|| ACOES_DE_USUARIO.stream().anyMatch(pattern -> pattern.matches(path));
 	}
 
-	private boolean isAdminPath(HttpServletRequest request) {
-		String path = caminho(request);
-		return path.startsWith("/admin/") || path.equals("/admin");
-	}
-
-	private String caminho(HttpServletRequest request) {
-		String path = request.getRequestURI();
-		String context = request.getContextPath();
-		if (context != null && !context.isEmpty() && path.startsWith(context)) {
-			path = path.substring(context.length());
-		}
-		return path;
+	private static PathPattern pattern(String value) {
+		return PathPatternParser.defaultInstance.parse(value);
 	}
 }
