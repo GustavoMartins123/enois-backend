@@ -111,11 +111,8 @@ public class GlobalApiRateLimitFilter extends OncePerRequestFilter {
 		}
 		if (!allowed) {
 			LOG.warn("Rate limit global atingido (chave: {})", key);
-			response.setStatus(429);
-			response.setHeader("Retry-After", "60");
-			response.setContentType("application/json");
-			response.setCharacterEncoding("UTF-8");
-			response.getWriter().write("{\"code\":\"RATE_LIMITED\",\"message\":\"Muitas requisicoes. Tente novamente em instantes.\"}");
+			RateLimitResponses.send(request, response, 60, "RATE_LIMITED",
+				"Muitas requisicoes. Tente novamente em instantes.");
 			return;
 		}
 		chain.doFilter(request, response);

@@ -85,11 +85,8 @@ public class PublicReadRateLimitFilter extends OncePerRequestFilter {
 			}
 			if (marks.size() >= perMinute) {
 				LOG.warn("Leitura pública acima do teto (chave={}, rota={})", who, request.getRequestURI());
-				response.setStatus(429);
-				response.setHeader("Retry-After", "60");
-				response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-				response.getWriter().write("{\"code\":\"ENUMERATION_GUARD\","
-					+ "\"message\":\"Muitas consultas de perfis em pouco tempo. Tente de novo em instantes.\"}");
+				RateLimitResponses.send(request, response, 60, "ENUMERATION_GUARD",
+					"Muitas consultas de perfis em pouco tempo. Tente de novo em instantes.");
 				return;
 			}
 			marks.addLast(now);
