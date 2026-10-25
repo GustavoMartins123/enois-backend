@@ -13,6 +13,8 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import com.socialcoisa.rede.shared.web.RequestPath;
+import org.springframework.web.util.pattern.PathPattern;
+import org.springframework.web.util.pattern.PathPatternParser;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -42,6 +44,9 @@ import jakarta.servlet.http.HttpServletResponse;
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 5)
 class RequestOriginFilter extends OncePerRequestFilter {
+
+	private static final PathPattern ADMIN_PATH = PathPatternParser.defaultInstance.parse("/admin/**");
+	private static final PathPattern MODERATION_PATH = PathPatternParser.defaultInstance.parse("/moderation/**");
 
 	static final String CLIENT_ORIGIN_HEADER = "X-Client-Origin";
 
@@ -117,7 +122,7 @@ class RequestOriginFilter extends OncePerRequestFilter {
 		}
 
 		// Admin e moderação: só a origem do frontend (confiável), nunca origem de terceiro.
-		if (isAdminPath(path) && !trusted) {
+		if (isAdminPath(request) && !trusted) {
 			if (StringUtils.hasText(origin)) {
 				setCors(response, origin);
 			}
@@ -224,9 +229,9 @@ class RequestOriginFilter extends OncePerRequestFilter {
 	}
 
 	/** Rotas do painel: somente a origem confiável do frontend. */
-	private static boolean isAdminPath(String path) {
-		return path.equals("/admin") || path.startsWith("/admin/")
-				|| path.equals("/moderation") || path.startsWith("/moderation/");
+	private static boolean isAdminPath(HttpServletRequest request) {
+		var path = RequestPath.segments(request);
+		return ADMIN_PATH.matches(path) || MODERATION_PATH.matches(path);
 	}
 
 	private static void reject(HttpServletResponse response, String code, String message) throws IOException {

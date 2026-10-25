@@ -168,7 +168,8 @@ class DeveloperOriginTests {
 		// do MockMvc reencodar o "%").
 		// Cada caminho usa uma origem propria para o limite de abuso nao mascarar o guard.
 		for (String path : java.util.List.of("/%61dmin/support", "/admin/%73upport",
-				"/%6doderation/me", "/api/%61dmin/support")) {
+				"/%6doderation/me", "/api/%61dmin/support",
+				"/admin;v=1/support/github", "/admin/support/github;v=1")) {
 			String origin = "https://encoded-" + Integer.toHexString(path.hashCode()) + ".example";
 			MvcResult registered = mockMvc.perform(post("/developers/origins")
 					.header("X-Session-Token", user.token())
