@@ -433,6 +433,27 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   corporativo, objetivos profissionais no perfil, termos de limitação de responsabilidade).
   Front: `cb9b38aa` + esta rodada; back: templates dos e-mails.
 ## Higiene do front (entregue 2026-10-21)
+- **[x] ENTREGUE 2026-10-25 — A CI do front não rodava teste, lint nem typecheck nos PRs que vão
+  para a QA.** O `ci.yml` disparava **só para `main`** — e a linha do dia a dia é a `qa`. Ou seja: os
+  PRs da equipe entravam **sem rodar teste nenhum**; o único check que disparavam era o build da
+  imagem, que faz `vite build` e **não** typecheca (o `"build"` do `package.json` é só `vite
+  build`). O script `typecheck` existia e **nenhum workflow o chamava**.
+  O comentário no arquivo explicava o motivo: *"Lint e typecheck entram aqui quando a main passar
+  neles (hoje: ~300 erros de lint... e ~60 erros de TypeScript)"*. **Essa dívida foi paga** — o lint
+  e o typecheck passam limpos nas duas linhas agora — e o passo nunca entrou.
+  *O que foi feito:* o `ci.yml` passa a disparar para a `qa` também (pull_request e push) e ganha os
+  passos **Lint** e **Typecheck** (os testes unitários já estavam lá); a dívida de lint foi quitada
+  (15 erros de formatação em 8 arquivos na `qa`, 14 em 7 na `main`, mais um tipo que vivia fora de
+  `src/types/**` — a regra `local/type-boundaries`); e o texto da página de desenvolvedores citava o
+  código de erro errado ("sem origem cadastrada" responde **403 `ORIGIN_NOT_ALLOWED`**, não
+  `ORIGIN_REQUIRED`).
+  *Por que importa:* sem o typecheck, um campo que a API devolve **nulo** passa e quebra no
+  navegador — e o `tsconfig` do front é `strict: true`, ou seja, o compilador pega essa classe
+  inteira de uma vez.
+  *Verificado:* `qa` — `vitest` 401/401, `eslint` sem erro, `tsc --noEmit` sem erro, `vite build`
+  ok. `main` — `vitest` 383/383 e o resto igual.
+  Front: #245 (`fix/ci-validar-prs-qa`, sobre a `qa`) e #246 (`fix/chave-origin-blocked`, sobre a
+  `main`).
 - **[x] ENTREGUE 2026-10-24 — O app oferecia login com Google mesmo num ambiente onde a API o
   desliga.** A API tem o flag `rede.oauth.google.enabled`: quando está desligado, `/auth/config`
   avisa (`googleLoginEnabled: false`) e `/oauth/google/start` **recusa** com 403
