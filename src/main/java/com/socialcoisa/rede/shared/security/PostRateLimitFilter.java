@@ -72,8 +72,7 @@ public class PostRateLimitFilter extends OncePerRequestFilter {
 		String token = request.getHeader("X-Session-Token");
 		boolean userAllowed = !StringUtils.hasText(token)
 			|| tryAcquire("u:" + Hashes.sha256Hex(token.trim()), userLimit);
-		boolean ipAllowed = tryAcquire("i:" + ipResolver.resolve(request), ipLimit);
-		if (!userAllowed || !ipAllowed) {
+		if (!userAllowed) {
 			writeTooManyRequests(response);
 			return;
 		}
