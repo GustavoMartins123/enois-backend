@@ -25,7 +25,7 @@ class SanctionGateAdapter implements SanctionGateReader {
 
 	@Override
 	public boolean banned(String userId) {
-		return sanctions.findActiveByUser(userId).map(UserSanction::isBan).orElse(false);
+		return sanctions.findActiveByUser(userId).map(UserSanction::isBlocked).orElse(false);
 	}
 
 	@Override
