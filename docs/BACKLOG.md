@@ -209,6 +209,29 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   container MariaDB aplicando as migrações (o do front, o `ci.yml`, já roda lint, typecheck e
   vitest).
 ## Higiene do backend (entregue 2026-10-21)
+- **[x] ENTREGUE 2026-10-25 — Campo de texto que passa do teto da coluna recusa com 409 "conflita
+  com o estado atual dos dados" — agora é 400 dizendo o campo.** Toda coluna de texto no banco tem um
+  teto (`varchar(160)`, `varchar(255)`...). Passar dele faz o INSERT falhar com "Data too long for
+  column", que o tradutor de exceções devolve como **409 CONFLICT** — "Operação conflita com o estado
+  atual dos dados". Para quem publica uma empresa ou um evento, a mensagem não significa nada: que
+  conflito, com qual estado? (No log do servidor o motivo ficava, invisível para a pessoa.)
+  *A auditoria:* as colunas `varchar` curtas do schema (mediadas na bancada) cruzadas com a
+  validação de cada serviço. Três módulos **não** checavam o teto — **empresas**, **eventos** e
+  **freelas** (o perfil corporativo trunca em silêncio; blogs e canais já validam). No app, o
+  formulário da empresa não limitava nome, setor, porte, localização nem site, e o título do evento
+  também não — a pessoa podia digitar mais e tomar o 409.
+  *O que foi feito:* `TextFieldLimit` (`shared/web`) com a mensagem no formato da casa, e a checagem
+  antes de gravar em `CompanyService`, `EventService` e `FreelanceService`. Os tetos são os das
+  colunas (nome 160, setor 80, porte 40, localização 160, site 300, descrição 4000, título de
+  evento 255, título de freela 200, escopo 4000). No app, os mesmos números aparecem no campo — e
+  o contador de caracteres junto.
+  *Testes:* `TextFieldLimitTests` (3, no back) e `company-edit-dialog.limits.test.ts` (2, no front).
+  *Comprovado que pegam:* sem a checagem, os três testes do back falham com
+  `Status expected:<400> but was:<409>`.
+  *Verificado:* back 21 testes (novos + de empresa, freela e evento) e front `vitest` 403/403,
+  `eslint` limpo, `tsc --noEmit` sem erro, `vite build` ok — tudo com 0 falhas.
+  Back: `2c824222` (branch `fix/limite-campos-texto`, sobre a `qa`). Front: `73a03d9c` (mesmo nome
+  de branch, sobre a `qa`).
 - **[x] ENTREGUE 2026-10-22 — A recorrência do banimento JÁ estava coberta (o plano ainda
   dizia que faltava).** Conferido no código: o banimento revoga **todas** as sessões da conta
   (`revokeAllByUser` — access e refresh na mesma linha de sessão), o **login** é recusado com 403
