@@ -1,9 +1,10 @@
 package com.socialcoisa.rede.shared.security;
 
-import java.util.Locale;
+import java.util.Arrays;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -13,13 +14,19 @@ import jakarta.servlet.http.HttpServletRequest;
 /**
  * Descobre de qual IP veio o pedido — o dado em que os limites por origem se apoiam.
  *
- * O tráfego entra pelo proxy reverso (Traefik), então {@code getRemoteAddr()} é o IP do proxy,
- * não o de quem pediu. O proxy deve enviar {@code X-Forwarded-For} com o IP real do cliente.
+ * O tráfego entra por um proxy reverso (ALB na AWS antiga, Traefik em `docker-prod3` hoje), então
+ * `getRemoteAddr()` é o IP do nó do proxy, não o de quem pediu: qualquer controle "por IP" que
+ * lesse dali estaria limitando o mundo inteiro como se fosse um só. Foi exatamente isso que
+ * aconteceu na migração pro Traefik — o IP do proxy (`31.220.102.169`, `docker-prod3`) não é mais
+ * loopback/RFC1918 como o ALB antigo, então {@link #isTrustedProxy} rejeitava a conexão e todo
+ * request caía no fallback de `getRemoteAddr()`, voltando sempre o IP do próprio proxy em vez do
+ * cliente real — corrigido tornando a lista de proxies confiáveis configurável
+ * (`security.trusted-proxy-ips`), em vez de só as faixas privadas fixas.
  *
- * Proxies confiáveis: faixas privadas (Docker, loopback) + IPs extras configuráveis via
- * {@code TRUSTED_PROXY_IPS}. Somente conexões vindas de um proxy confiável leem o XFF;
- * conexões diretas da internet usam o {@code getRemoteAddr()} para que o cliente não
- * escolha o próprio IP via header forjado.
+ * Sobre confiar no `X-Forwarded-For`: o cabeçalho pode vir forjado pelo cliente, mas o proxy da
+ * nossa rede **acrescenta** o IP de quem se conectou ao FIM da lista. Logo o ÚLTIMO item é o único
+ * que nós (e não o cliente) escrevemos — é ele que vale. Os itens anteriores são histórico que o
+ * cliente pode ter inventado, e por isso não entram na decisão.
  *
  * O Traefik coloca o IP real como primeiro (ou único) item do XFF. O ALB da AWS colocava
  * no fim. O resolver lê o PRIMEIRO hop do XFF (o mais à esquerda), que é o IP do cliente
@@ -30,14 +37,19 @@ public class ClientIpResolver {
 
 	private static final int MAX_IP = 45;
 
-	private final Set<String> extraTrustedIps;
+	private final Set<String> trustedProxyIps;
 
-	public ClientIpResolver(
-			@Value("${rede.security.trusted-proxy-ips:}") String trustedProxyIps) {
-		this.extraTrustedIps = java.util.Arrays.stream(trustedProxyIps.split(","))
+	/** Default sem proxy extra confiável — usado pelos testes, mantém o comportamento anterior. */
+	public ClientIpResolver() {
+		this("");
+	}
+
+	@Autowired
+	public ClientIpResolver(@Value("${security.trusted-proxy-ips:}") String trustedProxyIps) {
+		this.trustedProxyIps = Arrays.stream(trustedProxyIps.split(","))
 			.map(String::trim)
-			.filter(s -> !s.isEmpty())
-			.map(s -> s.toLowerCase(Locale.ROOT))
+			.map(ip -> ip.toLowerCase(java.util.Locale.ROOT))
+			.filter(StringUtils::hasText)
 			.collect(Collectors.toUnmodifiableSet());
 	}
 
@@ -57,7 +69,7 @@ public class ClientIpResolver {
 		return isPlausible(remote) ? remote.trim() : "desconhecido";
 	}
 
-	/** Loopback, faixas privadas e IPs extras configurados via env. */
+	/** Loopback, faixas privadas e o(s) IP(s) do proxy reverso atual: onde vivem nginx/ALB/Traefik. */
 	private boolean isTrustedProxy(String ip) {
 		if (!StringUtils.hasText(ip)) {
 			return false;
@@ -66,7 +78,7 @@ public class ClientIpResolver {
 		if (value.startsWith("::ffff:")) {
 			value = value.substring(7);
 		}
-		if (extraTrustedIps.contains(value)) {
+		if (trustedProxyIps.contains(value)) {
 			return true;
 		}
 		if (value.equals("127.0.0.1") || value.equals("::1") || value.equals("0:0:0:0:0:0:0:1")) {
