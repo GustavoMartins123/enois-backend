@@ -28,8 +28,9 @@ import jakarta.servlet.http.HttpServletRequest;
  * que nós (e não o cliente) escrevemos — é ele que vale. Os itens anteriores são histórico que o
  * cliente pode ter inventado, e por isso não entram na decisão.
  *
- * Limites de sanidade: valor curto, sem espaço, com forma de IP; qualquer coisa fora disso cai no
- * `getRemoteAddr()` (nunca lança, nunca deixa o cabeçalho virar chave de mapa gigante).
+ * O Traefik coloca o IP real como primeiro (ou único) item do XFF. O ALB da AWS colocava
+ * no fim. O resolver lê o PRIMEIRO hop do XFF (o mais à esquerda), que é o IP do cliente
+ * original. Itens subsequentes são proxies intermediários.
  */
 @Component
 public class ClientIpResolver {
@@ -54,25 +55,17 @@ public class ClientIpResolver {
 
 	public String resolve(HttpServletRequest request) {
 		String remote = request.getRemoteAddr();
-		// Só um proxy da nossa rede pode ditar o IP do cliente. Se a conexão vier direto da
-		// internet, X-Forwarded-For/X-Real-IP são do atacante e não valem (E-12/E-27).
 		if (!isTrustedProxy(remote)) {
 			return isPlausible(remote) ? remote.trim() : "desconhecido";
 		}
 		String forwarded = request.getHeader("X-Forwarded-For");
 		if (StringUtils.hasText(forwarded)) {
-			// Behind the ALB the header is always there. If its last hop is not an IP, fall to the
-			// connection address, never to X-Real-IP: the ALB passes that header through untouched,
-			// so the client would pick its own key (bypassing rate limits and IP blocks).
-			String candidate = lastHop(forwarded);
+			String candidate = firstHop(forwarded);
 			if (isPlausible(candidate)) {
 				return candidate;
 			}
 			return isPlausible(remote) ? remote.trim() : "desconhecido";
 		}
-		// X-Real-IP NUNCA é usado: o nginx do QA não o sobrescreve, então o cliente escolhia o
-		// próprio IP e escapava de bloqueio/rate limit (N-08). O proxy deve mandar X-Forwarded-For
-		// (com o IP real no FIM); sem ele, vale a conexão.
 		return isPlausible(remote) ? remote.trim() : "desconhecido";
 	}
 
@@ -81,7 +74,7 @@ public class ClientIpResolver {
 		if (!StringUtils.hasText(ip)) {
 			return false;
 		}
-		String value = ip.trim().toLowerCase(java.util.Locale.ROOT);
+		String value = ip.trim().toLowerCase(Locale.ROOT);
 		if (value.startsWith("::ffff:")) {
 			value = value.substring(7);
 		}
@@ -110,19 +103,14 @@ public class ClientIpResolver {
 	}
 
 	/**
-	 * O último item da lista — o que o nosso balanceador acrescentou. No length cap on the whole
-	 * header: the client can pad the forged prefix, and the ALB still appends the real IP at the end.
-	 * The hop itself is bounded by {@link #isPlausible}.
+	 * Primeiro item do XFF — o IP do cliente original. O Traefik coloca o IP real do
+	 * cliente como primeiro item; proxies intermediários são adicionados depois.
 	 */
-	private String lastHop(String header) {
-		int lastComma = header.lastIndexOf(',');
-		return lastComma < 0 ? header.trim() : header.substring(lastComma + 1).trim();
+	private String firstHop(String header) {
+		int firstComma = header.indexOf(',');
+		return firstComma < 0 ? header.trim() : header.substring(0, firstComma).trim();
 	}
 
-	/**
-	 * Forma de IP (v4 ou v6). Não valida faixa nem faz DNS: aqui é só para não aceitar texto solto
-	 * como chave — a decisão de bloquear é do limitador, não desta classe.
-	 */
 	private boolean isPlausible(String value) {
 		if (!StringUtils.hasText(value) || value.length() > MAX_IP || StringUtils.containsWhitespace(value)) {
 			return false;
