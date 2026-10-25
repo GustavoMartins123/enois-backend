@@ -216,22 +216,26 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   atual dos dados". Para quem publica uma empresa ou um evento, a mensagem não significa nada: que
   conflito, com qual estado? (No log do servidor o motivo ficava, invisível para a pessoa.)
   *A auditoria:* as colunas `varchar` curtas do schema (mediadas na bancada) cruzadas com a
-  validação de cada serviço. Três módulos **não** checavam o teto — **empresas**, **eventos** e
-  **freelas** (o perfil corporativo trunca em silêncio; blogs e canais já validam). No app, o
-  formulário da empresa não limitava nome, setor, porte, localização nem site, e o título do evento
-  também não — a pessoa podia digitar mais e tomar o 409.
+  validação de cada serviço. **Sete módulos não checavam o teto** — **empresas**, **eventos**,
+  **freelas**, **serviços**, **jogos**, **microprojetos** e a **contestação da carteira** (o perfil
+  corporativo trunca em silêncio; blogs e canais já validam). No app, nenhum desses campos tinha
+  limite: a pessoa podia digitar mais e tomar o 409.
+  *O caso mais spoilsado:* a API de serviço aceitava descrição de até **4000** caracteres e a coluna
+  é `varchar(2000)` — o banco recusava com "Data too long" e a pessoa levava o 409 sem saber que o
+  campo era a descrição.
   *O que foi feito:* `TextFieldLimit` (`shared/web`) com a mensagem no formato da casa, e a checagem
-  antes de gravar em `CompanyService`, `EventService` e `FreelanceService`. Os tetos são os das
-  colunas (nome 160, setor 80, porte 40, localização 160, site 300, descrição 4000, título de
-  evento 255, título de freela 200, escopo 4000). No app, os mesmos números aparecem no campo — e
-  o contador de caracteres junto.
-  *Testes:* `TextFieldLimitTests` (3, no back) e `company-edit-dialog.limits.test.ts` (2, no front).
+  antes de gravar em `CompanyService`, `EventService`, `FreelanceService`, `ServiceModels`,
+  `GameService`, `MicroProjectService` e `CoinDisputeService`. Os tetos são os das colunas (nome 160,
+  setor 80, porte 40, localização 160, site 300, descrição 4000, título de evento 255, título de
+  freela 200, escopo 4000, serviço 160/2000/1000/40, jogo 200/4000/500, microprojeto 200,
+  contestação 400/1000). No app, os mesmos números aparecem no campo — e o contador junto.
+  *Testes:* `TextFieldLimitTests` (7, no back) e `company-edit-dialog.limits.test.ts` (5, no front).
   *Comprovado que pegam:* sem a checagem, os três testes do back falham com
   `Status expected:<400> but was:<409>`.
-  *Verificado:* back 21 testes (novos + de empresa, freela e evento) e front `vitest` 403/403,
+  *Verificado:* back 24 testes (novos + de serviço, freela, evento, jogo, empresa e microprojeto) e front `vitest` 406/406,
   `eslint` limpo, `tsc --noEmit` sem erro, `vite build` ok — tudo com 0 falhas.
-  Back: `2c824222` (branch `fix/limite-campos-texto`, sobre a `qa`). Front: `73a03d9c` (mesmo nome
-  de branch, sobre a `qa`).
+  Back: `2c824222` + `81a2c3bc` (branch `fix/limite-campos-texto`, sobre a `qa`). Front: `73a03d9c` +
+  `73b347d8` (mesmo nome de branch, sobre a `qa`).
 - **[x] ENTREGUE 2026-10-22 — A recorrência do banimento JÁ estava coberta (o plano ainda
   dizia que faltava).** Conferido no código: o banimento revoga **todas** as sessões da conta
   (`revokeAllByUser` — access e refresh na mesma linha de sessão), o **login** é recusado com 403
