@@ -1,5 +1,6 @@
 package com.socialcoisa.rede.support.adapters.in.web;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.never;
@@ -20,10 +21,13 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.method.HandlerMethod;
+import org.springframework.web.servlet.HandlerInterceptor;
 
 import com.socialcoisa.rede.shared.web.AdminGuard;
 import com.socialcoisa.rede.shared.web.ModeratorGuard;
 import com.socialcoisa.rede.shared.web.TestAuthHelper;
+import com.socialcoisa.rede.shared.web.TestDatabase;
 import tools.jackson.databind.ObjectMapper;
 
 @SpringBootTest
@@ -34,10 +38,11 @@ class SupportRouteAuthorizationTests {
 	@MockitoSpyBean SupportController controller;
 	@MockitoSpyBean AdminGuard adminGuard;
 	@MockitoSpyBean ModeratorGuard moderatorGuard;
+	@MockitoSpyBean(name = "adminRouteInterceptor") HandlerInterceptor adminInterceptor;
 
 	@BeforeEach
 	void resetObservation() {
-		clearInvocations(controller, adminGuard, moderatorGuard);
+		clearInvocations(controller, adminGuard, moderatorGuard, adminInterceptor);
 	}
 
 	@Test
@@ -50,7 +55,7 @@ class SupportRouteAuthorizationTests {
 	@Test
 	void usuarioComumNaoExecutaLeituraOuEscritaProtegida() throws Exception {
 		var user = new TestAuthHelper(mockMvc, objectMapper).authenticate("route_policy_plain");
-		clearInvocations(controller, adminGuard, moderatorGuard);
+		clearInvocations(controller, adminGuard, moderatorGuard, adminInterceptor);
 		for (String path : List.of("/admin/support/github", "/%61dmin/support/github",
 				"/admin;v=1/support/github", "/admin/support/github;v=1")) {
 			mockMvc.perform(get(URI.create(path)).header("X-Session-Token", user.token()))
@@ -65,12 +70,89 @@ class SupportRouteAuthorizationTests {
 	@Test
 	void handlerExclusivoDeAdminUsaGuardaDeAdmin() throws Exception {
 		var user = new TestAuthHelper(mockMvc, objectMapper).authenticate("route_policy_role");
-		clearInvocations(controller, adminGuard, moderatorGuard);
+		clearInvocations(controller, adminGuard, moderatorGuard, adminInterceptor);
 		mockMvc.perform(get(URI.create("/admin/support/github;v=1"))
 				.header("X-Session-Token", user.token()))
 			.andExpect(status().isForbidden());
 		verify(adminGuard).requireAdmin(any());
 		verify(moderatorGuard, never()).requireModerator(any());
 		verifyNoInteractions(controller);
+	}
+
+	@Test
+	void cadeiaRealBloqueiaAntesDoControllerInclusiveComContexto() throws Exception {
+		var user = new TestAuthHelper(mockMvc, objectMapper).authenticate("route_policy_chain");
+		for (String context : List.of("", "/app")) {
+			for (String route : List.of("/admin/support/github", "/%61dmin/support/github",
+					"/admin/%73upport/github", "/admin;v=1/support/github", "/admin/support/github;v=1")) {
+				for (String session : List.of("", user.token())) {
+					for (boolean write : List.of(false, true)) {
+						clearInvocations(controller, adminGuard, moderatorGuard, adminInterceptor);
+						String receivedPath = context + route;
+						var request = write ? put(URI.create(receivedPath)) : get(URI.create(receivedPath));
+						request.contextPath(context);
+						if (!session.isEmpty()) request.header("X-Session-Token", session);
+						if (write) request.contentType(MediaType.APPLICATION_JSON).content("{}");
+						var result = mockMvc.perform(request)
+							.andExpect(session.isEmpty() ? status().isUnauthorized() : status().isForbidden())
+							.andReturn();
+						assertThat(result.getRequest().getRequestURI()).isEqualTo(receivedPath);
+						assertThat(result.getRequest().getContextPath()).isEqualTo(context);
+						assertThat(result.getHandler()).isInstanceOf(HandlerMethod.class);
+						var handler = (HandlerMethod) result.getHandler();
+						assertThat(handler.getBeanType()).isEqualTo(SupportController.class);
+						assertThat(handler.getMethod().getName())
+							.isEqualTo(write ? "updateGithubSettings" : "githubSettings");
+						verify(adminInterceptor).preHandle(any(), any(), any());
+						if (session.isEmpty()) verifyNoInteractions(adminGuard, moderatorGuard);
+						else verify(adminGuard).requireAdmin(any());
+						verify(moderatorGuard, never()).requireModerator(any());
+						verifyNoInteractions(controller);
+					}
+				}
+			}
+		}
+	}
+
+	@Test
+	void dadosCodificadosESegmentosDePontoNaoExecutamOperacaoAdministrativa() throws Exception {
+		var user = new TestAuthHelper(mockMvc, objectMapper).authenticate("route_policy_unmapped");
+		for (String path : List.of("/admin%2Fsupport/github", "/admin%252Fsupport/github",
+				"/%2561dmin/support/github", "/admin/x/%2e%2e/support/github")) {
+			for (String session : List.of("", user.token())) {
+				clearInvocations(controller, adminGuard, moderatorGuard, adminInterceptor);
+				var request = put(URI.create(path)).contentType(MediaType.APPLICATION_JSON).content("{}");
+				if (!session.isEmpty()) request.header("X-Session-Token", session);
+				var result = mockMvc.perform(request).andReturn();
+				assertThat(result.getRequest().getRequestURI()).isEqualTo(path);
+				// MockMvc não aplica a recusa de barras codificadas do Tomcat. Um handler
+				// estático pode ser selecionado; a operação administrativa continua proibida.
+				assertThat(result.getResponse().getStatus()).as(path).isIn(200, 400, 401, 403, 404);
+				if (result.getHandler() instanceof HandlerMethod handler) {
+					assertThat(handler.getBeanType()).as(path).isNotEqualTo(SupportController.class);
+				}
+				verifyNoInteractions(controller);
+			}
+		}
+	}
+
+	@Test
+	void administradorDaFixtureExecutaLeituraProtegidaComMesmoRoteamento() throws Exception {
+		var admin = new TestAuthHelper(mockMvc, objectMapper).authenticate("route_policy_positive");
+		TestDatabase.setAdmin(admin.userId());
+		for (String context : List.of("", "/app")) {
+			for (String route : List.of("/admin/support/github", "/%61dmin/support/github",
+					"/admin;v=1/support/github", "/admin/support/github;v=1")) {
+				clearInvocations(controller, adminGuard, moderatorGuard, adminInterceptor);
+				var result = mockMvc.perform(get(URI.create(context + route)).contextPath(context)
+						.header("X-Session-Token", admin.token()))
+					.andExpect(status().isOk()).andReturn();
+				assertThat(result.getRequest().getRequestURI()).isEqualTo(context + route);
+				assertThat(((HandlerMethod) result.getHandler()).getMethod().getName()).isEqualTo("githubSettings");
+				verify(adminInterceptor).preHandle(any(), any(), any());
+				verify(controller).githubSettings(any(), any());
+				verify(moderatorGuard, never()).requireModerator(any());
+			}
+		}
 	}
 }
