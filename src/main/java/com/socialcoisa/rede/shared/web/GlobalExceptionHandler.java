@@ -46,8 +46,8 @@ public class GlobalExceptionHandler {
 		// no CloudWatch com o código do erro, sem corpo de requisição nem dado pessoal.
 		if (exception.status() >= 500) {
 			LOGGER.error("api_error status={} code={} message={}", exception.status(), exception.code(),
-				exception.getMessage());
-			recordException(exception.status(), exception.code(), exception.getMessage(), request);
+				exception.getMessage(), exception);
+			recordException(exception.status(), exception.code(), exception.getMessage(), request, exception);
 		}
 		else {
 			LOGGER.debug("api_client_error status={} code={}", exception.status(), exception.code());
@@ -162,7 +162,7 @@ public class GlobalExceptionHandler {
 			return null;
 		}
 		LOGGER.error("response_write_failed", exception);
-		recordException(500, "RESPONSE_WRITE_FAILED", exception.getMessage(), request);
+		recordException(500, "RESPONSE_WRITE_FAILED", exception.getMessage(), request, exception);
 		return ResponseEntity.internalServerError()
 			.body(new ErrorResponse("INTERNAL_ERROR", "Erro interno inesperado.", Instant.now()));
 	}
@@ -188,16 +188,21 @@ public class GlobalExceptionHandler {
 	ResponseEntity<ErrorResponse> handleUnexpected(Exception exception,
 			jakarta.servlet.http.HttpServletRequest request) {
 		LOGGER.error("unhandled_exception", exception);
-		recordException(500, exception.getClass().getSimpleName(), exception.getMessage(), request);
+		recordException(500, exception.getClass().getSimpleName(), exception.getMessage(), request, exception);
 		return ResponseEntity.internalServerError()
 			.body(new ErrorResponse("INTERNAL_ERROR", "Erro interno inesperado.", Instant.now()));
 	}
 
 	private void recordException(int status, String code, String message,
 			jakarta.servlet.http.HttpServletRequest request) {
+		recordException(status, code, message, request, null);
+	}
+
+	private void recordException(int status, String code, String message,
+			jakarta.servlet.http.HttpServletRequest request, Throwable failure) {
 		try {
 			monitoring.recordException(status, code, message, request.getMethod(), request.getRequestURI(),
-				org.slf4j.MDC.get("requestId"), org.slf4j.MDC.get("userId"));
+				org.slf4j.MDC.get("requestId"), org.slf4j.MDC.get("userId"), failure);
 		}
 		catch (RuntimeException ignored) {
 			// Monitoração nunca pode mascarar o erro original.

@@ -23,8 +23,8 @@ import tools.jackson.databind.ObjectMapper;
  *
  * - **por IP, não global**: a mesma sequência que bloqueia um IP não pode bloquear outro (um teto
  *   global deixaria um atacante sozinho consumir a cota e derrubar o acesso de todos);
- * - **`X-Forwarded-For` pelo ÚLTIMO item**: é o único que o nosso balanceador escreve; os anteriores
- *   o cliente pode inventar. Trocar o histórico não muda a decisão; trocar o último muda;
+ * - **`X-Forwarded-For` pelo PRIMEIRO item**: é o IP real que o proxy poe no inicio; os
+ *   hops seguintes sao intermediarios. Trocar o primeiro muda a decisão; trocar o resto não;
  * - **cabeçalho absurdo não derruba nada**: valor gigante cai no IP da conexão em vez de virar erro;
  * - **quem usa normalmente não é bloqueado**: poucas tentativas seguidas passam;
  * - **a janela expira**: passado o tempo, o IP volta a poder tentar (sem isso, um pico viraria
@@ -62,14 +62,14 @@ class IdentityRateLimitTests {
 
 	@Test
 	void forwardedForCountsTheLastHopOnly() throws Exception {
-		// O histórico à esquerda muda a cada tentativa; o último item é o mesmo IP de verdade.
+		// Os hops a direita mudam a cada tentativa; o primeiro item e o mesmo IP de verdade.
 		for (int i = 0; i < 3; i++) {
-			loginWithForwarded("198.51.100.7, 203.0.113.30").andExpect(status().isUnauthorized());
+			loginWithForwarded("203.0.113.30, 198.51.100.7").andExpect(status().isUnauthorized());
 		}
-		loginWithForwarded("10.0.0.99, 203.0.113.30").andExpect(status().isTooManyRequests());
+		loginWithForwarded("203.0.113.30, 10.0.0.99").andExpect(status().isTooManyRequests());
 
-		// Mudar o ÚLTIMO item é mudar de IP: janela própria, ainda pode tentar.
-		loginWithForwarded("198.51.100.7, 203.0.113.31").andExpect(status().isUnauthorized());
+		// Mudar o PRIMEIRO item e mudar de IP: janela propria, ainda pode tentar.
+		loginWithForwarded("203.0.113.31, 198.51.100.7").andExpect(status().isUnauthorized());
 	}
 
 	@Test

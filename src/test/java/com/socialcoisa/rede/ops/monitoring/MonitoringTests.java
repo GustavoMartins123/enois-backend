@@ -115,4 +115,37 @@ class MonitoringTests {
 		assertThat(after.series()).isNotEmpty();
 		assertThat(after.topRoutes()).anyMatch(item -> item.label().equals("/monitor-probe"));
 	}
+
+	@Test
+	void exceptionCarriesSanitizedStackTraceToThePanel() throws Exception {
+		var admin = new TestAuthHelper(mockMvc, objectMapper).authenticate("group-admin");
+		String marker = "monitor-stack-" + UUID.randomUUID();
+		RuntimeException failure;
+		try {
+			throw new IllegalStateException(marker + " para contato@exemplo.com com token abc123");
+		}
+		catch (RuntimeException caught) {
+			failure = caught;
+		}
+		try {
+			monitoring.recordException(500, "INTERNAL_ERROR", marker, "GET", "/painel-prova",
+				"req-stack-" + UUID.randomUUID(), null, failure);
+			Thread.sleep(800);
+
+			mockMvc.perform(get("/admin/monitoring/events")
+					.header("X-Session-Token", admin.token())
+					.param("q", marker))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].metadata").exists())
+				.andExpect(jsonPath("$[0].metadata").value(org.hamcrest.Matchers.containsString(
+					"IllegalStateException")))
+				.andExpect(jsonPath("$[0].metadata").value(org.hamcrest.Matchers.not(
+					org.hamcrest.Matchers.containsString("contato@exemplo.com"))))
+				.andExpect(jsonPath("$[0].metadata").value(org.hamcrest.Matchers.not(
+					org.hamcrest.Matchers.containsString("abc123"))));
+		}
+		finally {
+			jdbc.update("delete from system_events where message like ?", "%" + marker + "%");
+		}
+	}
 }
