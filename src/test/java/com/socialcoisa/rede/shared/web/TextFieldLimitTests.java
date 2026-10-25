@@ -84,6 +84,86 @@ class TextFieldLimitTests {
 			.andExpect(jsonPath("$.message").value(Matchers.containsString("200")));
 	}
 
+
+	@Test
+	void ofertaDeServicoComDescricaoLongaRecusaDizendoOCampo() throws Exception {
+		var dono = auth("tfl_oferta");
+		// A API aceitava 4000 caracteres e a coluna e varchar(2000): o banco recusava com
+		// "Data too long" e a pessoa levava 409 "conflita com o estado atual dos dados".
+		mockMvc.perform(post("/servicos/ofertas")
+				.header("X-Session-Token", dono.token())
+				.header("Idempotency-Key", "tfl-oferta-longa")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of(
+					"category", "design", "title", "Capa de profissional",
+					"description", "D".repeat(2500),
+					"deliverables", "Arte de capa, dois dias.",
+					"price", 100, "deliveryDays", 2))))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("SERVICE_FIELD_TOO_LONG"))
+			.andExpect(jsonPath("$.message").value(Matchers.containsString("descricao")))
+			.andExpect(jsonPath("$.message").value(Matchers.containsString("2.000")));
+	}
+
+	@Test
+	void jogoComTituloLongoRecusaDizendoOCampo() throws Exception {
+		var dono = auth("tfl_jogo");
+		mockMvc.perform(post("/games")
+				.header("X-Session-Token", dono.token())
+				.header("Idempotency-Key", "tfl-jogo-longo")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of(
+					"title", "J".repeat(300), "url", "https://exemplo.itch.io/jogo"))))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("GAME_FIELD_TOO_LONG"))
+			.andExpect(jsonPath("$.message").value(Matchers.containsString("titulo")))
+			.andExpect(jsonPath("$.message").value(Matchers.containsString("200")));
+	}
+
+	@Test
+	void microprojetoComTituloLongoRecusaDizendoOCampo() throws Exception {
+		var dono = auth("tfl_micro");
+		var empresa = mockMvc.perform(post("/empresas")
+				.header("X-Session-Token", dono.token())
+				.header("Idempotency-Key", "tfl-micro-empresa")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of(
+					"name", "Estudio de Teste", "description", "Empresa criada para o teste de limite."))))
+			.andExpect(status().isOk())
+			.andReturn();
+		String companyId = objectMapper.readTree(empresa.getResponse().getContentAsString()).get("id").asText();
+
+		mockMvc.perform(post("/empresas/" + companyId + "/microprojetos")
+				.header("X-Session-Token", dono.token())
+				.header("Idempotency-Key", "tfl-micro-longo")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of(
+					"title", "M".repeat(300),
+					"problem", "Problema real com pelo menos trinta caracteres para passar.",
+					"deliverables", "Entregaveis com pelo menos vinte caracteres.",
+					"acceptanceCriteria", "Criterios com pelo menos vinte caracteres."))))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("COMPANY_FIELD_TOO_LONG"))
+			.andExpect(jsonPath("$.message").value(Matchers.containsString("titulo")))
+			.andExpect(jsonPath("$.message").value(Matchers.containsString("200")));
+	}
+
+	@Test
+	void contestacaoComMotivoLongoRecusaDizendoOCampo() throws Exception {
+		var dono = auth("tfl_contesta");
+		mockMvc.perform(post("/carteira/transacoes/coin_x/contestar")
+				.header("X-Session-Token", dono.token())
+				.header("Idempotency-Key", "tfl-contesta-longa")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of(
+					"reason", "R".repeat(500),
+					"description", "Descricao com pelo menos vinte caracteres."))))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("DISPUTE_FIELD_TOO_LONG"))
+			.andExpect(jsonPath("$.message").value(Matchers.containsString("motivo")))
+			.andExpect(jsonPath("$.message").value(Matchers.containsString("400")));
+	}
+
 	private TestAuthHelper.AuthSession auth(String username) throws Exception {
 		return new TestAuthHelper(mockMvc, objectMapper).authenticate(username);
 	}

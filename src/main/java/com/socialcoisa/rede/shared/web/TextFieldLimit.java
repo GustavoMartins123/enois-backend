@@ -25,7 +25,12 @@ public final class TextFieldLimit {
 	public static void check(String code, String field, String value, int max) {
 		if (value != null && value.length() > max) {
 			throw new ApiException(400, code,
-				"O campo " + field + " aceita no máximo " + max + " caracteres.");
+				"O campo " + field + " aceita no máximo " + milhar(max) + " caracteres.");
 		}
+	}
+
+	/** 2000 vira "2.000" — é como o número aparece no app (e a pessoa lê melhor assim). */
+	private static String milhar(int numero) {
+		return String.format("%,d", numero).replace(',', '.');
 	}
 }
