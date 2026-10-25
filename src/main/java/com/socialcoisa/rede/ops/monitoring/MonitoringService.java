@@ -140,12 +140,12 @@ public class MonitoringService {
 		metrics.methods.computeIfAbsent(method == null ? "?" : method, key -> new LongAdder()).increment();
 		metrics.routes.computeIfAbsent(route == null ? "UNMATCHED" : route, key -> new LongAdder()).increment();
 		seconds.computeIfAbsent(now / 1000, key -> new LongAdder()).increment();
-		if (status >= 400) {
-			String level = status >= 500 ? "ERROR" : "WARN";
-			String message = method + " " + (route == null ? path : route) + " -> " + status;
-			enqueue(new EventRow(id(), clock.instant(), level, "REQUEST", message, requestId, method, path,
-				route, status, durationMs, userId, clientIp, deviceId, null));
-		}
+		// TODA requisição vira evento no painel (200, 4xx e 5xx), com nível por status:
+		// 5xx ERROR, 4xx WARN, resto INFO. O filtro "só falhas" do painel continua funcionando.
+		String level = status >= 500 ? "ERROR" : status >= 400 ? "WARN" : "INFO";
+		String message = method + " " + (route == null ? path : route) + " -> " + status;
+		enqueue(new EventRow(id(), clock.instant(), level, "REQUEST", message, requestId, method, path,
+			route, status, durationMs, userId, clientIp, deviceId, null));
 	}
 
 	// Exceções gravam com o IP da requisição atual (via MDC do filtro): é o IP de origem
@@ -536,12 +536,39 @@ public class MonitoringService {
 
 	private DbPoolView pool() {
 		DataSource source = dataSource.getIfAvailable();
-		if (!(source instanceof HikariDataSource hikari) || hikari.getHikariPoolMXBean() == null) {
+		HikariDataSource hikari = unwrapHikari(source);
+		if (hikari == null || hikari.getHikariPoolMXBean() == null) {
 			return null;
 		}
 		var mx = hikari.getHikariPoolMXBean();
 		return new DbPoolView(mx.getActiveConnections(), mx.getIdleConnections(), mx.getTotalConnections(),
 			mx.getThreadsAwaitingConnection(), hikari.getMaximumPoolSize(), hikari.getMinimumIdle());
+	}
+
+	/**
+	 * O DataSource pode estar embrulhado (LazyConnectionDataSourceProxy do bootstrap-mode=deferred,
+	 * TransactionAware etc.): o instanceof direto falhava e o painel mostrava 0/0 sempre.
+	 */
+	private static HikariDataSource unwrapHikari(DataSource source) {
+		if (source instanceof HikariDataSource hikari) {
+			return hikari;
+		}
+		if (source == null) {
+			return null;
+		}
+		try {
+			HikariDataSource unwrapped = source.unwrap(HikariDataSource.class);
+			if (unwrapped != null) {
+				return unwrapped;
+			}
+		}
+		catch (java.sql.SQLException | RuntimeException ignored) {
+			// Segue para o fallback abaixo.
+		}
+		if (source instanceof org.springframework.jdbc.datasource.DelegatingDataSource delegating) {
+			return unwrapHikari(delegating.getTargetDataSource());
+		}
+		return null;
 	}
 
 	private static long cgroupLong(String v2, String v1) {
