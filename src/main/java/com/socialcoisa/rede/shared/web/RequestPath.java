@@ -2,6 +2,7 @@ package com.socialcoisa.rede.shared.web;
 
 import java.nio.charset.StandardCharsets;
 
+import org.springframework.http.server.PathContainer;
 import org.springframework.web.util.UriUtils;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -21,22 +22,23 @@ public final class RequestPath {
 		return path;
 	}
 
-	/** Decodifica uma vez, preservando separadores para nao inventar uma rota registrada. */
-	public static String routingPath(HttpServletRequest request) {
+	/** Mesma representacao por segmentos utilizada no matching do Spring MVC. */
+	public static PathContainer segments(HttpServletRequest request) {
+		return PathContainer.parsePath(rawPath(request), PathContainer.Options.HTTP_PATH);
+	}
+
+	private static String rawPath(HttpServletRequest request) {
 		String path = request.getRequestURI();
 		if (path == null) {
 			return "/";
 		}
 		String context = request.getContextPath();
-		if (context != null && !context.isEmpty() && path.startsWith(context)) {
-			path = path.substring(context.length());
-		}
-		try {
-			path = UriUtils.decode(path, StandardCharsets.UTF_8);
-		}
-		catch (IllegalArgumentException malformed) {
-			return path;
-		}
-		return path;
+		return context != null && !context.isEmpty() && path.startsWith(context)
+			? path.substring(context.length()) : path;
+	}
+
+	/** Decodifica uma vez, preservando separadores para nao inventar uma rota registrada. */
+	public static String routingPath(HttpServletRequest request) {
+		return UriUtils.decode(rawPath(request), StandardCharsets.UTF_8);
 	}
 }

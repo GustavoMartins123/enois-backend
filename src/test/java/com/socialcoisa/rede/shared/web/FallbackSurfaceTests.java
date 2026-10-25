@@ -32,6 +32,9 @@ class FallbackSurfaceTests {
 	@Autowired
 	private AdminRouteInterceptor adminRouteInterceptor;
 
+	@Autowired
+	private FallbackSurfaceFilter fallbackSurfaceFilter;
+
 	@Test
 	void caminhoForaDaSuperficieRespondeVazio() throws Exception {
 		mockMvc.perform(get("/caminho_sem_atribuicao_9f2c"))
@@ -120,6 +123,19 @@ class FallbackSurfaceTests {
 		for (String path : java.util.List.of("/users/%61dmin", "/administer/support", "/admins/support")) {
 			assertThat(adminRouteInterceptor.preHandle(new MockHttpServletRequest("GET", path),
 					new MockHttpServletResponse(), new Object())).isTrue();
+		}
+	}
+
+	@Test
+	void escapeInvalidoQueAlcanceOFiltroRecebe400() throws Exception {
+		for (String path : java.util.List.of("/admin/%zz", "/admin/%")) {
+			var request = new MockHttpServletRequest("GET", path);
+			var response = new MockHttpServletResponse();
+			var continued = new java.util.concurrent.atomic.AtomicBoolean();
+			fallbackSurfaceFilter.doFilter(request, response,
+				(nextRequest, nextResponse) -> continued.set(true));
+			assertThat(response.getStatus()).isEqualTo(400);
+			assertThat(continued.get()).isFalse();
 		}
 	}
 }
