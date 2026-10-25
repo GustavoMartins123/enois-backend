@@ -143,6 +143,10 @@ jobs:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           # panic:yes => somente leitura; vazio/ausente => online (o botão do painel decide).
+          # ImageKit aposentado, mas o purge/delete de midia antiga precisa funcionar ate a migracao.
+          IMAGEKIT_URL_ENDPOINT: ${{ secrets.IMAGEKIT_URL_ENDPOINT }}
+          IMAGEKIT_PUBLIC_KEY: ${{ secrets.IMAGEKIT_PUBLIC_KEY }}
+          IMAGEKIT_PRIVATE_KEY: ${{ secrets.IMAGEKIT_PRIVATE_KEY }}
           PANIC_MODE: ${{ secrets.PANIC_MODE }}
         run: |
           set -euo pipefail
@@ -191,6 +195,9 @@ jobs:
               "LINKEDIN_REDIRECT_URI=${LINKEDIN_REDIRECT_URI}",
               "GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}",
               "GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}",
+              "IMAGEKIT_URL_ENDPOINT=${IMAGEKIT_URL_ENDPOINT}",
+              "IMAGEKIT_PUBLIC_KEY=${IMAGEKIT_PUBLIC_KEY}",
+              "IMAGEKIT_PRIVATE_KEY=${IMAGEKIT_PRIVATE_KEY}",
               "REDE_AUTH_SIGNUP_ENABLED=true",
               "SIGNUP_CAPTCHA_ENABLED=true",
               "JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=60.0 -XX:+ExitOnOutOfMemoryError"
