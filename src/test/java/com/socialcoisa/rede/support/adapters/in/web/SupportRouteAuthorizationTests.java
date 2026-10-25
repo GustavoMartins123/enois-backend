@@ -2,7 +2,9 @@ package com.socialcoisa.rede.support.adapters.in.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -23,6 +25,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerInterceptor;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.web.servlet.resource.ResourceHttpRequestHandler;
 
 import com.socialcoisa.rede.shared.web.AdminGuard;
 import com.socialcoisa.rede.shared.web.ModeratorGuard;
@@ -125,12 +129,24 @@ class SupportRouteAuthorizationTests {
 				if (!session.isEmpty()) request.header("X-Session-Token", session);
 				var result = mockMvc.perform(request).andReturn();
 				assertThat(result.getRequest().getRequestURI()).isEqualTo(path);
-				// MockMvc não aplica a recusa de barras codificadas do Tomcat. Um handler
-				// estático pode ser selecionado; a operação administrativa continua proibida.
-				assertThat(result.getResponse().getStatus()).as(path).isIn(200, 400, 401, 403, 404);
-				if (result.getHandler() instanceof HandlerMethod handler) {
-					assertThat(handler.getBeanType()).as(path).isNotEqualTo(SupportController.class);
+				// MockMvc não aplica a recusa de barras codificadas do Tomcat.
+				if (path.equals("/admin%2Fsupport/github") || path.equals("/%2561dmin/support/github")) {
+					assertThat(result.getHandler()).as(path).isInstanceOf(ResourceHttpRequestHandler.class);
+					assertThat(result.getResponse().getStatus()).as(path).isEqualTo(session.isEmpty() ? 401 : 404);
+					if (!session.isEmpty()) {
+						assertThat(result.getResolvedException()).as(path).isInstanceOf(NoResourceFoundException.class);
+					}
 				}
+				else {
+					// O 200 vem do filtro de fallback, sem selecionar um handler MVC.
+					assertThat(result.getHandler()).as(path).isNull();
+					assertThat(result.getResponse().getStatus()).as(path).isEqualTo(200);
+					assertThat(result.getResponse().getContentType()).as(path).startsWith("text/html");
+					assertThat(result.getResponse().getContentAsString()).as(path)
+						.contains("<title>Control Panel</title>");
+				}
+				verify(adminInterceptor, never()).preHandle(any(), any(), any());
+				verifyNoInteractions(adminGuard, moderatorGuard);
 				verifyNoInteractions(controller);
 			}
 		}
@@ -149,8 +165,11 @@ class SupportRouteAuthorizationTests {
 					.andExpect(status().isOk()).andReturn();
 				assertThat(result.getRequest().getRequestURI()).isEqualTo(context + route);
 				assertThat(((HandlerMethod) result.getHandler()).getMethod().getName()).isEqualTo("githubSettings");
-				verify(adminInterceptor).preHandle(any(), any(), any());
-				verify(controller).githubSettings(any(), any());
+				var authorization = inOrder(adminInterceptor, adminGuard, controller);
+				authorization.verify(adminInterceptor).preHandle(any(), any(), any());
+				authorization.verify(adminGuard).requireAdmin(argThat(user -> user.id().value().equals(admin.userId())));
+				authorization.verify(controller).githubSettings(any(), any());
+				authorization.verify(adminGuard).requireAdmin(argThat(user -> user.id().value().equals(admin.userId())));
 				verify(moderatorGuard, never()).requireModerator(any());
 			}
 		}
