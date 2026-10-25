@@ -161,6 +161,12 @@ jobs:
           curl -s -X DELETE "${AUTH[@]}" "${API}/containers/${CONTAINER_NAME}?v=1" || true
 
           echo "==> Criar container novo"
+          # Memoria do container da QA: host vmi935062 tem 7.76GB e e COMPARTILHADO com outros
+          # tres projetos (apbackend_medcare, zmbackend e companhia) que rodam SEM limite de
+          # memoria e ja usavam ~4.3GB juntos. Medido em 2026-10-24: o backend da QA usava
+          # 0.55GB de 1GB. Subir para 2GB (reserva 1GB) e dar 60% do limite a JVM (heap ate
+          # 1.2GB, em vez dos 256MB que 25% davam) cabe sem disputo com os vizinhos.
+          # (O JSON abaixo NAO aceita comentario: ele vai cru no corpo do POST da Portainer.)
           cat > /tmp/enois-backend-deploy.json <<EOF
           {
             "Image": "${IMAGE_REF}",
@@ -186,14 +192,15 @@ jobs:
               "GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}",
               "GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}",
               "REDE_AUTH_SIGNUP_ENABLED=true",
-              "SIGNUP_CAPTCHA_ENABLED=true"
+              "SIGNUP_CAPTCHA_ENABLED=true",
+              "JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=60.0 -XX:+ExitOnOutOfMemoryError"
             ],
             "ExposedPorts": {"8081/tcp": {}},
             "HostConfig": {
               "RestartPolicy": {"Name": "unless-stopped"},
-              "Memory": 1073741824,
-              "MemorySwap": 1073741824,
-              "MemoryReservation": 536870912,
+              "Memory": 2147483648,
+              "MemorySwap": 2147483648,
+              "MemoryReservation": 1073741824,
               "PortBindings": {"8081/tcp": [{"HostPort": "8105"}]},
               "NetworkMode": "enois-qa"
             },
@@ -299,15 +306,24 @@ jobs:
               container_name: enois-prod-backend
               network_mode: host
               restart: unless-stopped
-              # enois-node2 (6 vCPU/11.67GB) e dedicado so a este projeto (so compartilha host
+              # enois-node2 (6 vCPU/11.68GB) e dedicado so a este projeto (so compartilha host
               # com o MariaDB bare-metal). Limite anterior era 0 (sem cap, risco de a JVM
-              # engolir toda a RAM e sufocar o MariaDB); agora 4g/2g deixa ~7.5GB livres pro
-              # banco+SO. mem_limit/mem_reservation/memswap_limit (nao deploy.resources, que e
-              # ignorado fora de swarm) sao honrados pelo Docker Compose standalone.
-              mem_limit: 4g
-              mem_reservation: 2g
-              memswap_limit: 4g
+              # engolir toda a RAM e sufocar o MariaDB). mem_limit/mem_reservation/memswap_limit
+              # (nao deploy.resources, que e ignorado fora de swarm) sao honrados pelo Docker
+              # Compose standalone.
+              #
+              # Medido no host em 2026-10-24: o container usava 0.79GB de 4GB e a JVM, sem flag,
+              # so podia usar 25% do limite (MaxRAMPercentage) = 1GB de heap — a RAM estava
+              # ociosa. Agora 6g/3g com MaxRAMPercentage=60: heap ate 3.6GB, e ainda sobra
+              # ~5GB pro MariaDB+SO (o banco e bare-metal e nao aparece no inventario).
+              mem_limit: 6g
+              mem_reservation: 3g
+              memswap_limit: 6g
               environment:
+                # Sem isto a JVM usa 25% do limite como heap (1GB de 4GB) e o resto da RAM fica
+                # sem uso; 60% + ExitOnOutOfMemoryError deixa a JVM crescer sob demanda e morre
+                # com erro claro (em vez de ser morta pelo kernel sem log).
+                JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=60.0 -XX:+ExitOnOutOfMemoryError"
                 SPRING_PROFILES_ACTIVE: prd
                 DB_PASSWORD: ${DB_PASSWORD}
                 REDE_FRONTEND_URL: https://enois.ia.br
