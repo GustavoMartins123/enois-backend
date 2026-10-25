@@ -505,6 +505,37 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   Front: #247 (`fix/contrato-publico-da-api`, sobre a `qa`). Back: #181 (mesmo branch).
   *O que continua aberto (não é código meu):* gerar um OpenAPI de verdade exige um documento
   gerado e revisado (escrever à mão não é caminho) e um passo na esteira — que é do raposo.
+- **[x] ENTREGUE 2026-10-25 — Data e hora sem fuso: o React estava regenerando a página inteira
+  na hora que ela abre.** O item estava aberto desde 2026-10-18 (a página do blog dava erro de
+  hidratação #418 em produção) e era **maior do que parecia**: 45 pontos do front formatavam data
+  direto no componente (`toLocaleDateString`, `toLocaleString`, `Intl.DateTimeFormat`), sem
+  `timeZone`, e os **getters locais** (`getFullYear`, `getMonth`, `getDate`, `getTimezoneOffset`)
+  lêm no fuso do *runtime*. O pod roda em UTC e o navegador da pessoa roda no fuso dela: o servidor
+  escrevia "23 de outubro" e o navegador "24 de outubro", o HTML do servidor não batia com o do
+  cliente e o React cuspia *"Hydration failed because the server rendered text didn't match the
+  client"* — que faz o React **regenerar a árvore inteira** no cliente (a mesma família do
+  "cabeçalho pisca"). Para quem está em São Paulo, a janela em que isso acontece é **todo dia
+  entre 00h e 03h (UTC)** — ou seja, boa parte da noite.
+  *Como foi provado:* Chrome headless com o dev server em UTC (o fuso do pod) e o navegador em
+  `Pacific/Kiritimati` (via `Emulation.setTimezoneOverride`): a página do blog acusou o erro de
+  hidratação; com o conserto, **zero** erros de console em quatro telas (blog, post, comunidades,
+  vagas).
+  *O que foi feito:* um módulo único (`src/lib/date/format.ts`) formata toda data **no fuso do
+  app** (`America/Sao_Paulo`) — servidor e navegador dizem a mesma coisa, qualquer que seja o fuso
+  de quem está olhando. Data **sem fuso** é lida como dia de calendário (e não como o dia
+  anterior, que é o que `new Date("2026-10-18")` fazia). Os 45 pontos passaram a usar o módulo,
+  inclusive os getters: o ano do rodapé, o ano mínimo do campo de nascimento, a contagem de meses
+  do currículo e o valor do campo `datetime-local` (agendamento) também divergiam.
+  *A regra ficou travada:* `src/lib/date/formato-unico.test.ts` falha se alguém formatar data fora
+  do módulo — e o teste **falha** quando a regra é quebrada (provado: a regra foi quebrada de
+  propósito e o teste acusou). As duas exceções (`night-rest.ts` e `min-age.ts`) são
+  intencionais: são do **aparelho** de quem está usando e só rodam no cliente, depois da montagem.
+  *Testes:* `src/lib/date/format.test.ts` (11) — o mesmo instante formatado com o runtime em três
+  fusos (UTC, São Paulo, Tóquio) dá **a mesma saída**; data sem fuso é o dia de calendário; e
+  `formato-unico.test.ts` (2).
+  *Verificado:* `vitest` 414/414, `eslint` limpo nos arquivos tocados, `tsc --noEmit` sem erro,
+  `vite build` ok, e a reprodução no Chrome headless sem erro de hidratação.
+  Front: #248 (`fix/data-sem-fuso`, sobre a `qa`).
 - **[x] ENTREGUE 2026-10-24 — O app oferecia login com Google mesmo num ambiente onde a API o
   desliga.** A API tem o flag `rede.oauth.google.enabled`: quando está desligado, `/auth/config`
   avisa (`googleLoginEnabled: false`) e `/oauth/google/start` **recusa** com 403
