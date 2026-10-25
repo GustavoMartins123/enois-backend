@@ -42,11 +42,11 @@ class EmailLogController {
 	}
 
 	record EmailLogView(String id, String toEmail, String subject, String kind, String status, String error,
-			String createdAt, String clientIp) {
+			String createdAt) {
 		static EmailLogView from(EmailLog log) {
 			return new EmailLogView(log.id(), PiiMask.email(log.toEmail()), PiiMask.text(log.subject()),
 				log.kind(), log.status().name(),
-				PiiMask.text(log.error()), log.createdAt().toString(), log.clientIp());
+				PiiMask.text(log.error()), log.createdAt().toString());
 		}
 	}
 }
