@@ -209,6 +209,22 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   container MariaDB aplicando as migrações (o do front, o `ci.yml`, já roda lint, typecheck e
   vitest).
 ## Higiene do backend (entregue 2026-10-21)
+- **[x] ENTREGUE 2026-10-25 — O plano do perfil corporativo ainda dizia "pendente" no que já estava
+  entregue.** Cruzamento dos planos contra o código (a regra: conferir no código antes de dizer que
+  falta — a lista do repo já mentiu várias vezes) achou dois marcadores desatualizados:
+  - `corporate-profile-validation.md` dizia "commit pendente no próximo ciclo" para os documentos do
+    plano — eles entraram no mesmo dia (`32123181`) e o plano inteiro foi publicado depois;
+  - `corporate-profile-progress.md` tinha "[ ] Confirmar com a dona as decisões abertas
+    (username com ponto, rotas)" — **essas duas foram resolvidas na Fase 10** (o próprio
+    `decisions.md` marca a pergunta 1 como resolvida).
+  *Conferido no código:* a rota pública `/profissional/{username}` existe no front
+  (`profissional_.$username.tsx`), e o backend atende `GET /corporate/{username}` e
+  `GET /corporate/{profileUsername}/posts` (o feed corporativo). Os itens marcados como entregues
+  estão de pé.
+  *Fica só uma pergunta de produto, sem bloqueio:* a visibilidade do feed corporativo (público
+  para todos ou só para seguidores) — o plano já tem o padrão (público) e a `decisions.md` diz que
+  não trava nada.
+  Back: `docs/backlog-plano-atualizado` (branch própria, sobre a `qa`).
 - **[x] ENTREGUE 2026-10-22 — A recorrência do banimento JÁ estava coberta (o plano ainda
   dizia que faltava).** Conferido no código: o banimento revoga **todas** as sessões da conta
   (`revokeAllByUser` — access e refresh na mesma linha de sessão), o **login** é recusado com 403
