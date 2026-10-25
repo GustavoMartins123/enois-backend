@@ -399,6 +399,27 @@ Idempotency-Key: <uuid>
 
 A resposta será cacheadada e reutilizada se a mesma chave for reenviada.
 
+## Loja de molduras
+
+| Método | Rota | Descrição | Autenticação |
+|---|---|---|---|
+| GET | `/api/loja?order=oldest` | Catálogo da moldura mais antiga para a mais nova (padrão) | Não; com sessão, inclui posse e equipamento |
+| GET | `/api/loja?order=newest` | Catálogo da moldura mais nova para a mais antiga | Não; com sessão, inclui posse e equipamento |
+
+Cada item inclui `releaseOrder`, sequência positiva e única de entrada no catálogo.
+A ordenação usa esse campo, independentemente da posição do item no código. Novos
+itens recebem o próximo número da sequência. O catálogo atual usa somente as 18 molduras
+existentes, com sequência de 1 a 18: Portal é 16, Holograma é 17 e Galáxia é 18.
+
+As molduras nativas são definidas no serviço, sem tabela de catálogo. Os itens e a lista
+são imutáveis; a sequência é validada na inicialização e cada consulta retorna uma lista
+completa e imutável na ordem solicitada, sem modificar o catálogo compartilhado.
+Esta alteração não grava dados e não requer migração de banco.
+
+`order` aceita somente `oldest` e `newest`. Valor vazio ou inválido retorna `400`
+com código `INVALID_CATALOG_ORDER`. Uma sessão enviada e inválida retorna erro de
+autenticação, sem transformar a requisição em leitura anônima.
+
 ## Tratamento de Erros
 
 ```json
