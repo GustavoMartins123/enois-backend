@@ -148,6 +148,20 @@ jobs:
           IMAGEKIT_PUBLIC_KEY: ${{ secrets.IMAGEKIT_PUBLIC_KEY }}
           IMAGEKIT_PRIVATE_KEY: ${{ secrets.IMAGEKIT_PRIVATE_KEY }}
           PANIC_MODE: ${{ secrets.PANIC_MODE }}
+          # Storage da midia na QA. Sem estas variaveis o app sobe em `imagekit` (o default) e o
+          # S3StorageConfig nem e criado — o endpoint de upload responde 503 "desativado" mesmo
+          # com o bucket funcionando em producao. A QA usa o MESMO bucket, separada pelo prefixo
+          # `qa/`: objeto de teste nao se mistura com o de producao e a limpeza de um ambiente
+          # nao alcanca o outro.
+          REDE_MEDIA_STORAGE: ${{ secrets.PROD_REDE_MEDIA_STORAGE }}
+          REDE_MEDIA_S3_BUCKET: ${{ secrets.PROD_REDE_MEDIA_S3_BUCKET }}
+          REDE_MEDIA_S3_REGION: ${{ secrets.PROD_REDE_MEDIA_S3_REGION }}
+          REDE_MEDIA_S3_ENDPOINT: ${{ secrets.PROD_REDE_MEDIA_S3_ENDPOINT }}
+          REDE_MEDIA_S3_FORCE_PATH_STYLE: ${{ secrets.PROD_REDE_MEDIA_S3_FORCE_PATH_STYLE }}
+          REDE_MEDIA_S3_PUBLIC_BASE_URL: ${{ secrets.PROD_REDE_MEDIA_S3_PUBLIC_BASE_URL }}
+          REDE_MEDIA_S3_PREFIX: qa/
+          AWS_ACCESS_KEY_ID: ${{ secrets.PROD_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.PROD_AWS_SECRET_ACCESS_KEY }}
         run: |
           set -euo pipefail
           API="${PORTAINER_BASE_URL}/api/endpoints/${PORTAINER_ENDPOINT_ID}/docker"
@@ -200,6 +214,16 @@ jobs:
               "IMAGEKIT_PRIVATE_KEY=${IMAGEKIT_PRIVATE_KEY}",
               "REDE_AUTH_SIGNUP_ENABLED=true",
               "SIGNUP_CAPTCHA_ENABLED=true",
+              "REDE_MEDIA_STORAGE=${REDE_MEDIA_STORAGE}",
+              "REDE_MEDIA_S3_BUCKET=${REDE_MEDIA_S3_BUCKET}",
+              "REDE_MEDIA_S3_REGION=${REDE_MEDIA_S3_REGION}",
+              "REDE_MEDIA_S3_ENDPOINT=${REDE_MEDIA_S3_ENDPOINT}",
+              "REDE_MEDIA_S3_FORCE_PATH_STYLE=${REDE_MEDIA_S3_FORCE_PATH_STYLE}",
+              "REDE_MEDIA_S3_PUBLIC_BASE_URL=${REDE_MEDIA_S3_PUBLIC_BASE_URL}",
+              "REDE_MEDIA_S3_PREFIX=${REDE_MEDIA_S3_PREFIX}",
+              "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}",
+              "AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}",
+              "TRUSTED_PROXY_IPS=154.12.230.97",
               "JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=60.0 -XX:+ExitOnOutOfMemoryError"
             ],
             "ExposedPorts": {"8081/tcp": {}},
@@ -332,6 +356,12 @@ jobs:
                 # com erro claro (em vez de ser morta pelo kernel sem log).
                 JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=60.0 -XX:+ExitOnOutOfMemoryError"
                 SPRING_PROFILES_ACTIVE: prd
+                # Proxy reverso da frente (Traefik em docker-prod3). Sem esta lista o app nao
+                # confia no X-Forwarded-For e responde com o IP do proprio proxy para todo
+                # mundo — foi assim que os limites por IP passaram a valer para a plataforma
+                # inteira como se fosse uma pessoa so. O valor existia apenas no Portainer
+                # (fora deste arquivo), entao um deploy da stack o apagaria.
+                TRUSTED_PROXY_IPS: 31.220.102.169
                 # Observabilidade em arquivo na VPS (fora do banco): o dir usa o default
                 # /app/data/monitoring. Sem volume dedicado, o arquivo morre com o container
                 # (aceito: série de 60 min em memória continua; o painel lê o dia corrente).
