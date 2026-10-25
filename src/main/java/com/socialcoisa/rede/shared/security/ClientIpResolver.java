@@ -1,5 +1,11 @@
 package com.socialcoisa.rede.shared.security;
 
+import java.util.Arrays;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -8,13 +14,19 @@ import jakarta.servlet.http.HttpServletRequest;
 /**
  * Descobre de qual IP veio o pedido — o dado em que os limites por origem se apoiam.
  *
- * O tráfego entra pelo ALB, então `getRemoteAddr()` é o IP do nó do cluster, não o de quem pediu:
- * qualquer controle "por IP" que lesse dali estaria limitando o mundo inteiro como se fosse um só.
+ * O tráfego entra por um proxy reverso (ALB na AWS antiga, Traefik em `docker-prod3` hoje), então
+ * `getRemoteAddr()` é o IP do nó do proxy, não o de quem pediu: qualquer controle "por IP" que
+ * lesse dali estaria limitando o mundo inteiro como se fosse um só. Foi exatamente isso que
+ * aconteceu na migração pro Traefik — o IP do proxy (`31.220.102.169`, `docker-prod3`) não é mais
+ * loopback/RFC1918 como o ALB antigo, então {@link #isTrustedProxy} rejeitava a conexão e todo
+ * request caía no fallback de `getRemoteAddr()`, voltando sempre o IP do próprio proxy em vez do
+ * cliente real — corrigido tornando a lista de proxies confiáveis configurável
+ * (`security.trusted-proxy-ips`), em vez de só as faixas privadas fixas.
  *
- * Sobre confiar no `X-Forwarded-For`: o cabeçalho pode vir forjado pelo cliente, mas o ALB
- * **acrescenta** o IP de quem se conectou ao FIM da lista. Logo o ÚLTIMO item é o único que nós
- * (e não o cliente) escrevemos — é ele que vale. Os itens anteriores são histórico que o cliente
- * pode ter inventado, e por isso não entram na decisão.
+ * Sobre confiar no `X-Forwarded-For`: o cabeçalho pode vir forjado pelo cliente, mas o proxy da
+ * nossa rede **acrescenta** o IP de quem se conectou ao FIM da lista. Logo o ÚLTIMO item é o único
+ * que nós (e não o cliente) escrevemos — é ele que vale. Os itens anteriores são histórico que o
+ * cliente pode ter inventado, e por isso não entram na decisão.
  *
  * Limites de sanidade: valor curto, sem espaço, com forma de IP; qualquer coisa fora disso cai no
  * `getRemoteAddr()` (nunca lança, nunca deixa o cabeçalho virar chave de mapa gigante).
@@ -23,6 +35,22 @@ import jakarta.servlet.http.HttpServletRequest;
 public class ClientIpResolver {
 
 	private static final int MAX_IP = 45;
+
+	private final Set<String> trustedProxyIps;
+
+	/** Default sem proxy extra confiável — usado pelos testes, mantém o comportamento anterior. */
+	public ClientIpResolver() {
+		this("");
+	}
+
+	@Autowired
+	public ClientIpResolver(@Value("${security.trusted-proxy-ips:}") String trustedProxyIps) {
+		this.trustedProxyIps = Arrays.stream(trustedProxyIps.split(","))
+			.map(String::trim)
+			.map(ip -> ip.toLowerCase(java.util.Locale.ROOT))
+			.filter(StringUtils::hasText)
+			.collect(Collectors.toUnmodifiableSet());
+	}
 
 	public String resolve(HttpServletRequest request) {
 		String remote = request.getRemoteAddr();
@@ -48,7 +76,7 @@ public class ClientIpResolver {
 		return isPlausible(remote) ? remote.trim() : "desconhecido";
 	}
 
-	/** Loopback e faixas privadas: é onde vivem o nginx/ALB do cluster. */
+	/** Loopback, faixas privadas e o(s) IP(s) do proxy reverso atual: onde vivem nginx/ALB/Traefik. */
 	private boolean isTrustedProxy(String ip) {
 		if (!StringUtils.hasText(ip)) {
 			return false;
@@ -56,6 +84,9 @@ public class ClientIpResolver {
 		String value = ip.trim().toLowerCase(java.util.Locale.ROOT);
 		if (value.startsWith("::ffff:")) {
 			value = value.substring(7);
+		}
+		if (trustedProxyIps.contains(value)) {
+			return true;
 		}
 		if (value.equals("127.0.0.1") || value.equals("::1") || value.equals("0:0:0:0:0:0:0:1")) {
 			return true;
