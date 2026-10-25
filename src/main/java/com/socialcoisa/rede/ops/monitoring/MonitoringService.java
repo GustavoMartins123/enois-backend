@@ -26,6 +26,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.LongAdder;
 
+import com.socialcoisa.rede.shared.web.RequestObservabilityFilter;
+
 import javax.sql.DataSource;
 
 import org.springframework.beans.factory.ObjectProvider;
@@ -69,6 +71,9 @@ public class MonitoringService {
 	private final AtomicInteger peakInFlight = new AtomicInteger();
 	private long eventMinute = -1;
 	private int eventCount;
+	// Amostra anterior do cpu.stat do container: a porcentagem de uso é o delta entre chamadas.
+	private volatile long ultimoCpuUsoMicros = -1;
+	private volatile long ultimoCpuAmostraMillis = -1;
 	private volatile List<CountView> levelCounts = List.of();
 	private volatile List<CountView> typeCounts = List.of();
 	private volatile long countsAt;
@@ -143,10 +148,13 @@ public class MonitoringService {
 		}
 	}
 
+	// Exceções gravam com o IP da requisição atual (via MDC do filtro): é o IP de origem
+	// da tentativa que gerou o erro, não do erro em si.
 	public void recordException(int status, String code, String message, String method, String path,
 			String requestId, String userId) {
 		enqueue(new EventRow(id(), clock.instant(), status >= 500 ? "ERROR" : "WARN", "EXCEPTION",
-			code + ": " + safe(message), requestId, method, path, null, status, null, userId, null, null, null));
+			code + ": " + safe(message), requestId, method, path, null, status, null, userId,
+			org.slf4j.MDC.get(RequestObservabilityFilter.MDC_CLIENT_IP), null, null));
 	}
 
 	public void recordEvent(String level, String type, String message, Map<String, Object> metadata) {
@@ -523,7 +531,7 @@ public class MonitoringService {
 			systemTotal, systemFree, disk.getTotalSpace(), disk.getUsableSpace(),
 			containerMemoryUsed(),
 			containerMemoryMax(),
-			cgroupCpu(), pool);
+			cgroupCpu(), cgroupCpuPorcentagem(), pool);
 	}
 
 	private DbPoolView pool() {
@@ -619,6 +627,43 @@ public class MonitoringService {
 		}
 		catch (Exception ignored) {
 			return null;
+		}
+	}
+
+	/**
+	 * Uso de CPU do CONTAINER em porcentagem: delta do usage_usec do cgroup entre amostras,
+	 * dividido pelo tempo decorrido e pelos núcleos disponíveis. A primeira chamada não tem
+	 * amostra anterior e devolve -1 (a segunda, meio segundo depois, já mostra).
+	 */
+	private double cgroupCpuPorcentagem() {
+		try {
+			long usoAgora = -1;
+			for (String linha : java.nio.file.Files.readAllLines(java.nio.file.Path.of("/sys/fs/cgroup/cpu.stat"))) {
+				if (linha.startsWith("usage_usec ")) {
+					usoAgora = Long.parseLong(linha.substring("usage_usec ".length()).trim());
+					break;
+				}
+			}
+			if (usoAgora < 0) {
+				return -1;
+			}
+			long agora = System.currentTimeMillis();
+			double porcentagem = -1;
+			if (ultimoCpuUsoMicros >= 0 && agora > ultimoCpuAmostraMillis) {
+				double cpuConsumidaMillis = (usoAgora - ultimoCpuUsoMicros) / 1000.0;
+				double paredeMillis = agora - ultimoCpuAmostraMillis;
+				double nucleos = cgroupCpu() > 0 ? cgroupCpu() : Runtime.getRuntime().availableProcessors();
+				if (nucleos > 0 && paredeMillis > 0) {
+					porcentagem = (cpuConsumidaMillis / paredeMillis) / nucleos * 100.0;
+				}
+			}
+			ultimoCpuUsoMicros = usoAgora;
+			ultimoCpuAmostraMillis = agora;
+			return Math.min(porcentagem, 100.0);
+		}
+		catch (Exception e) {
+			ultimoCpuUsoMicros = -1;
+			return -1;
 		}
 	}
 
@@ -774,7 +819,7 @@ public class MonitoringService {
 			int loadedClasses, double processCpuPercent, double systemCpuPercent, double loadAverage,
 			int processors, long systemMemoryTotalBytes, long systemMemoryFreeBytes, long diskTotalBytes,
 			long diskFreeBytes, long cgroupMemoryUsedBytes, long cgroupMemoryMaxBytes, double cgroupCpuCores,
-			DbPoolView dbPool) {
+			double cgroupCpuPercent, DbPoolView dbPool) {
 	}
 
 	public record OverviewView(String generatedAt, long uptimeSeconds, long requestsLastMinute,
