@@ -454,6 +454,23 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   ok. `main` — `vitest` 383/383 e o resto igual.
   Front: #245 (`fix/ci-validar-prs-qa`, sobre a `qa`) e #246 (`fix/chave-origin-blocked`, sobre a
   `main`).
+- **[x] ENTREGUE 2026-10-25 — Um PR em conflito não roda CI nenhuma, e a `main` tinha 1 erro de
+  lint que viraria CI vermelho.** Ao abrir o PR #246 (o texto da chave de origem que faltava), o
+  GitHub **não disparou nenhum workflow** nele. A causa não era o workflow: sem o *merge ref*
+  (`refs/pull/246/merge`), que o GitHub não conseguiu criar enquanto o PR teve conflito, o evento
+  `pull_request` nem chega a começar. O sintoma é silencioso — o PR aparece sem check nenhum, o
+  que parece "a CI não roda para PR de `main`", mas era o conflito.
+  *O que foi feito:* o conflito foi resolvido (a mesma chave `originBlocked` em posições
+  diferentes, porque a `main` tinha recebido o merge da `qa` #231), ficando o texto com o código
+  de erro certo; e a `main` levou a correção de formatação que faltava (`use-frame-theme.ts`):
+  sem ela, o passo **Lint** que o PR #245 adiciona deixa a `main` vermelha assim que ele chegar
+  lá — o `eslint .` acusava 1 erro de prettier.
+  *Verificado:* `main` mesclada — `vitest` 401/401, `eslint .` sem erro, `tsc --noEmit` sem erro,
+  `vite build` ok; e o **PR #246 passou a rodar a CI de verdade** (job `verificar` verde), o que
+  prova que a linha da `main` volta a ser validada.
+  *Nota de operação (front):* todos os PRs abertos estão `MERGEABLE`; o `BLOCKED` que o GitHub
+  mostra em cada um é só o **pedido de 1 aprovação** que a proteção das branches exige (ninguém
+  mais está exigindo check de status).
 - **[x] ENTREGUE 2026-10-24 — O app oferecia login com Google mesmo num ambiente onde a API o
   desliga.** A API tem o flag `rede.oauth.google.enabled`: quando está desligado, `/auth/config`
   avisa (`googleLoginEnabled: false`) e `/oauth/google/start` **recusa** com 403
