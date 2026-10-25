@@ -479,131 +479,23 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   corporativo, objetivos profissionais no perfil, termos de limitação de responsabilidade).
   Front: `cb9b38aa` + esta rodada; back: templates dos e-mails.
 ## Higiene do front (entregue 2026-10-21)
-- **[x] ENTREGUE 2026-10-25 — O arquivo de properties da QA repetia 5 chaves, e a repetição era
-  silenciosa.** Em `.properties` a **última** ocorrência da chave vence, e nada avisa: o arquivo
-  parece limpo e o valor que vale é o do fim. Na QA o bloco de OAuth aparecia **três vezes** (o
-  genérico com `${REDE_FRONTEND_URL}`, o do sandbox com os hosts fixos e um `enabled=true` solto,
-  mais dois comentários órfãos) — e o callback do Google é justamente a configuração que já
-  quebrou por divergência de host (o `redirect_uri_mismatch`).
-  *O conserto:* um bloco só, com o **valor efetivo de hoje, chave por chave** — provado por
-  comparação automática: 28 chaves antes, 28 depois, nenhuma chave a mais ou a menos, **nenhum
-  valor diferente**. Só a repetição foi embora.
-  *Teste:* `ProfilePropertiesTests` (2) — nenhum perfil pode repetir chave (a falha lista as
-  chaves e o número de vezes), e o callback do OAuth de cada ambiente tem de apontar para o host
-  DELE (a QA para o host da QA, a produção para a URL do ambiente). Comprovado que o teste pega:
-  restaurando o arquivo antigo, ele falha listando as cinco chaves (`frontend-redirect-url (3x)`,
-  `google.client-id (3x)`, `google.client-secret (3x)`, `google.redirect-uri (3x)`,
-  `google.enabled (3x)`).
-  *Verificado:* `ProfilePropertiesTests` + `OAuthHardeningTests` + `EmailVerificationFlowTests` =
-  13 testes, 0 falhas.
-  Back: `78d8cef3` (branch `fix/config-qa-sem-duplicata`, sobre a `qa`).
-- **[x] ENTREGUE 2026-10-25 — Guarda-corpo para a coluna com palavra reservada do MariaDB (a
-  classe de bug que já derrubou a produção DUAS vezes).** A V140 criava a coluna `signal`
-  (reservada) e o `CREATE TABLE` devolvia 1064 — o pod não subia; a coluna `read` das notificações
-  (também reservada) fazia o Hibernate gerar `update notifications set ..., read=?, ...` — 500 em
-  todo insert/update de notificação, ou seja, **comentar um post quebrava** (a V170 renomeou para
-  `is_read`). Nas duas vezes o **H2 dos testes aceitava** e só o MariaDB da produção recusava — e a
-  **QA cita identificadores** (`globally_quoted_identifiers=true`), então o bug passa nos dois
-  lugares onde ele é testado e quebra só em produção.
-  *O que foi feito:* `MariaDbReservedWordsTests` (2) — nenhuma migration pode declarar coluna
-  reservada **sem crase**, e nenhuma entidade JPA pode mapear coluna reservada (o Hibernate monta
-  o SQL e não cita). A lista de reservadas não é cópia: foi extraída do **próprio motor**
-  (MariaDB 11.4.13 da bancada), testando cada palavra como nome de coluna e guardando as que
-  falham com 1064 — 227 palavras em `src/test/resources/mariadb-reserved-words.txt`.
-  *A auditoria que motivou:* as 156 migrations, as entidades JPA e o SQL cru foram varridos contra
-  essa lista — **não há nenhuma coluna reservada sem citar no código de hoje** (a `lines` da V120 é
-  usada por JDBC cru, sempre entre crases). O que faltava era o guarda-corpo para a terceira
-  ocorrência.
-  *Comprovado que o teste pega:* reconstruindo o bug histórico (a entidade voltando a mapear o
-  campo `read` na coluna `read`), ele falha com `NotificationJpaEntity.java: coluna 'read' (campo
-  'read') e palavra reservada do MariaDB`.
-  *Verificado:* `MariaDbReservedWordsTests` + `ProfilePropertiesTests` + `FlywayMigrationConfigTests`
-  = 8 testes, 0 falhas.
-  Back: `57efb0a3` (mesmo branch `fix/config-qa-sem-duplicata`, sobre a `qa`).
-- **[x] ENTREGUE 2026-10-24 — Duas listas faziam a página rolar de lado no celular.** Item de grid
-  nasce com `min-width: auto`, ou seja, o mínimo dele é o **min-content** do conteúdo; quando o card
-  tem um título que não quebra (`truncate`/`nowrap`) ou uma palavra gigante sem espaço, esse
-  min-content é maior que a tela — a coluna cresce, o card sai do container e a página passa a
-  rolar horizontalmente.
-  *Medido* no Chrome headless a 390px e 1280px, com a sessão real e dado real da QA (17 telas
-  principais: feed, blogs, vagas, eventos, mentoria, comunidades, grupos, mensagens, carteira,
-  jogos, marketplace, perfil, moderador, login, serviços, salvos):
-  | tela | 360px, dado real | 360px, título longo |
-  |---|---|---|
-  | `/servicos` | **estourava 31px** | 572px |
-  | `/freelances` | 0 | **417px** |
-  As outras 15 telas ficaram em **0px** de overflow — inclusive com título patológico injetado
-  nos cards, o que mostra que o problema era local, não do app inteiro.
-  *O que foi feito:* `min-w-0` no `<li>` do card de oferta (e no `<ul>` da grade) — o título já era
-  truncado, mas o `nowrap` dele ainda contava no min-content do item; e `min-w-0` + `break-words`
-  no card de freelance, cujo título é texto do prestador e pode ser uma palavra sem espaço.
-  Agora as duas ficam em **0px** nos dois cenários.
-  *Teste:* `src/lib/layout-cards.test.ts` (3) trava a regra nos dois cards que quebraram.
-  *Verificado:* `vitest` 404/404, `eslint` limpo, `tsc --noEmit` sem erro, `vite build` ok.
-  Front: `55fba796` (branch `auditoria/responsividade`, sobre a `qa`).
-- **[x] ENTREGUE 2026-10-24 — O card da comunidade mostrava o CÓDIGO do assunto ("TECNOLOGIA") em
-  vez da palavra, e três tipos do front diziam que um campo nunca era nulo quando a API anula.**
-  A API devolve o assunto como código (`"TECNOLOGIA"`, `"CARREIRA"`) e o app tem o dicionário
-  `TOPIC_LABELS`, que o filtro de assuntos e o card do post já usavam — mas o card da comunidade e a
-  página de detalhe renderizavam o código cru. Na mesma tela, o chip dizia "Tecnologia" e o card
-  dizia "TECNOLOGIA" (confirmado na QA).
-  *O que foi feito:* `topicLabel()` (`src/constants/community-topics.ts`) traduz o código na
-  palavra, e os três lugares (card da comunidade, prateleira do perfil e página da comunidade) passam
-  a usá-lo. Verificado no navegador depois da mudança: o card mostra "Engraçado"/"Tecnologia" e não
-  sobra nenhum código cru na tela.
-  *E os tipos:* três campos são anuláveis na API e o front afirmava o contrário — `Community.topic`
-  (`null` na comunidade sem assunto), `Mentor.nextSlot` (`null` quando o mentor não tem vaga livre)
-  e `TimeSlot.startsAt`/`endsAt` (`null` no slot sem horário). Medido na QA: 2 dos 5 mentores da
-  lista vinham com `nextSlot: null` e a primeira comunidade com `topic: null`; o backend anula os
-  dois explicitamente (`orElse(null)` e `startsAt() != null ? ... : null`). E o `sessionId` da
-  resposta de agendar sessão: **a API nunca mandou esse nome** (ela devolve o `id`).
-  *Como foi achado:* 30 endpoints da API comparados com os tipos do front, com dado real da QA
-  (~300 campos) — estes foram os que mentiam. A lista de assuntos do front e do backend bate (34 nos
-  dois lados).
-  *Teste:* `src/constants/community-topics.test.ts` (5) — o rótulo traduz o código, comunidade sem
-  assunto não mostra nada, assunto desconhecido cai no próprio código, e as telas não podem voltar
-  a renderizar o código cru.
-  *Verificado:* `vitest` 394/394, `eslint` sem erro novo (15 = os 15 da base), `tsc --noEmit` sem
-  erro, `vite build` ok.
-  Front: `1be8c186` (branch `fix/mentor-tipo-null`, sobre a `qa`).
-- **[x] ENTREGUE 2026-10-25 — O seletor de comentários do post devolvia um array NOVO a cada
-  leitura (o React avisando: "getSnapshot should be cached").** O `useSyncExternalStore` (zustand)
-  compara o snapshot por **referência**; o seletor fazia `state.cards[postId]?.localComments ?? []`
-  e, quando o post não estava no store, cada leitura devolvia um array diferente — o React entendia
-  que o estado tinha mudado e renderizava de novo. Acontece em dois lugares: a **página do post**
-  (o primeiro render, antes do card entrar no store) e o **post do blog**, que renderiza os
-  comentários sem passar pelo card do feed e nunca registra o card.
-  *Como foi achado:* a varredura das rotas que faltavam na auditoria de responsividade (19 telas a
-  390px, com sessão real e dado real da QA)apanhou o aviso do React no console da página do post;
-  o stack (obtido instrumentando o `console.error`) apontou `useSyncExternalStore` → zustand →
-  `PostComments`.
-  *O que foi feito:* os seletores (`selectLocalComments` e `selectCommentMentions`) foram para o
-  store, que é onde vivem, com as referências estáveis `NENHUM_COMENTARIO`/`NENHUMA_MENCAO`.
-  *Verificado no navegador:* antes **1 aviso** do React por carregamento da página do post, depois
-  **0**. (O número de renders não mudou — 12 nos dois casos: o aviso era o sintoma do snapshot
-  instável, não um loop em curso.)
-  *Teste:* `src/stores/post-card.store.test.ts` (3) — o seletor devolve a MESMA referência quando o
-  post não está no store, e o valor do store quando está.
-  *Verificado:* `vitest` 392/392, `eslint` 15 = os 15 da base (delta zero), `tsc --noEmit` sem erro,
-  `vite build` ok.
-  Front: `4e6fbada` (branch `auditoria/rotas-restantes`, sobre a `qa`).
-- **[x] ENTREGUE 2026-10-25 — Duas abas do navegador não derrubam mais a sessão (o refresh token
-  gira no backend).** O backend renova o refresh token a cada renovação (`refreshSession` revoga o
-  token usado e emite um novo) e o `localStorage` é compartilhado entre as abas: a aba A renova e
-  guarda a sessão nova, a aba B renova com o token VELHO (já revogado) e leva 401 — e esse 401
-  **não** quer dizer que a sessão acabou, porque a sessão nova está no armazenamento. Antes, o 401 do
-  refresh chamava `clearSession()` e apagava a sessão da outra aba: **as duas abas caíam no login
-  “sem motivo”** — o sintoma que a dona reclamou.
-  *O que foi feito:* quando o refresh é recusado, o front confere se o token guardado **mudou** desde
-  o início da chamada. Mudou (e não sumiu) → outra aba renovou → a sessão está viva e a chamada
-  repete com o token novo. O token ter sumido é o caso de logout de verdade: aí sim a sessão
-  encerra.
-  *Teste:* `src/lib/api-client.refresh.test.ts` (2) — a sessão da outra aba sobrevive ao 401 do
-  refresh, e uma recusa de verdade (ninguém renovou) ainda encerra a sessão. *Reproduzido antes da
-  correção:* o primeiro teste falhava com o `session_token` ficando `undefined` (o armazenamento
-  tinha sido apagado) em vez de conservar o token da outra aba.
-  *Verificado:* `vitest` 403/403, `eslint` limpo, `tsc --noEmit` sem erro, `vite build` ok.
-  Front: `897d7a5b` (branch `fix/refresh-entre-abas`, sobre a `qa`).
+- **[x] ENTREGUE 2026-10-25 — O clique na notificação push abria a API em vez do post.** O backend
+  manda na notificação um `href` de API ("/api/feed/posts/post_123" — é o que a API devolve em
+  `/notifications`). A rota do APP está na tabela do front (`src/utils/navigation.ts`), que o
+  **service worker não conhece**: ele é um JavaScript puro, sem acesso às rotas. O worker navegava
+  direto para esse href — então o clique na notificação do celular (push) abria o caminho da API, e
+  a pessoa caía numa página que não é o post (no melhor dos casos, num JSON). Dentro do app o mesmo
+  href era traduzido corretamente (o tradutor existe há tempo, com a tabela de rotas e o teste dela).
+  *O que foi feito:* o worker reconhece o href de API e **pergunta a aba**, que é quem conhece a
+  tabela; a aba traduz pelo mesmo `navigateToHref` que a notificação dentro do app usa — o destino
+  passa a ser o mesmo nos dois caminhos. Sem aba aberta, o worker abre as notificações do app. E a
+  `VERSION` do worker subiu (`enois-v7` → `enois-v8`): sem isso o worker antigo continuaria
+  servindo e a correção não chegaria a ninguém.
+  *Teste:* `src/lib/push-navigation.test.ts` (4) — a aba traduz o href pela tabela de rotas, a
+  mensagem errada é ignorada, o worker usa a mesma string de mensagem e a versão do cache subiu.
+  *Comprovado que pega:* com o `public/sw.js` antigo, o teste falha em duas verificações.
+  *Verificado:* `vitest` 405/405, `eslint` limpo, `tsc --noEmit` sem erro, `vite build` ok.
+  Front: `d01dc892` (branch `fix/clique-notificacao-push`, sobre a `qa`).
 - **[x] ENTREGUE 2026-10-24 — O app oferecia login com Google mesmo num ambiente onde a API o
   desliga.** A API tem o flag `rede.oauth.google.enabled`: quando está desligado, `/auth/config`
   avisa (`googleLoginEnabled: false`) e `/oauth/google/start` **recusa** com 403
