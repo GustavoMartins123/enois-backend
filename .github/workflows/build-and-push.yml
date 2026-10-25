@@ -158,7 +158,12 @@ jobs:
           REDE_MEDIA_S3_REGION: ${{ secrets.PROD_REDE_MEDIA_S3_REGION }}
           REDE_MEDIA_S3_ENDPOINT: ${{ secrets.PROD_REDE_MEDIA_S3_ENDPOINT }}
           REDE_MEDIA_S3_FORCE_PATH_STYLE: ${{ secrets.PROD_REDE_MEDIA_S3_FORCE_PATH_STYLE }}
-          REDE_MEDIA_S3_PUBLIC_BASE_URL: ${{ secrets.PROD_REDE_MEDIA_S3_PUBLIC_BASE_URL }}
+          # Base publica = por onde o navegador LE e SOBE a midia. Como o PUT passa pelo app,
+          # e ela que define QUAL API autentica a subida: com a base de producao, o upload da
+          # QA ia para a API de producao (a sessao da QA nao vale la) e o arquivo nunca era
+          # gravado. Cada ambiente aponta para a propria API; o bucket e o mesmo, separado
+          # pelo prefixo `qa/`.
+          REDE_MEDIA_S3_PUBLIC_BASE_URL: https://enois-api-qa.b7cloud.tech/api/storage/
           REDE_MEDIA_S3_PREFIX: qa/
           AWS_ACCESS_KEY_ID: ${{ secrets.PROD_AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.PROD_AWS_SECRET_ACCESS_KEY }}
