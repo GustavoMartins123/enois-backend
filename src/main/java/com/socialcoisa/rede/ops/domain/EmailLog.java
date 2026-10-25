@@ -8,10 +8,10 @@ import java.time.Instant;
  * avisos sem transformar o painel num arquivo de mensagens pessoais.
  */
 public record EmailLog(String id, String toEmail, String subject, String kind, EmailLogStatus status,
-		String error, Instant createdAt, String clientIp) {
+		String error, Instant createdAt) {
 
 	public static EmailLog create(String id, String toEmail, String subject, String kind, EmailLogStatus status,
-			String error, Instant now, String clientIp) {
-		return new EmailLog(id, toEmail, subject, kind, status, error, now, clientIp);
+			String error, Instant now) {
+		return new EmailLog(id, toEmail, subject, kind, status, error, now);
 	}
 }

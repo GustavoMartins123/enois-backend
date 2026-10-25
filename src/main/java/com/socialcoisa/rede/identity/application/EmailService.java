@@ -74,17 +74,13 @@ public class EmailService {
      * (que é o que importa) segue normalmente.
      */
     private void recordEmail(String toEmail, String subject, String kind, boolean sent, String error) {
-        // IP da requisição que disparou o envio (rastreio de abuso: quem massiva reset/reset para
-        // spamar alguém). E-mails fora de requisição (agendados) ficam sem IP.
-        String ipDeOrigem = org.slf4j.MDC.get(com.socialcoisa.rede.shared.web.RequestObservabilityFilter.MDC_CLIENT_IP);
         try {
             // O código do 2FA NUNCA entra no log: o assunto é redigido por tipo, mesmo que um
             // chamador futuro monte um assunto com o código dentro.
             String safeSubject = "TWO_FACTOR".equals(kind) ? "Seu código de acesso (redigido)" : subject;
             emailLogs.save(EmailLog.create("email_" + UUID.randomUUID().toString().replace("-", ""),
                 truncate(toEmail, 180), truncate(safeSubject, 200), kind,
-                sent ? EmailLogStatus.SENT : EmailLogStatus.FAILED, truncate(error, 500), Instant.now(),
-                ipDeOrigem));
+                sent ? EmailLogStatus.SENT : EmailLogStatus.FAILED, truncate(error, 500), Instant.now()));
         } catch (RuntimeException logFailure) {
             LOG.warn("Nao foi possivel registrar o envio de e-mail para {}: {}", PiiMask.email(toEmail),
                 PiiMask.text(logFailure.getMessage()));

@@ -39,9 +39,6 @@ class EmailLogJpaEntity {
 	@Column(name = "created_at", nullable = false)
 	private Instant createdAt;
 
-	@Column(name = "client_ip", length = 45)
-	private String clientIp;
-
 	protected EmailLogJpaEntity() {
 	}
 
@@ -50,7 +47,6 @@ class EmailLogJpaEntity {
 		entity.id = log.id();
 		entity.toEmail = log.toEmail();
 		entity.subject = log.subject();
-		entity.clientIp = log.clientIp();
 		entity.kind = log.kind();
 		entity.status = log.status();
 		entity.error = log.error();
@@ -59,6 +55,6 @@ class EmailLogJpaEntity {
 	}
 
 	EmailLog toDomain() {
-		return new EmailLog(id, toEmail, subject, kind, status, error, createdAt, clientIp);
+		return new EmailLog(id, toEmail, subject, kind, status, error, createdAt);
 	}
 }
