@@ -104,11 +104,18 @@ public class SanctionService {
 
 	/**
 	 * Banimento direto por decisao humana: salva a sancao e escala para BAN, revogando
-	 * todas as sessoes (o padrao do recurso negado, sem passar pelo recurso).
+	 * todas as sessoes (o padrao do recurso negado, sem passar pelo recurso). A suspensao
+	 * com prazo (SUSPENDED) tambem revoga as sessoes na hora, mas NAO vira BAN aqui: a
+	 * conversao para BAN definitivo so acontece no vencimento sem recurso.
 	 */
 	@Transactional
 	public UserSanction banAuthor(UserSanction sanction, String authorId, String reviewerId,
 			com.socialcoisa.rede.identity.application.port.out.AuthSessionRepository sessions) {
+		if (sanction.type() == com.socialcoisa.rede.moderation.domain.SanctionType.SUSPENDED) {
+			UserSanction saved = sanctions.save(sanction);
+			sessions.revokeAllByUser(authorId, Instant.now(clock));
+			return saved;
+		}
 		UserSanction saved = sanctions.save(sanction);
 		// PERMABAN já é permanente: só o RESTRICTION vira BAN no caminho do recurso negado.
 		UserSanction banned = sanction.type() == com.socialcoisa.rede.moderation.domain.SanctionType.PERMABAN
@@ -119,7 +126,7 @@ public class SanctionService {
 		return banned;
 	}
 
-	/** Recurso do proprio usuario: so com restricao ativa e sem recurso pendente. */
+	/** Recurso do proprio usuario: so com restricao ou suspensao ativa e sem recurso pendente. */
 	@Transactional
 	public Appeal appeal(String userId, String message) {
 		if (!StringUtils.hasText(message) || message.trim().length() < 10) {
@@ -141,7 +148,7 @@ public class SanctionService {
 		return saved;
 	}
 
-	/** Recurso aprovado: restricao sai e a conta volta ao normal. */
+	/** Recurso aprovado: restricao ou suspensao sai e a conta volta ao normal. */
 	@Transactional
 	public UserSanction approveAppeal(String appealId, String reviewerId) {
 		Appeal appeal = pendingAppeal(appealId);
@@ -164,7 +171,7 @@ public class SanctionService {
 		return removed;
 	}
 
-	/** Recurso negado: conta banida (sessoes revogadas na hora). */
+	/** Recurso negado: sancao SUSPENDED ou restricao vira BAN (sessoes revogadas na hora). */
 	@Transactional
 	public UserSanction denyAppeal(String appealId, String reviewerId,
 			com.socialcoisa.rede.identity.application.port.out.AuthSessionRepository sessions) {
@@ -172,6 +179,8 @@ public class SanctionService {
 		UserSanction sanction = sanctions.findById(appeal.sanctionId())
 			.orElseThrow(() -> new ApiException(404, "SANCTION_NOT_FOUND", "Sancao nao encontrada."));
 		appeals.save(appeal.deny(reviewerId, Instant.now(clock)));
+		// Tanto a restricao quanto a suspensao com prazo convergem para BAN no indeferimento:
+		// sem recurso aceito, a conta cai no mesmo estado final e o conteudo entra na purga.
 		UserSanction banned = sanctions.save(sanction.escalateToBan());
 		sessions.revokeAllByUser(sanction.userId(), Instant.now(clock));
 		banCleanup.cleanup(banned.id(), sanction.userId());
