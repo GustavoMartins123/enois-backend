@@ -433,6 +433,23 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   corporativo, objetivos profissionais no perfil, termos de limitação de responsabilidade).
   Front: `cb9b38aa` + esta rodada; back: templates dos e-mails.
 ## Higiene do front (entregue 2026-10-21)
+- **[x] ENTREGUE 2026-10-25 — O clique na notificação push abria a API em vez do post.** O backend
+  manda na notificação um `href` de API ("/api/feed/posts/post_123" — é o que a API devolve em
+  `/notifications`). A rota do APP está na tabela do front (`src/utils/navigation.ts`), que o
+  **service worker não conhece**: ele é um JavaScript puro, sem acesso às rotas. O worker navegava
+  direto para esse href — então o clique na notificação do celular (push) abria o caminho da API, e
+  a pessoa caía numa página que não é o post (no melhor dos casos, num JSON). Dentro do app o mesmo
+  href era traduzido corretamente (o tradutor existe há tempo, com a tabela de rotas e o teste dela).
+  *O que foi feito:* o worker reconhece o href de API e **pergunta a aba**, que é quem conhece a
+  tabela; a aba traduz pelo mesmo `navigateToHref` que a notificação dentro do app usa — o destino
+  passa a ser o mesmo nos dois caminhos. Sem aba aberta, o worker abre as notificações do app. E a
+  `VERSION` do worker subiu (`enois-v7` → `enois-v8`): sem isso o worker antigo continuaria
+  servindo e a correção não chegaria a ninguém.
+  *Teste:* `src/lib/push-navigation.test.ts` (4) — a aba traduz o href pela tabela de rotas, a
+  mensagem errada é ignorada, o worker usa a mesma string de mensagem e a versão do cache subiu.
+  *Comprovado que pega:* com o `public/sw.js` antigo, o teste falha em duas verificações.
+  *Verificado:* `vitest` 405/405, `eslint` limpo, `tsc --noEmit` sem erro, `vite build` ok.
+  Front: `d01dc892` (branch `fix/clique-notificacao-push`, sobre a `qa`).
 - **[x] ENTREGUE 2026-10-24 — O app oferecia login com Google mesmo num ambiente onde a API o
   desliga.** A API tem o flag `rede.oauth.google.enabled`: quando está desligado, `/auth/config`
   avisa (`googleLoginEnabled: false`) e `/oauth/google/start` **recusa** com 403
