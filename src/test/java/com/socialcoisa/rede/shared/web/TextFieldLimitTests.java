@@ -164,6 +164,38 @@ class TextFieldLimitTests {
 			.andExpect(jsonPath("$.message").value(Matchers.containsString("400")));
 	}
 
+
+	@Test
+	void comunidadeComNomeLongoRecusaDizendoOCampo() throws Exception {
+		var dono = auth("tfl_comunidade");
+		mockMvc.perform(post("/communities")
+				.header("X-Session-Token", dono.token())
+				.header("Idempotency-Key", "tfl-comunidade-longa")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of(
+					"name", "C".repeat(300), "description", "Comunidade de teste."))))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("COMMUNITY_FIELD_TOO_LONG"))
+			.andExpect(jsonPath("$.message").value(Matchers.containsString("nome")))
+			.andExpect(jsonPath("$.message").value(Matchers.containsString("255")));
+	}
+
+	@Test
+	void colecaoDeJogoComTituloLongoRecusaDizendoOCampo() throws Exception {
+		// A colecao curada e da administracao (a porta exige admin antes de chegar no servico).
+		var dono = auth("group-admin");
+		mockMvc.perform(post("/games/colecoes")
+				.header("X-Session-Token", dono.token())
+				.header("Idempotency-Key", "tfl-colecao-longa")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of(
+					"title", "K".repeat(300), "gameIds", java.util.List.of()))))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("GAME_FIELD_TOO_LONG"))
+			.andExpect(jsonPath("$.message").value(Matchers.containsString("titulo")))
+			.andExpect(jsonPath("$.message").value(Matchers.containsString("160")));
+	}
+
 	private TestAuthHelper.AuthSession auth(String username) throws Exception {
 		return new TestAuthHelper(mockMvc, objectMapper).authenticate(username);
 	}
