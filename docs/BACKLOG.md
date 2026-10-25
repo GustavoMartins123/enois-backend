@@ -209,6 +209,21 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   container MariaDB aplicando as migrações (o do front, o `ci.yml`, já roda lint, typecheck e
   vitest).
 ## Higiene do backend (entregue 2026-10-21)
+- **[x] ENTREGUE 2026-10-25 — O endpoint de push não podia passar do que a coluna guarda.** Auditoria
+  do contrato entre a **entidade** e a **coluna** (356 colunas com `length` declarado, comparadas
+  com o schema que as migrations criaram): uma só estava errada — e no sentido perigoso, a entidade
+  prometendo **mais** do que a coluna guarda.
+  `push_subscriptions.endpoint` é `varchar(700)` (o número não é arbitrário: 700 caracteres cabem no
+  limite de chave do InnoDB — 3072 bytes em utf8mb4 — sem precisar de índice com prefixo, e o H2 dos
+  testes não aceita o prefixo). A entidade declarava `@Column(length = 1000)`.
+  *O efeito:* um endpoint maior passava pela API (que só checava o "https://") e quebrava no INSERT
+  com "Data too long" — que o tradutor de exceções devolve como **409 CONFLICT**, "Operação
+  conflita com o estado atual dos dados". O `ddl-auto=validate` do projeto compara o tipo, não o
+  comprimento, então esse descasamento passava batido.
+  *O que será feito:* a API recusa com **400** dizendo o que é ("Endpoint de push longo demais
+  (máximo 700 caracteres)") e a entidade passa a declarar o tamanho real.
+  *Teste:* `PushControllerTests` (5) — um endpoint de 700 caracteres recusa com 400 dizendo o campo.
+  Back: `3e0136c5` (branch `fix/config-qa-sem-duplicata`, sobre a `qa`).
 - **[x] ENTREGUE 2026-10-25 — Campo de texto que passa do teto da coluna recusa com 409 "conflita
   com o estado atual dos dados" — agora é 400 dizendo o campo.** Toda coluna de texto no banco tem um
   teto (`varchar(160)`, `varchar(255)`...). Passar dele faz o INSERT falhar com "Data too long for
