@@ -24,14 +24,15 @@ import jakarta.servlet.http.HttpServletRequest;
  * cliente real — corrigido tornando a lista de proxies confiáveis configurável
  * (`security.trusted-proxy-ips`), em vez de só as faixas privadas fixas.
  *
- * Sobre confiar no `X-Forwarded-For`: o cabeçalho pode vir forjado pelo cliente, mas o proxy da
- * nossa rede **acrescenta** o IP de quem se conectou ao FIM da lista. Logo o ÚLTIMO item é o único
- * que nós (e não o cliente) escrevemos — é ele que vale. Os itens anteriores são histórico que o
- * cliente pode ter inventado, e por isso não entram na decisão.
+ * A ordem das fontes: (1) `CF-Connecting-IP`, quando existe — é o IP que o Cloudflare viu, e
+ * ele o reescreve a cada requisição (o cliente não forja); (2) a cadeia do `X-Forwarded-For`,
+ * lida da direita para a esquerda pulando os proxies confiáveis; (3) o `getRemoteAddr()`.
  *
- * O Traefik coloca o IP real como primeiro (ou único) item do XFF. O ALB da AWS colocava
- * no fim. O resolver lê o PRIMEIRO hop do XFF (o mais à esquerda), que é o IP do cliente
- * original. Itens subsequentes são proxies intermediários.
+ * Sobre confiar no `X-Forwarded-For`: o cabeçalho pode vir forjado pelo cliente, e o item forjado
+ * fica no MEIO da lista (o proxy acrescenta o IP real no fim) ou no COMEÇO (quando o proxy
+ * substitui o cabeçalho e o cliente mandou um). Por isso a cadeia é lida da direita para a
+ * esquerda, pulando os proxies confiáveis: o primeiro salto que não é proxy é o IP da pessoa —
+ * com qualquer convenção do proxy, e sem o cliente poder escolher o próprio.
  */
 @Component
 public class ClientIpResolver {
@@ -59,9 +60,18 @@ public class ClientIpResolver {
 		if (!isTrustedProxy(remote)) {
 			return isPlausible(remote) ? remote.trim() : "desconhecido";
 		}
+		// O Cloudflare (que fica na frente do Traefik em produção) escreve o IP de quem pediu
+		// neste cabeçalho e o SOBRESCREVE em toda requisição que passa por ele — o cliente não
+		// consegue forjá-lo. É a única fonte do IP real quando o proxy da frente reescreve o
+		// X-Forwarded-For com o endereço da borda dele (os logs mostraram faixas 172.6x, do
+		// próprio Cloudflare, para todo mundo). Só vale vindo de um proxy confiável.
+		String borda = request.getHeader("CF-Connecting-IP");
+		if (isPlausible(borda)) {
+			return borda.trim();
+		}
 		String forwarded = request.getHeader("X-Forwarded-For");
 		if (StringUtils.hasText(forwarded)) {
-			String candidate = firstHop(forwarded);
+			String candidate = clientHop(forwarded);
 			if (isPlausible(candidate)) {
 				return candidate;
 			}
@@ -104,12 +114,37 @@ public class ClientIpResolver {
 	}
 
 	/**
-	 * Primeiro item do XFF — o IP do cliente original. O Traefik coloca o IP real do
-	 * cliente como primeiro item; proxies intermediários são adicionados depois.
+	 * O IP do cliente dentro da cadeia do `X-Forwarded-For`.
+	 *
+	 * <p>A cadeia é lida <strong>da direita para a esquerda</strong>, pulando os saltos que são
+	 * proxies confiáveis. O único item da cadeia que o <strong>cliente</strong> controla é o mais
+	 * à esquerda — e é exatamente esse que não pode valer: se ele valer, cada pessoa escolhe o
+	 * próprio IP e escapa de todo limite por IP (e o bloqueio da moderação vira decorativo).
+	 *
+	 * <p>Assim a leitura serve a qualquer convenção do proxy:
+	 * <ul>
+	 * <li>proxy que <strong>substitui</strong> o cabeçalho (Traefik sem confiar em XFF de
+	 * qualquer origem): a cadeia tem um item só, o IP real → é o primeiro não-confiável a partir
+	 * da direita;</li>
+	 * <li>proxy que <strong>acrescenta</strong> o IP de quem se conectou (ALB): a cadeia é
+	 * "forjado, real" → da direita, "real" não é proxy confiável, é ele; o "forjado" (do cliente)
+	 * nunca é alcançado;</li>
+	 * <li>cadeia com proxies no meio: os confiáveis são pulados e para no primeiro que não é.</li>
+	 * </ul>
 	 */
-	private String firstHop(String header) {
-		int firstComma = header.indexOf(',');
-		return firstComma < 0 ? header.trim() : header.substring(0, firstComma).trim();
+	private String clientHop(String header) {
+		String[] saltos = header.split(",");
+		for (int i = saltos.length - 1; i >= 0; i--) {
+			String salto = saltos[i].trim();
+			if (!isPlausible(salto)) {
+				continue;
+			}
+			if (isTrustedProxy(salto)) {
+				continue;
+			}
+			return salto;
+		}
+		return "";
 	}
 
 	private boolean isPlausible(String value) {
