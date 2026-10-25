@@ -78,6 +78,7 @@ class IdentityRateLimitFilter extends OncePerRequestFilter {
 
 	private void writeTooManyRequests(HttpServletResponse response) throws IOException {
 		response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
+		response.setHeader("Retry-After", "300");
 		response.setContentType(MediaType.APPLICATION_JSON_VALUE);
 		response.setCharacterEncoding("UTF-8");
 		Map<String, String> body = new LinkedHashMap<>();
