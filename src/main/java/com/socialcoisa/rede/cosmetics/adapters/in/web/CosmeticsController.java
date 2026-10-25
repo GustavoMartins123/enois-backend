@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.socialcoisa.rede.cosmetics.application.CosmeticsService;
@@ -31,15 +32,17 @@ class CosmeticsController {
 	/** O catálogo da loja; com sessão, marca o que a pessoa já tem e o que está equipado. */
 	@GetMapping("/loja")
 	List<Map<String, Object>> catalog(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		String me = tryResolve(userId, sessionToken);
-		return cosmetics.catalog().stream().map(item -> {
+                        @RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+                        @RequestParam(required = false) String order) {
+                String me = sessionToken == null ? null : currentUserResolver.resolve(userId, sessionToken).id().value();
+                return cosmetics.catalog(order == null ? "oldest" : order).stream().map(item -> {
 			var view = new java.util.LinkedHashMap<String, Object>();
 			view.put("id", item.id());
 			view.put("name", item.name());
 			view.put("description", item.description());
 			view.put("priceMf", item.priceMf());
 			view.put("cssRing", item.cssRing());
+                        view.put("releaseOrder", item.releaseOrder());
 			if (me != null) {
 				view.put("owned", cosmetics.owns(me, item.id()));
 				view.put("equipped", item.id().equals(cosmetics.equippedFrame(me)));
@@ -66,11 +69,4 @@ class CosmeticsController {
 		return Map.of("id", itemId, "equipped", !"none".equals(itemId));
 	}
 
-	private String tryResolve(String userId, String sessionToken) {
-		try {
-			return currentUserResolver.resolve(userId, sessionToken).id().value();
-		} catch (RuntimeException e) {
-			return null;
-		}
-	}
 }
