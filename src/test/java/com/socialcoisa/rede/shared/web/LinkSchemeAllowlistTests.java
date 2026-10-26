@@ -97,14 +97,27 @@ class LinkSchemeAllowlistTests {
 			.andExpect(jsonPath("$.website").value("https://linkscheme.test"));
 
 		// Rows stored before the allowlist are neutralized by the migration (re-run here on a planted row).
-		jdbc.update("update companies set website = ? where id = ?", "java\tscript:alert(1)", companyId);
+		for (String unsafe : DISGUISED_SCRIPT_URLS) {
+			if (unsafe.contains("\u200b") || unsafe.contains("\\")) {
+				continue; // not a scheme for a browser either: the link resolves as a relative path
+			}
+			assertThat(websiteAfterMigration(companyId, unsafe)).as(unsafe).isNull();
+		}
+		// Scheme-less values, host:port and allowed schemes stay.
+		for (String kept : List.of("meusite.com", "meusite.com:8080", "meusite.com:8080/a", "localhost:3000",
+				"www.site.com/a:b", "HTTPS://X.TEST", "mailto:a@b.test", "Data e hora")) {
+			assertThat(websiteAfterMigration(companyId, kept)).as(kept).isEqualTo(kept);
+		}
+	}
+
+	private String websiteAfterMigration(String companyId, String website) {
+		jdbc.update("update companies set website = ? where id = ?", website, companyId);
 		jdbc.execute((java.sql.Connection connection) -> {
 			ScriptUtils.executeSqlScript(connection,
 				new ClassPathResource("db/migration/V180__neutralize_unsafe_link_schemes.sql"));
 			return null;
 		});
-		assertThat(jdbc.queryForObject("select website from companies where id = ?", String.class, companyId))
-			.isNull();
+		return jdbc.queryForObject("select website from companies where id = ?", String.class, companyId);
 	}
 
 	@Test
