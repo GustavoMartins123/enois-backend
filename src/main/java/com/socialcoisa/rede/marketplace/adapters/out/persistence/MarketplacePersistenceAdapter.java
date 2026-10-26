@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +20,10 @@ interface SpringDataMarketplaceListingRepository
 	MarketplaceListingJpaEntity save(MarketplaceListingJpaEntity entity);
 
 	Optional<MarketplaceListingJpaEntity> findById(String id);
+
+	@Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+	@Query("select l from MarketplaceListingJpaEntity l where l.id = :id")
+	Optional<MarketplaceListingJpaEntity> findByIdForUpdate(String id);
 
 	Optional<MarketplaceListingJpaEntity> findFirstByItemKindAndItemIdAndStatus(String itemKind, String itemId,
 			String status);
@@ -46,6 +52,14 @@ interface SpringDataMarketplacePurchaseRepository
 	List<MarketplacePurchaseJpaEntity> findBySellerIdOrderByCreatedAtDesc(String sellerId);
 
 	List<MarketplacePurchaseJpaEntity> findByListingIdAndState(String listingId, String state);
+
+	@Query("""
+		select count(p) > 0 from MarketplacePurchaseJpaEntity p
+		join MarketplaceListingJpaEntity l on l.id = p.listingId
+		where p.buyerId = :buyerId and p.state <> 'REFUNDED'
+		and l.itemKind = :itemKind and l.itemId = :itemId
+		""")
+	boolean hasPurchaseForItem(String buyerId, String itemKind, String itemId);
 }
 
 @Repository
@@ -76,6 +90,16 @@ class MarketplacePersistenceAdapter implements MarketplaceRepository {
 	@Override
 	public Optional<MarketplaceListing> findListingById(String id) {
 		return listings.findById(id).map(MarketplaceListingJpaEntity::toDomain);
+	}
+
+	@Override
+	public Optional<MarketplaceListing> findListingByIdForUpdate(String id) {
+		return listings.findByIdForUpdate(id).map(MarketplaceListingJpaEntity::toDomain);
+	}
+
+	@Override
+	public boolean hasPurchaseForItem(String buyerId, String itemKind, String itemId) {
+		return purchases.hasPurchaseForItem(buyerId, itemKind, itemId);
 	}
 
 	@Override

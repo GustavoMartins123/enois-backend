@@ -131,7 +131,12 @@ public class MarketplaceService {
 
 	@Transactional
 	public MarketplacePurchase buy(String listingId, String buyerId) {
-		MarketplaceListing listing = listing(listingId);
+		MarketplaceListing listing = listings.findListingByIdForUpdate(listingId)
+			.orElseThrow(() -> new ApiException(404, "LISTING_NOT_FOUND", "Listagem não encontrada."));
+		// O importador pode anunciar o mesmo item de novo com outro id de listagem.
+		if (listings.hasPurchaseForItem(buyerId, listing.itemKind().name(), listing.itemId())) {
+			throw new ApiException(409, "ITEM_ALREADY_OWNED", "Você já comprou este item. Acesse Minhas compras.");
+		}
 		if (listing.status() != MarketplaceListing.Status.ACTIVE) {
 			throw new ApiException(409, "LISTING_NOT_ACTIVE", "Esta listagem não está mais aberta.");
 		}
