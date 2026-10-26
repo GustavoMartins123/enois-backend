@@ -466,7 +466,7 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		jdbc.update("delete from pending_email_changes where user_id = ?", userId);
 		emailService.sendHtmlEmail(oldEmail, "Seu e-mail foi alterado — Énóis",
 			"<p>O e-mail da sua conta no Énóis foi alterado para <b>"
-				+ org.springframework.web.util.HtmlUtils.htmlEscape(newEmail)
+				+ EmailService.escapeHtml(newEmail)
 				+ "</b>. Se não foi você, fale com o suporte imediatamente.</p>");
 	}
 
