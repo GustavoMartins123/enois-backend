@@ -70,6 +70,19 @@ public class EmailService {
     }
 
     /**
+     * Sent instead of a verification link when someone signs up with an address that already has an
+     * account: the owner learns about it, and the signup response stays the same as a new one.
+     */
+    public boolean sendSignupAttemptNotice(String toEmail, String userName) {
+        String htmlBody = "<p>Olá, " + escape(userName) + ".</p>"
+                + "<p>Alguém tentou criar uma conta no Énóis com este e-mail, mas ele já tem uma conta.</p>"
+                + "<p>Se foi você, <a href=\"" + escape(frontendUrl + "/entrar") + "\">entre</a> normalmente "
+                + "ou use \"Esqueci minha senha\". Se não foi, pode ignorar esta mensagem: nada mudou na sua conta.</p>"
+                + "<p>— Equipe Énóis</p>";
+        return sendHtml(toEmail, "Tentativa de cadastro com seu e-mail — Énóis", htmlBody);
+    }
+
+    /**
      * Registra o metadado do envio sem nunca atrapalhar o envio em si: se o log falhar, o e-mail
      * (que é o que importa) segue normalmente.
      */

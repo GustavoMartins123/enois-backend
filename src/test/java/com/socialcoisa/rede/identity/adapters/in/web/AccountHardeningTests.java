@@ -56,11 +56,77 @@ class AccountHardeningTests {
 	void setUp() {
 		resetTokens.clear();
 		when(emailService.sendVerificationEmail(anyString(), anyString(), anyString())).thenReturn(true);
+		when(emailService.sendSignupAttemptNotice(anyString(), anyString())).thenReturn(true);
 		when(emailService.sendEmailChangeConfirmation(anyString(), anyString(), anyString())).thenReturn(true);
 		org.mockito.Mockito.doAnswer(invocation -> {
 			resetTokens.add(invocation.getArgument(2, String.class));
 			return null;
 		}).when(emailService).sendPasswordResetEmail(anyString(), anyString(), anyString());
+	}
+
+	@Test
+	void signupWithARegisteredEmailLooksLikeANewSignup() throws Exception {
+		new TestAuthHelper(mockMvc, objectMapper).authenticate("acch_existing");
+
+		JsonNode existing = signup("acch_existing@test.com", "Test1234!", "acch-existing");
+		JsonNode fresh = signup("acch_fresh@test.com", "Test1234!", "acch-fresh");
+
+		assertThat(existing.get("verificationRequired")).isEqualTo(fresh.get("verificationRequired"));
+		assertThat(existing.get("emailSent")).isEqualTo(fresh.get("emailSent"));
+		assertThat(existing.get("email").asText()).isEqualTo("acch_existing@test.com");
+		assertThat(existing.propertyNames()).containsExactlyInAnyOrderElementsOf(fresh.propertyNames());
+		verify(emailService).sendSignupAttemptNotice(eq("acch_existing@test.com"), anyString());
+		assertThat(TestDatabase.pendingSignupsByEmail("acch_existing@test.com")).isZero();
+	}
+
+	@Test
+	void honeypotResponseIsValidJson() throws Exception {
+		Map<String, Object> body = signupBody("acch\"hp@test.com", "Test1234!");
+		body.put("website", "http://spam.example");
+		String response = mockMvc.perform(post("/auth/signup")
+				.header("Idempotency-Key", "acch-honeypot")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(body)))
+			.andExpect(status().isCreated())
+			.andReturn().getResponse().getContentAsString();
+
+		assertThat(objectMapper.readTree(response).get("email").asText()).isEqualTo("acch\"hp@test.com");
+	}
+
+	@Test
+	void pendingSignupIsOnlyRevealedToTheRightPassword() throws Exception {
+		signup("acch_pending@test.com", "Test1234!", "acch-pending");
+
+		mockMvc.perform(post("/auth/login")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("email", "acch_pending@test.com",
+					"password", "Wrong1234!"))))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
+	}
+
+	@Test
+	void reusedResetTokenSaysItWasUsed() throws Exception {
+		new TestAuthHelper(mockMvc, objectMapper).authenticate("acch_reset");
+		mockMvc.perform(post("/auth/password/forgot")
+				.header("Idempotency-Key", "acch-forgot")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("email", "acch_reset@test.com"))))
+			.andExpect(status().isAccepted());
+		assertThat(resetTokens).hasSize(1);
+		String token = resetTokens.get(0);
+
+		mockMvc.perform(post("/auth/password/reset")
+				.header("Idempotency-Key", "acch-reset-1")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("token", token, "password", "Another123!"))))
+			.andExpect(status().isOk());
+		mockMvc.perform(post("/auth/password/reset")
+				.header("Idempotency-Key", "acch-reset-2")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("token", token, "password", "Another456!"))))
+			.andExpect(status().isConflict())
+			.andExpect(jsonPath("$.code").value("TOKEN_ALREADY_USED"));
 	}
 
 	@Test
