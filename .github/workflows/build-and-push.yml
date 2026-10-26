@@ -392,15 +392,19 @@ jobs:
                 TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY}
                 REDE_AUTH_SIGNUP_ENABLED: "true"
                 SIGNUP_CAPTCHA_ENABLED: "true"
-                # SMTP do dominio (mail.b7cloud.tech). O servidor anuncia STARTTLS e nao AUTH;
-                # o relay e liberado por IP para os hosts da b7cloud. Sem estas variaveis o
-                # Spring caia em localhost:587 e NENHUM e-mail saia (2FA, reset, confirmacao).
+                # SMTP do dominio (mail.b7cloud.tech) na 465, que e a porta de saida liberada para
+                # este host — a 587 abre daqui, mas o egresso do cluster nao chega nela (connect
+                # timeout). A 465 e TLS implicito (SMTPS): a conexao ja nasce cifrada e o servidor
+                # NAO anuncia STARTTLS, entao ele fica desligado (com starttls.required o envio
+                # falha com "host does not support STARTTLS"). Sem estas variaveis o Spring cai em
+                # localhost:587 e NENHUM e-mail sai (2FA, reset, confirmacao).
                 SPRING_MAIL_HOST: mail.b7cloud.tech
-                SPRING_MAIL_PORT: "587"
+                SPRING_MAIL_PORT: "465"
                 SPRING_MAIL_USERNAME: suporte@enois.ia.br
                 SPRING_MAIL_PASSWORD: ${MAIL_PASSWORD}
-                SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: "true"
-                SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_REQUIRED: "true"
+                SPRING_MAIL_PROPERTIES_MAIL_SMTP_SSL_ENABLE: "true"
+                SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: "false"
+                SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_REQUIRED: "false"
                 LINKEDIN_CLIENT_ID: ${LINKEDIN_CLIENT_ID}
                 LINKEDIN_CLIENT_SECRET: ${LINKEDIN_CLIENT_SECRET}
                 LINKEDIN_REDIRECT_URI: ${LINKEDIN_REDIRECT_URI}
