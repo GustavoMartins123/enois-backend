@@ -53,6 +53,12 @@ regras valem para agentes autônomos, sessões assistidas e contribuições huma
 
 ## Qualidade (gates)
 
+- **Regra do escoteiro: toda falha é corrigida quando encontrada.** Teste quebrado ou instável,
+  build quebrado, erro de lint ou de tipo, bug ou falha de segurança que você encontrar é corrigido
+  na mesma tarefa, mesmo que seja anterior à sua mudança. "Já falha na `main`" não é motivo para
+  deixar como está. Se o conserto estiver realmente fora de alcance (depende de decisão dos
+  mantenedores, de acesso à infraestrutura, ou é grande demais para a tarefa), registre na mesma
+  tarefa (issue ou item do backlog) e diga na PR — nunca deixe em silêncio.
 - **Zero regressão.** Bug corrigido ganha teste de prova que falharia antes do conserto.
 - **Sem stub, sem TODO fingindo conclusão, sem asserção enfraquecida, sem fallback silencioso.**
   Comportamento não suportado responde com erro explícito, não com "talvez funcione".

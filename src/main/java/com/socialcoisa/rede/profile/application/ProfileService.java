@@ -254,7 +254,8 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 		// Curriculo: ausente no corpo da requisicao mantem o que ja estava; vazio limpa. Nao passa
 		// pelo `update` geral porque nao e campo de exibicao — e arquivo, e so o dono le.
 		if (command.resumeUrl() != null) {
-			profile.updateResume(command.resumeUrl(), command.resumeName(), clock.instant());
+			profile.updateResume(com.socialcoisa.rede.shared.web.SafeUrl.requireHttpUrl(command.resumeUrl(), "curriculo"), command.resumeName(),
+				clock.instant());
 		}
 		// A bio em HTML e sanitizada aqui, como o HTML do post de pagina: allowlist de tags e CSS.
 		// Vazio limpa (o perfil volta para a bio de texto); ausente no corpo da requisicao mantem.

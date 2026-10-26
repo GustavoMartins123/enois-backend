@@ -26,8 +26,6 @@ import com.socialcoisa.rede.shared.web.CurrentUserResolver;
 @RestController
 class CorporateProfileController {
 
-	private static final String USER_HEADER = "X-User-Id";
-
 	private final CorporateProfileService service;
 	private final CurrentUserResolver currentUserResolver;
 
@@ -50,9 +48,8 @@ class CorporateProfileController {
 	}
 
 	@GetMapping("/me/business-profile")
-	Map<String, Object> me(@RequestHeader(value = USER_HEADER, required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+	Map<String, Object> me(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		return view(service.byUser(user.id().value()).orElse(null));
 	}
 
@@ -66,17 +63,15 @@ class CorporateProfileController {
 	}
 
 	@PostMapping("/me/business-profile")
-	Map<String, Object> create(@RequestHeader(value = USER_HEADER, required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken, @RequestBody CreateRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+	Map<String, Object> create(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken, @RequestBody CreateRequest request) {
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		CorporateProfile created = service.create(user.id().value(), request.username(), request.name());
 		return view(created);
 	}
 
 	@PatchMapping("/me/business-profile")
-	Map<String, Object> updateDetails(@RequestHeader(value = USER_HEADER, required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken, @RequestBody DetailsRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+	Map<String, Object> updateDetails(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken, @RequestBody DetailsRequest request) {
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		CorporateProfile updated = service.updateDetails(user.id().value(), request.headline(), request.bio(),
 			request.avatar(), request.banner(), request.bannerHtml(), request.location(), request.industry(),
 			request.externalLinks());
@@ -84,40 +79,35 @@ class CorporateProfileController {
 	}
 
 	@PostMapping("/me/business-profile/name")
-	Map<String, Object> rename(@RequestHeader(value = USER_HEADER, required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken, @RequestBody NameRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+	Map<String, Object> rename(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken, @RequestBody NameRequest request) {
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		return view(service.rename(user.id().value(), request.name()));
 	}
 
 	/** Prévia da importação do perfil social — nada é gravado. */
 	@GetMapping("/me/business-profile/import-preview")
 	CorporateProfileService.ImportPreview importPreview(
-			@RequestHeader(value = USER_HEADER, required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		return service.importPreview(user.id().value());
 	}
 
 	/** Aplica só os campos escolhidos (consentimento campo a campo). */
 	@PostMapping("/me/business-profile/import")
-	Map<String, Object> importFromSocial(@RequestHeader(value = USER_HEADER, required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken, @RequestBody ImportRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+	Map<String, Object> importFromSocial(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken, @RequestBody ImportRequest request) {
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		return view(service.importFromSocial(user.id().value(), request == null ? null : request.fields()));
 	}
 
 	@PostMapping("/me/business-profile/activate")
-	Map<String, Object> activate(@RequestHeader(value = USER_HEADER, required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+	Map<String, Object> activate(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		return view(service.activate(user.id().value()));
 	}
 
 	@PostMapping("/me/business-profile/deactivate")
-	Map<String, Object> deactivate(@RequestHeader(value = USER_HEADER, required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+	Map<String, Object> deactivate(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		return view(service.deactivate(user.id().value()));
 	}
 

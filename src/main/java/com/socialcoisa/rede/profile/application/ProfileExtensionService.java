@@ -150,7 +150,7 @@ public class ProfileExtensionService implements ManageProfileExtensionUseCase {
 				"Você pode ter no máximo " + MAX_ENTRIES_PER_KIND + " certificações no perfil.");
 		}
 		Certification certification = Certification.create(userId, name, issuer, description, issueDate, expirationDate,
-			credentialUrl, clock.instant());
+			com.socialcoisa.rede.shared.web.SafeUrl.requireHttpUrl(credentialUrl, "credencial"), clock.instant());
 		return toCertificationView(repository.saveCertification(certification));
 	}
 
@@ -161,7 +161,8 @@ public class ProfileExtensionService implements ManageProfileExtensionUseCase {
 		Certification certification = repository.findCertificationById(certificationId)
 			.filter(c -> c.userId().equals(userId))
 			.orElseThrow(() -> new ApiException(404, "CERTIFICATION_NOT_FOUND", "Certificacao nao encontrada."));
-		certification.update(name, issuer, description, issueDate, expirationDate, credentialUrl, clock.instant());
+		certification.update(name, issuer, description, issueDate, expirationDate,
+			com.socialcoisa.rede.shared.web.SafeUrl.requireHttpUrl(credentialUrl, "credencial"), clock.instant());
 		return toCertificationView(repository.saveCertification(certification));
 	}
 

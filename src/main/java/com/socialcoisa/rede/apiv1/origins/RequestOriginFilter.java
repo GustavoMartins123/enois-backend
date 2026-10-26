@@ -13,6 +13,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import com.socialcoisa.rede.shared.web.RequestPath;
+import com.socialcoisa.rede.shared.web.TrustedOriginCors;
 import org.springframework.web.util.pattern.PathPattern;
 import org.springframework.web.util.pattern.PathPatternParser;
 
@@ -57,7 +58,7 @@ class RequestOriginFilter extends OncePerRequestFilter {
 	private final boolean enforce;
 
 	RequestOriginFilter(DeveloperOriginService origins, OriginAbuseGuard abuse,
-			@Value("${rede.cors.allowed-origins:https://enois.ia.br,http://localhost:5173}") String allowed,
+			@Value("${rede.cors.allowed-origins:https://enois.ia.br}") String allowed,
 			@Value("${rede.origins.trusted:https://*.b7cloud.com.br}") String trusted,
 			@Value("${rede.origins.enforce:true}") boolean enforce) {
 		this.origins = origins;
@@ -70,6 +71,11 @@ class RequestOriginFilter extends OncePerRequestFilter {
 	@Override
 	protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
 			throws ServletException, IOException {
+		// Marked even when enforcement is off: filters that answer early reflect only these origins.
+		String browserOrigin = request.getHeader("Origin");
+		if (StringUtils.hasText(browserOrigin) && isTrusted(matchForm(browserOrigin))) {
+			TrustedOriginCors.markTrusted(request, browserOrigin);
+		}
 		if (!enforce) {
 			chain.doFilter(request, response);
 			return;
@@ -151,6 +157,8 @@ class RequestOriginFilter extends OncePerRequestFilter {
 			// moderacao nunca abria (`NetworkError` no console). O resto segue no CORS estatico.
 			if ("OPTIONS".equalsIgnoreCase(method) && StringUtils.hasText(origin)) {
 				setCors(response, origin);
+				// Only the app's own origins may send the HttpOnly session cookie.
+				response.setHeader("Access-Control-Allow-Credentials", "true");
 				if (preflight(request, response)) {
 					return;
 				}

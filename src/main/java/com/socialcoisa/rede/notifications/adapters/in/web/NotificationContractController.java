@@ -53,10 +53,9 @@ class NotificationContractController {
 	}
 
 	@GetMapping
-	PageResponse<NotificationView> notifications(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	PageResponse<NotificationView> notifications(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestParam(required = false) String cursor, @RequestParam(defaultValue = "20") int limit) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		Instant before = cursorCodec.decode(cursor).orElse(null);
 		// Bloqueio: notificacao de quem foi bloqueado (ou de quem bloqueou) nao aparece mais.
 		Set<String> hidden = blockedUsersReader.hiddenIdsFor(user.id().value());
@@ -97,11 +96,10 @@ class NotificationContractController {
 	}
 
 	@PostMapping("/{notificationId}/read")
-	ResponseEntity<String> read(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> read(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String notificationId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of("notificationId", notificationId));
 		return idempotency.execute(user.id(), "POST", "/api/notifications/{notificationId}/read", idempotencyKey, hash,
 			() -> {
@@ -111,10 +109,9 @@ class NotificationContractController {
 	}
 
 	@PostMapping("/read-all")
-	ResponseEntity<String> readAll(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> readAll(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of("userId", user.id().value()));
 		return idempotency.execute(user.id(), "POST", "/api/notifications/read-all", idempotencyKey, hash,
 			() -> {

@@ -459,7 +459,8 @@ public class SocialLoginService implements OAuthUseCase {
 			: (StringUtils.hasText(email) ? email.substring(0, email.indexOf('@')) : "user"));
 		String candidate = base;
 		int suffix = 1;
-		while (userProfileRepository.existsByUsername(candidate)) {
+		while (userProfileRepository.existsByUsername(candidate)
+				|| com.socialcoisa.rede.shared.web.AdminGuard.isReservedUsername(candidate)) {
 			candidate = base + "-" + suffix++;
 		}
 		return candidate;

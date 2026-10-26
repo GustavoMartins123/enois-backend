@@ -74,8 +74,13 @@ class ConnectionPersistenceAdapter implements ConnectionRepository {
 	}
 
 	@Override
-	public boolean existsActiveConnection(String userId1, String userId2) {
-		return springData.existsActiveConnection(userId1, userId2);
+	public boolean existsAcceptedConnection(String userId1, String userId2) {
+		return springData.existsAcceptedConnection(userId1, userId2);
+	}
+
+	@Override
+	public Set<String> findAcceptedAmong(String userId, java.util.Collection<String> others) {
+		return others.isEmpty() ? Set.of() : new HashSet<>(springData.findAcceptedAmong(userId, others));
 	}
 
 	@Override

@@ -168,7 +168,7 @@ class SupportRouteAuthorizationTests {
 				var authorization = inOrder(adminInterceptor, adminGuard, controller);
 				authorization.verify(adminInterceptor).preHandle(any(), any(), any());
 				authorization.verify(adminGuard).requireAdmin(argThat(user -> user.id().value().equals(admin.userId())));
-				authorization.verify(controller).githubSettings(any(), any());
+				authorization.verify(controller).githubSettings(any());
 				authorization.verify(adminGuard).requireAdmin(argThat(user -> user.id().value().equals(admin.userId())));
 				verify(moderatorGuard, never()).requireModerator(any());
 			}

@@ -72,9 +72,12 @@ This starts with the `dev` profile using an **H2 in-memory database**. Swagger U
 
 | Profile | Database    | How to activate                          |
 |---------|-------------|------------------------------------------|
-| `dev`   | H2 (memory) | `SPRING_PROFILES_ACTIVE=dev` (default)   |
+| `dev`   | H2 (memory) | `SPRING_PROFILES_ACTIVE=dev`             |
 | `hml`   | MariaDB     | `SPRING_PROFILES_ACTIVE=hml`             |
 | `prd`   | MySQL       | `SPRING_PROFILES_ACTIVE=prd`             |
+
+There is no default profile: the packaged app refuses to boot without `SPRING_PROFILES_ACTIVE`.
+`./mvnw spring-boot:run` runs as `dev`; pick another with `-Dspring-boot.run.profiles=<profile>`.
 
 ### hml (MariaDB)
 
@@ -88,7 +91,7 @@ docker run -d --name rede-mariadb \
   -p 3306:3306 mariadb:11
 
 # Run with hml profile
-SPRING_PROFILES_ACTIVE=hml ./mvnw spring-boot:run
+./mvnw spring-boot:run -Dspring-boot.run.profiles=hml
 ```
 
 ### prd (MySQL 8+)
@@ -103,7 +106,7 @@ docker run -d --name rede-mysql \
   -p 3307:3306 mysql:8
 
 # Run with prd profile
-SPRING_PROFILES_ACTIVE=prd ./mvnw spring-boot:run
+./mvnw spring-boot:run -Dspring-boot.run.profiles=prd
 ```
 
 ## Building
@@ -385,7 +388,7 @@ backend expõe fica público em `https://enois.ia.br/api/...` — inclusive `/ap
 |---|---|---|
 | `SPRING_PROFILES_ACTIVE` | sim | `qa` no cluster |
 | `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` | sim | vêm do Secret `socialthing-db-secrets` |
-| `REDE_ADMIN_EMAILS` | sim | allowlist (separada por vírgula) para `/admin/reports/**`. **Vazio = ninguém é admin.** |
+| ~~`REDE_ADMIN_EMAILS`~~ | não | **ignorada**. Admin é a flag `users.is_admin` (V171), nunca username nem e-mail (ver passo 2). |
 | `REDE_FRONTEND_URL` | sim | base do front; o callback OAuth volta em `${REDE_FRONTEND_URL}/auth/callback` |
 | `REDE_BACKEND_URL` | sim | base pública do back; monta os redirect URIs do OAuth |
 | `FRONTEND_URL` | sim | link do e-mail de reset de senha: `${FRONTEND_URL}/auth/reset?token=...` |
@@ -399,15 +402,17 @@ backend expõe fica público em `https://enois.ia.br/api/...` — inclusive `/ap
 | `MANAGEMENT_ENDPOINTS` | não | padrão `health`. Para métricas use `health,prometheus` **e bloqueie `/api/actuator/*` no gateway** |
 | `SUPPORT_EMAIL` | não | e-mail do time que recebe os pedidos de suporte. Sem ele o pedido ainda fica registrado e visível em `/admin/support` |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | p/ push no celular | par de chaves do Web Push (ver passo 7 abaixo). Sem elas o push fica desligado e só as notificações dentro do app funcionam |
-| `REDE_SECURITY_ENCRYPTION_KEY` | p/ 2FA por app | chave de 32 bytes em base64 (`openssl rand -base64 32`) que cifra os segredos TOTP em repouso (AES-GCM). **Sem ela, o 2FA por aplicativo authenticator fica indisponível** (erro explícito, sem guardar segredo em texto puro); o 2FA por código de e-mail continua funcionando |
+| `REDE_SECURITY_ENCRYPTION_KEY` | **sim** (fora do `dev`) | chave de 32 bytes em base64 (`openssl rand -base64 32`) que cifra os segredos TOTP em repouso (AES-GCM) e assina o desafio do cadastro. **Fora do perfil `dev` o pod não sobe sem ela** (o mesmo valor em todas as réplicas) |
 | `VAPID_SUBJECT` | não | contato do emissor VAPID, no formato `mailto:contato@dominio` (padrão `mailto:suporte@enois.ia.br`) |
 
 ### Passo a passo das ações manuais
 
 1. **Criar/atualizar o Secret do banco** (`socialthing-db-secrets`) com as chaves `host`, `port`, `dbname`,
    `username`, `password`. Sem isso o pod não sobe (Flyway falha no boot).
-2. **Definir `REDE_ADMIN_EMAILS`** no Deployment com os e-mails que podem moderar. Enquanto estiver vazio,
-   `/admin/reports/**` responde 403 para todos.
+2. **Admins são a flag `users.is_admin`** (V171 marcou as contas da equipe existentes). Conferir com
+   `select id, username from users where is_admin = true`. Um admin promove/revoga outro pelo painel
+   (`POST /admin/admins`, `POST /admin/admins/{username}/revoke`); o primeiro admin de uma base nova é
+   `update users set is_admin = true where id = '<user id>'`. `REDE_ADMIN_EMAILS` não concede mais nada.
 3. **Configurar o SMTP** (`MAIL_*`) e `FRONTEND_URL` para o reset de senha funcionar de ponta a ponta.
 4. **Configurar o OAuth**: criar as credenciais no Google Cloud e no Apple Developer e cadastrar os
    redirect URIs exatamente como

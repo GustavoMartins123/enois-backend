@@ -41,7 +41,7 @@ class MonitoringTests {
 		var regular = new TestAuthHelper(mockMvc, objectMapper).authenticate("mon_regular");
 		String marker = "monitor-test-" + UUID.randomUUID();
 		monitoring.recordEvent("ERROR", "TEST", marker, Map.of("origem", "teste"));
-		drain();
+		drain(marker);
 
 		mockMvc.perform(get("/admin/monitoring/overview").header("X-Session-Token", admin.token()))
 			.andExpect(status().isOk())
@@ -71,7 +71,7 @@ class MonitoringTests {
 		var admin = new TestAuthHelper(mockMvc, objectMapper).authenticate("group-admin");
 		String marker = "monitor-range-" + UUID.randomUUID();
 		monitoring.recordEvent("WARN", "TEST", marker, Map.of("origem", "teste"));
-		drain();
+		drain(marker);
 
 		// Intervalo que inclui agora: o evento aparece.
 		String de = java.time.Instant.now().minus(java.time.Duration.ofHours(1)).toString();
@@ -138,22 +138,15 @@ class MonitoringTests {
 				org.hamcrest.Matchers.containsString("abc123"))));
 	}
 
-	private static void drain() throws InterruptedException {
-		// O flush é assíncrono (500ms): espera o arquivo crescer, não só existir —
-		// o arquivo pode já ter conteúdo de testes anteriores.
+	private static void drain(String marker) throws InterruptedException {
+		// O flush é assíncrono (500ms). Wait for this event's marker itself: every request is also an
+		// event, so the file growing does not mean our event was written yet.
 		java.nio.file.Path day = java.nio.file.Paths.get(
 			System.getProperty("java.io.tmpdir"), "rede-monitoring-test",
 			"events-" + java.time.LocalDate.now(java.time.ZoneOffset.UTC) + ".jsonl");
-		long before;
-		try {
-			before = java.nio.file.Files.size(day);
-		}
-		catch (java.io.IOException ignored) {
-			before = 0;
-		}
 		for (int i = 0; i < 80; i++) {
 			try {
-				if (java.nio.file.Files.size(day) > before) {
+				if (java.nio.file.Files.readString(day).contains(marker)) {
 					return;
 				}
 			}
@@ -174,7 +167,7 @@ class MonitoringTests {
 			null, "127.0.0.1", null);
 		monitoring.recordRequest("GET", errorPath, errorPath, 429, 12, "req-" + UUID.randomUUID(),
 			null, "127.0.0.1", null);
-		drain();
+		drain(errorPath);
 
 		mockMvc.perform(get("/admin/monitoring/events")
 				.header("X-Session-Token", admin.token())

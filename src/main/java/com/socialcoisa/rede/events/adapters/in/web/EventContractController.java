@@ -52,11 +52,10 @@ class EventContractController {
 	 * um evento absurdo (data que nao existe na vida real) sai da vitrine sem depender de banco.
 	 */
 	@DeleteMapping("/{eventId}")
-	ResponseEntity<String> delete(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> delete(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String eventId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(java.util.Map.of("eventId", eventId));
 		return idempotency.execute(user.id(), "DELETE", "/api/events/{eventId}", idempotencyKey, hash,
 			() -> {
@@ -81,11 +80,10 @@ class EventContractController {
 	PageResponse<EventView> events(@RequestParam(required = false) String format,
 			@RequestParam(required = false) String cursor, @RequestParam(defaultValue = "20") int limit,
 			@RequestParam(defaultValue = "false") boolean includePast,
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		Instant before = cursorCodec.decode(cursor).orElse(null);
 		var page = eventService.list(format, before, limit, includePast);
-		String viewer = viewerId(userId, sessionToken);
+		String viewer = viewerId(sessionToken);
 		List<String> ids = page.items().stream().map(Event::id).toList();
 		Set<String> attendingIds = viewer != null ? eventService.attendingEventIds(viewer, ids) : Set.of();
 		var items = page.items().stream().map(event -> toView(event, attendingIds.contains(event.id()))).toList();
@@ -105,21 +103,19 @@ class EventContractController {
 
 	@GetMapping("/{eventId}")
 	EventView event(@PathVariable String eventId,
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		Event event = eventService.getById(eventId);
-		String viewer = viewerId(userId, sessionToken);
+		String viewer = viewerId(sessionToken);
 		boolean attending = viewer != null
 			&& eventService.attendingEventIds(viewer, List.of(event.id())).contains(event.id());
 		return toView(event, attending);
 	}
 
 	@PostMapping
-	ResponseEntity<String> create(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> create(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@RequestBody CreateEventRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(request);
 		return idempotency.execute(user.id(), "POST", "/api/events", idempotencyKey, hash,
 			() -> {
@@ -131,9 +127,9 @@ class EventContractController {
 	}
 
 	/** Resolve o usuario quando ha sessao; listagem publica segue sem login. */
-	private String viewerId(String userId, String sessionToken) {
+	private String viewerId(String sessionToken) {
 		try {
-			return currentUserResolver.resolve(userId, sessionToken).id().value();
+			return currentUserResolver.resolve(sessionToken).id().value();
 		}
 		catch (RuntimeException exception) {
 			return null;
@@ -141,11 +137,10 @@ class EventContractController {
 	}
 
 	@PostMapping("/{eventId}/attendees")
-	ResponseEntity<String> attend(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> attend(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String eventId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of("eventId", eventId));
 		return idempotency.execute(user.id(), "POST", "/api/events/{eventId}/attendees", idempotencyKey, hash,
 			() -> {
@@ -155,11 +150,10 @@ class EventContractController {
 	}
 
 	@DeleteMapping("/{eventId}/attendees")
-	ResponseEntity<String> cancel(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> cancel(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String eventId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of("eventId", eventId));
 		return idempotency.execute(user.id(), "DELETE", "/api/events/{eventId}/attendees", idempotencyKey, hash,
 			() -> {

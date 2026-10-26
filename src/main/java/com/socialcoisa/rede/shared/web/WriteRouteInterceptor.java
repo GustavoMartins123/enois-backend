@@ -30,6 +30,9 @@ class WriteRouteInterceptor implements HandlerInterceptor {
 		"/auth/signup",
 		"/auth/login",
 		"/auth/refresh",
+		// Logout only revokes the credentials the caller sends; it must work once the access token
+		// has expired, or the refresh cookie would outlive the "logout".
+		"/auth/logout",
 		"/auth/email/verify",
 		"/auth/email/resend",
 		"/auth/password/forgot",

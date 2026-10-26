@@ -29,10 +29,9 @@ class EmailLogController {
 	}
 
 	@GetMapping("/admin/emails")
-	List<EmailLogView> recent(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	List<EmailLogView> recent(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestParam(defaultValue = "50") int limit) {
-		moderatorGuard.requireModerator(currentUserResolver.resolve(userId, sessionToken));
+		moderatorGuard.requireModerator(currentUserResolver.resolve(sessionToken));
 		// 2FA fora do painel: nem destinatário, nem assunto, nem existência do envio. O log existe
 		// para acompanhar entrega de avisos; código de segundo fator não é metadado de operação.
 		return logs.findRecent(limit).stream()

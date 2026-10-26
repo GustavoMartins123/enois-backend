@@ -170,8 +170,7 @@ class CommunityCosmeticsFlowTests {
 			.header("Idempotency-Key", "cosmetics-verify-" + name).contentType(MediaType.APPLICATION_JSON)
 			.content(objectMapper.writeValueAsString(Map.of("token", verificationToken))))
 			.andExpect(status().isOk()).andReturn();
-		var session = objectMapper.readTree(verified.getResponse().getContentAsString());
-		return new TestAuthHelper.AuthSession(session.get("token").asText(), session.get("refreshToken").asText(),
+		return new TestAuthHelper.AuthSession(TestAuthHelper.sessionToken(verified), TestAuthHelper.refreshToken(verified),
 			TestDatabase.userIdByEmail(email).orElseThrow());
 	}
 }
