@@ -53,11 +53,18 @@ class TwoFactorPersistenceAdapter implements TwoFactorRepository {
 
 	@Override
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
-	public boolean claimAttempt(String challengeId) {
-		return jdbc.update("""
+	public AttemptClaim claimAttempt(String challengeId) {
+		int claimed = jdbc.update("""
 				update two_factor_challenges set attempts = attempts + 1
 				where id = ? and attempts < ? and consumed_at is null
-				""", challengeId, TwoFactorChallenge.MAX_ATTEMPTS) == 1;
+				""", challengeId, TwoFactorChallenge.MAX_ATTEMPTS);
+		if (claimed == 1) {
+			return AttemptClaim.CLAIMED;
+		}
+		boolean consumed = !jdbc.queryForList(
+			"select id from two_factor_challenges where id = ? and consumed_at is not null", String.class, challengeId)
+			.isEmpty();
+		return consumed ? AttemptClaim.CONSUMED : AttemptClaim.OUT_OF_ATTEMPTS;
 	}
 
 	@Override

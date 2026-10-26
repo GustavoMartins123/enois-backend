@@ -25,8 +25,12 @@ public interface TwoFactorRepository {
 	 * Atomically claims one attempt before the code is checked, in its own transaction: a wrong code
 	 * fails and rolls the request back, and the attempt must survive that. False when the challenge
 	 * is consumed, gone or out of attempts, so parallel requests cannot share one read of the counter.
+	 * The reason is read inside the same new transaction, so it reflects what made the claim fail
+	 * (an outer REPEATABLE READ snapshot could still show the challenge as open).
 	 */
-	boolean claimAttempt(String challengeId);
+	AttemptClaim claimAttempt(String challengeId);
+
+	enum AttemptClaim { CLAIMED, CONSUMED, OUT_OF_ATTEMPTS }
 
 	/**
 	 * Marks the challenge consumed in the caller's transaction; true only for the one request that

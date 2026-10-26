@@ -398,6 +398,9 @@ class TwoFactorFlowTests {
 		assertThat(twoFactorRepository.replaceCode(challengeId, "new-hash", now.plusSeconds(300))).isFalse();
 		assertThat(twoFactorRepository.findChallenge(challengeId).orElseThrow().isConsumed()).isTrue();
 		assertThat(twoFactorRepository.consumeChallenge(challengeId, now)).isFalse();
+		// A claim on it says why it failed, without relying on the caller's snapshot.
+		assertThat(twoFactorRepository.claimAttempt(challengeId))
+			.isEqualTo(com.socialcoisa.rede.identity.application.port.out.TwoFactorRepository.AttemptClaim.CONSUMED);
 	}
 
 	@Test
@@ -415,7 +418,8 @@ class TwoFactorFlowTests {
 			for (int index = 0; index < threads; index++) {
 				claims.add(pool.submit(() -> {
 					start.await();
-					return twoFactorRepository.claimAttempt(challengeId);
+					return twoFactorRepository.claimAttempt(challengeId)
+						== com.socialcoisa.rede.identity.application.port.out.TwoFactorRepository.AttemptClaim.CLAIMED;
 				}));
 			}
 			start.countDown();
