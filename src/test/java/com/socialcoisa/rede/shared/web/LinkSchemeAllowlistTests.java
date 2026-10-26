@@ -14,7 +14,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.init.ScriptUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -41,6 +44,9 @@ class LinkSchemeAllowlistTests {
 
 	@Autowired
 	private ObjectMapper objectMapper;
+
+	@Autowired
+	private JdbcTemplate jdbc;
 
 	@Test
 	void linkTargetAllowsOnlyHttpHttpsMailtoOrNoScheme() {
@@ -89,6 +95,16 @@ class LinkSchemeAllowlistTests {
 		mockMvc.perform(get("/empresa/" + company.get("slug").asString()))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.website").value("https://linkscheme.test"));
+
+		// Rows stored before the allowlist are neutralized by the migration (re-run here on a planted row).
+		jdbc.update("update companies set website = ? where id = ?", "java\tscript:alert(1)", companyId);
+		jdbc.execute((java.sql.Connection connection) -> {
+			ScriptUtils.executeSqlScript(connection,
+				new ClassPathResource("db/migration/V180__neutralize_unsafe_link_schemes.sql"));
+			return null;
+		});
+		assertThat(jdbc.queryForObject("select website from companies where id = ?", String.class, companyId))
+			.isNull();
 	}
 
 	@Test
