@@ -140,6 +140,25 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
     *Escopo que fica para o item 13:* escopos OAuth de aplicações de terceiros (aqui o escopo é o
     nível de acesso da API de cada rota).
     Front: `925b048a` (branch `fix/lint-higiene-front`).
+    - **[x] ENTREGUE 2026-10-26 — A matriz prometia rota aberta que a API recusa, e faltavam sete
+      rotas (o Labirinto inteiro).** O item acima prometia os pares (método, caminho) batendo com
+      o backend — e batem. Mas o **escopo** de cada rota (a coluna `public`/`auth`/`admin`, que é
+      o que quem integra acredita) nunca foi conferido: a auditoria chamou as 41 leituras
+      documentadas **sem sessão** e achou duas prometidas como `public` que respondem **401** —
+      `GET /daily-games/blocks/today` e `GET /daily-games/words/today` (a própria descrição da
+      primeira dizia "com sessão", e o rótulo dizia o contrário). E a seção de jogos diários
+      documentava 6 das 13 rotas da API: faltava o Labirinto inteiro (estado, início, movimento,
+      ranking) e o ranking/início/guesses de Palavras.
+      *O que foi feito:* os dois rótulos viraram `auth` e as sete rotas entraram na matriz. E a
+      conferência de escopo virou **código**: `npm run check:api-matrix` agora sonda as leituras
+      documentadas sem credencial e compara com o escopo prometido (rota `public` que responde
+      401/403 é promessa quebrada; rota `auth`/`admin` que responde 200 é rota escondida).
+      *A prova de que a trava pega:* com os dois rótulos errados de volta, o script accuse
+      exatamente as duas e sai com erro.
+      *Testes:* `src/lib/developers/api-matrix-check.test.ts` (17 no total, +4 do escopo).
+      *Verificado:* `vitest` 467/467, `eslint` limpo, `tsc --noEmit` sem erro, `vite build` ok, e o
+      script fechando em "a página documenta só o que existe, com o escopo certo".
+      Front: #264 (`fix/matriz-escopos-daily-games`, sobre a `qa`).
 13. **Registro de aplicações de terceiros (OAuth + PKCE, escopos, revogação)** — programa de auth de
     terceiros. Exige decisão de produto/segurança antes. *Aceite:* app só recebe escopo autorizado; revogável.
 14. **CI de segurança + testes adversariais** — secret-scanning, SCA, SAST com política de bloqueio;
@@ -310,6 +329,22 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   cluster nunca entra. O perfil de teste deixa a defesa ligada com teto alto (1000), para uma
   classe que exercita 401/404 de propósito não derrubar as seguintes.
   *Achado pelo relato da dona* ("nosso amigo probe está atacando em todas as rotas").
+- **[x] ENTREGUE 2026-10-26 — A vitrine do marketplace buscava a galeria de temas para todo
+  item, e levava 404 em cada um.** O card da listagem pedia o pacote JSON do tema
+  (`GET /temas/galeria/{id}`) para **qualquer** item à venda — mas o `itemId` de uma listagem só
+  aponta para a galeria quando o item é um **TEMA** (`ItemKind.THEME`: "Tema da galeria (aponta
+  para theme_gallery)"). Para banner, template, página, post, blog e serviço o id é o do próprio item
+  do marketplace (`mitem_…`), e a chamada respondia **404** — uma por item da vitrine, com o caminho
+  errado no console (e a prévia caía no fundo genérico, então a tela parecia funcionar).
+  *Achado pela varredura de responsividade* (Chrome headless, 390px e 1280px, com a QA ao vivo):
+  a tela não transbordava, mas o console mostrava 8 respostas 404.
+  *O conserto:* a consulta da galeria virou um hook (`src/lib/marketplace/use-listing-theme.ts`) que
+  só roda quando a listagem é de tema; os outros tipos seguem com a prévia genérica.
+  *Prova:* com o `enabled` de volta, o teste acusa (o spy é chamado para item que não é tema); com o
+  conserto, a vitrine do marketplace na QA ao vivo ficou **sem nenhuma resposta com falha e sem
+  erro de console**.
+  *Testes:* `src/lib/marketplace/use-listing-theme.test.tsx` (2).
+  Front: #268 (`fix/marketplace-so-busca-tema-no-tema`, sobre a `qa`).
 - **[x] ENTREGUE 2026-10-22 — O serviço não dizia quem prestava, não tinha conversa com quem
   prestava, e os serviços de teste que sobraram na produção continuavam no catálogo.**
   Três coisas da mesma feature (o marketplace de serviços, Fase 5), pedidas pela dona:
@@ -681,6 +716,21 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   corporativo) e "usa o artigo masculino da marca".
   *Verificado:* `vitest` 342/342, `tsc --noEmit` sem erro, `eslint` limpo, `vite build` ok, e o
   HTML do SSR do login ja entrega a descricao nova.
+- **[x] ENTREGUE 2026-10-26 — A varredura de responsividade ficou completa: nenhuma rota do app
+  ficou sem medir.** O que faltava eram as **7 telas protegidas** (moderação, denúncias,
+  penalidades, meus-serviços, perfil profissional, painel de projetos, bloqueados): elas exigem
+  sessão de administrador, e a sessão da QA estava morta. Quebrou-se o impasse com o backend local
+  na bancada MariaDB (`enois-bench66`) e a allowlist de admin por variável
+  (`REDE_ADMIN_BOOTSTRAP_ENABLED` + `REDE_ADMIN_EMAILS`) — sem tocar no banco de nenhum ambiente.
+  *O que foi medido (Chrome headless, 390px e 1280px, sessão injetada):* as 7 telas protegidas e
+  mais as que exigem login (feed, mensagens, salvos, carteira, configurações, segurança, minhas
+  vagas) — **overflow horizontal 0 em todas**. Também foram medidas as telas novas do dia (grupos,
+  loja, marketplace, jogos diários, trilha, notificações): limpas nas duas larguras.
+  *Como a sessão foi obtida:* cadastro local → confirmação de e-mail gravando o hash do token na
+  bancada (o e-mail não sai sem SMTP) → `POST /auth/email/verify` devolve a sessão; na bancada
+  foram semeados uma denúncia e uma sanção para as tabelas de moderação terem conteúdo.
+  *Fora do escopo (externo):* Turnstile em produção, CORS do bucket S3 e a aprovação do app do
+  LinkedIn.
 - **[x] ENTREGUE 2026-10-22 — As abas da caixa de entrada cortavam no celular.** Com a quinta aba
   ("Serviços", que veio do chat de serviço), a faixa de abas da caixa de entrada ficava sem
   respiro a 390px e cortava "Arquivadas" na borda a 360px — cortada sem nenhuma pista de que

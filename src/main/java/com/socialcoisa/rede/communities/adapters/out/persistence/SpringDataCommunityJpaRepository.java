@@ -10,16 +10,16 @@ import org.springframework.data.repository.query.Param;
 
 interface SpringDataCommunityJpaRepository extends JpaRepository<CommunityJpaEntity, String> {
 
-	// `:q` vazio desliga a busca; nome e descrição entram no mesmo LIKE, sem diferenciar caixa.
-	@Query("SELECT c FROM CommunityJpaEntity c WHERE (:q = '' OR LOWER(c.name) LIKE LOWER(CONCAT('%', :q, '%')) "
-			+ "OR LOWER(c.description) LIKE LOWER(CONCAT('%', :q, '%'))) "
+	// `:q` null disables the search; it is a LikePattern (escaped, lower-cased) matched on name and description.
+	@Query("SELECT c FROM CommunityJpaEntity c WHERE (:q IS NULL OR LOWER(c.name) LIKE :q ESCAPE '!' "
+			+ "OR LOWER(c.description) LIKE :q ESCAPE '!') "
 			+ "AND (:before IS NULL OR c.createdAt < :before) ORDER BY c.createdAt DESC")
 	List<CommunityJpaEntity> findAllBefore(@Param("q") String q, @Param("before") Instant before,
 			Pageable pageable);
 
 	@Query("SELECT c FROM CommunityJpaEntity c WHERE c.topic = :topic "
-			+ "AND (:q = '' OR LOWER(c.name) LIKE LOWER(CONCAT('%', :q, '%')) "
-			+ "OR LOWER(c.description) LIKE LOWER(CONCAT('%', :q, '%'))) "
+			+ "AND (:q IS NULL OR LOWER(c.name) LIKE :q ESCAPE '!' "
+			+ "OR LOWER(c.description) LIKE :q ESCAPE '!') "
 			+ "AND (:before IS NULL OR c.createdAt < :before) ORDER BY c.createdAt DESC")
 	List<CommunityJpaEntity> findByTopic(@Param("topic") String topic, @Param("q") String q,
 			@Param("before") Instant before, Pageable pageable);

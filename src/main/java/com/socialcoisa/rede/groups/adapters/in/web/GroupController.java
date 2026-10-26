@@ -65,11 +65,10 @@ class GroupController {
 	}
 
 	@GetMapping
-	PageResponse<GroupView> groups(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	PageResponse<GroupView> groups(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestParam(required = false) String query,
 			@RequestParam(required = false) String cursor, @RequestParam(defaultValue = "20") int limit) {
-		CurrentUser viewer = resolveSafely(userId, sessionToken);
+		CurrentUser viewer = resolveSafely(sessionToken);
 		Instant before = cursorCodec.decode(cursor).orElse(null);
 		List<Group> groups = groupService.list(query, before, limit);
 		var items = groups.stream().map(group -> view(group, viewer)).toList();
@@ -79,19 +78,17 @@ class GroupController {
 	}
 
 	@GetMapping("/{slug}")
-	GroupView group(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	GroupView group(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String slug) {
-		CurrentUser viewer = resolveSafely(userId, sessionToken);
+		CurrentUser viewer = resolveSafely(sessionToken);
 		return view(groupService.resolve(slug), viewer);
 	}
 
 	@PostMapping
-	ResponseEntity<String> create(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> create(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@RequestBody GroupRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(request);
 		return idempotency.execute(user.id(), "POST", "/api/groups", idempotencyKey, hash, () -> {
 			Group group = groupService.create(request.name(), request.description(), request.topic(),
@@ -101,11 +98,10 @@ class GroupController {
 	}
 
 	@PatchMapping("/{groupId}")
-	ResponseEntity<String> update(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> update(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String groupId, @RequestBody GroupRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of("groupId", groupId, "request", request));
 		return idempotency.execute(user.id(), "PATCH", "/api/groups/{groupId}", idempotencyKey, hash, () -> {
 			Group group = groupService.update(groupId, request.name(), request.description(), request.topic(),
@@ -115,11 +111,10 @@ class GroupController {
 	}
 
 	@PostMapping("/{groupId}/join")
-	ResponseEntity<String> join(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> join(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String groupId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of("groupId", groupId, "action", "join"));
 		return idempotency.execute(user.id(), "POST", "/api/groups/{groupId}/join", idempotencyKey, hash, () -> {
 			JoinOutcome outcome = groupService.join(groupId, user.id().value());
@@ -128,11 +123,10 @@ class GroupController {
 	}
 
 	@DeleteMapping("/{groupId}/members/me")
-	ResponseEntity<String> leave(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> leave(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String groupId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of("groupId", groupId, "action", "leave"));
 		return idempotency.execute(user.id(), "DELETE", "/api/groups/{groupId}/members/me", idempotencyKey, hash,
 			() -> {
@@ -142,10 +136,9 @@ class GroupController {
 	}
 
 	@GetMapping("/{groupId}/members")
-	PageResponse<MemberView> members(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	PageResponse<MemberView> members(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String groupId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		var items = groupService.listMembers(groupId, user.id().value())
 			.stream()
 			.map(this::memberView)
@@ -154,11 +147,10 @@ class GroupController {
 	}
 
 	@DeleteMapping("/{groupId}/members/{memberId}")
-	ResponseEntity<String> removeMember(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> removeMember(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String groupId, @PathVariable String memberId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of("groupId", groupId, "memberId", memberId));
 		return idempotency.execute(user.id(), "DELETE", "/api/groups/{groupId}/members/{memberId}",
 			idempotencyKey, hash, () -> {
@@ -168,10 +160,9 @@ class GroupController {
 	}
 
 	@GetMapping("/{groupId}/requests")
-	PageResponse<RequestView> requests(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	PageResponse<RequestView> requests(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String groupId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		var items = groupService.listPendingRequests(groupId, user.id().value())
 			.stream()
 			.map(this::requestView)
@@ -180,27 +171,24 @@ class GroupController {
 	}
 
 	@PostMapping("/{groupId}/requests/{requestId}/approve")
-	ResponseEntity<String> approve(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> approve(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String groupId, @PathVariable String requestId) {
-		return decide(userId, sessionToken, idempotencyKey, groupId, requestId, true);
+		return decide(sessionToken, idempotencyKey, groupId, requestId, true);
 	}
 
 	@PostMapping("/{groupId}/requests/{requestId}/reject")
-	ResponseEntity<String> reject(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> reject(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String groupId, @PathVariable String requestId) {
-		return decide(userId, sessionToken, idempotencyKey, groupId, requestId, false);
+		return decide(sessionToken, idempotencyKey, groupId, requestId, false);
 	}
 
 	@PostMapping("/{groupId}/transfer")
-	ResponseEntity<String> transfer(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> transfer(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String groupId, @RequestBody TransferRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of("groupId", groupId, "request", request));
 		return idempotency.execute(user.id(), "POST", "/api/groups/{groupId}/transfer", idempotencyKey, hash,
 			() -> {
@@ -214,11 +202,10 @@ class GroupController {
 	 * dono, no endpoint próprio. A decisão vai para a auditoria com o motivo.
 	 */
 	@PostMapping("/{groupId}/status")
-	ResponseEntity<String> changeStatus(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> changeStatus(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String groupId, @RequestBody StatusRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		adminGuard.requireAdmin(user);
 		GroupStatus status = parseStatus(request.status());
 		String hash = idempotency.hash(Map.of("groupId", groupId, "request", request));
@@ -229,11 +216,10 @@ class GroupController {
 	}
 
 	@PostMapping("/{groupId}/close")
-	ResponseEntity<String> close(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> close(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String groupId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of("groupId", groupId, "action", "close"));
 		return idempotency.execute(user.id(), "POST", "/api/groups/{groupId}/close", idempotencyKey, hash, () -> {
 			Group group = groupService.close(groupId, user.id().value());
@@ -241,9 +227,9 @@ class GroupController {
 		});
 	}
 
-	private ResponseEntity<String> decide(String userId, String sessionToken, String idempotencyKey, String groupId,
+	private ResponseEntity<String> decide(String sessionToken, String idempotencyKey, String groupId,
 			String requestId, boolean approve) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String action = approve ? "approve" : "reject";
 		String hash = idempotency.hash(Map.of("groupId", groupId, "requestId", requestId, "action", action));
 		return idempotency.execute(user.id(), "POST", "/api/groups/{groupId}/requests/{requestId}/" + action,
@@ -279,9 +265,9 @@ class GroupController {
 				request.createdAt()));
 	}
 
-	private CurrentUser resolveSafely(String userId, String sessionToken) {
+	private CurrentUser resolveSafely(String sessionToken) {
 		try {
-			return currentUserResolver.resolve(userId, sessionToken);
+			return currentUserResolver.resolve(sessionToken);
 		} catch (Exception e) {
 			return null;
 		}

@@ -73,7 +73,8 @@ public class CorporateProfileService {
 		return repository.save(current.withDetails(
 			trimOrNull(headline, 200), trimOrNull(bio, 2000), trimOrNull(avatar, 500), trimOrNull(banner, 500),
 			trimOrNull(bannerHtml, 20000), trimOrNull(location, 200), trimOrNull(industry, 200),
-			trimOrNull(externalLinks, 1000), clock.instant()));
+			com.socialcoisa.rede.shared.web.SafeUrl.requireHttpUrls(trimOrNull(externalLinks, 1000), "[,\\s]+", "links externos"),
+			clock.instant()));
 	}
 
 	/**

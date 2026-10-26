@@ -42,14 +42,16 @@ public class GlobalApiRateLimitFilter extends OncePerRequestFilter {
 	private final Map<String, Deque<Long>> hits = new ConcurrentHashMap<>();
 	private final Clock clock;
 	private final ClientIpResolver clientIpResolver;
+	private final RateLimitSessions sessions;
 	private final int perMinute;
 	private final int sharedMultiplier;
 
-	public GlobalApiRateLimitFilter(Clock clock, ClientIpResolver clientIpResolver,
+	public GlobalApiRateLimitFilter(Clock clock, ClientIpResolver clientIpResolver, RateLimitSessions sessions,
 			@Value("${rede.rate.global-per-minute:0}") int perMinute,
 			@Value("${rede.rate.global-shared-multiplier:50}") int sharedMultiplier) {
 		this.clock = clock;
 		this.clientIpResolver = clientIpResolver;
+		this.sessions = sessions;
 		this.perMinute = perMinute;
 		this.sharedMultiplier = Math.max(1, sharedMultiplier);
 	}
@@ -75,23 +77,23 @@ public class GlobalApiRateLimitFilter extends OncePerRequestFilter {
 			chain.doFilter(request, response);
 			return;
 		}
-	// Sessão tem teto próprio; sem sessão, o IP com multiplicador (tráfego interno do
-	// cluster atrás do ingress não tem header e dividia o balde com todo mundo).
-	String session = request.getHeader("X-Session-Token");
-	String key;
-	int limit;
-	if (StringUtils.hasText(session)) {
-		key = "u:" + com.socialcoisa.rede.shared.security.Hashes.sha256Hex(session.trim());
-		limit = perMinute;
-	}
-	else {
-		boolean hasHeader = StringUtils.hasText(request.getHeader("X-Forwarded-For"))
-			|| StringUtils.hasText(request.getHeader("X-Real-IP"));
-		key = "ip:" + clientIpResolver.resolve(request);
-		limit = hasHeader ? perMinute : perMinute * sharedMultiplier;
-	}
-
+		// Sessão tem teto próprio; sem sessão, o IP com multiplicador (tráfego interno do
+		// cluster atrás do ingress não tem header e dividia o balde com todo mundo).
+		// Only a live session earns its own bucket, keyed by the user; anything else counts against the IP
+		// (decided by the resolved address, never by whether the client sent a header).
 		long now = clock.millis();
+		String ip = clientIpResolver.resolve(request);
+		String key = "ip:" + ip;
+		int limit = clientIpResolver.isTrustedProxy(ip) ? perMinute * sharedMultiplier : perMinute;
+		String session = request.getHeader("X-Session-Token");
+		if (StringUtils.hasText(session)) {
+			String userId = sessions.userId(session, ip);
+			if (userId != null) {
+				key = "u:" + userId;
+				limit = perMinute;
+			}
+		}
+
 		if (hits.size() > MAX_KEYS) {
 			sweep(now);
 		}
@@ -129,4 +131,5 @@ public class GlobalApiRateLimitFilter extends OncePerRequestFilter {
 			}
 		});
 	}
+
 }

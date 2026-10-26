@@ -49,9 +49,8 @@ class MarketplaceController {
 
 	/** Limpeza sob demanda dos resquícios (admin). Devolve quantas listagens caíram. */
 	@PostMapping("/admin/marketplace/sanitize")
-	Map<String, Object> sanitize(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+	Map<String, Object> sanitize(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		adminGuard.requireAdmin(user);
 		int removed = sanitizeWorker.sanitizeNow();
 		return Map.of("removed", removed, "listings", marketplace.catalog(60).size());
@@ -66,10 +65,9 @@ class MarketplaceController {
 
 	/** Publica qualquer conteúdo (template, banner, página, post, blog ou serviço). */
 	@PostMapping("/marketplace/items")
-	Map<String, Object> publishItem(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	Map<String, Object> publishItem(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestBody PublishItemRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		MarketplaceListing listing = marketplace.publishItem(user.id().value(), request.kind(), request.title(),
 			request.description(), request.content(), request.price());
 		return Map.of("id", listing.id(), "status", listing.status().name());
@@ -78,41 +76,36 @@ class MarketplaceController {
 	/** Conteúdo de uma compra (só o comprador): usado pelo editor de "Minhas compras". */
 	@GetMapping("/marketplace/purchases/{purchaseId}/content")
 	Map<String, Object> purchasedContent(@PathVariable String purchaseId,
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		var purchased = marketplace.contentForPurchase(purchaseId, user.id().value());
 		return Map.of("kind", purchased.kind().name(), "title", purchased.title(), "itemId", purchased.itemId(),
 			"content", purchased.content() == null ? "" : purchased.content());
 	}
 
 	@GetMapping("/marketplace/mine")
-	List<ListingView> mine(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+	List<ListingView> mine(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		return views(marketplace.mine(user.id().value()));
 	}
 
 	@GetMapping("/marketplace/compras")
-	List<PurchaseView> myPurchases(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+	List<PurchaseView> myPurchases(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		return marketplace.purchasesDetailed(user.id().value()).stream().map(PurchaseView::from).toList();
 	}
 
 	@GetMapping("/marketplace/vendas")
-	List<PurchaseView> mySales(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+	List<PurchaseView> mySales(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		return marketplace.salesBySeller(user.id().value()).stream()
 			.map(p -> PurchaseView.from(p, null, null, null))
 			.toList();
 	}
 
 	@PostMapping("/marketplace")
-	Map<String, Object> publish(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken, @RequestBody PublishRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+	Map<String, Object> publish(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken, @RequestBody PublishRequest request) {
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		MarketplaceListing.ItemKind kind = parseKind(request.itemKind());
 		if (kind != MarketplaceListing.ItemKind.THEME) {
 			throw new ApiException(400, "INVALID_ITEM_KIND", "Por enquanto só temas estão à venda.");
@@ -127,25 +120,22 @@ class MarketplaceController {
 	}
 
 	@PostMapping("/marketplace/{listingId}/buy")
-	Map<String, Object> buy(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken, @PathVariable String listingId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+	Map<String, Object> buy(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken, @PathVariable String listingId) {
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		MarketplacePurchase purchase = marketplace.buy(listingId, user.id().value());
 		return Map.of("purchaseId", purchase.id(), "state", purchase.state().name(), "price", purchase.price());
 	}
 
 	@PostMapping("/marketplace/purchases/{purchaseId}/confirm")
-	Map<String, Object> confirm(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken, @PathVariable String purchaseId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+	Map<String, Object> confirm(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken, @PathVariable String purchaseId) {
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		MarketplacePurchase purchase = marketplace.confirm(purchaseId, user.id().value());
 		return Map.of("purchaseId", purchase.id(), "state", purchase.state().name());
 	}
 
 	@PostMapping("/marketplace/purchases/{purchaseId}/refund")
-	Map<String, Object> refund(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken, @PathVariable String purchaseId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+	Map<String, Object> refund(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken, @PathVariable String purchaseId) {
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		MarketplacePurchase purchase = marketplace.refund(purchaseId, user.id().value());
 		return Map.of("purchaseId", purchase.id(), "state", purchase.state().name());
 	}

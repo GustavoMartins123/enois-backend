@@ -39,7 +39,8 @@ class RequestObservabilityFilterTests {
 	@Test
 	void exposesRequestContextInMdcDuringTheRequestAndClearsItAfter() throws Exception {
 		MockHttpServletRequest request = new MockHttpServletRequest("GET", "/feed");
-		// Primeiro item e o IP real do cliente (o proxy poe no inicio); o resto sao hops.
+		// The left-most entry is whatever the client sent; the hop our (trusted, loopback) proxy appended
+		// is the real client address, and that is what the logs must carry.
 		request.addHeader("X-Forwarded-For", "6.6.6.6, 203.0.113.7");
 		MockHttpServletResponse response = new MockHttpServletResponse();
 		Map<String, String> seen = new HashMap<>();
@@ -49,7 +50,7 @@ class RequestObservabilityFilterTests {
 			MDC.put(RequestObservabilityFilter.MDC_USER_ID, "user_1");
 		});
 
-		assertThat(seen).containsEntry(RequestObservabilityFilter.MDC_CLIENT_IP, "6.6.6.6").containsKey("requestId");
+		assertThat(seen).containsEntry(RequestObservabilityFilter.MDC_CLIENT_IP, "203.0.113.7").containsKey("requestId");
 		assertThat(response.getHeader(RequestObservabilityFilter.REQUEST_ID_HEADER)).isEqualTo(seen.get("requestId"));
 		assertThat(MDC.getCopyOfContextMap()).isNullOrEmpty();
 		assertThat(audit.list).isEmpty();

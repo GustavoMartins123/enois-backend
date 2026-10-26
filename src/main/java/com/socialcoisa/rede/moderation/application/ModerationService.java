@@ -72,9 +72,10 @@ public class ModerationService {
 			return;
 		}
 		try {
-			String reporter = describeUser(report.reporterId());
+			String reporter = EmailService.escapeHtml(describeUser(report.reporterId()));
 			String authorId = contentAuthors.authorOf(report.targetType().name(), report.targetId()).orElse(null);
-			String reported = authorId == null ? "(autor nao identificado para este alvo)" : describeUser(authorId);
+			String reported = EmailService.escapeHtml(
+				authorId == null ? "(autor nao identificado para este alvo)" : describeUser(authorId));
 			String content = contentReader.contentOf(report.targetType().name(), report.targetId()).orElse(null);
 
 			StringBuilder body = new StringBuilder();
@@ -89,10 +90,10 @@ public class ModerationService {
 			if (content != null) {
 				body.append("<p><b>Conteúdo do post denunciado:</b></p>")
 					.append("<blockquote style=\"margin:8px 0;padding:8px 12px;border-left:3px solid #ccc;")
-					.append("white-space:pre-wrap\">").append(escape(truncate(content, 2000))).append("</blockquote>");
+					.append("white-space:pre-wrap\">").append(EmailService.escapeHtml(truncate(content, 2000))).append("</blockquote>");
 			}
 			if (report.description() != null && !report.description().isBlank()) {
-				body.append("<p><b>Relato de quem denunciou:</b> ").append(escape(report.description())).append("</p>");
+				body.append("<p><b>Relato de quem denunciou:</b> ").append(EmailService.escapeHtml(report.description())).append("</p>");
 			}
 			String base = frontendUrl + "/moderacao/" + report.id();
 			body.append("<p style=\"margin-top:16px\"><b>Ações rápidas</b> (abrem o painel; a ação é "
@@ -151,13 +152,6 @@ public class ModerationService {
 			.orElse(userId);
 	}
 
-	private String escape(String value) {
-		if (value == null) {
-			return "";
-		}
-		return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-			.replace("\"", "&quot;");
-	}
 
 	private String truncate(String value, int max) {
 		return value.length() <= max ? value : value.substring(0, max) + "… [cortado]";

@@ -41,12 +41,14 @@ public class PublicReadRateLimitFilter extends OncePerRequestFilter {
 	private final Map<String, Deque<Long>> hits = new ConcurrentHashMap<>();
 	private final Clock clock;
 	private final ClientIpResolver ipResolver;
+	private final RateLimitSessions sessions;
 	private final int perMinute;
 
-	public PublicReadRateLimitFilter(Clock clock, ClientIpResolver ipResolver,
+	public PublicReadRateLimitFilter(Clock clock, ClientIpResolver ipResolver, RateLimitSessions sessions,
 			@Value("${rede.rate.public-read-per-minute:600}") int perMinute) {
 		this.clock = clock;
 		this.ipResolver = ipResolver;
+		this.sessions = sessions;
 		// O valor configurado vale como esta: o piso de 10 antigo ignorava o teste e qualquer
 		// ajuste de operacao abaixo disso.
 		this.perMinute = Math.max(1, perMinute);
@@ -66,18 +68,20 @@ public class PublicReadRateLimitFilter extends OncePerRequestFilter {
 			throws ServletException, IOException {
 		// Logado tem balde próprio (sessão); anônimo divide o do IP — é a enumeração anônima
 		// que este teto existe para conter, não o usuário navegando entre perfis.
-		String session = request.getHeader("X-Session-Token");
-		String key;
-		String who;
-		if (org.springframework.util.StringUtils.hasText(session)) {
-			key = "u:" + com.socialcoisa.rede.shared.security.Hashes.sha256Hex(session.trim());
-			who = "sessao";
-		}
-		else {
-			key = "ip:" + ipResolver.resolve(request);
-			who = key;
-		}
+		// Only a live session earns its own bucket, keyed by the user; anything else counts against the IP.
 		long now = clock.millis();
+		String ip = ipResolver.resolve(request);
+		String ipKey = "ip:" + ip;
+		String key = ipKey;
+		String who = ipKey;
+		String session = request.getHeader("X-Session-Token");
+		if (org.springframework.util.StringUtils.hasText(session)) {
+			String userId = sessions.userId(session, ip);
+			if (userId != null) {
+				key = "u:" + userId;
+				who = "sessao";
+			}
+		}
 		Deque<Long> marks = hits.computeIfAbsent(key, k -> new ArrayDeque<>());
 		synchronized (marks) {
 			while (!marks.isEmpty() && marks.peekFirst() < now - WINDOW_MS) {
@@ -96,4 +100,5 @@ public class PublicReadRateLimitFilter extends OncePerRequestFilter {
 		}
 		chain.doFilter(request, response);
 	}
+
 }

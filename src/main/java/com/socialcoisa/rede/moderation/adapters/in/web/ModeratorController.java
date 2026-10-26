@@ -78,9 +78,8 @@ class ModeratorController {
 	}
 
 	@GetMapping("/moderation/me")
-	MeResponse me(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader("X-Session-Token") String sessionToken) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+	MeResponse me(@RequestHeader("X-Session-Token") String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		ModeratorService.MeView me = moderators.me(user.id().value());
 		return new MeResponse(me.reputation(), me.minReputation(), me.eligible(), me.moderator(),
 			adminGuard.isAdmin(user), me.moderatorCount(), me.minModeratorsForSanction(), me.application());
@@ -88,50 +87,45 @@ class ModeratorController {
 
 	@PostMapping("/moderation/applications")
 	ModeratorService.ApplicationView apply(
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken,
 			@RequestBody ApplicationRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		return moderators.apply(user.id().value(), request.motivation(), request.experience(),
 			request.availability());
 	}
 
 	@GetMapping("/moderation/reports")
 	List<ModeratorService.PanelReportView> reports(
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken,
 			@RequestParam(defaultValue = "20") int limit) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		moderatorGuard.requireModerator(user);
 		return moderators.panelReports(user.id().value(), limit);
 	}
 
 	@PostMapping("/moderation/reports/{reportId}/vote")
-	ModeratorService.VoteResult vote(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String reportId,
+	ModeratorService.VoteResult vote(@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String reportId,
 			@RequestBody VoteRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		moderatorGuard.requireModerator(user);
 		return moderators.vote(reportId, user.id().value(), request.vote(), request.note());
 	}
 
 	@GetMapping("/admin/moderator-applications")
 	List<ModeratorService.ApplicationView> applications(
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken,
 			@RequestParam(defaultValue = "PENDING") ModeratorApplicationStatus status,
 			@RequestParam(defaultValue = "50") int limit) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		adminGuard.requireAdmin(user);
 		return moderators.applicationsOfStatus(status, limit);
 	}
 
 	@PostMapping("/admin/moderator-applications/{applicationId}/approve")
 	ModeratorService.ApplicationView approve(
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String applicationId,
 			@RequestBody(required = false) DecisionRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		adminGuard.requireAdmin(user);
 		return moderators.decideApplication(applicationId, user.id().value(), true,
 			request == null ? null : request.note());
@@ -139,10 +133,9 @@ class ModeratorController {
 
 	@PostMapping("/admin/moderator-applications/{applicationId}/reject")
 	ModeratorService.ApplicationView reject(
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String applicationId,
 			@RequestBody(required = false) DecisionRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		adminGuard.requireAdmin(user);
 		return moderators.decideApplication(applicationId, user.id().value(), false,
 			request == null ? null : request.note());
@@ -150,40 +143,36 @@ class ModeratorController {
 
 	@GetMapping("/admin/moderators")
 	List<ModeratorService.ApplicationView> moderatorList(
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken,
 			@RequestParam(defaultValue = "200") int limit) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		adminGuard.requireAdmin(user);
 		return moderators.approvedModerators(limit);
 	}
 
 	@PostMapping("/admin/moderators")
 	ModeratorService.ApplicationView appoint(
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken,
 			@RequestBody AppointmentRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		adminGuard.requireAdmin(user);
 		return moderators.appoint(request.username(), user.id().value(), request.note());
 	}
 
 	@PostMapping("/admin/moderators/{userId}/revoke")
 	ModeratorService.ApplicationView revoke(
-			@RequestHeader(value = "X-User-Id", required = false) String requesterId,
 			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String userId,
 			@RequestBody(required = false) DecisionRequest request) {
-		CurrentUser user = currentUserResolver.resolve(requesterId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		adminGuard.requireAdmin(user);
 		return moderators.revoke(userId, user.id().value(), request == null ? null : request.note());
 	}
 
 	@PostMapping("/admin/users/{username}/sanction")
 	ModeratorService.SanctionResult sanction(
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String username,
 			@RequestBody SanctionRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		moderatorGuard.requireModerator(user);
 		return moderators.sanctionUser(user.id().value(), username, request.type(), request.reason());
 	}
@@ -191,10 +180,9 @@ class ModeratorController {
 	/** Limpeza por spam: APAGA DO BANCO todos os posts e comentários do usuário. */
 	@PostMapping("/admin/users/{username}/sanitize")
 	ModeratorService.SanitizeResult sanitize(
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String username,
 			@RequestBody(required = false) DecisionRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		moderatorGuard.requireModerator(user);
 		return moderators.sanitizeUser(user.id().value(), username,
 			request == null ? "Limpeza por spam (motivo não informado)" : request.note());
@@ -206,9 +194,8 @@ class ModeratorController {
 	 */
 	@GetMapping("/admin/users/{username}/age")
 	java.util.Map<String, String> declaredAge(
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String username) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		adminGuard.requireAdmin(user);
 		var profile = profiles.findByUsername(username.trim())
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuário não encontrado."));
@@ -230,10 +217,9 @@ class ModeratorController {
 	 */
 	@GetMapping("/admin/users/{username}/risco")
 	List<com.socialcoisa.rede.shared.risk.RiskAssessment> riskHistory(
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String username,
 			@RequestParam(defaultValue = "20") int limit) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		adminGuard.requireAdmin(user);
 		var profile = profiles.findByUsername(username.trim())
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuário não encontrado."));
@@ -243,38 +229,34 @@ class ModeratorController {
 	/** IPs recentes de onde o usuário entrou — fonte para o bloqueio de IP. */
 	@GetMapping("/admin/users/{username}/ips")
 	List<com.socialcoisa.rede.moderation.application.IpBlockService.UserIpView> userIps(
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String username) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		moderatorGuard.requireModerator(user);
 		return ipBlocks.ipsOfUser(username);
 	}
 
 	@PostMapping("/admin/blocked-ips")
 	com.socialcoisa.rede.moderation.application.IpBlockService.BlockedIpView blockIp(
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken,
 			@RequestBody BlockIpRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		moderatorGuard.requireModerator(user);
 		return ipBlocks.block(user.id().value(), request.ip(), request.reason());
 	}
 
 	@GetMapping("/admin/blocked-ips")
 	List<com.socialcoisa.rede.moderation.application.IpBlockService.BlockedIpView> blockedIps(
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken,
 			@RequestParam(defaultValue = "100") int limit) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		moderatorGuard.requireModerator(user);
 		return ipBlocks.list(limit);
 	}
 
 	@PostMapping("/admin/blocked-ips/{ip}/unblock")
 	Map<String, String> unblockIp(
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String ip) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		moderatorGuard.requireModerator(user);
 		ipBlocks.unblock(ip);
 		return Map.of("ip", ip, "blocked", "false");
@@ -293,11 +275,10 @@ class ModeratorController {
 	 */
 	@GetMapping("/moderation/users/suspicious")
 	SuspiciousUserService.SuspiciousUsersView suspicious(
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken,
 			@RequestParam(defaultValue = "100") int limit,
 			@RequestParam(defaultValue = "30") int days) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		moderatorGuard.requireModerator(user);
 		return suspiciousUsers.list(limit, days);
 	}
@@ -305,10 +286,9 @@ class ModeratorController {
 	/** Banimento em lote: cada conta passa pelo fluxo normal de sanção, com resultado por item. */
 	@PostMapping("/moderation/users/bulk-ban")
 	BulkBanService.BulkBanResult bulkBan(
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken,
 			@RequestBody BulkBanRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		moderatorGuard.requireModerator(user);
 		return bulkBans.ban(user.id().value(), request.usernames(), request.type(), request.reason());
 	}
@@ -316,66 +296,59 @@ class ModeratorController {
 	/** Última rodada da automação (o "não sabemos o que aconteceu" do incidente). */
 	@GetMapping("/admin/automod/status")
 	SuspiciousAutoBanWorker.Status automodStatus(
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		adminGuard.requireAdmin(user);
 		return autoBan.status();
 	}
 
 	@GetMapping("/moderation/sanction-proposals")
 	List<SanctionProposalService.ProposalView> sanctionProposals(
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken,
 			@RequestParam(defaultValue = "50") int limit) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		moderatorGuard.requireModerator(user);
 		return sanctionProposals.pending(user.id().value(), limit);
 	}
 
 	@PostMapping("/moderation/sanction-proposals")
 	SanctionProposalService.ProposalView proposeSanction(
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken,
 			@RequestBody SanctionProposalRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		moderatorGuard.requireModerator(user);
 		return sanctionProposals.propose(user.id().value(), request.username(), request.type(), request.reason());
 	}
 
 	@PostMapping("/moderation/sanction-proposals/{proposalId}/vote")
 	SanctionProposalService.DecisionResult voteSanction(
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String proposalId,
 			@RequestBody SanctionProposalVoteRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		moderatorGuard.requireModerator(user);
 		return sanctionProposals.vote(proposalId, user.id().value(), request.vote(), request.note());
 	}
 
 	@PostMapping("/admin/sanction-proposals/{proposalId}/cancel")
 	SanctionProposalService.ProposalView cancelSanction(
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String proposalId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		adminGuard.requireAdmin(user);
 		return sanctionProposals.cancel(proposalId, user.id().value());
 	}
 
 	@GetMapping("/moderation/games")
-	List<GameReviewView> pendingGames(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader("X-Session-Token") String sessionToken,
+	List<GameReviewView> pendingGames(@RequestHeader("X-Session-Token") String sessionToken,
 			@RequestParam(defaultValue = "30") int limit) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		moderatorGuard.requireModerator(user);
 		return games.pending(limit).stream().map(this::gameView).toList();
 	}
 
 	@PostMapping("/moderation/games/{gameId}/approve")
-	Map<String, Object> approveGame(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String gameId,
+	Map<String, Object> approveGame(@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String gameId,
 			@RequestBody(required = false) DecisionRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		moderatorGuard.requireModerator(user);
 		if (!adminGuard.isAdmin(user)) {
 			games.requireNotOwnSubmission(gameId, user.id().value());
@@ -385,10 +358,9 @@ class ModeratorController {
 	}
 
 	@PostMapping("/moderation/games/{gameId}/reject")
-	Map<String, Object> rejectGame(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String gameId,
+	Map<String, Object> rejectGame(@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String gameId,
 			@RequestBody(required = false) DecisionRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		moderatorGuard.requireModerator(user);
 		Game rejected = games.reject(gameId, user.id().value(), request == null ? null : request.note());
 		return Map.of("id", rejected.id(), "status", rejected.status().name());
@@ -415,10 +387,9 @@ class ModeratorController {
 	// ---- Serviços da comunidade: mesma fila e mesmas regras dos jogos ----
 
 	@GetMapping("/moderation/services")
-	List<ServiceView> pendingServices(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader("X-Session-Token") String sessionToken,
+	List<ServiceView> pendingServices(@RequestHeader("X-Session-Token") String sessionToken,
 			@RequestParam(defaultValue = "30") int limit) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		moderatorGuard.requireModerator(user);
 		return serviceOffers.pending(limit).stream()
 			.map(offer -> ServiceView.of(offer, serviceOffers.usernameOf(offer), user.id().value()))
@@ -426,10 +397,9 @@ class ModeratorController {
 	}
 
 	@PostMapping("/moderation/services/{serviceId}/approve")
-	Map<String, Object> approveService(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String serviceId,
+	Map<String, Object> approveService(@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String serviceId,
 			@RequestBody(required = false) DecisionRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		moderatorGuard.requireModerator(user);
 		if (!adminGuard.isAdmin(user)) {
 			serviceOffers.requireNotOwnSubmission(serviceId, user.id().value());
@@ -440,10 +410,9 @@ class ModeratorController {
 	}
 
 	@PostMapping("/moderation/services/{serviceId}/reject")
-	Map<String, Object> rejectService(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String serviceId,
+	Map<String, Object> rejectService(@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String serviceId,
 			@RequestBody DecisionRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		moderatorGuard.requireModerator(user);
 		var rejected = serviceOffers.reject(serviceId, user.id().value(),
 			request == null ? null : request.note());
@@ -453,10 +422,9 @@ class ModeratorController {
 	}
 
 	@PostMapping("/moderation/services/{serviceId}/suspend")
-	Map<String, Object> suspendService(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String serviceId,
+	Map<String, Object> suspendService(@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String serviceId,
 			@RequestBody(required = false) DecisionRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		moderatorGuard.requireModerator(user);
 		var suspended = serviceOffers.suspend(serviceId, user.id().value(),
 			request == null ? null : request.note());

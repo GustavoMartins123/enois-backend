@@ -50,6 +50,7 @@ class AutomatedWritePathsTests {
 		"/auth/signup",
 		"/auth/login",
 		"/auth/refresh",
+		"/auth/logout",
 		"/auth/email/verify",
 		"/auth/email/resend",
 		"/auth/password/forgot",

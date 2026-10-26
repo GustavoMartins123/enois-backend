@@ -71,6 +71,48 @@ class ClientIpSpoofingTests {
 	}
 
 	@Test
+	void cloudflareHeaderIsIgnoredWhenTheHopIsNotACloudflareEdge() {
+		// Direct hit on the origin proxy: it records the client's own address, which is not a
+		// Cloudflare edge, so a CF-Connecting-IP sent by that client is not trusted.
+		MockHttpServletRequest request = new MockHttpServletRequest("POST", "/auth/login");
+		request.addHeader("CF-Connecting-IP", "198.51.100.250");
+		request.addHeader("X-Forwarded-For", REAL_IP);
+		request.setRemoteAddr("10.0.0.5");
+
+		assertThat(resolver.resolve(request)).isEqualTo(REAL_IP);
+	}
+
+	@Test
+	void cloudflareHeaderWithoutForwardedChainIsIgnored() {
+		MockHttpServletRequest request = new MockHttpServletRequest("POST", "/auth/login");
+		request.addHeader("CF-Connecting-IP", "198.51.100.250");
+		request.setRemoteAddr("10.0.0.5");
+
+		assertThat(resolver.resolve(request)).isEqualTo("10.0.0.5");
+	}
+
+	@Test
+	void forgedRealIpFromAnUntrustedPeerIsIgnored() {
+		MockHttpServletRequest request = new MockHttpServletRequest("POST", "/auth/login");
+		request.addHeader("X-Real-IP", "198.51.100.250");
+		request.addHeader("X-Forwarded-For", "198.51.100.251");
+		request.setRemoteAddr(REAL_IP);
+
+		assertThat(resolver.resolve(request)).isEqualTo(REAL_IP);
+	}
+
+	@Test
+	void trustedProxiesAcceptCidrs() {
+		ClientIpResolver withCidr = new ClientIpResolver("31.220.102.0/24");
+		MockHttpServletRequest request = new MockHttpServletRequest("POST", "/auth/login");
+		request.addHeader("X-Forwarded-For", REAL_IP);
+		request.setRemoteAddr("31.220.102.169");
+
+		assertThat(withCidr.resolve(request)).isEqualTo(REAL_IP);
+		assertThat(withCidr.isTrustedProxy("31.220.103.1")).isFalse();
+	}
+
+	@Test
 	void oProxyQueSubstituiOCabecalhoTambemServe() {
 		// Convenção "substitui": a cadeia tem um item só, o IP real.
 		MockHttpServletRequest request = new MockHttpServletRequest("GET", "/feed");
@@ -113,7 +155,8 @@ class ClientIpSpoofingTests {
 	@Test
 	void girarOHeaderDoClienteNaoEscapaDoLimiteGlobal() throws Exception {
 		Clock clock = Clock.fixed(Instant.parse("2026-10-20T00:00:00Z"), ZoneOffset.UTC);
-		GlobalApiRateLimitFilter filter = new GlobalApiRateLimitFilter(clock, resolver, 3, 50);
+		GlobalApiRateLimitFilter filter = new GlobalApiRateLimitFilter(clock, resolver,
+			org.mockito.Mockito.mock(RateLimitSessions.class), 3, 50);
 
 		int lastStatus = 0;
 		for (int i = 0; i < 4; i++) {
@@ -131,7 +174,10 @@ class ClientIpSpoofingTests {
 	@Test
 	void loggedInUserHasOwnBucketSeparateFromTheIp() throws Exception {
 		Clock clock = Clock.fixed(Instant.parse("2026-10-20T00:00:00Z"), ZoneOffset.UTC);
-		GlobalApiRateLimitFilter filter = new GlobalApiRateLimitFilter(clock, resolver, 2, 50);
+		var sessions = org.mockito.Mockito.mock(RateLimitSessions.class);
+		org.mockito.Mockito.when(sessions.userId(org.mockito.ArgumentMatchers.eq("token-user-a"),
+			org.mockito.ArgumentMatchers.anyString())).thenReturn("user_a");
+		GlobalApiRateLimitFilter filter = new GlobalApiRateLimitFilter(clock, resolver, sessions, 2, 50);
 
 		// Anônimo esgota o balde do IP em 2.
 		for (int i = 0; i < 2; i++) {
@@ -151,6 +197,13 @@ class ClientIpSpoofingTests {
 		MockHttpServletResponse loggedResponse = new MockHttpServletResponse();
 		filter.doFilter(logged, loggedResponse, new MockFilterChain());
 		assertThat(loggedResponse.getStatus()).isNotEqualTo(429);
+
+		// An invented token is not a session: it lands in the exhausted IP bucket.
+		MockHttpServletRequest invented = albRequest();
+		invented.addHeader("X-Session-Token", "invented-token");
+		MockHttpServletResponse inventedResponse = new MockHttpServletResponse();
+		filter.doFilter(invented, inventedResponse, new MockFilterChain());
+		assertThat(inventedResponse.getStatus()).isEqualTo(429);
 	}
 
 	/** POST: o teto global agora vale para escrita (leitura é livre). */

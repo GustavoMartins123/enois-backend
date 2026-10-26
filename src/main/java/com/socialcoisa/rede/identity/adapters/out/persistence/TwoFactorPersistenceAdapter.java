@@ -9,6 +9,8 @@ import java.util.Optional;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.socialcoisa.rede.identity.application.port.out.TwoFactorRepository;
 import com.socialcoisa.rede.identity.domain.TwoFactorChallenge;
@@ -34,20 +36,48 @@ class TwoFactorPersistenceAdapter implements TwoFactorRepository {
 
 	@Override
 	public void saveChallenge(TwoFactorChallenge challenge) {
-		if (findChallenge(challenge.id()).isPresent()) {
-			jdbc.update("""
-					update two_factor_challenges set code_hash = ?, attempts = ?, expires_at = ?, consumed_at = ?
-					where id = ?""",
-				challenge.codeHash(), challenge.attempts(), challenge.expiresAt(), challenge.consumedAt(),
-				challenge.id());
-			return;
-		}
 		jdbc.update("""
 				insert into two_factor_challenges (id, user_id, method, code_hash, attempts, expires_at,
 					consumed_at, created_at)
 				values (?, ?, ?, ?, ?, ?, ?, ?)""",
 			challenge.id(), challenge.userId(), challenge.method().name(), challenge.codeHash(), challenge.attempts(),
 			challenge.expiresAt(), challenge.consumedAt(), challenge.createdAt());
+	}
+
+	@Override
+	public boolean replaceCode(String challengeId, String codeHash, Instant expiresAt) {
+		return jdbc.update("""
+				update two_factor_challenges set code_hash = ?, attempts = 0, expires_at = ?
+				where id = ? and consumed_at is null""", codeHash, java.sql.Timestamp.from(expiresAt), challengeId) == 1;
+	}
+
+	@Override
+	@Transactional(propagation = Propagation.REQUIRES_NEW)
+	public AttemptClaim claimAttempt(String challengeId) {
+		int claimed = jdbc.update("""
+				update two_factor_challenges set attempts = attempts + 1
+				where id = ? and attempts < ? and consumed_at is null
+				""", challengeId, TwoFactorChallenge.MAX_ATTEMPTS);
+		if (claimed == 1) {
+			return AttemptClaim.CLAIMED;
+		}
+		boolean consumed = !jdbc.queryForList(
+			"select id from two_factor_challenges where id = ? and consumed_at is not null", String.class, challengeId)
+			.isEmpty();
+		return consumed ? AttemptClaim.CONSUMED : AttemptClaim.OUT_OF_ATTEMPTS;
+	}
+
+	@Override
+	public boolean consumeChallenge(String challengeId, Instant now) {
+		return jdbc.update("update two_factor_challenges set consumed_at = ? where id = ? and consumed_at is null",
+			java.sql.Timestamp.from(now), challengeId) == 1;
+	}
+
+	@Override
+	public boolean markTotpStepUsed(String userId, long step) {
+		return jdbc.update("""
+				update user_two_factor_secrets set totp_last_step = ?
+				where user_id = ? and (totp_last_step is null or totp_last_step < ?)""", step, userId, step) > 0;
 	}
 
 	@Override

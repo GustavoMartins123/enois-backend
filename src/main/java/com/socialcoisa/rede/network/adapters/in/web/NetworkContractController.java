@@ -58,11 +58,10 @@ class NetworkContractController {
 	}
 
 	@GetMapping("/users")
-	PageResponse<NetworkUserView> users(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	PageResponse<NetworkUserView> users(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestParam(required = false) String query,
 			@RequestParam(required = false) String cursor, @RequestParam(defaultValue = "20") int limit) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		Set<String> hidden = blockService.hiddenIdsFor(user.id().value());
 		List<UserConnection> connections = networkService.getConnections(user.id().value());
 		Set<String> connectedIds = connections.stream()
@@ -95,10 +94,9 @@ class NetworkContractController {
 	}
 
 	@GetMapping("/suggestions")
-	List<NetworkUserView> suggestions(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	List<NetworkUserView> suggestions(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestParam(defaultValue = "4") int limit) {
-		CurrentUser currentUser = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser currentUser = currentUserResolver.resolve(sessionToken);
 		Set<String> hidden = blockService.hiddenIdsFor(currentUser.id().value());
 		List<ConnectionSuggestion> suggestions = networkService.getSuggestions(currentUser.id().value(), limit);
 		Set<String> suggestedIds = suggestions.stream()
@@ -116,19 +114,17 @@ class NetworkContractController {
 	}
 
 	@GetMapping("/summary")
-	NetworkSummaryView summary(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+	NetworkSummaryView summary(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		int connections = networkService.countConnections(user.id().value());
 		int pending = networkService.getPendingRequests(user.id().value()).size();
 		return new NetworkSummaryView(user.id().value(), connections, 0, pending);
 	}
 
 	@GetMapping("/requests")
-	PageResponse<ConnectionRequestView> requests(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	PageResponse<ConnectionRequestView> requests(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestParam(required = false) String cursor, @RequestParam(defaultValue = "20") int limit) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		var pending = networkService.getPendingRequests(user.id().value());
 		var items = pending.stream()
 			.map(c -> new ConnectionRequestView(
@@ -142,11 +138,10 @@ class NetworkContractController {
 	}
 
 	@PostMapping("/connections/{targetUserId}")
-	ResponseEntity<String> connect(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> connect(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String targetUserId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of("targetUserId", targetUserId));
 		return idempotency.execute(user.id(), "POST", "/api/network/connections/{userId}", idempotencyKey, hash,
 			() -> {
@@ -156,11 +151,10 @@ class NetworkContractController {
 	}
 
 	@PutMapping("/connections/{targetUserId}/accept")
-	ResponseEntity<String> accept(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> accept(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String targetUserId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of("targetUserId", targetUserId));
 		return idempotency.execute(user.id(), "PUT", "/api/network/connections/{userId}/accept", idempotencyKey, hash,
 			() -> {
@@ -170,10 +164,9 @@ class NetworkContractController {
 	}
 
 	@GetMapping("/connections/{targetUserId}/status")
-	ConnectionStatusView status(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ConnectionStatusView status(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String targetUserId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String status = networkService.getConnectionStatus(user.id().value(), targetUserId);
 		boolean blocked = blockService.isBlockedBy(user.id().value(), targetUserId);
 		return new ConnectionStatusView(targetUserId, status, blocked);
@@ -181,11 +174,10 @@ class NetworkContractController {
 
 	/** Bloqueia um usuario: ele some do feed, dos comentarios, das notificacoes e da busca. */
 	@PostMapping("/blocks/{targetUserId}")
-	ResponseEntity<String> block(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> block(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String targetUserId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of("targetUserId", targetUserId));
 		return idempotency.execute(user.id(), "POST", "/api/network/blocks/{userId}", idempotencyKey, hash,
 			() -> {
@@ -195,11 +187,10 @@ class NetworkContractController {
 	}
 
 	@DeleteMapping("/blocks/{targetUserId}")
-	ResponseEntity<String> unblock(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> unblock(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String targetUserId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of("targetUserId", targetUserId));
 		return idempotency.execute(user.id(), "DELETE", "/api/network/blocks/{userId}", idempotencyKey, hash,
 			() -> {
@@ -210,9 +201,8 @@ class NetworkContractController {
 
 	/** Quem eu bloqueei (para poder desfazer). */
 	@GetMapping("/blocks")
-	List<BlockedUserView> blocks(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+	List<BlockedUserView> blocks(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		var blocks = blockService.listBlocked(user.id().value());
 		Map<String, UserProfile> profiles = userProfileRepository
 			.findAllByIds(blocks.stream().map(com.socialcoisa.rede.network.domain.UserBlock::blockedId).toList())
@@ -231,11 +221,10 @@ class NetworkContractController {
 	}
 
 	@DeleteMapping("/connections/{targetUserId}")
-	ResponseEntity<String> remove(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> remove(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String targetUserId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of("targetUserId", targetUserId));
 		return idempotency.execute(user.id(), "DELETE", "/api/network/connections/{userId}", idempotencyKey, hash,
 			() -> {

@@ -5,7 +5,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
-import org.springframework.web.util.HtmlUtils;
 
 import com.socialcoisa.rede.identity.application.EmailService;
 import com.socialcoisa.rede.jobs.application.port.out.JobApplicationStatusNotifier;
@@ -92,9 +91,9 @@ class JobApplicationStatusNotifierAdapter implements JobApplicationStatusNotifie
 		StringBuilder body = new StringBuilder();
 		// Titulo e empresa vem do anuncio do empregador: entram escapados, senao um titulo com
 		// <a href> vira link de phishing dentro do e-mail que chega ao candidato.
-		body.append("<p><strong>").append(HtmlUtils.htmlEscape(job.title())).append("</strong> — ")
-			.append(HtmlUtils.htmlEscape(job.company())).append("</p>");
-		body.append("<p>").append(HtmlUtils.htmlEscape(text).replace("\n", "<br/>")).append("</p>");
+		body.append("<p><strong>").append(EmailService.escapeHtml(job.title())).append("</strong> — ")
+			.append(EmailService.escapeHtml(job.company())).append("</p>");
+		body.append("<p>").append(EmailService.escapeHtml(text).replace("\n", "<br/>")).append("</p>");
 		body.append("<p style=\"color:#6b7280;font-size:12px\">").append("Voce recebeu este aviso porque se ")
 			.append("candidatou a esta vaga no Enois.</p>");
 		return body.toString();

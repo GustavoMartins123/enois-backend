@@ -13,6 +13,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import com.socialcoisa.rede.shared.web.RequestPath;
+import com.socialcoisa.rede.shared.web.TrustedOriginCors;
 import org.springframework.web.util.pattern.PathPattern;
 import org.springframework.web.util.pattern.PathPatternParser;
 
@@ -57,7 +58,7 @@ class RequestOriginFilter extends OncePerRequestFilter {
 	private final boolean enforce;
 
 	RequestOriginFilter(DeveloperOriginService origins, OriginAbuseGuard abuse,
-			@Value("${rede.cors.allowed-origins:https://enois.ia.br,http://localhost:5173}") String allowed,
+			@Value("${rede.cors.allowed-origins:https://enois.ia.br}") String allowed,
 			@Value("${rede.origins.trusted:https://*.b7cloud.com.br}") String trusted,
 			@Value("${rede.origins.enforce:true}") boolean enforce) {
 		this.origins = origins;
@@ -70,12 +71,39 @@ class RequestOriginFilter extends OncePerRequestFilter {
 	@Override
 	protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
 			throws ServletException, IOException {
+		// Marked even when enforcement is off: filters that answer early reflect only these origins.
+		boolean trustedBrowserOrigin = false;
+		String browserOrigin = request.getHeader("Origin");
+		if (StringUtils.hasText(browserOrigin) && isTrusted(matchForm(browserOrigin))) {
+			trustedBrowserOrigin = true;
+			TrustedOriginCors.markTrusted(request, browserOrigin);
+		}
 		if (!enforce) {
 			chain.doFilter(request, response);
 			return;
 		}
 		String path = RequestPath.applicationPath(request);
 		String method = request.getMethod();
+
+		// Preflight é sempre respondido, de qualquer origem: ele não executa nada nem devolve dado,
+		// e a operação real continua passando por este filtro. Recusar o OPTIONS só transforma a
+		// recusa em falha de CORS no navegador — a ação aparece como "sem conexão" sem nunca ter
+		// chegado ao servidor.
+		if ("OPTIONS".equalsIgnoreCase(method)) {
+			String preflightOrigin = request.getHeader("Origin");
+			if (StringUtils.hasText(preflightOrigin)) {
+				setCors(response, preflightOrigin);
+				// O front chama a API cross-origin com o cookie de sessão: sem ecoar a credencial
+				// aqui o navegador descarta o preflight ("Allow-Credentials ... must be 'true'") e a
+				// tela fica sem dados. Só a origem do próprio app recebe isso — origem de terceiro
+				// cadastrada continua saindo sem credencial.
+				if (trustedBrowserOrigin) {
+					response.setHeader("Access-Control-Allow-Credentials", "true");
+				}
+			}
+			preflight(request, response);
+			return;
+		}
 
 		// Fluxos controlados por terceiros ou infraestrutura que não têm origem do app.
 		if (bypass(method, path)) {
@@ -138,6 +166,8 @@ class RequestOriginFilter extends OncePerRequestFilter {
 			// moderacao nunca abria (`NetworkError` no console). O resto segue no CORS estatico.
 			if ("OPTIONS".equalsIgnoreCase(method) && StringUtils.hasText(origin)) {
 				setCors(response, origin);
+				// Only the app's own origins may send the HttpOnly session cookie.
+				response.setHeader("Access-Control-Allow-Credentials", "true");
 				if (preflight(request, response)) {
 					return;
 				}

@@ -65,11 +65,20 @@ interface SpringDataUserConnectionJpaRepository extends JpaRepository<UserConnec
 	List<String> findAcceptedFriendIds(@Param("userId") String userId);
 
 	@Query("""
+			SELECT c.receiverUserId FROM UserConnectionJpaEntity c
+			WHERE c.requesterUserId = :userId AND c.status = 'ACCEPTED' AND c.receiverUserId IN :others
+			UNION
+			SELECT c.requesterUserId FROM UserConnectionJpaEntity c
+			WHERE c.receiverUserId = :userId AND c.status = 'ACCEPTED' AND c.requesterUserId IN :others""")
+	List<String> findAcceptedAmong(@Param("userId") String userId,
+			@Param("others") java.util.Collection<String> others);
+
+	@Query("""
 			SELECT CASE WHEN COUNT(c) > 0 THEN true ELSE false END
 			FROM UserConnectionJpaEntity c
 			WHERE ((c.requesterUserId = :user1 AND c.receiverUserId = :user2)
 			   OR (c.requesterUserId = :user2 AND c.receiverUserId = :user1))
-			  AND c.status IN ('PENDING', 'ACCEPTED')""")
-	boolean existsActiveConnection(@Param("user1") String user1, @Param("user2") String user2);
+			  AND c.status = 'ACCEPTED'""")
+	boolean existsAcceptedConnection(@Param("user1") String user1, @Param("user2") String user2);
 
 }

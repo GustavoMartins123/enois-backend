@@ -60,7 +60,7 @@ class GroupContentController {
 	@GetMapping("/{groupId}/topics")
 	PageResponse<TopicView> topics(@RequestHeader(value = "X-Session-Token", required = false) String token,
 			@PathVariable String groupId) {
-		CurrentUser user = currentUserResolver.resolve(null, token);
+		CurrentUser user = currentUserResolver.resolve(token);
 		var items = feed.listTopics(groupId, user.id().value()).stream().map(GroupContentController::topicView).toList();
 		return new PageResponse<>(items, null);
 	}
@@ -69,7 +69,7 @@ class GroupContentController {
 	ResponseEntity<String> createTopic(@RequestHeader(value = "X-Session-Token", required = false) String token,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String groupId, @RequestBody TopicRequest request) {
-		CurrentUser user = currentUserResolver.resolve(null, token);
+		CurrentUser user = currentUserResolver.resolve(token);
 		String hash = idempotency.hash(Map.of("groupId", groupId, "request", request));
 		return idempotency.execute(user.id(), "POST", "/api/groups/{groupId}/topics", idempotencyKey, hash, () -> {
 			GroupTopic topic = feed.createTopic(groupId, user.id().value(), request.name(), request.description());
@@ -81,7 +81,7 @@ class GroupContentController {
 	ResponseEntity<String> updateTopic(@RequestHeader(value = "X-Session-Token", required = false) String token,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String groupId, @PathVariable String topicId, @RequestBody TopicRequest request) {
-		CurrentUser user = currentUserResolver.resolve(null, token);
+		CurrentUser user = currentUserResolver.resolve(token);
 		String hash = idempotency.hash(Map.of("groupId", groupId, "topicId", topicId, "request", request));
 		return idempotency.execute(user.id(), "PATCH", "/api/groups/{groupId}/topics/{topicId}", idempotencyKey, hash,
 			() -> {
@@ -95,7 +95,7 @@ class GroupContentController {
 	ResponseEntity<String> archiveTopic(@RequestHeader(value = "X-Session-Token", required = false) String token,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String groupId, @PathVariable String topicId) {
-		CurrentUser user = currentUserResolver.resolve(null, token);
+		CurrentUser user = currentUserResolver.resolve(token);
 		String hash = idempotency.hash(Map.of("groupId", groupId, "topicId", topicId, "action", "archive"));
 		return idempotency.execute(user.id(), "POST", "/api/groups/{groupId}/topics/{topicId}/archive",
 			idempotencyKey, hash, () -> {
@@ -108,7 +108,7 @@ class GroupContentController {
 	ResponseEntity<String> reorderTopics(@RequestHeader(value = "X-Session-Token", required = false) String token,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String groupId, @RequestBody ReorderTopicsRequest request) {
-		CurrentUser user = currentUserResolver.resolve(null, token);
+		CurrentUser user = currentUserResolver.resolve(token);
 		String hash = idempotency.hash(Map.of("groupId", groupId, "request", request));
 		return idempotency.execute(user.id(), "POST", "/api/groups/{groupId}/topics/reorder", idempotencyKey, hash,
 			() -> {
@@ -122,7 +122,7 @@ class GroupContentController {
 	ResponseEntity<String> publish(@RequestHeader(value = "X-Session-Token", required = false) String token,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String groupId, @RequestBody GroupPostRequest request) {
-		CurrentUser user = currentUserResolver.resolve(null, token);
+		CurrentUser user = currentUserResolver.resolve(token);
 		String hash = idempotency.hash(Map.of("groupId", groupId, "request", request));
 		return idempotency.execute(user.id(), "POST", "/api/groups/{groupId}/posts", idempotencyKey, hash, () -> {
 			GroupPost post = feed.publish(groupId, request.topicId(), user.id().value(), request.content(),
@@ -135,7 +135,7 @@ class GroupContentController {
 	PageResponse<GroupPostView> posts(@RequestHeader(value = "X-Session-Token", required = false) String token,
 			@PathVariable String groupId, @RequestParam(required = false) String topicId,
 			@RequestParam(required = false) String cursor, @RequestParam(defaultValue = "20") int limit) {
-		CurrentUser user = currentUserResolver.resolve(null, token);
+		CurrentUser user = currentUserResolver.resolve(token);
 		Instant before = cursorCodec.decode(cursor).orElse(null);
 		List<GroupPost> posts = feed.listPosts(groupId, topicId, user.id().value(), before, limit);
 		// A reação de quem está lendo vem numa consulta só (sem N+1), como no feed principal.
@@ -151,7 +151,7 @@ class GroupContentController {
 	@GetMapping("/{groupId}/pinned")
 	GroupPostView pinned(@RequestHeader(value = "X-Session-Token", required = false) String token,
 			@PathVariable String groupId) {
-		CurrentUser user = currentUserResolver.resolve(null, token);
+		CurrentUser user = currentUserResolver.resolve(token);
 		GroupPost post = feed.pinnedPost(groupId, user.id().value())
 			.orElseThrow(() -> new ApiException(404, "NO_PINNED_POST", "Nao ha publicacao fixada neste grupo."));
 		return postView(post, feed.myReactions(groupId, user.id().value(), List.of(post.id())).get(post.id()));
@@ -161,7 +161,7 @@ class GroupContentController {
 	ResponseEntity<String> pin(@RequestHeader(value = "X-Session-Token", required = false) String token,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String groupId, @PathVariable String postId) {
-		CurrentUser user = currentUserResolver.resolve(null, token);
+		CurrentUser user = currentUserResolver.resolve(token);
 		String hash = idempotency.hash(Map.of("groupId", groupId, "postId", postId, "action", "pin"));
 		return idempotency.execute(user.id(), "POST", "/api/groups/{groupId}/posts/{postId}/pin", idempotencyKey, hash,
 			() -> {
@@ -174,7 +174,7 @@ class GroupContentController {
 	ResponseEntity<String> unpin(@RequestHeader(value = "X-Session-Token", required = false) String token,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String groupId, @PathVariable String postId) {
-		CurrentUser user = currentUserResolver.resolve(null, token);
+		CurrentUser user = currentUserResolver.resolve(token);
 		String hash = idempotency.hash(Map.of("groupId", groupId, "postId", postId, "action", "unpin"));
 		return idempotency.execute(user.id(), "DELETE", "/api/groups/{groupId}/posts/{postId}/pin", idempotencyKey,
 			hash, () -> {
@@ -187,7 +187,7 @@ class GroupContentController {
 	ResponseEntity<String> comment(@RequestHeader(value = "X-Session-Token", required = false) String token,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String groupId, @PathVariable String postId, @RequestBody CommentRequest request) {
-		CurrentUser user = currentUserResolver.resolve(null, token);
+		CurrentUser user = currentUserResolver.resolve(token);
 		String hash = idempotency.hash(Map.of("groupId", groupId, "postId", postId, "request", request));
 		return idempotency.execute(user.id(), "POST", "/api/groups/{groupId}/posts/{postId}/comments",
 			idempotencyKey, hash, () -> {
@@ -201,7 +201,7 @@ class GroupContentController {
 	PageResponse<CommentView> comments(@RequestHeader(value = "X-Session-Token", required = false) String token,
 			@PathVariable String groupId, @PathVariable String postId,
 			@RequestParam(defaultValue = "100") int limit) {
-		CurrentUser user = currentUserResolver.resolve(null, token);
+		CurrentUser user = currentUserResolver.resolve(token);
 		var items = feed.listComments(groupId, postId, user.id().value(), limit)
 			.stream()
 			.map(this::commentView)
@@ -213,7 +213,7 @@ class GroupContentController {
 	ResponseEntity<String> react(@RequestHeader(value = "X-Session-Token", required = false) String token,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String groupId, @PathVariable String postId, @RequestBody ReactionRequest request) {
-		CurrentUser user = currentUserResolver.resolve(null, token);
+		CurrentUser user = currentUserResolver.resolve(token);
 		String hash = idempotency.hash(Map.of("groupId", groupId, "postId", postId, "request", request));
 		return idempotency.execute(user.id(), "POST", "/api/groups/{groupId}/posts/{postId}/reactions",
 			idempotencyKey, hash, () -> {
@@ -226,7 +226,7 @@ class GroupContentController {
 	ResponseEntity<String> unreact(@RequestHeader(value = "X-Session-Token", required = false) String token,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String groupId, @PathVariable String postId) {
-		CurrentUser user = currentUserResolver.resolve(null, token);
+		CurrentUser user = currentUserResolver.resolve(token);
 		String hash = idempotency.hash(Map.of("groupId", groupId, "postId", postId, "action", "unreact"));
 		return idempotency.execute(user.id(), "DELETE", "/api/groups/{groupId}/posts/{postId}/reactions",
 			idempotencyKey, hash, () -> {
@@ -239,7 +239,7 @@ class GroupContentController {
 	ResponseEntity<String> removePost(@RequestHeader(value = "X-Session-Token", required = false) String token,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String groupId, @PathVariable String postId) {
-		CurrentUser user = currentUserResolver.resolve(null, token);
+		CurrentUser user = currentUserResolver.resolve(token);
 		String hash = idempotency.hash(Map.of("groupId", groupId, "postId", postId, "action", "remove"));
 		return idempotency.execute(user.id(), "DELETE", "/api/groups/{groupId}/posts/{postId}", idempotencyKey, hash,
 			() -> {
@@ -252,7 +252,7 @@ class GroupContentController {
 	ResponseEntity<String> removeComment(@RequestHeader(value = "X-Session-Token", required = false) String token,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String groupId, @PathVariable String postId, @PathVariable String commentId) {
-		CurrentUser user = currentUserResolver.resolve(null, token);
+		CurrentUser user = currentUserResolver.resolve(token);
 		String hash = idempotency.hash(Map.of("groupId", groupId, "postId", postId, "commentId", commentId,
 			"action", "remove"));
 		return idempotency.execute(user.id(), "DELETE", "/api/groups/{groupId}/posts/{postId}/comments/{commentId}",

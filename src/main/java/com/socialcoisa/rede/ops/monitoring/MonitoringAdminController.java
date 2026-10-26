@@ -32,15 +32,13 @@ class MonitoringAdminController {
 
 	@GetMapping("/overview")
 	MonitoringService.OverviewView overview(
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		moderatorGuard.requireModerator(currentUserResolver.resolve(userId, sessionToken));
+		moderatorGuard.requireModerator(currentUserResolver.resolve(sessionToken));
 		return monitoring.overview();
 	}
 
 	@GetMapping("/events")
 	List<MonitoringService.EventView> events(
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestParam(required = false) String level,
 			@RequestParam(required = false) String type,
@@ -49,7 +47,7 @@ class MonitoringAdminController {
 			@RequestParam(required = false) String to,
 			@RequestParam(required = false) String before,
 			@RequestParam(defaultValue = "100") int limit) {
-		moderatorGuard.requireModerator(currentUserResolver.resolve(userId, sessionToken));
+		moderatorGuard.requireModerator(currentUserResolver.resolve(sessionToken));
 		return monitoring.events(level, type, query, from, to, before, limit);
 	}
 }

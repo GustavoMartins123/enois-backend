@@ -252,7 +252,7 @@ proxy do bucket.
 | Variável | Descrição |
 |---|---|
 | `REDE_MEDIA_FFMPEG_PATH` | Caminho do ffmpeg (padrão `ffmpeg`) |
-| `TURNSTILE_REJECT_TEST_KEYS` | Trata chaves de teste `1x000…` como captcha indisponível (padrão `true`) |
+| `TURNSTILE_TEST_KEY_POLICY` | O que fazer com chaves de teste `1x000…`: `degrade` (padrão — sobe com o captcha externo desligado e ERROR no log) ou `fatal` (recusa o boot). Chave de teste nunca conta como captcha ativo |
 | `REDE_VERSION_DETAILS_TOKEN` | Token do header `X-Version-Details` para ver uptime/Flyway/storage em `/version` |
 
 ## Migrações de Banco
@@ -261,9 +261,12 @@ As migrações Flyway em `src/main/resources/db/migration/` são executadas auto
 
 ### Scripts auxiliares
 
+Origem e destino nao tem default (escolha o alvo a cada execucao) e as senhas vem de variaveis de
+ambiente, nunca da linha de comando. Veja `--help` de cada script.
+
 ```bash
-# Exportar banco MariaDB remoto
-./scripts/db-export.sh
+# Exportar banco MariaDB (dumps/ e ignorado pelo git)
+./scripts/db-export.sh > dumps/backup.sql
 
 # Importar dump para banco local
 ./scripts/db-import.sh

@@ -72,18 +72,30 @@ public class MessagingService {
 			throw new com.socialcoisa.rede.shared.web.ApiException(400, "TOO_MANY_PARTICIPANTS",
 				"Uma conversa pode ter no maximo 100 participantes.");
 		}
+		// JOB and SERVICE conversations are opened by their own flows (and exempt from the minor
+		// rule below); the generic endpoint only creates person-to-person conversations.
+		String normalizedKind = kind == null || kind.isBlank() ? "DIRECT" : kind.trim().toUpperCase(java.util.Locale.ROOT);
+		if (!"DIRECT".equals(normalizedKind) && !"GROUP".equals(normalizedKind)) {
+			throw new ApiException(400, "INVALID_CONVERSATION_KIND", "Tipo de conversa invalido.");
+		}
 		ageGate.requireCanWrite(createdBy);
 		unique.add(createdBy);
+		// One read per kind for the whole group (up to 100 people), never one per participant.
+		// hiddenIdsFor covers blocks in both directions.
 		var creatorHidden = blockedUsers.hiddenIdsFor(createdBy);
-		for (String pid : unique) {
-			if (!pid.equals(createdBy)
-					&& (creatorHidden.contains(pid) || blockedUsers.hiddenIdsFor(pid).contains(createdBy))) {
-				throw new com.socialcoisa.rede.shared.web.ApiException(403, "USER_BLOCKED",
-					"Nao e possivel conversar com este usuario.");
+		java.util.List<String> others = unique.stream().filter(pid -> !pid.equals(createdBy)).toList();
+		if (others.stream().anyMatch(creatorHidden::contains)) {
+			throw new com.socialcoisa.rede.shared.web.ApiException(403, "USER_BLOCKED",
+				"Nao e possivel conversar com este usuario.");
+		}
+		var minors = agePolicy.minorIds(others);
+		if (!minors.isEmpty()) {
+			if (!connections.findAcceptedAmong(createdBy, minors).containsAll(minors)) {
+				throw minorDmRestricted();
 			}
 		}
 		String id = "conversation_" + UUID.randomUUID().toString().replace("-", "");
-		Conversation conversation = Conversation.create(id, kind, title, createdBy, clock.instant());
+		Conversation conversation = Conversation.create(id, normalizedKind, title, createdBy, clock.instant());
 		repository.saveConversation(conversation);
 		for (String pid : unique) {
 			repository.saveParticipant(ConversationParticipant.create(id, pid, clock.instant()));
@@ -210,12 +222,13 @@ public class MessagingService {
 	 * Desconhecidos nao abrem conversa com menor — o primeiro vetor de contato abusivo fica fechado.
 	 */
 	private void protegeMenorDestinatario(String conversationId, String senderId) {
-		// A restrição vale para conversa DIRETA entre pessoas: em grupos e canais, o menor escolheu
-		// participar (e a moderação cobre o conteúdo).
+		// Applies to every person-to-person conversation, groups included: a minor added to a group
+		// did not choose its other members. JOB and SERVICE conversations are opened by the minor's
+		// own action (applying, hiring) and keep working.
 		String kind = repository.findConversationById(conversationId)
 			.map(conversation -> conversation.kind())
 			.orElse("DIRECT");
-		if (!"DIRECT".equalsIgnoreCase(kind)) {
+		if ("JOB".equalsIgnoreCase(kind) || "SERVICE".equalsIgnoreCase(kind)) {
 			return;
 		}
 		List<com.socialcoisa.rede.messaging.domain.ConversationParticipant> participants = repository
@@ -225,15 +238,23 @@ public class MessagingService {
 			if (recipientId.equals(senderId)) {
 				continue;
 			}
-			if (!agePolicy.isMinor(recipientId)) {
-				continue;
-			}
-			if (!connections.existsActiveConnection(senderId, recipientId)) {
-				throw new ApiException(403, "MINOR_DM_RESTRICTED",
-					"Para proteger usuarios menores de idade, so e possivel conversar com eles apos uma conexao aceita.");
-			}
+			requireMayContactMinor(senderId, recipientId);
 		}
 	}
+
+	/** ECA Digital: a minor is only reachable by someone with an ACCEPTED connection to them. */
+	private void requireMayContactMinor(String actorId, String recipientId) {
+		if (agePolicy.isMinor(recipientId) && !connections.existsAcceptedConnection(actorId, recipientId)) {
+			throw minorDmRestricted();
+		}
+	}
+
+	private static ApiException minorDmRestricted() {
+		return new ApiException(403, "MINOR_DM_RESTRICTED",
+			"Para proteger usuarios menores de idade, so e possivel conversar com eles apos uma conexao aceita.");
+	}
+
+
 
 	@Transactional
 	public void markRead(String conversationId, String userId) {

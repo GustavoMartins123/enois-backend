@@ -31,17 +31,18 @@ import jakarta.servlet.http.HttpServletResponse;
 class IdentityRateLimitFilter extends OncePerRequestFilter {
 
 	/** Caminho → ação do limitador. Só POST: é o que cria conta, gasta senha ou dispara e-mail. */
-	private static final Map<String, String> RULES = Map.of(
-		"/auth/signup", IpRateLimiter.SIGNUP,
-		"/auth/login", IpRateLimiter.LOGIN,
-		"/auth/password/forgot", IpRateLimiter.PASSWORD,
-		"/auth/password/reset", IpRateLimiter.PASSWORD,
-		"/auth/email/resend", IpRateLimiter.EMAIL,
-		"/auth/2fa/resend", IpRateLimiter.EMAIL,
-		"/auth/2fa/email/request", IpRateLimiter.EMAIL,
-		"/auth/2fa/verify", IpRateLimiter.TWO_FACTOR,
-		"/auth/2fa/email/confirm", IpRateLimiter.TWO_FACTOR,
-		"/auth/2fa/totp/enable", IpRateLimiter.TWO_FACTOR);
+	private static final Map<String, String> RULES = Map.ofEntries(
+		Map.entry("/auth/signup", IpRateLimiter.SIGNUP),
+		Map.entry("/auth/login", IpRateLimiter.LOGIN),
+		Map.entry("/auth/password/forgot", IpRateLimiter.PASSWORD),
+		Map.entry("/auth/password/reset", IpRateLimiter.PASSWORD),
+		Map.entry("/auth/email/resend", IpRateLimiter.EMAIL),
+		Map.entry("/auth/2fa/resend", IpRateLimiter.EMAIL),
+		Map.entry("/auth/2fa/email/request", IpRateLimiter.EMAIL),
+		Map.entry("/auth/2fa/verify", IpRateLimiter.TWO_FACTOR),
+		Map.entry("/auth/2fa/email/confirm", IpRateLimiter.TWO_FACTOR),
+		Map.entry("/auth/2fa/totp/enable", IpRateLimiter.TWO_FACTOR),
+		Map.entry("/auth/refresh", IpRateLimiter.REFRESH));
 
 	private final IpRateLimiter limiter;
 	private final ClientIpResolver ipResolver;

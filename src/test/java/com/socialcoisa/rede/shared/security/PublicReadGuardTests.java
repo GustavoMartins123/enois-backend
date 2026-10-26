@@ -67,4 +67,16 @@ class PublicReadGuardTests {
 				.andExpect(status().isOk());
 		}
 	}
+
+	@Test
+	void anInventedSessionTokenDoesNotEarnAFreshBucket() throws Exception {
+		for (int i = 0; i < 20; i++) {
+			mockMvc.perform(get("/users/search").param("q", "t3anon" + i))
+				.andExpect(status().isOk());
+		}
+		// A random token is not a session: it still counts against the IP that is already exhausted.
+		mockMvc.perform(get("/users/search").param("q", "t3fake")
+				.header("X-Session-Token", "invented-" + System.nanoTime()))
+			.andExpect(status().isTooManyRequests());
+	}
 }
