@@ -15,6 +15,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+import com.socialcoisa.rede.identity.application.port.out.AuthSessionRepository;
+
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -42,14 +44,16 @@ public class GlobalApiRateLimitFilter extends OncePerRequestFilter {
 	private final Map<String, Deque<Long>> hits = new ConcurrentHashMap<>();
 	private final Clock clock;
 	private final ClientIpResolver clientIpResolver;
+	private final AuthSessionRepository sessions;
 	private final int perMinute;
 	private final int sharedMultiplier;
 
-	public GlobalApiRateLimitFilter(Clock clock, ClientIpResolver clientIpResolver,
+	public GlobalApiRateLimitFilter(Clock clock, ClientIpResolver clientIpResolver, AuthSessionRepository sessions,
 			@Value("${rede.rate.global-per-minute:0}") int perMinute,
 			@Value("${rede.rate.global-shared-multiplier:50}") int sharedMultiplier) {
 		this.clock = clock;
 		this.clientIpResolver = clientIpResolver;
+		this.sessions = sessions;
 		this.perMinute = perMinute;
 		this.sharedMultiplier = Math.max(1, sharedMultiplier);
 	}
@@ -77,11 +81,15 @@ public class GlobalApiRateLimitFilter extends OncePerRequestFilter {
 		}
 	// Sessão tem teto próprio; sem sessão, o IP com multiplicador (tráfego interno do
 	// cluster atrás do ingress não tem header e dividia o balde com todo mundo).
+	// Only a live session earns its own bucket, keyed by the user: an invented token falls back to the IP.
 	String session = request.getHeader("X-Session-Token");
+	String userId = StringUtils.hasText(session)
+		? sessions.findActiveUserId(session.trim(), clock.instant()).orElse(null)
+		: null;
 	String key;
 	int limit;
-	if (StringUtils.hasText(session)) {
-		key = "u:" + com.socialcoisa.rede.shared.security.Hashes.sha256Hex(session.trim());
+	if (userId != null) {
+		key = "u:" + userId;
 		limit = perMinute;
 	}
 	else {
