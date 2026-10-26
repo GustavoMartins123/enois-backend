@@ -16,7 +16,7 @@ interface SpringDataMentorJpaRepository extends JpaRepository<MentorJpaEntity, S
 
 	Optional<MentorJpaEntity> findByUserId(String userId);
 
-	@Query("SELECT m FROM MentorJpaEntity m WHERE LOWER(m.expertise) LIKE LOWER(CONCAT('%', :expertise, '%')) "
+	@Query("SELECT m FROM MentorJpaEntity m WHERE LOWER(m.expertise) LIKE :expertise ESCAPE '!' "
 			+ "AND (:before IS NULL OR m.createdAt < :before) ORDER BY m.rating DESC")
 	List<MentorJpaEntity> findByExpertise(@Param("expertise") String expertise, @Param("before") Instant before,
 			Pageable pageable);

@@ -44,7 +44,7 @@ class CommunityPersistenceAdapter implements CommunityRepository {
 	@Override
 	public List<Community> findAll(String topic, String query, Instant before, int limit) {
 		PageRequest page = PageRequest.of(0, limit);
-		String q = StringUtils.hasText(query) ? query.trim() : "";
+		String q = com.socialcoisa.rede.shared.web.LikePattern.contains(query);
 		List<CommunityJpaEntity> entities;
 		if (StringUtils.hasText(topic)) {
 			entities = springData.findByTopic(topic, q, before, page);
