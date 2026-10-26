@@ -49,12 +49,22 @@ public class TurnstileValidator {
 			throw new IllegalStateException("TURNSTILE_SITE_KEY/TURNSTILE_SECRET_KEY are Cloudflare test keys. "
 				+ "Configure real keys or leave both empty (the signup challenge is used instead).");
 		}
+		if (isTestKey(secretKey) || isTestKey(siteKey)) {
+			// A guarda de boot esta desligada de proposito neste ambiente (QA). O log alto e o que
+			// substitui a recusa: ninguem deve confundir "subiu" com "captcha externo ativo".
+			LOG.error("TURNSTILE_* sao chaves de TESTE da Cloudflare: o captcha externo esta DESLIGADO neste "
+					+ "ambiente e o cadastro usa o desafio proprio do backend. Em producao a aplicacao recusa subir.");
+		}
 	}
 
-	/** A proteção externa está configurada? Sem isso, o cadastro usa o desafio próprio. */
+	/**
+	 * A proteção externa está configurada? Sem isso, o cadastro usa o desafio próprio.
+	 *
+	 * Chave de teste nunca conta como configurada, com ou sem a guarda de boot: ela aceita qualquer
+	 * token no siteverify, então tratá-la como "captcha ativo" abriria o cadastro para bot.
+	 */
 	public boolean isConfigured() {
-		return secretKey != null && !secretKey.isBlank()
-			&& !(rejectTestKeys && isTestKey(secretKey));
+		return secretKey != null && !secretKey.isBlank() && !isTestKey(secretKey);
 	}
 
 	private static boolean isTestKey(String key) {
@@ -69,10 +79,9 @@ public class TurnstileValidator {
 		return siteKey;
 	}
 
-	/** Configurado E com site key: é o que o front consegue renderizar. */
+	/** Configurado E com site key real: é o que o front consegue renderizar. */
 	public boolean isAvailable() {
-		return isConfigured() && siteKey != null && !siteKey.isBlank()
-			&& !(rejectTestKeys && isTestKey(siteKey));
+		return isConfigured() && siteKey != null && !siteKey.isBlank() && !isTestKey(siteKey);
 	}
 
 	public void require(String token) {
