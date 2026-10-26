@@ -164,7 +164,8 @@ public class AuthThrottle {
 	/** Janela deslizante de timestamps (podados a cada leitura — memória bounded). */
 	private static final class Janela {
 
-		private final Map<Instant, Boolean> marcas = new ConcurrentHashMap<>();
+		// A queue, not a set: two failures in the same clock tick are two failures.
+		private final java.util.Queue<Instant> marcas = new java.util.concurrent.ConcurrentLinkedQueue<>();
 		private Instant ultimo;
 
 		private Janela(Instant primeiro) {
@@ -173,11 +174,11 @@ public class AuthThrottle {
 
 		private void registra(Instant agora) {
 			ultimo = agora;
-			marcas.put(agora, Boolean.TRUE);
+			marcas.add(agora);
 		}
 
 		private void podado(Instant agora, Duration janela) {
-			marcas.keySet().removeIf(marca -> Duration.between(marca, agora).compareTo(janela) > 0);
+			marcas.removeIf(marca -> Duration.between(marca, agora).compareTo(janela) > 0);
 		}
 
 		private int contagem() {

@@ -53,7 +53,7 @@ class AuthThrottleKeyTests {
 		for (int i = 0; i < 5; i++) {
 			throttle.registraFalhaLogin("target@test.com", "198.51.100.1");
 		}
-		assertThat(throttle.loginDelayMillis("target@test.com", "198.51.100.1")).isPositive();
+		assertThat(throttle.loginDelayMillis("target@test.com", "198.51.100.1")).isEqualTo(1_000L);
 		assertThat(throttle.loginDelayMillis("target@test.com", "203.0.113.7")).isZero();
 	}
 }
