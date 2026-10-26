@@ -329,6 +329,22 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   cluster nunca entra. O perfil de teste deixa a defesa ligada com teto alto (1000), para uma
   classe que exercita 401/404 de propósito não derrubar as seguintes.
   *Achado pelo relato da dona* ("nosso amigo probe está atacando em todas as rotas").
+- **[x] ENTREGUE 2026-10-26 — A vitrine do marketplace buscava a galeria de temas para todo
+  item, e levava 404 em cada um.** O card da listagem pedia o pacote JSON do tema
+  (`GET /temas/galeria/{id}`) para **qualquer** item à venda — mas o `itemId` de uma listagem só
+  aponta para a galeria quando o item é um **TEMA** (`ItemKind.THEME`: "Tema da galeria (aponta
+  para theme_gallery)"). Para banner, template, página, post, blog e serviço o id é o do próprio item
+  do marketplace (`mitem_…`), e a chamada respondia **404** — uma por item da vitrine, com o caminho
+  errado no console (e a prévia caía no fundo genérico, então a tela parecia funcionar).
+  *Achado pela varredura de responsividade* (Chrome headless, 390px e 1280px, com a QA ao vivo):
+  a tela não transbordava, mas o console mostrava 8 respostas 404.
+  *O conserto:* a consulta da galeria virou um hook (`src/lib/marketplace/use-listing-theme.ts`) que
+  só roda quando a listagem é de tema; os outros tipos seguem com a prévia genérica.
+  *Prova:* com o `enabled` de volta, o teste acusa (o spy é chamado para item que não é tema); com o
+  conserto, a vitrine do marketplace na QA ao vivo ficou **sem nenhuma resposta com falha e sem
+  erro de console**.
+  *Testes:* `src/lib/marketplace/use-listing-theme.test.tsx` (2).
+  Front: #268 (`fix/marketplace-so-busca-tema-no-tema`, sobre a `qa`).
 - **[x] ENTREGUE 2026-10-22 — O serviço não dizia quem prestava, não tinha conversa com quem
   prestava, e os serviços de teste que sobraram na produção continuavam no catálogo.**
   Três coisas da mesma feature (o marketplace de serviços, Fase 5), pedidas pela dona:
