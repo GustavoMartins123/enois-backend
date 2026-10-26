@@ -30,6 +30,9 @@ final class RateLimitResponses {
 		String origin = request.getHeader("Origin");
 		if (StringUtils.hasText(origin)) {
 			response.setHeader("Access-Control-Allow-Origin", origin);
+			// The app sends cookies (credentials: include); without this the browser hides the 429.
+			// Safe: the body is a fixed code and message, nothing user-specific.
+			response.setHeader("Access-Control-Allow-Credentials", "true");
 			response.addHeader("Vary", "Origin");
 		}
 		String requested = request.getHeader("Access-Control-Request-Headers");

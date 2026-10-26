@@ -34,6 +34,7 @@ class RateLimitCorsTests {
 
 		assertThat(response.getStatus()).isEqualTo(429);
 		assertThat(response.getHeader("Access-Control-Allow-Origin")).isEqualTo("https://enois.ia.br");
+		assertThat(response.getHeader("Access-Control-Allow-Credentials")).isEqualTo("true");
 		assertThat(response.getHeader("Vary")).contains("Origin");
 		assertThat(response.getHeader("Access-Control-Allow-Headers")).isNotBlank();
 		assertThat(response.getHeader("Retry-After")).isNotBlank();
