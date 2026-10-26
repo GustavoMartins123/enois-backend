@@ -30,31 +30,49 @@ public class TurnstileValidator {
 
 	private final String secretKey;
 	private final String siteKey;
-	private final boolean rejectTestKeys;
+	private final boolean refuseTestKeysAtBoot;
 	private final ObjectMapper objectMapper;
 	private final HttpClient httpClient;
 
 	public TurnstileValidator(@Value("${rede.turnstile.secret-key:}") String secretKey,
 			@Value("${rede.turnstile.site-key:}") String siteKey,
-			@Value("${rede.turnstile.reject-test-keys:true}") boolean rejectTestKeys,
+			@Value("${rede.turnstile.test-key-policy:degrade}") String testKeyPolicy,
 			ObjectMapper objectMapper) {
 		this.secretKey = secretKey;
 		this.siteKey = siteKey;
-		this.rejectTestKeys = rejectTestKeys;
+		this.refuseTestKeysAtBoot = isFatalPolicy(testKeyPolicy);
 		this.objectMapper = objectMapper;
 		this.httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
-		// Cloudflare's documented test keys accept any token: outside dev the app refuses to boot
-		// with them instead of running without a real captcha.
-		if (rejectTestKeys && (isTestKey(secretKey) || isTestKey(siteKey))) {
+		// As chaves publicas de teste da Cloudflare aceitam QUALQUER token. O que fazer com elas e
+		// configuravel, porque nenhuma das duas escolhas pode ser surpresa:
+		//   degrade (default) — o captcha externo e tratado como desligado e o cadastro usa o desafio
+		//       proprio do backend, com ERROR no log. O site continua de pe.
+		//   fatal — recusa o boot. Para quem quer a garantia dura de "nunca rodar sem captcha real".
+		// Uma politica escrita errado nunca derruba o ambiente: cai em degrade e avisa no log.
+		if (!isTestKey(secretKey) && !isTestKey(siteKey)) {
+			return;
+		}
+		if (refuseTestKeysAtBoot) {
 			throw new IllegalStateException("TURNSTILE_SITE_KEY/TURNSTILE_SECRET_KEY are Cloudflare test keys. "
-				+ "Configure real keys or leave both empty (the signup challenge is used instead).");
+				+ "Configure real keys, leave both empty (the signup challenge is used instead), or set "
+				+ "rede.turnstile.test-key-policy=degrade.");
 		}
-		if (isTestKey(secretKey) || isTestKey(siteKey)) {
-			// A guarda de boot esta desligada de proposito neste ambiente (QA). O log alto e o que
-			// substitui a recusa: ninguem deve confundir "subiu" com "captcha externo ativo".
-			LOG.error("TURNSTILE_* sao chaves de TESTE da Cloudflare: o captcha externo esta DESLIGADO neste "
-					+ "ambiente e o cadastro usa o desafio proprio do backend. Em producao a aplicacao recusa subir.");
+		LOG.error("TURNSTILE_* sao chaves de TESTE da Cloudflare: o captcha externo esta DESLIGADO neste ambiente "
+				+ "e o cadastro usa o desafio proprio do backend (rede.turnstile.test-key-policy=degrade).");
+	}
+
+	/** Só `fatal` recusa o boot; qualquer outro valor (inclusive um typo) degrada e e reportado. */
+	private static boolean isFatalPolicy(String policy) {
+		String value = policy == null ? "" : policy.trim().toLowerCase(java.util.Locale.ROOT);
+		if (value.isEmpty() || value.equals("degrade")) {
+			return false;
 		}
+		if (value.equals("fatal")) {
+			return true;
+		}
+		LOG.error("rede.turnstile.test-key-policy=\"{}\" nao existe (valores: degrade, fatal); usando degrade.",
+			policy);
+		return false;
 	}
 
 	/**

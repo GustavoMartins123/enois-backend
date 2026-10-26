@@ -15,35 +15,48 @@ class TurnstileValidatorTests {
 	private static final String REAL_SECRET = "0x4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 	private static final String REAL_SITE = "0x4AAAAAAAAAAAAAAA";
 
-	private static TurnstileValidator validator(String secret, String site, boolean rejectTestKeys) {
-		return new TurnstileValidator(secret, site, rejectTestKeys, JsonMapper.builder().build());
+	private static TurnstileValidator validator(String secret, String site, String policy) {
+		return new TurnstileValidator(secret, site, policy, JsonMapper.builder().build());
 	}
 
+	/**
+	 * Chave de teste aceita QUALQUER token no siteverify, entao nunca pode contar como captcha
+	 * ativo — nem com a politica em degrade, que e a que a QA usa.
+	 */
 	@Test
-	void cloudflareTestKeysAreRefusedAtBoot() {
-		assertThatThrownBy(() -> validator(TEST_SECRET, TEST_SITE, true))
+	void testKeysNeverCountAsConfigured() {
+		TurnstileValidator degraded = validator(TEST_SECRET, TEST_SITE, "degrade");
+
+		assertThat(degraded.isConfigured()).isFalse();
+		assertThat(degraded.isAvailable()).isFalse();
+		// Inerte por desenho: quem decide o cadastro passa a ser o desafio proprio do backend.
+		assertThatCode(() -> degraded.require("")).doesNotThrowAnyException();
+	}
+
+	/** O default (e o que vale em producao hoje): o site sobe, o captcha externo fica desligado. */
+	@Test
+	void degradePolicyKeepsTheSiteUp() {
+		assertThatCode(() -> validator(TEST_SECRET, TEST_SITE, "degrade")).doesNotThrowAnyException();
+	}
+
+	/** A garantia dura continua disponivel para quem a quer: `fatal` recusa o boot. */
+	@Test
+	void fatalPolicyRefusesTestKeysAtBoot() {
+		assertThatThrownBy(() -> validator(TEST_SECRET, TEST_SITE, "fatal"))
 			.isInstanceOf(IllegalStateException.class)
 			.hasMessageContaining("test keys");
 	}
 
-	/**
-	 * A QA roda com as chaves de teste publicas da Cloudflare. La a guarda de boot esta desligada de
-	 * proposito — derrubar o site por causa de captcha de teste tirou a QA do ar em 2026-10-26 —,
-	 * mas isso nao pode virar "captcha ativo": chave de teste aceita qualquer token no siteverify.
-	 */
+	/** Um typo na configuracao nao pode derrubar um ambiente: cai em degrade e avisa no log. */
 	@Test
-	void testKeysNeverCountAsConfiguredEvenWhenTheBootGuardIsOff() {
-		TurnstileValidator qaStyle = validator(TEST_SECRET, TEST_SITE, false);
-
-		assertThat(qaStyle.isConfigured()).isFalse();
-		assertThat(qaStyle.isAvailable()).isFalse();
-		// Inerte por desenho: quem passa a decidir o cadastro e o desafio proprio do backend.
-		assertThatCode(() -> qaStyle.require("")).doesNotThrowAnyException();
+	void unknownPolicyFallsBackToDegrade() {
+		assertThatCode(() -> validator(TEST_SECRET, TEST_SITE, "fata1")).doesNotThrowAnyException();
+		assertThat(validator(TEST_SECRET, TEST_SITE, "fata1").isConfigured()).isFalse();
 	}
 
 	@Test
 	void realKeysStayConfiguredAndAvailable() {
-		TurnstileValidator prod = validator(REAL_SECRET, REAL_SITE, true);
+		TurnstileValidator prod = validator(REAL_SECRET, REAL_SITE, "fatal");
 
 		assertThat(prod.isConfigured()).isTrue();
 		assertThat(prod.isAvailable()).isTrue();
@@ -51,7 +64,7 @@ class TurnstileValidatorTests {
 
 	@Test
 	void emptyKeysAreNotConfigured() {
-		TurnstileValidator dev = validator("", "", true);
+		TurnstileValidator dev = validator("", "", "fatal");
 
 		assertThat(dev.isConfigured()).isFalse();
 		assertThat(dev.isAvailable()).isFalse();
