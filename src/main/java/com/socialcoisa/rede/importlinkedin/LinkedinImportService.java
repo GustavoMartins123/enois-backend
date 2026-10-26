@@ -38,11 +38,11 @@ public class LinkedinImportService {
 	 * streamed against these caps and the read stops as soon as one is crossed.
 	 */
 	private static final int MAX_ENTRIES = 50;
-	private static final long MAX_ENTRY_BYTES = 10L * 1024 * 1024;
+	private static final long MAX_ENTRY_BYTES = 2L * 1024 * 1024;
 	/** Expansion ratio cap, only checked past {@link #RATIO_FLOOR_BYTES} so tiny exports never trip it. */
 	private static final long MAX_EXPANSION_RATIO = 100;
 	private static final long RATIO_FLOOR_BYTES = 1024L * 1024;
-	private static final long DEFAULT_MAX_TOTAL_BYTES = 20L * 1024 * 1024;
+	private static final long DEFAULT_MAX_TOTAL_BYTES = 8L * 1024 * 1024;
 
 	private final long maxTotalBytes;
 
@@ -52,7 +52,7 @@ public class LinkedinImportService {
 
 	@Autowired
 	public LinkedinImportService(
-			@Value("${rede.import.linkedin.max-uncompressed-bytes:20971520}") long maxTotalBytes) {
+			@Value("${rede.import.linkedin.max-uncompressed-bytes:8388608}") long maxTotalBytes) {
 		this.maxTotalBytes = maxTotalBytes;
 	}
 
