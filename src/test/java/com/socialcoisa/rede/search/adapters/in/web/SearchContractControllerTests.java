@@ -45,7 +45,9 @@ class SearchContractControllerTests {
 	@Test
 	void wildcardCharactersMatchLiterally() throws Exception {
 		new TestAuthHelper(mockMvc, objectMapper).authenticate("likewildcard");
-		for (String wildcard : new String[] { "%", "_", "!" }) {
+		// Each pattern would match "likewildcard" if %, _ or the escape char acted as wildcards. The test
+		// database is shared, so a bare "_" would rightly match other usernames that contain "_".
+		for (String wildcard : new String[] { "like%card", "likewildcar_", "like!%card" }) {
 			mockMvc.perform(get("/search")
 					.param("q", wildcard)
 					.param("types", "users,communities,jobs,events,mentors"))
