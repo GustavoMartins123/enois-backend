@@ -23,7 +23,8 @@ import jakarta.servlet.http.Cookie;
 import tools.jackson.databind.ObjectMapper;
 
 /** Browser sessions travel in HttpOnly cookies; cookie-authenticated writes need the CSRF header. */
-@SpringBootTest
+// The test profile is dev, which turns Secure off for plain-http local runs; production keeps the default.
+@SpringBootTest(properties = "rede.auth.cookie-secure=true")
 @AutoConfigureMockMvc
 class SessionCookieTests {
 
