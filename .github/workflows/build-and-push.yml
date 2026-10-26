@@ -315,17 +315,35 @@ jobs:
           curl -sf -X POST "${AUTH[@]}" "${API}/containers/${CONTAINER_NAME}/start"
 
       - name: 🩺 Health check
+        env:
+          PORTAINER_BASE_URL: ${{ secrets.PORTAINER_BASE_URL }}
+          PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
         run: |
-          # boot do Spring Boot (Flyway+Hibernate+Tomcat) pode levar bem mais que 8s, 8s dava flaky-fail
-          for i in $(seq 1 15); do
-            if curl -sf --max-time 10 https://enois-api-qa.b7cloud.tech/health; then
+          # Boot do Spring (Flyway + Hibernate + Tomcat) na QA roda com lazy-initialization=false e
+          # ainda carrega as vagas externas na subida: 75s era curto demais e um boot lento
+          # aparecia como deploy quebrado. 30 tentativas de 10s = 5min.
+          URL=https://enois-api-qa.b7cloud.tech/health
+          for i in $(seq 1 30); do
+            if curl -sf --max-time 10 "$URL"; then
               echo "OK na tentativa $i"
               exit 0
             fi
             echo "tentativa $i falhou, aguardando..."
-            sleep 5
+            sleep 10
           done
-          echo "health check nao respondeu apos 75s"
+
+          # Ate aqui o deploy falhava "mudo": o CI nao dizia POR QUE o container nao respondeu.
+          # O proprio Portainer (endpoint 8 = docker-prod4) tem o estado e o log do container.
+          API="${PORTAINER_BASE_URL}/api/endpoints/${PORTAINER_ENDPOINT_ID}/docker"
+          AUTH=(-H "X-API-Key: ${PORTAINER_API_KEY}")
+          echo "=== estado do ${CONTAINER_NAME} ==="
+          curl -s --max-time 20 "${AUTH[@]}" "${API}/containers/${CONTAINER_NAME}/json" \
+            | tr ',' '\n' | grep -E '"(Status|Running|ExitCode|RestartCount|OOMKilled|StartedAt|FinishedAt)"' | head -20
+          echo "=== ultimas linhas do container ==="
+          curl -s --max-time 30 "${AUTH[@]}" \
+            "${API}/containers/${CONTAINER_NAME}/logs?tail=200&stdout=1&stderr=1" \
+            | tr -cd '\11\12\15\40-\176' | tail -n 120
+          echo "health check nao respondeu apos 300s"
           exit 1
 
   # ===========================================================================
