@@ -700,6 +700,21 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   corporativo) e "usa o artigo masculino da marca".
   *Verificado:* `vitest` 342/342, `tsc --noEmit` sem erro, `eslint` limpo, `vite build` ok, e o
   HTML do SSR do login ja entrega a descricao nova.
+- **[x] ENTREGUE 2026-10-26 — A varredura de responsividade ficou completa: nenhuma rota do app
+  ficou sem medir.** O que faltava eram as **7 telas protegidas** (moderação, denúncias,
+  penalidades, meus-serviços, perfil profissional, painel de projetos, bloqueados): elas exigem
+  sessão de administrador, e a sessão da QA estava morta. Quebrou-se o impasse com o backend local
+  na bancada MariaDB (`enois-bench66`) e a allowlist de admin por variável
+  (`REDE_ADMIN_BOOTSTRAP_ENABLED` + `REDE_ADMIN_EMAILS`) — sem tocar no banco de nenhum ambiente.
+  *O que foi medido (Chrome headless, 390px e 1280px, sessão injetada):* as 7 telas protegidas e
+  mais as que exigem login (feed, mensagens, salvos, carteira, configurações, segurança, minhas
+  vagas) — **overflow horizontal 0 em todas**. Também foram medidas as telas novas do dia (grupos,
+  loja, marketplace, jogos diários, trilha, notificações): limpas nas duas larguras.
+  *Como a sessão foi obtida:* cadastro local → confirmação de e-mail gravando o hash do token na
+  bancada (o e-mail não sai sem SMTP) → `POST /auth/email/verify` devolve a sessão; na bancada
+  foram semeados uma denúncia e uma sanção para as tabelas de moderação terem conteúdo.
+  *Fora do escopo (externo):* Turnstile em produção, CORS do bucket S3 e a aprovação do app do
+  LinkedIn.
 - **[x] ENTREGUE 2026-10-22 — As abas da caixa de entrada cortavam no celular.** Com a quinta aba
   ("Serviços", que veio do chat de serviço), a faixa de abas da caixa de entrada ficava sem
   respiro a 390px e cortava "Arquivadas" na borda a 360px — cortada sem nenhuma pista de que
