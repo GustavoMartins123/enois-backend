@@ -39,6 +39,9 @@ public interface ConnectionRepository {
 	/** Only an ACCEPTED connection counts: a pending request must not unlock anything. */
 	boolean existsAcceptedConnection(String userId1, String userId2);
 
+	/** The ids among {@code others} with an ACCEPTED connection to {@code userId}, in one query. */
+	Set<String> findAcceptedAmong(String userId, java.util.Collection<String> others);
+
 	Set<UserId> findAcceptedFriendIds(UserId userId);
 
 	List<ConnectionSuggestion> findSuggestions(String userId, int limit);

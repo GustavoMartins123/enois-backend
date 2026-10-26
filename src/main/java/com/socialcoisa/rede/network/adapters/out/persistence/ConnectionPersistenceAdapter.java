@@ -79,6 +79,11 @@ class ConnectionPersistenceAdapter implements ConnectionRepository {
 	}
 
 	@Override
+	public Set<String> findAcceptedAmong(String userId, java.util.Collection<String> others) {
+		return others.isEmpty() ? Set.of() : new HashSet<>(springData.findAcceptedAmong(userId, others));
+	}
+
+	@Override
 	public Set<UserId> findAcceptedFriendIds(UserId userId) {
 		var ids = springData.findAcceptedFriendIds(userId.value());
 		Set<UserId> result = new HashSet<>();

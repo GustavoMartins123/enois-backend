@@ -90,8 +90,7 @@ public class MessagingService {
 		}
 		var minors = agePolicy.minorIds(others);
 		if (!minors.isEmpty()) {
-			var connected = activeConnectionIds(createdBy);
-			if (!connected.containsAll(minors)) {
+			if (!connections.findAcceptedAmong(createdBy, minors).containsAll(minors)) {
 				throw minorDmRestricted();
 			}
 		}
@@ -255,16 +254,7 @@ public class MessagingService {
 			"Para proteger usuarios menores de idade, so e possivel conversar com eles apos uma conexao aceita.");
 	}
 
-	/** People with an ACCEPTED connection to the user (a pending request unlocks nothing). */
-	private java.util.Set<String> activeConnectionIds(String userId) {
-		java.util.Set<String> ids = new java.util.HashSet<>();
-		for (var connection : connections.findRequests(userId,
-				com.socialcoisa.rede.network.domain.ConnectionStatus.ACCEPTED)) {
-			ids.add(userId.equals(connection.requesterUserId()) ? connection.receiverUserId()
-				: connection.requesterUserId());
-		}
-		return ids;
-	}
+
 
 	@Transactional
 	public void markRead(String conversationId, String userId) {
