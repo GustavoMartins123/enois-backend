@@ -156,7 +156,7 @@ class ClientIpSpoofingTests {
 	void girarOHeaderDoClienteNaoEscapaDoLimiteGlobal() throws Exception {
 		Clock clock = Clock.fixed(Instant.parse("2026-10-20T00:00:00Z"), ZoneOffset.UTC);
 		GlobalApiRateLimitFilter filter = new GlobalApiRateLimitFilter(clock, resolver,
-			org.mockito.Mockito.mock(com.socialcoisa.rede.identity.application.port.out.AuthSessionRepository.class), 3, 50);
+			org.mockito.Mockito.mock(RateLimitSessions.class), 3, 50);
 
 		int lastStatus = 0;
 		for (int i = 0; i < 4; i++) {
@@ -174,9 +174,9 @@ class ClientIpSpoofingTests {
 	@Test
 	void loggedInUserHasOwnBucketSeparateFromTheIp() throws Exception {
 		Clock clock = Clock.fixed(Instant.parse("2026-10-20T00:00:00Z"), ZoneOffset.UTC);
-		var sessions = org.mockito.Mockito.mock(com.socialcoisa.rede.identity.application.port.out.AuthSessionRepository.class);
-		org.mockito.Mockito.when(sessions.findActiveUserId("token-user-a", clock.instant()))
-			.thenReturn(java.util.Optional.of("user_a"));
+		var sessions = org.mockito.Mockito.mock(RateLimitSessions.class);
+		org.mockito.Mockito.when(sessions.userId(org.mockito.ArgumentMatchers.eq("token-user-a"),
+			org.mockito.ArgumentMatchers.anyString())).thenReturn("user_a");
 		GlobalApiRateLimitFilter filter = new GlobalApiRateLimitFilter(clock, resolver, sessions, 2, 50);
 
 		// Anônimo esgota o balde do IP em 2.
