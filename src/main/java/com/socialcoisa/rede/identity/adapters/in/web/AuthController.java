@@ -52,6 +52,8 @@ import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 @RequestMapping("/auth")
 class AuthController {
 
+	private static final org.slf4j.Logger AUDIT = org.slf4j.LoggerFactory.getLogger(AuthController.class);
+
 	private final SignupUseCase signupUseCase;
 	private final VerifyEmailUseCase verifyEmailUseCase;
 	private final TwoFactorLoginUseCase twoFactorLoginUseCase;
@@ -422,17 +424,18 @@ class AuthController {
 	 * quem tem 2FA por app voltar a logar com e-mail + senha e reativar em /seguranca.
 	 */
 	@PostMapping("/admin/two-factor/reset-broken")
-	Map<String, Integer> resetBrokenTwoFactor(
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader("X-Session-Token") String sessionToken) {
-		// Está sob /auth, então o interceptor de /admin não o cobre: exige admin explicitamente
-		// (N-09 — qualquer sessão resetava o TOTP global).
+	Map<String, Boolean> resetBrokenTwoFactor(@RequestHeader("X-Session-Token") String sessionToken) {
+		// Está sob /auth, então o interceptor de /admin não o cobre: exige admin explicitamente,
+		// by the same server-side users.is_admin flag AdminGuard uses.
 		String callerId = requireUserId(sessionToken);
 		boolean admin = profiles.findById(callerId).map(profile -> profile.admin()).orElse(false);
 		if (!admin) {
+			AUDIT.warn("admin_two_factor_reset_denied userId={}", callerId);
 			throw new ApiException(403, "FORBIDDEN", "Acesso restrito a administradores.");
 		}
-		return Map.of("reset", twoFactorService.resetBrokenTotp());
+		int reset = twoFactorService.resetBrokenTotp();
+		AUDIT.warn("admin_two_factor_reset userId={} accounts={}", callerId, reset);
+		return Map.of("ok", true);
 	}
 
 	@GetMapping("/oauth/providers")

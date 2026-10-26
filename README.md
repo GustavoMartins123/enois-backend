@@ -385,7 +385,7 @@ backend expõe fica público em `https://enois.ia.br/api/...` — inclusive `/ap
 |---|---|---|
 | `SPRING_PROFILES_ACTIVE` | sim | `qa` no cluster |
 | `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` | sim | vêm do Secret `socialthing-db-secrets` |
-| `REDE_ADMIN_EMAILS` | sim | allowlist (separada por vírgula) para `/admin/reports/**`. **Vazio = ninguém é admin.** |
+| ~~`REDE_ADMIN_EMAILS`~~ | não | **ignorada**. Admin é a flag `users.is_admin` (V171), nunca username nem e-mail (ver passo 2). |
 | `REDE_FRONTEND_URL` | sim | base do front; o callback OAuth volta em `${REDE_FRONTEND_URL}/auth/callback` |
 | `REDE_BACKEND_URL` | sim | base pública do back; monta os redirect URIs do OAuth |
 | `FRONTEND_URL` | sim | link do e-mail de reset de senha: `${FRONTEND_URL}/auth/reset?token=...` |
@@ -406,8 +406,10 @@ backend expõe fica público em `https://enois.ia.br/api/...` — inclusive `/ap
 
 1. **Criar/atualizar o Secret do banco** (`socialthing-db-secrets`) com as chaves `host`, `port`, `dbname`,
    `username`, `password`. Sem isso o pod não sobe (Flyway falha no boot).
-2. **Definir `REDE_ADMIN_EMAILS`** no Deployment com os e-mails que podem moderar. Enquanto estiver vazio,
-   `/admin/reports/**` responde 403 para todos.
+2. **Admins são a flag `users.is_admin`** (V171 marcou as contas da equipe existentes). Conferir com
+   `select id, username from users where is_admin = true`. Um admin promove/revoga outro pelo painel
+   (`POST /admin/admins`, `POST /admin/admins/{username}/revoke`); o primeiro admin de uma base nova é
+   `update users set is_admin = true where id = '<user id>'`. `REDE_ADMIN_EMAILS` não concede mais nada.
 3. **Configurar o SMTP** (`MAIL_*`) e `FRONTEND_URL` para o reset de senha funcionar de ponta a ponta.
 4. **Configurar o OAuth**: criar as credenciais no Google Cloud e no Apple Developer e cadastrar os
    redirect URIs exatamente como
