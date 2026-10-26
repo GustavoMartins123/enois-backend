@@ -51,7 +51,7 @@ class GroupCreationQueryCountTests {
 		verify(blockedUsers, times(1)).hiddenIdsFor(anyString());
 		verify(agePolicy, times(1)).minorIds(any());
 		verify(agePolicy, never()).isMinor(anyString());
-		verify(connections, never()).existsActiveConnection(anyString(), anyString());
+		verify(connections, never()).existsAcceptedConnection(anyString(), anyString());
 	}
 
 	@Test

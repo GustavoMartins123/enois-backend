@@ -121,6 +121,27 @@ class ConversationCreationRulesTests {
 	}
 
 	@Test
+	void aPendingRequestDoesNotUnlockAMinorUntilItIsAccepted() throws Exception {
+		var adult = auth.authenticate("ccr_pending_adult");
+		var minor = auth.authenticate("ccr_pending_minor");
+		makeMinor(minor.userId());
+		connections.save(UserConnection.request(adult.userId(), minor.userId(), Instant.now()));
+
+		create(adult, "ccr-pending-dm", Map.of("kind", "DIRECT", "participantIds", List.of(minor.userId())))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("MINOR_DM_RESTRICTED"));
+		create(adult, "ccr-pending-group", Map.of("kind", "GROUP", "title", "grupo",
+				"participantIds", List.of(minor.userId())))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("MINOR_DM_RESTRICTED"));
+
+		jdbc.update("UPDATE user_connections SET status = 'ACCEPTED' WHERE requester_user_id = ? AND receiver_user_id = ?",
+			adult.userId(), minor.userId());
+		create(adult, "ccr-accepted-dm", Map.of("kind", "DIRECT", "participantIds", List.of(minor.userId())))
+			.andExpect(status().is2xxSuccessful());
+	}
+
+	@Test
 	void missingParticipantsIsABadRequest() throws Exception {
 		var creator = auth.authenticate("ccr_empty");
 		create(creator, "ccr-empty-1", Map.of("kind", "GROUP"))

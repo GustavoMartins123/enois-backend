@@ -69,7 +69,7 @@ interface SpringDataUserConnectionJpaRepository extends JpaRepository<UserConnec
 			FROM UserConnectionJpaEntity c
 			WHERE ((c.requesterUserId = :user1 AND c.receiverUserId = :user2)
 			   OR (c.requesterUserId = :user2 AND c.receiverUserId = :user1))
-			  AND c.status IN ('PENDING', 'ACCEPTED')""")
-	boolean existsActiveConnection(@Param("user1") String user1, @Param("user2") String user2);
+			  AND c.status = 'ACCEPTED'""")
+	boolean existsAcceptedConnection(@Param("user1") String user1, @Param("user2") String user2);
 
 }

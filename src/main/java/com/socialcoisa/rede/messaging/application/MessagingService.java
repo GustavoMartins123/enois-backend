@@ -245,7 +245,7 @@ public class MessagingService {
 
 	/** ECA Digital: a minor is only reachable by someone with an ACCEPTED connection to them. */
 	private void requireMayContactMinor(String actorId, String recipientId) {
-		if (agePolicy.isMinor(recipientId) && !connections.existsActiveConnection(actorId, recipientId)) {
+		if (agePolicy.isMinor(recipientId) && !connections.existsAcceptedConnection(actorId, recipientId)) {
 			throw minorDmRestricted();
 		}
 	}
@@ -255,15 +255,13 @@ public class MessagingService {
 			"Para proteger usuarios menores de idade, so e possivel conversar com eles apos uma conexao aceita.");
 	}
 
-	/** People with a pending or accepted connection to the user: what existsActiveConnection checks. */
+	/** People with an ACCEPTED connection to the user (a pending request unlocks nothing). */
 	private java.util.Set<String> activeConnectionIds(String userId) {
 		java.util.Set<String> ids = new java.util.HashSet<>();
-		for (var status : java.util.List.of(com.socialcoisa.rede.network.domain.ConnectionStatus.PENDING,
+		for (var connection : connections.findRequests(userId,
 				com.socialcoisa.rede.network.domain.ConnectionStatus.ACCEPTED)) {
-			for (var connection : connections.findRequests(userId, status)) {
-				ids.add(userId.equals(connection.requesterUserId()) ? connection.receiverUserId()
-					: connection.requesterUserId());
-			}
+			ids.add(userId.equals(connection.requesterUserId()) ? connection.receiverUserId()
+				: connection.requesterUserId());
 		}
 		return ids;
 	}

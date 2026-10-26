@@ -36,7 +36,8 @@ public interface ConnectionRepository {
 
 	int countByUserAndStatus(String userId, ConnectionStatus status);
 
-	boolean existsActiveConnection(String userId1, String userId2);
+	/** Only an ACCEPTED connection counts: a pending request must not unlock anything. */
+	boolean existsAcceptedConnection(String userId1, String userId2);
 
 	Set<UserId> findAcceptedFriendIds(UserId userId);
 
