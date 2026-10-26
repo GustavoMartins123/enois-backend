@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import com.socialcoisa.rede.identity.application.port.out.AuthSessionRepository;
@@ -27,16 +28,28 @@ public class RateLimitSessions {
 	private static final long TTL_MS = 60_000L;
 	private static final int MAX_ENTRIES = 100_000;
 	private static final long LOOKUP_WINDOW_MS = 60_000L;
+	/**
+	 * Uncached lookups per IP per minute. One person needs one lookup per live session per minute, so
+	 * 60 is ample for a home connection; a carrier/office NAT IP with more than 60 distinct sessions
+	 * active in the same minute sees the extra ones counted against the IP until their cache entry
+	 * exists. Trusted proxies (one address for many people) get the global limiter's multiplier.
+	 */
 	private static final int LOOKUPS_PER_WINDOW = 60;
 
 	private final ObjectProvider<AuthSessionRepository> sessions;
 	private final Clock clock;
+	private final ClientIpResolver clientIpResolver;
+	private final int sharedMultiplier;
 	private final Map<String, Cached> known = new ConcurrentHashMap<>();
 	private final Map<String, Window> lookups = new ConcurrentHashMap<>();
 
-	public RateLimitSessions(ObjectProvider<AuthSessionRepository> sessions, Clock clock) {
+	public RateLimitSessions(ObjectProvider<AuthSessionRepository> sessions, Clock clock,
+			ClientIpResolver clientIpResolver,
+			@Value("${rede.rate.global-shared-multiplier:50}") int sharedMultiplier) {
 		this.sessions = sessions;
 		this.clock = clock;
+		this.clientIpResolver = clientIpResolver;
+		this.sharedMultiplier = Math.max(1, sharedMultiplier);
 	}
 
 	/** User id of a live session, or null; {@code ip} is the caller's resolved address. */
@@ -69,7 +82,8 @@ public class RateLimitSessions {
 		Window window = lookups.compute(ip, (key, current) -> current == null || now - current.start() >= LOOKUP_WINDOW_MS
 			? new Window(now, 1)
 			: new Window(current.start(), current.count() + 1));
-		return window.count() <= LOOKUPS_PER_WINDOW;
+		int budget = clientIpResolver.isTrustedProxy(ip) ? LOOKUPS_PER_WINDOW * sharedMultiplier : LOOKUPS_PER_WINDOW;
+		return window.count() <= budget;
 	}
 
 	private record Cached(String userId, long until) {
