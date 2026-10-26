@@ -29,6 +29,13 @@ public final class SafeUrl {
 	 */
 	private static final Pattern MARKDOWN_DESTINATION = Pattern.compile("\\]\\(([^)]*)\\)");
 
+	/** Reference-style markdown link definition: `[ref]: url` on its own line. */
+	private static final Pattern MARKDOWN_REFERENCE = Pattern.compile("(?m)^\\s{0,3}\\[([^\\]]+)\\]:\\s+(.+)$");
+
+	/** HTML href/src attribute value (covers `<a href="...">`, `<img src="...">`, etc). */
+	private static final Pattern HTML_ATTR_URL = Pattern.compile(
+		"(?i)(?:href|src|action|formaction)\\s*=\\s*[\"']([^\"']*)[\"']");
+
 	private SafeUrl() {
 	}
 
@@ -57,15 +64,29 @@ public final class SafeUrl {
 	 * {@link SafeLinkRequestBodyAdvice}); URL fields are checked by {@link #requireHttpUrl}.
 	 */
 	public static void requireSafeMarkdownLinks(String text, String field) {
-		if (text == null || text.indexOf("](") < 0) {
+		if (text == null) {
 			return;
 		}
-		Matcher destination = MARKDOWN_DESTINATION.matcher(text);
-		while (destination.find()) {
-			if (!isSafeLinkTarget(destination.group(1))) {
-				throw new ApiException(400, "UNSAFE_LINK",
-					"O campo " + field + " tem um link com endereco nao permitido (use http, https ou mailto).");
+		if (text.indexOf("](") >= 0) {
+			Matcher destination = MARKDOWN_DESTINATION.matcher(text);
+			while (destination.find()) {
+				rejectUnsafe(destination.group(1), field);
 			}
+		}
+		Matcher reference = MARKDOWN_REFERENCE.matcher(text);
+		while (reference.find()) {
+			rejectUnsafe(reference.group(2).trim(), field);
+		}
+		Matcher htmlAttr = HTML_ATTR_URL.matcher(text);
+		while (htmlAttr.find()) {
+			rejectUnsafe(htmlAttr.group(1), field);
+		}
+	}
+
+	private static void rejectUnsafe(String target, String field) {
+		if (!isSafeLinkTarget(target)) {
+			throw new ApiException(400, "UNSAFE_LINK",
+				"O campo " + field + " tem um link com endereco nao permitido (use http, https ou mailto).");
 		}
 	}
 
