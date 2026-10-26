@@ -30,25 +30,24 @@ public class TurnstileValidator {
 
 	private final String secretKey;
 	private final String siteKey;
-	private final boolean failOpen;
 	private final boolean rejectTestKeys;
 	private final ObjectMapper objectMapper;
 	private final HttpClient httpClient;
 
 	public TurnstileValidator(@Value("${rede.turnstile.secret-key:}") String secretKey,
 			@Value("${rede.turnstile.site-key:}") String siteKey,
-			@Value("${rede.turnstile.fail-open:false}") boolean failOpen,
 			@Value("${rede.turnstile.reject-test-keys:true}") boolean rejectTestKeys,
 			ObjectMapper objectMapper) {
 		this.secretKey = secretKey;
 		this.siteKey = siteKey;
-		this.failOpen = failOpen;
 		this.rejectTestKeys = rejectTestKeys;
 		this.objectMapper = objectMapper;
 		this.httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+		// Cloudflare's documented test keys accept any token: outside dev the app refuses to boot
+		// with them instead of running without a real captcha.
 		if (rejectTestKeys && (isTestKey(secretKey) || isTestKey(siteKey))) {
-			LOG.warn("Turnstile com chave de TESTE do Cloudflare: o captcha sera tratado como indisponivel "
-				+ "para nao aceitar token dummy (N-10).");
+			throw new IllegalStateException("TURNSTILE_SITE_KEY/TURNSTILE_SECRET_KEY are Cloudflare test keys. "
+				+ "Configure real keys or leave both empty (the signup challenge is used instead).");
 		}
 	}
 
@@ -84,7 +83,9 @@ public class TurnstileValidator {
 			throw new ApiException(403, "TURNSTILE_REQUIRED", "Verificacao anti-bot obrigatoria.");
 		}
 		try {
-			String body = "secret=" + secretKey + "&response=" + token;
+			// Encoded: a token containing '&' or '=' must not add form fields to the verification call.
+			String body = "secret=" + java.net.URLEncoder.encode(secretKey, java.nio.charset.StandardCharsets.UTF_8)
+				+ "&response=" + java.net.URLEncoder.encode(token, java.nio.charset.StandardCharsets.UTF_8);
 			HttpRequest request = HttpRequest.newBuilder()
 				.uri(URI.create(VERIFY_URL))
 				.header("Content-Type", "application/x-www-form-urlencoded")
@@ -103,10 +104,8 @@ public class TurnstileValidator {
 		}
 		catch (Exception failure) {
 			LOG.error("Erro ao validar Turnstile: {}", failure.getMessage());
-			if (!failOpen) {
-				throw new ApiException(503, "TURNSTILE_UNAVAILABLE",
-					"Verificacao anti-bot indisponivel agora. Tente novamente em instantes.");
-			}
+			throw new ApiException(503, "TURNSTILE_UNAVAILABLE",
+				"Verificacao anti-bot indisponivel agora. Tente novamente em instantes.");
 		}
 	}
 }

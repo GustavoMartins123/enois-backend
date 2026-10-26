@@ -399,7 +399,7 @@ backend expõe fica público em `https://enois.ia.br/api/...` — inclusive `/ap
 | `MANAGEMENT_ENDPOINTS` | não | padrão `health`. Para métricas use `health,prometheus` **e bloqueie `/api/actuator/*` no gateway** |
 | `SUPPORT_EMAIL` | não | e-mail do time que recebe os pedidos de suporte. Sem ele o pedido ainda fica registrado e visível em `/admin/support` |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | p/ push no celular | par de chaves do Web Push (ver passo 7 abaixo). Sem elas o push fica desligado e só as notificações dentro do app funcionam |
-| `REDE_SECURITY_ENCRYPTION_KEY` | p/ 2FA por app | chave de 32 bytes em base64 (`openssl rand -base64 32`) que cifra os segredos TOTP em repouso (AES-GCM). **Sem ela, o 2FA por aplicativo authenticator fica indisponível** (erro explícito, sem guardar segredo em texto puro); o 2FA por código de e-mail continua funcionando |
+| `REDE_SECURITY_ENCRYPTION_KEY` | **sim** (fora do `dev`) | chave de 32 bytes em base64 (`openssl rand -base64 32`) que cifra os segredos TOTP em repouso (AES-GCM) e assina o desafio do cadastro. **Fora do perfil `dev` o pod não sobe sem ela** (o mesmo valor em todas as réplicas) |
 | `VAPID_SUBJECT` | não | contato do emissor VAPID, no formato `mailto:contato@dominio` (padrão `mailto:suporte@enois.ia.br`) |
 
 ### Passo a passo das ações manuais
