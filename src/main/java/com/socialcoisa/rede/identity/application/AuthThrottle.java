@@ -17,7 +17,9 @@ import com.socialcoisa.rede.shared.web.ApiException;
  * guardadas em memória com expiração — a aplicação continua stateless.
  *
  * <p>Login: after 5 failures in 1 minute for the same account AND IP, each attempt is delayed
- * progressively (no lock, never a 429; o acerto zera o contador).
+ * progressively (no lock, never a 429; o acerto zera o contador). Failures against the account from
+ * any network add a second, smaller capped delay once they pass 4x that limit, so spraying one
+ * account from many IPs still slows down without letting a third party lock the owner out.
  * Signup: 10 por hora por IP. Os tetos são configuráveis — o perfil dev/testes abre
  * (a suíte cria centenas de contas do mesmo IP).</p>
  */
@@ -28,11 +30,17 @@ public class AuthThrottle {
 	private static final Duration SIGNUP_WINDOW = Duration.ofHours(1);
 	/** Teto do mapa: evita crescer sem fim sob ataque distribuído (as chaves velhas expiram). */
 	private static final int MAX_KEYS = 50_000;
+	/** Per-account (any network) failures needed before the account-wide delay starts, as a multiple. */
+	private static final int ACCOUNT_FAILURE_FACTOR = 4;
+	private static final long ACCOUNT_IP_MAX_DELAY_MILLIS = 2_000L;
+	/** Small on purpose: anyone can feed this counter, so it may slow the owner a little, never lock. */
+	private static final long ACCOUNT_MAX_DELAY_MILLIS = 1_000L;
 
 	private final int loginMaxFalhas;
 	private final int signupMaxPorJanela;
 
 	private final Map<String, Janela> falhasLogin = new ConcurrentHashMap<>();
+	private final Map<String, Janela> falhasPorConta = new ConcurrentHashMap<>();
 	private final Map<String, Janela> signupsPorIp = new ConcurrentHashMap<>();
 
 	public AuthThrottle(
@@ -48,30 +56,49 @@ public class AuthThrottle {
 	 * failures from another network never slow the owner down; os limites por IP seguem.
 	 */
 	public void exigeLoginPermitido(String email, String ip) {
-		Janela janela = falhasLogin.get(loginKey(email, ip));
-		if (janela == null) {
+		long millis = loginDelayMillis(email, ip);
+		if (millis <= 0) {
 			return;
 		}
-		Instant agora = Instant.now();
-		janela.podado(agora, LOGIN_WINDOW);
-		if (janela.contagem() >= loginMaxFalhas) {
-			long millis = Math.min(2_000L, 200L * janela.contagem());
-			try {
-				Thread.sleep(millis);
-			}
-			catch (InterruptedException interrupted) {
-				Thread.currentThread().interrupt();
-			}
+		try {
+			Thread.sleep(millis);
 		}
+		catch (InterruptedException interrupted) {
+			Thread.currentThread().interrupt();
+		}
+	}
+
+	/** The larger of the account+IP delay and the capped account-wide delay; 0 when neither applies. */
+	long loginDelayMillis(String email, String ip) {
+		int porRede = falhasRecentes(falhasLogin, loginKey(email, ip));
+		long delay = porRede >= loginMaxFalhas ? Math.min(ACCOUNT_IP_MAX_DELAY_MILLIS, 200L * porRede) : 0;
+		int porConta = falhasRecentes(falhasPorConta, normaliza(email));
+		if (porConta >= loginMaxFalhas * ACCOUNT_FAILURE_FACTOR) {
+			delay = Math.max(delay, Math.min(ACCOUNT_MAX_DELAY_MILLIS, 20L * porConta));
+		}
+		return delay;
+	}
+
+	private int falhasRecentes(Map<String, Janela> mapa, String chave) {
+		Janela janela = mapa.get(chave);
+		if (janela == null) {
+			return 0;
+		}
+		janela.podado(Instant.now(), LOGIN_WINDOW);
+		return janela.contagem();
 	}
 
 	/** Falha de credenciais: conta a janela (o êxito limpa). */
 	public void registraFalhaLogin(String email, String ip) {
-		String chave = loginKey(email, ip);
-		if (falhasLogin.size() > MAX_KEYS) {
-			falhasLogin.clear();
+		registraFalha(falhasLogin, loginKey(email, ip));
+		registraFalha(falhasPorConta, normaliza(email));
+	}
+
+	private void registraFalha(Map<String, Janela> mapa, String chave) {
+		if (mapa.size() > MAX_KEYS) {
+			mapa.clear();
 		}
-		falhasLogin.compute(chave, (k, existente) -> {
+		mapa.compute(chave, (k, existente) -> {
 			Instant agora = Instant.now();
 			if (existente == null || Duration.between(existente.ultimo(), agora).compareTo(LOGIN_WINDOW) > 0) {
 				return new Janela(agora);
@@ -81,9 +108,10 @@ public class AuthThrottle {
 		});
 	}
 
-	/** Login com sucesso: o contador da conta zera. */
+	/** Login com sucesso: os contadores da conta zeram. */
 	public void limpaLogin(String email, String ip) {
 		falhasLogin.remove(loginKey(email, ip));
+		falhasPorConta.remove(normaliza(email));
 	}
 
 	private String loginKey(String email, String ip) {
