@@ -12,4 +12,6 @@ regras valem por inteiro; a de baixo é repetida porque é a mais fácil de pula
 
 <!-- engineering-learn:live -->
 - Controle de segurança em caminho quente (filtro, limitador, contador de tentativas): nada de consulta ao banco por requisição sem cache e sem cota por IP, repositório JPA em filtro só via `ObjectProvider`, e limite de tentativas é reivindicado atomicamente (`UPDATE ... where attempts < N`) antes de conferir o código — nunca ler, conferir e só depois incrementar.
+- Migração que neutraliza dado perigoso usa denylist explícita do que é perigoso (ex.: `^(javascript|vbscript|data|file):` depois de tirar `[\x00-\x20]` do início), nunca allowlist com exceções em regex — a exceção (`host:port`) virou brecha.
+- Docker em tarefa de agente: remova só o container que você criou, pelo nome (`docker rm -f <nome>`); nunca `docker container prune`, `system prune` ou remoção em massa — apaga containers de outros projetos da máquina.
 <!-- /engineering-learn:live -->
