@@ -13,6 +13,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import com.socialcoisa.rede.shared.web.RequestPath;
+import com.socialcoisa.rede.shared.web.TrustedOriginCors;
 import org.springframework.web.util.pattern.PathPattern;
 import org.springframework.web.util.pattern.PathPatternParser;
 
@@ -70,6 +71,11 @@ class RequestOriginFilter extends OncePerRequestFilter {
 	@Override
 	protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
 			throws ServletException, IOException {
+		// Marked even when enforcement is off: filters that answer early reflect only these origins.
+		String browserOrigin = request.getHeader("Origin");
+		if (StringUtils.hasText(browserOrigin) && isTrusted(matchForm(browserOrigin))) {
+			TrustedOriginCors.markTrusted(request, browserOrigin);
+		}
 		if (!enforce) {
 			chain.doFilter(request, response);
 			return;
