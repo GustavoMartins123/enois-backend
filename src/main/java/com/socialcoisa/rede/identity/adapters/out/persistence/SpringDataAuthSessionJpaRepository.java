@@ -23,6 +23,17 @@ interface SpringDataAuthSessionJpaRepository extends JpaRepository<AuthSessionJp
 	@Query("UPDATE AuthSessionJpaEntity s SET s.revokedAt = :now WHERE s.userId = :userId AND s.revokedAt IS NULL")
 	void revokeAllByUser(@Param("userId") String userId, @Param("now") Instant now);
 
+	@Modifying
+	@Query("UPDATE AuthSessionJpaEntity s SET s.revokedAt = :now WHERE s.userId = :userId AND s.revokedAt IS NULL "
+		+ "AND s.token <> :keepHash AND s.token <> :keepRaw")
+	void revokeOthersByUser(@Param("userId") String userId, @Param("keepHash") String keepHash,
+			@Param("keepRaw") String keepRaw, @Param("now") Instant now);
+
+	/** Só um concorrente consegue revogar: o segundo update encontra revokedAt preenchido. */
+	@Modifying
+	@Query("UPDATE AuthSessionJpaEntity s SET s.revokedAt = :now WHERE s.token = :token AND s.revokedAt IS NULL")
+	int revokeIfActive(@Param("token") String token, @Param("now") Instant now);
+
 	@org.springframework.data.jpa.repository.Query(
 		"SELECT s.ip FROM AuthSessionJpaEntity s WHERE s.userId = :userId AND s.ip IS NOT NULL "
 			+ "ORDER BY s.createdAt DESC")

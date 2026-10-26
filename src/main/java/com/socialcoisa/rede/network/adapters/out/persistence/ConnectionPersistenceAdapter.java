@@ -1,5 +1,6 @@
 package com.socialcoisa.rede.network.adapters.out.persistence;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -34,6 +35,16 @@ class ConnectionPersistenceAdapter implements ConnectionRepository {
 	}
 
 	@Override
+	public void markRemoved(Long id, Instant removedAt) {
+		springData.markRemoved(id, ConnectionStatus.REMOVED, removedAt);
+	}
+
+	@Override
+	public int markAccepted(Long id, Instant acceptedAt) {
+		return springData.markAccepted(id, acceptedAt);
+	}
+
+	@Override
 	public Optional<UserConnection> findBetweenUsers(String requesterUserId, String receiverUserId) {
 		return springData.findBetweenUsers(requesterUserId, receiverUserId)
 			.map(UserConnectionJpaEntity::toDomain);
@@ -63,8 +74,13 @@ class ConnectionPersistenceAdapter implements ConnectionRepository {
 	}
 
 	@Override
-	public boolean existsActiveConnection(String userId1, String userId2) {
-		return springData.existsActiveConnection(userId1, userId2);
+	public boolean existsAcceptedConnection(String userId1, String userId2) {
+		return springData.existsAcceptedConnection(userId1, userId2);
+	}
+
+	@Override
+	public Set<String> findAcceptedAmong(String userId, java.util.Collection<String> others) {
+		return others.isEmpty() ? Set.of() : new HashSet<>(springData.findAcceptedAmong(userId, others));
 	}
 
 	@Override

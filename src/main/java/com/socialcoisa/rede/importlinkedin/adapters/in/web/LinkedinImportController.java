@@ -32,10 +32,9 @@ class LinkedinImportController {
 
 	@PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	LinkedinImportService.LinkedinImportPreview importArchive(
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestParam("file") MultipartFile file) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		return service.parse(file);
 	}
 
@@ -45,10 +44,9 @@ class LinkedinImportController {
 	 */
 	@PostMapping("/texto")
 	LinkedinImportService.LinkedinImportPreview importText(
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestBody TextoRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		return service.parseTexto(request == null ? null : request.texto());
 	}
 

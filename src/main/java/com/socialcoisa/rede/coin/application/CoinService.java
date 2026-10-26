@@ -59,15 +59,12 @@ public class CoinService {
 	/** Volume interno fixo do genesis. Não é público; nunca muda. */
 	private static final long TREASURY_GENESIS = FAIS(2_000_000L);
 	public static final long AIRDROP_PER_USER = FAIS(100L);
-	public static final long AIRDROP_OWNER = FAIS(150_000L);
 	/** Presença diária (plano C2): 5/dia, bônus de 25 a cada 7 dias seguidos. */
 	public static final long DAILY_PRESENCE = FAIS(5L);
 	public static final long STREAK_BONUS = FAIS(25L);
 	/** Teto de envio para contas com menos de 7 dias. */
 	private static final long NEW_ACCOUNT_DAILY_CAP = FAIS(500L);
 	private static final Duration NEW_ACCOUNT_WINDOW = Duration.ofDays(7);
-
-	private static final String OWNER_USERNAME = "aminadojava";
 
 	private final CoinLedgerRepository ledger;
 	private final CoinRateService rateService;
@@ -157,14 +154,14 @@ public class CoinService {
 		grant(accountId, amount, CoinEntry.Kind.REWARD, ref, message, now);
 	}
 
-	/** Airdrop idempotente: 100 faíscas da tesouraria (150.000 para a dona), uma vez por conta. */
+	/** Airdrop idempotente: 100 faíscas da tesouraria, uma vez por conta. Sem exceção por username. */
 	private void ensureGenesis(String accountId, String username) {
 		if (ledger.existsByKindAndRefId(com.socialcoisa.rede.coin.domain.CoinEntry.Kind.AIRDROP,
 				"airdrop:" + accountId)) {
 			return;
 		}
 		ensureTreasury();
-		long amount = OWNER_USERNAME.equals(username) ? AIRDROP_OWNER : AIRDROP_PER_USER;
+		long amount = AIRDROP_PER_USER;
 		grant(TREASURY_ACCOUNT, -amount, CoinEntry.Kind.GENESIS_TREASURY, "airdrop-tesouraria:" + accountId,
 			"Distribuição inicial", Instant.now(clock));
 		grant(accountId, amount, CoinEntry.Kind.AIRDROP, "airdrop:" + accountId, "Distribuição inicial",
@@ -431,6 +428,26 @@ public class CoinService {
 		Instant now = Instant.now(clock);
 		grant(receiverId, -amount, CoinEntry.Kind.REVERSAL_OUT, originalRef + ":reversao", reason, now);
 		grant(senderId, amount, CoinEntry.Kind.REVERSAL_IN, originalRef + ":reversao", reason, now);
+	}
+
+	/** Visão de supply: total fixo do gênese, o que ficou no cofre e o que circula. */
+	public record SupplyView(long total, long cofre, long circulacao, long somaSaldos, boolean coerente) {
+	}
+
+	/**
+	 * A soma de todos os saldos TEM que ser igual ao total do gênese: nada cria faíscas, tudo gira
+	 * do valor que já existe. Divergência é bug ou fraude — o painel mostra e a investigação vem.
+	 */
+	@Transactional(readOnly = true)
+	public SupplyView supply() {
+		long total = TREASURY_GENESIS;
+		var tesouraria = ledger.findAccount(TREASURY_ACCOUNT);
+		long cofre = tesouraria.map(CoinAccount::balance).orElse(0L);
+		long soma = ledger.totalBalance();
+		// Pré-gênese (nenhuma carteira acessada ainda) não é divergência: só é alarme quando a
+		// tesouraria existe e a soma dos saldos não fecha com o total.
+		boolean coerente = tesouraria.isPresent() ? soma == total : soma == 0;
+		return new SupplyView(total, cofre, total - cofre, soma, coerente);
 	}
 
 	/**

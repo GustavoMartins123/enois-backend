@@ -29,6 +29,7 @@ public class EmailService {
     private final JavaMailSender mailSender;
     private final TemplateEngine templateEngine;
     private final String frontendUrl;
+    private final String backendUrl;
     private final String fromEmail;
     private final EmailLogRepository emailLogs;
 
@@ -36,6 +37,7 @@ public class EmailService {
             JavaMailSender mailSender,
             TemplateEngine templateEngine,
             @Value("${rede.frontend.url}") String frontendUrl,
+            @Value("${rede.backend.url:https://api.enois.ia.br}") String backendUrl,
             @Value("${spring.mail.username}") String fromEmail,
             EmailLogRepository emailLogs) {
         this.mailSender = mailSender;
@@ -43,8 +45,41 @@ public class EmailService {
         this.frontendUrl = frontendUrl.endsWith("/")
                 ? frontendUrl.substring(0, frontendUrl.length() - 1)
                 : frontendUrl;
+        this.backendUrl = backendUrl.endsWith("/")
+                ? backendUrl.substring(0, backendUrl.length() - 1)
+                : backendUrl;
         this.fromEmail = fromEmail;
         this.emailLogs = emailLogs;
+    }
+
+    /**
+     * Confirmação do NOVO e-mail (E-02/E-11). O endereço só passa a valer quando a pessoa clica
+     * neste link — e o clique prova que ela controla a caixa nova.
+     */
+    public boolean sendEmailChangeConfirmation(String toEmail, String userName, String token) {
+        String link = backendUrl + "/api/auth/email/change/confirm?token="
+                + java.net.URLEncoder.encode(token, java.nio.charset.StandardCharsets.UTF_8);
+        String htmlBody = "<p>Olá, " + escapeHtml(userName) + ".</p>"
+                + "<p>Recebemos um pedido para trocar o e-mail da sua conta no Énóis para este endereço.</p>"
+                + "<p><a href=\"" + escapeHtml(link) + "\" style=\"display:inline-block;padding:12px 24px;"
+                + "background:#6366f1;color:#fff;text-decoration:none;border-radius:999px;font-weight:600\">"
+                + "Confirmar novo e-mail</a></p>"
+                + "<p>Se não foi você, ignore esta mensagem: nada muda até o clique.</p>"
+                + "<p>— Equipe Énóis</p>";
+        return sendHtml(toEmail, "Confirme seu novo e-mail — Énóis", htmlBody);
+    }
+
+    /**
+     * Sent instead of a verification link when someone signs up with an address that already has an
+     * account: the owner learns about it, and the signup response stays the same as a new one.
+     */
+    public boolean sendSignupAttemptNotice(String toEmail, String userName) {
+        String htmlBody = "<p>Olá, " + escapeHtml(userName) + ".</p>"
+                + "<p>Alguém tentou criar uma conta no Énóis com este e-mail, mas ele já tem uma conta.</p>"
+                + "<p>Se foi você, <a href=\"" + escapeHtml(frontendUrl + "/entrar") + "\">entre</a> normalmente "
+                + "ou use \"Esqueci minha senha\". Se não foi, pode ignorar esta mensagem: nada mudou na sua conta.</p>"
+                + "<p>— Equipe Énóis</p>";
+        return sendHtml(toEmail, "Tentativa de cadastro com seu e-mail — Énóis", htmlBody);
     }
 
     /**
@@ -268,10 +303,10 @@ public class EmailService {
 			byte[] imageBytes, String imageName) {
 		String htmlBody = "<p>Novo pedido de suporte enviado pelo app.</p>"
 			+ "<ul>"
-			+ "<li><b>Usuario:</b> " + escape(replyTo) + "</li>"
-			+ "<li><b>Assunto:</b> " + escape(requestSubject) + "</li>"
+			+ "<li><b>Usuario:</b> " + escapeHtml(replyTo) + "</li>"
+			+ "<li><b>Assunto:</b> " + escapeHtml(requestSubject) + "</li>"
 			+ "</ul>"
-			+ "<p><b>Mensagem:</b></p><pre style=\"white-space:pre-wrap\">" + escape(requestMessage)
+			+ "<p><b>Mensagem:</b></p><pre style=\"white-space:pre-wrap\">" + escapeHtml(requestMessage)
 			+ "</pre>";
 
 		try {
@@ -304,9 +339,9 @@ public class EmailService {
 	public void sendSupportReplyEmail(String toEmail, String originalSubject, String reply) {
 		String subject = "Resposta do suporte do Énóis — " + (originalSubject == null ? "" : originalSubject);
 		String htmlBody = "<p>Olá,</p>"
-			+ "<p>Sobre o seu pedido <b>" + escape(originalSubject) + "</b>:</p>"
+			+ "<p>Sobre o seu pedido <b>" + escapeHtml(originalSubject) + "</b>:</p>"
 			+ "<blockquote style=\"margin:8px 0;padding:8px 12px;border-left:3px solid #ccc;"
-			+ "white-space:pre-wrap\">" + escape(reply) + "</blockquote>"
+			+ "white-space:pre-wrap\">" + escapeHtml(reply) + "</blockquote>"
 			+ "<p>— Equipe Énóis</p>";
 		try {
 			MimeMessage message = mailSender.createMimeMessage();
@@ -330,7 +365,7 @@ public class EmailService {
 	public void sendSupportClosedEmail(String toEmail, String originalSubject) {
 		String subject = "Pedido de suporte concluído — " + (originalSubject == null ? "" : originalSubject);
 		String htmlBody = "<p>Olá,</p>"
-			+ "<p>Seu pedido <b>" + escape(originalSubject) + "</b> foi concluído pelo time do Énóis.</p>"
+			+ "<p>Seu pedido <b>" + escapeHtml(originalSubject) + "</b> foi concluído pelo time do Énóis.</p>"
 			+ "<p>Se o problema continuar, é só abrir um novo pedido em "
 			+ "<a href=\"https://enois.ia.br/suporte\">enois.ia.br/suporte</a>.</p>"
 			+ "<p>— Equipe Énóis</p>";
@@ -366,10 +401,12 @@ public class EmailService {
 		}
 	}
 
-	private String escape(String value) {
-		if (value == null) {
-			return "";
-		}
-		return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
+	/**
+	 * The one escaping helper for e-mail bodies built as strings: every value that did not come
+	 * from a literal in code (names, titles, user text, links) goes through it before entering the
+	 * HTML. Thymeleaf templates escape on their own via {@code th:text}/{@code th:href}.
+	 */
+	public static String escapeHtml(String value) {
+		return value == null ? "" : org.springframework.web.util.HtmlUtils.htmlEscape(value, "UTF-8");
 	}
 }

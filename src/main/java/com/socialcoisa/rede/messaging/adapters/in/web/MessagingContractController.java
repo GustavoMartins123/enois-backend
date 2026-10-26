@@ -53,10 +53,9 @@ class MessagingContractController {
 	}
 
 	@GetMapping
-	PageResponse<ConversationView> conversations(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	PageResponse<ConversationView> conversations(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestParam(required = false) String cursor, @RequestParam(defaultValue = "20") int limit) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		Instant before = cursorCodec.decode(cursor).orElse(null);
 		List<Conversation> conversations = messagingService.listConversations(user.id().value(), before, limit);
 		var items = conversations.stream()
@@ -79,10 +78,9 @@ class MessagingContractController {
 	}
 
 	@GetMapping("/search")
-	PageResponse<ConversationView> search(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	PageResponse<ConversationView> search(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestParam(required = false) String q, @RequestParam(defaultValue = "20") int limit) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		List<Conversation> conversations = messagingService.listConversations(user.id().value(), null, limit);
 		String query = q != null ? q.toLowerCase() : "";
 		var items = conversations.stream()
@@ -104,10 +102,9 @@ class MessagingContractController {
 	}
 
 	@GetMapping("/{conversationId}")
-	ConversationDetailView conversation(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ConversationDetailView conversation(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String conversationId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		if (!messagingService.isParticipant(conversationId, user.id().value())) {
 			throw new ApiException(403, "NOT_PARTICIPANT", "Voce nao participa desta conversa.");
 		}
@@ -123,11 +120,10 @@ class MessagingContractController {
 	}
 
 	@GetMapping("/{conversationId}/messages")
-	PageResponse<MessageView> messages(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	PageResponse<MessageView> messages(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String conversationId, @RequestParam(required = false) String cursor,
 			@RequestParam(defaultValue = "50") int limit) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		if (!messagingService.isParticipant(conversationId, user.id().value())) {
 			throw new ApiException(403, "NOT_PARTICIPANT", "Voce nao participa desta conversa.");
 		}
@@ -157,11 +153,10 @@ class MessagingContractController {
 	 * sumiu — mesmo padrao do inbox: selecionar, selecionar tudo, apagar.
 	 */
 	@PostMapping("/{conversationId}/messages/hide")
-	ResponseEntity<String> hideMessages(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> hideMessages(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String conversationId, @RequestBody HideConversationsRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		if (!messagingService.isParticipant(conversationId, user.id().value())) {
 			throw new ApiException(403, "NOT_PARTICIPANT", "Voce nao participa desta conversa.");
 		}
@@ -179,11 +174,10 @@ class MessagingContractController {
 	}
 
 	@PostMapping("/{conversationId}/messages")
-	ResponseEntity<String> send(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> send(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String conversationId, @RequestBody SendMessageRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of("conversationId", conversationId, "text",
 			request.text() == null ? "" : request.text(), "mediaIds",
 			request.mediaIds() == null ? List.of() : request.mediaIds(), "mediaSpoiler",
@@ -200,11 +194,10 @@ class MessagingContractController {
 	}
 
 	@PostMapping("/{conversationId}/read")
-	ResponseEntity<String> read(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> read(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String conversationId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of("conversationId", conversationId));
 		return idempotency.execute(user.id(), "POST", "/api/conversations/{conversationId}/read", idempotencyKey, hash,
 			() -> {
@@ -218,11 +211,10 @@ class MessagingContractController {
 	 * chama. Nao cria conversa duplicada: devolve a existente quando ja ha uma entre os dois.
 	 */
 	@PostMapping("/direct")
-	ResponseEntity<String> direct(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> direct(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@RequestBody DirectConversationRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String otherId = request.userId() == null ? "" : request.userId().trim();
 		if (otherId.isEmpty()) {
 			throw new ApiException(400, "INVALID_RECIPIENT", "Destinatario obrigatorio.");
@@ -255,11 +247,10 @@ class MessagingContractController {
 	 * participante mantem a conversa. Aceita a lista de ids.
 	 */
 	@PostMapping("/hide")
-	ResponseEntity<String> hide(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> hide(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@RequestBody HideConversationsRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		List<String> ids = request.ids() == null ? List.of()
 			: request.ids().stream().filter(id -> id != null && !id.isBlank()).map(String::trim).distinct().toList();
 		if (ids.isEmpty()) {
@@ -274,10 +265,9 @@ class MessagingContractController {
 
 	/** As conversas que a pessoa apagou para si — a tela de arquivadas. */
 	@GetMapping("/archived")
-	PageResponse<ConversationView> archived(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	PageResponse<ConversationView> archived(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestParam(required = false) String cursor, @RequestParam(defaultValue = "20") int limit) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		Instant before = cursorCodec.decode(cursor).orElse(null);
 		List<Conversation> conversations = messagingService.listArchivedConversations(user.id().value(), before,
 			Math.min(limit, 50));
@@ -302,11 +292,10 @@ class MessagingContractController {
 
 	/** Restaurar: desfaz o "apagar para mim" das conversas escolhidas. */
 	@PostMapping("/unhide")
-	ResponseEntity<String> unhide(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> unhide(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@RequestBody HideConversationsRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		List<String> ids = request.ids() == null ? List.of()
 			: request.ids().stream().filter(id -> id != null && !id.isBlank()).map(String::trim).distinct().toList();
 		if (ids.isEmpty()) {
@@ -320,11 +309,10 @@ class MessagingContractController {
 	}
 
 	@PostMapping
-	ResponseEntity<String> create(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> create(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@RequestBody CreateConversationRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(request);
 		return idempotency.execute(user.id(), "POST", "/api/conversations", idempotencyKey, hash,
 			() -> {
@@ -342,12 +330,11 @@ class MessagingContractController {
 	}
 
 	@PostMapping("/{conversationId}/messages/{messageId}/reactions")
-	ResponseEntity<String> reactToMessage(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> reactToMessage(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String conversationId, @PathVariable String messageId,
 			@RequestBody ReactToMessageRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		requireMessageInConversation(conversationId, messageId, user.id().value());
 		Map<String, Object> payload = new LinkedHashMap<>();
 		payload.put("messageId", messageId);
@@ -361,10 +348,9 @@ class MessagingContractController {
 	}
 
 	@GetMapping("/{conversationId}/messages/{messageId}/reactions")
-	Object listMessageReactions(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	Object listMessageReactions(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String conversationId, @PathVariable String messageId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		requireMessageInConversation(conversationId, messageId, user.id().value());
 		var reactions = messagingService.getReactions(messageId);
 		var summary = reactions.stream()

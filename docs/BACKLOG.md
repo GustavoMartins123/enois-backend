@@ -140,6 +140,25 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
     *Escopo que fica para o item 13:* escopos OAuth de aplicações de terceiros (aqui o escopo é o
     nível de acesso da API de cada rota).
     Front: `925b048a` (branch `fix/lint-higiene-front`).
+    - **[x] ENTREGUE 2026-10-26 — A matriz prometia rota aberta que a API recusa, e faltavam sete
+      rotas (o Labirinto inteiro).** O item acima prometia os pares (método, caminho) batendo com
+      o backend — e batem. Mas o **escopo** de cada rota (a coluna `public`/`auth`/`admin`, que é
+      o que quem integra acredita) nunca foi conferido: a auditoria chamou as 41 leituras
+      documentadas **sem sessão** e achou duas prometidas como `public` que respondem **401** —
+      `GET /daily-games/blocks/today` e `GET /daily-games/words/today` (a própria descrição da
+      primeira dizia "com sessão", e o rótulo dizia o contrário). E a seção de jogos diários
+      documentava 6 das 13 rotas da API: faltava o Labirinto inteiro (estado, início, movimento,
+      ranking) e o ranking/início/guesses de Palavras.
+      *O que foi feito:* os dois rótulos viraram `auth` e as sete rotas entraram na matriz. E a
+      conferência de escopo virou **código**: `npm run check:api-matrix` agora sonda as leituras
+      documentadas sem credencial e compara com o escopo prometido (rota `public` que responde
+      401/403 é promessa quebrada; rota `auth`/`admin` que responde 200 é rota escondida).
+      *A prova de que a trava pega:* com os dois rótulos errados de volta, o script accuse
+      exatamente as duas e sai com erro.
+      *Testes:* `src/lib/developers/api-matrix-check.test.ts` (17 no total, +4 do escopo).
+      *Verificado:* `vitest` 467/467, `eslint` limpo, `tsc --noEmit` sem erro, `vite build` ok, e o
+      script fechando em "a página documenta só o que existe, com o escopo certo".
+      Front: #264 (`fix/matriz-escopos-daily-games`, sobre a `qa`).
 13. **Registro de aplicações de terceiros (OAuth + PKCE, escopos, revogação)** — programa de auth de
     terceiros. Exige decisão de produto/segurança antes. *Aceite:* app só recebe escopo autorizado; revogável.
 14. **CI de segurança + testes adversariais** — secret-scanning, SCA, SAST com política de bloqueio;
@@ -209,6 +228,59 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   container MariaDB aplicando as migrações (o do front, o `ci.yml`, já roda lint, typecheck e
   vitest).
 ## Higiene do backend (entregue 2026-10-21)
+- **[x] ENTREGUE 2026-10-25 — O IP que o app resolvia era o do proxy (na QA) ou o da borda do
+  Cloudflare (na prod): todo mundo parecia a mesma pessoa.** A variável `TRUSTED_PROXY_IPS` não
+  estava no ambiente — a lista de proxies confiáveis nasceu vazia e o IP do proxy não é loopback
+  nem RFC1918, então o app **rejeitava** o `X-Forwarded-For` e respondia com o
+  `getRemoteAddr()`: o IP do proxy, idêntico para todas as requisições. Todo limite por IP
+  (login, cadastro, leitura) e o bloqueio da moderação passavam a valer para a plataforma inteira
+  como se fosse uma pessoa só — o mesmo defeito que derrubou o app antes, agora pela metade
+  resolvida (a lista configurável existia, mas ninguém a configurou).
+  *A evidência (logs dos containers, agregados):* na **QA**, `TRUSTED_PROXY_IPS` **ausente** e
+  **1 único IP distinto** em todas as requisições; na **prod**, a variável existia (o IP do
+  Traefik) mas os IPs resolvidos eram faixas **172.6x/172.7x — do próprio Cloudflare**, que fica
+  na frente: 91 de 131 requisições vindas de 3 endereços de borda. O IP real da pessoa estava no
+  cabeçalho que o Cloudflare escreve (`CF-Connecting-IP`) e o app não lia.
+  *A segunda metade do defeito (código):* o `ClientIpResolver` passou a ler o **primeiro** item do
+  `X-Forwarded-For` — e o primeiro item é o único que o **cliente** controla: cada pessoa podia
+  escolher com que IP os limites a viam. O próprio teste que existia para provar que o cliente não
+  escolhe o próprio IP tinha sido invertido para afirmar o contrário.
+  *O conserto:*
+  - o app resolve o IP nesta ordem: (1) `CF-Connecting-IP`, quando existe — é o IP que o
+    Cloudflare viu e ele o sobrescreve a cada requisição, então o cliente não o forja (e só vale
+    vindo de um proxy confiável); (2) a cadeia do `X-Forwarded-For`, lida **da direita para a
+    esquerda**, pulando os proxies confiáveis — assim o item forjado nunca é alcançado e a
+    leitura serve às duas convenções (proxy que substitui o cabeçalho e proxy que o acrescenta);
+    (3) o `getRemoteAddr()`;
+  - `TRUSTED_PROXY_IPS` entrou no deploy da **QA** (que não tinha a variável) e no da **prod** —
+    onde ela existia só digitada à mão no Portainer, fora do arquivo: um deploy da stack apagaria
+    e o defeito voltaria sozinho.
+  *A prova (o teste que falhou antes do conserto):* com o código como estava, `ClientIpSpoofingTests`
+  dava **5 falhas em 9** — e a mais grave mostrava que quatro requisições seguidas, cada uma com
+  um `X-Forwarded-For` diferente, passavam **sem** bater no teto global (200 em vez de 429): o
+  limite por IP tinha virado decorativo.
+  *Testes:* `ClientIpSpoofingTests` (9) — o item forjado não vale; as duas convenções de proxy
+  servem; proxy confiável no meio da cadeia é pulado; cabeçalho inchado não faz o forjado valer;
+  o cabeçalho do Cloudflare tem precedência e só vale de proxy confiável; e girar o header do
+  cliente não escapa do teto global (429).
+  *Verificado:* `ClientIpSpoofingTests` 9/9; contra o código anterior os mesmos testes falham
+  5/9 (a prova de que o defeito era real, não impressão); suíte do backend verde.
+- **[x] ENTREGUE 2026-10-25 — O plano do perfil corporativo ainda dizia "pendente" no que já estava
+  entregue.** Cruzamento dos planos contra o código (a regra: conferir no código antes de dizer que
+  falta — a lista do repo já mentiu várias vezes) achou dois marcadores desatualizados:
+  - `corporate-profile-validation.md` dizia "commit pendente no próximo ciclo" para os documentos do
+    plano — eles entraram no mesmo dia (`32123181`) e o plano inteiro foi publicado depois;
+  - `corporate-profile-progress.md` tinha "[ ] Confirmar com a dona as decisões abertas
+    (username com ponto, rotas)" — **essas duas foram resolvidas na Fase 10** (o próprio
+    `decisions.md` marca a pergunta 1 como resolvida).
+  *Conferido no código:* a rota pública `/profissional/{username}` existe no front
+  (`profissional_.$username.tsx`), e o backend atende `GET /corporate/{username}` e
+  `GET /corporate/{profileUsername}/posts` (o feed corporativo). Os itens marcados como entregues
+  estão de pé.
+  *Fica só uma pergunta de produto, sem bloqueio:* a visibilidade do feed corporativo (público
+  para todos ou só para seguidores) — o plano já tem o padrão (público) e a `decisions.md` diz que
+  não trava nada.
+  Back: `docs/backlog-plano-atualizado` (branch própria, sobre a `qa`).
 - **[x] ENTREGUE 2026-10-22 — A recorrência do banimento JÁ estava coberta (o plano ainda
   dizia que faltava).** Conferido no código: o banimento revoga **todas** as sessões da conta
   (`revokeAllByUser` — access e refresh na mesma linha de sessão), o **login** é recusado com 403
@@ -257,6 +329,22 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   cluster nunca entra. O perfil de teste deixa a defesa ligada com teto alto (1000), para uma
   classe que exercita 401/404 de propósito não derrubar as seguintes.
   *Achado pelo relato da dona* ("nosso amigo probe está atacando em todas as rotas").
+- **[x] ENTREGUE 2026-10-26 — A vitrine do marketplace buscava a galeria de temas para todo
+  item, e levava 404 em cada um.** O card da listagem pedia o pacote JSON do tema
+  (`GET /temas/galeria/{id}`) para **qualquer** item à venda — mas o `itemId` de uma listagem só
+  aponta para a galeria quando o item é um **TEMA** (`ItemKind.THEME`: "Tema da galeria (aponta
+  para theme_gallery)"). Para banner, template, página, post, blog e serviço o id é o do próprio item
+  do marketplace (`mitem_…`), e a chamada respondia **404** — uma por item da vitrine, com o caminho
+  errado no console (e a prévia caía no fundo genérico, então a tela parecia funcionar).
+  *Achado pela varredura de responsividade* (Chrome headless, 390px e 1280px, com a QA ao vivo):
+  a tela não transbordava, mas o console mostrava 8 respostas 404.
+  *O conserto:* a consulta da galeria virou um hook (`src/lib/marketplace/use-listing-theme.ts`) que
+  só roda quando a listagem é de tema; os outros tipos seguem com a prévia genérica.
+  *Prova:* com o `enabled` de volta, o teste acusa (o spy é chamado para item que não é tema); com o
+  conserto, a vitrine do marketplace na QA ao vivo ficou **sem nenhuma resposta com falha e sem
+  erro de console**.
+  *Testes:* `src/lib/marketplace/use-listing-theme.test.tsx` (2).
+  Front: #268 (`fix/marketplace-so-busca-tema-no-tema`, sobre a `qa`).
 - **[x] ENTREGUE 2026-10-22 — O serviço não dizia quem prestava, não tinha conversa com quem
   prestava, e os serviços de teste que sobraram na produção continuavam no catálogo.**
   Três coisas da mesma feature (o marketplace de serviços, Fase 5), pedidas pela dona:
@@ -433,6 +521,136 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   corporativo, objetivos profissionais no perfil, termos de limitação de responsabilidade).
   Front: `cb9b38aa` + esta rodada; back: templates dos e-mails.
 ## Higiene do front (entregue 2026-10-21)
+- **[x] ENTREGUE 2026-10-25 — A CI do front não rodava teste, lint nem typecheck nos PRs que vão
+  para a QA.** O `ci.yml` disparava **só para `main`** — e a linha do dia a dia é a `qa`. Ou seja: os
+  PRs da equipe entravam **sem rodar teste nenhum**; o único check que disparavam era o build da
+  imagem, que faz `vite build` e **não** typecheca (o `"build"` do `package.json` é só `vite
+  build`). O script `typecheck` existia e **nenhum workflow o chamava**.
+  O comentário no arquivo explicava o motivo: *"Lint e typecheck entram aqui quando a main passar
+  neles (hoje: ~300 erros de lint... e ~60 erros de TypeScript)"*. **Essa dívida foi paga** — o lint
+  e o typecheck passam limpos nas duas linhas agora — e o passo nunca entrou.
+  *O que foi feito:* o `ci.yml` passa a disparar para a `qa` também (pull_request e push) e ganha os
+  passos **Lint** e **Typecheck** (os testes unitários já estavam lá); a dívida de lint foi quitada
+  (15 erros de formatação em 8 arquivos na `qa`, 14 em 7 na `main`, mais um tipo que vivia fora de
+  `src/types/**` — a regra `local/type-boundaries`); e o texto da página de desenvolvedores citava o
+  código de erro errado ("sem origem cadastrada" responde **403 `ORIGIN_NOT_ALLOWED`**, não
+  `ORIGIN_REQUIRED`).
+  *Por que importa:* sem o typecheck, um campo que a API devolve **nulo** passa e quebra no
+  navegador — e o `tsconfig` do front é `strict: true`, ou seja, o compilador pega essa classe
+  inteira de uma vez.
+  *Verificado:* `qa` — `vitest` 401/401, `eslint` sem erro, `tsc --noEmit` sem erro, `vite build`
+  ok. `main` — `vitest` 383/383 e o resto igual.
+  Front: #245 (`fix/ci-validar-prs-qa`, sobre a `qa`) e #246 (`fix/chave-origin-blocked`, sobre a
+  `main`).
+- **[x] ENTREGUE 2026-10-25 — Um PR em conflito não roda CI nenhuma, e a `main` tinha 1 erro de
+  lint que viraria CI vermelho.** Ao abrir o PR #246 (o texto da chave de origem que faltava), o
+  GitHub **não disparou nenhum workflow** nele. A causa não era o workflow: sem o *merge ref*
+  (`refs/pull/246/merge`), que o GitHub não conseguiu criar enquanto o PR teve conflito, o evento
+  `pull_request` nem chega a começar. O sintoma é silencioso — o PR aparece sem check nenhum, o
+  que parece "a CI não roda para PR de `main`", mas era o conflito.
+  *O que foi feito:* o conflito foi resolvido (a mesma chave `originBlocked` em posições
+  diferentes, porque a `main` tinha recebido o merge da `qa` #231), ficando o texto com o código
+  de erro certo; e a `main` levou a correção de formatação que faltava (`use-frame-theme.ts`):
+  sem ela, o passo **Lint** que o PR #245 adiciona deixa a `main` vermelha assim que ele chegar
+  lá — o `eslint .` acusava 1 erro de prettier.
+  *Verificado:* `main` mesclada — `vitest` 401/401, `eslint .` sem erro, `tsc --noEmit` sem erro,
+  `vite build` ok; e o **PR #246 passou a rodar a CI de verdade** (job `verificar` verde), o que
+  prova que a linha da `main` volta a ser validada.
+  *Nota de operação (front):* todos os PRs abertos estão `MERGEABLE`; o `BLOCKED` que o GitHub
+  mostra em cada um é só o **pedido de 1 aprovação** que a proteção das branches exige (ninguém
+  mais está exigindo check de status).
+- **[x] ENTREGUE 2026-10-25 — O plano dizia que o OpenAPI estava plugado: não está, e o pipeline
+  do front estava quebrado em três pontos.** O ROADMAP afirmava que o springdoc estava no
+  `pom.xml` (`springdoc.api-docs.path=/api/openapi.json`, ligado por `SPRINGDOC_ENABLED`) e que só
+  faltava o passo da esteira. **Conferido no código: o springdoc saiu no `pom.xml` no lote de
+  segurança (`302b7690`)** — incompatível com o Boot 4 e a UI dele expunha a superfície inteira
+  da API. Não existe `/openapi.json`: o caminho responde como qualquer rota desconhecida (200 sem
+  corpo). O mesmo evento apagou do `OperationalController` o único registro de que o documento
+  existia, e o front ficou com um pipeline que não podia funcionar:
+  1. o `specs/openapi.json` commitado é um **esqueleto** — zero rotas, mas com cara de documento;
+  2. o gerador importava `generate` do `@orval/core`, que **não existe** na versão travada do lock
+     (7.21.0 — o `generate` está no pacote `orval`): `npm run generate:api` quebrava com
+     "generate is not a function";
+  3. mesmo com um documento em mãos, a URL buscada (`/api/openapi.json`) não responderia nada.
+  *O que foi feito.* **No back:** o comentário do `OperationalController` passou a dizer a verdade
+  (não há OpenAPI, não há `SPRINGDOC_ENABLED` que ligue algo) e o índice `GET /api/v1` — que é o
+  contrato legível por máquina, montado a partir do roteador — passou a declarar em texto que o
+  documento OpenAPI não existe e onde está o contrato (`/developers` do app e o próprio índice).
+  *No front:* o `specs/openapi.json` se declara esqueleto e aponta para o contrato real (com
+  `x-enois`); os scripts de fetch e de geração **recusam o esqueleto** com mensagem que aponta o
+  caminho (em vez de pilha de erro do orval); o gerador passou a usar a CLI (que funciona na
+  versão travada) e `scripts/**/*.ts` entrou no `tsc` (antes o typecheck não via os scripts).
+  *E a lacuna que mais importava:* a matriz documentada da página `/developers` (157 pares) era
+  conferida **à mão**, em roteiro de auditoria — ou seja, uma vez por rodada, e cada_ENDPOINT novo
+  podia deixá-la velha. Agora é código: `npm run check:api-matrix` busca o índice ao vivo e
+  compara par a par (path e método, com variável de caminho casada por segmento como o roteador
+  faz). *Verificado contra a QA:* 157 pares documentados × 494 rotas do índice — tudo bate.
+  *Testes:* `src/lib/developers/api-matrix-check.test.ts` (8) e `src/lib/developers/openapi-spec.test.ts`
+  (5) no front; `V1ApiAliasTests` (11, era 9) no back — o índice afirma que não há OpenAPI e o
+  backend não serve documento nem em `/openapi.json`.
+  *Verificado:* front `vitest` 414/414, `eslint` limpo, `tsc --noEmit` limpo (com os scripts
+  dentro), `vite build` ok; back `V1ApiAliasTests` 11/11.
+  Front: #247 (`fix/contrato-publico-da-api`, sobre a `qa`). Back: #181 (mesmo branch).
+  *O que continua aberto (não é código meu):* gerar um OpenAPI de verdade exige um documento
+  gerado e revisado (escrever à mão não é caminho) e um passo na esteira — que é do raposo.
+- **[x] ENTREGUE 2026-10-25 — Data e hora sem fuso: o React estava regenerando a página inteira
+  na hora que ela abre.** O item estava aberto desde 2026-10-18 (a página do blog dava erro de
+  hidratação #418 em produção) e era **maior do que parecia**: 45 pontos do front formatavam data
+  direto no componente (`toLocaleDateString`, `toLocaleString`, `Intl.DateTimeFormat`), sem
+  `timeZone`, e os **getters locais** (`getFullYear`, `getMonth`, `getDate`, `getTimezoneOffset`)
+  lêm no fuso do *runtime*. O pod roda em UTC e o navegador da pessoa roda no fuso dela: o servidor
+  escrevia "23 de outubro" e o navegador "24 de outubro", o HTML do servidor não batia com o do
+  cliente e o React cuspia *"Hydration failed because the server rendered text didn't match the
+  client"* — que faz o React **regenerar a árvore inteira** no cliente (a mesma família do
+  "cabeçalho pisca"). Para quem está em São Paulo, a janela em que isso acontece é **todo dia
+  entre 00h e 03h (UTC)** — ou seja, boa parte da noite.
+  *Como foi provado:* Chrome headless com o dev server em UTC (o fuso do pod) e o navegador em
+  `Pacific/Kiritimati` (via `Emulation.setTimezoneOverride`): a página do blog acusou o erro de
+  hidratação; com o conserto, **zero** erros de console em quatro telas (blog, post, comunidades,
+  vagas).
+  *O que foi feito:* um módulo único (`src/lib/date/format.ts`) formata toda data **no fuso do
+  app** (`America/Sao_Paulo`) — servidor e navegador dizem a mesma coisa, qualquer que seja o fuso
+  de quem está olhando. Data **sem fuso** é lida como dia de calendário (e não como o dia
+  anterior, que é o que `new Date("2026-10-18")` fazia). Os 45 pontos passaram a usar o módulo,
+  inclusive os getters: o ano do rodapé, o ano mínimo do campo de nascimento, a contagem de meses
+  do currículo e o valor do campo `datetime-local` (agendamento) também divergiam.
+  *A regra ficou travada:* `src/lib/date/formato-unico.test.ts` falha se alguém formatar data fora
+  do módulo — e o teste **falha** quando a regra é quebrada (provado: a regra foi quebrada de
+  propósito e o teste acusou). As duas exceções (`night-rest.ts` e `min-age.ts`) são
+  intencionais: são do **aparelho** de quem está usando e só rodam no cliente, depois da montagem.
+  *Testes:* `src/lib/date/format.test.ts` (11) — o mesmo instante formatado com o runtime em três
+  fusos (UTC, São Paulo, Tóquio) dá **a mesma saída**; data sem fuso é o dia de calendário; e
+  `formato-unico.test.ts` (2).
+  *Verificado:* `vitest` 414/414, `eslint` limpo nos arquivos tocados, `tsc --noEmit` sem erro,
+  `vite build` ok, e a reprodução no Chrome headless sem erro de hidratação.
+  Front: #248 (`fix/data-sem-fuso`, sobre a `qa`).
+- **[x] ENTREGUE 2026-10-24 — O app oferecia login com Google mesmo num ambiente onde a API o
+  desliga.** A API tem o flag `rede.oauth.google.enabled`: quando está desligado, `/auth/config`
+  avisa (`googleLoginEnabled: false`) e `/oauth/google/start` **recusa** com 403
+  `OAUTH_PROVIDER_DISABLED`. O front **ignorava esse campo** — o tipo `AuthConfig` nem o declarava
+  e a tela de entrada desenha o botão do Google em código fixo. Na prática, desligar o Google no
+  ambiente não tirava o botão da frente da pessoa: ela clicava e só recebia um erro (e a
+  mensagem que aparecia era a do Google mesmo quando a falha era do LinkedIn).
+  *Como o problema foi achado:* as **382 chamadas de API do front** foram extraídas do código e
+  os **tipos de resposta** (em `src/types/**`) comparados com o JSON **real** que a API devolve —
+  foi assim que apareceu o `googleLoginEnabled` que a API entrega e o front não tipa. (O mesmo
+  cruzamento achou, na rodada anterior, a rota `/admin/carteira/supply` faltando na API.)
+  *O que foi feito:* `AuthConfig` declara `googleLoginEnabled`; `availableSocialProviders()`
+  (`src/constants/auth-providers.ts`) decide o que a tela oferece — o Google só entra na lista
+  quando a API diz que está ligado (a mesma regra do captcha, que também espera a configuração) —
+  e o botão deixou de ser escrito em código fixo. A falha da entrada social passou a citar o
+  provedor certo, e a recusa da API (`OAUTH_PROVIDER_DISABLED`) ganha a mensagem dela, que é mais
+  útil que o texto genérico.
+  *Testes:* `src/constants/auth-providers.test.ts` (7) — o Google some quando a API diz que está
+  desligado, aparece quando diz que está ligado, não aparece antes da resposta da API, os demais
+  provedores continuam, o tipo declara o campo (trava do contrato) e a tela consulta a config.
+  *Verificado:* `vitest` 390/390, `eslint` limpo nos arquivos tocados, `tsc` sem erro NOVO (o
+  `originBlocked` de `developer-origins-section.tsx` já existia na base), `vite build` ok, e a tela
+  conferida no Chrome headless a 390px e 1280px nos dois estados do flag (sem overflow horizontal).
+  Front: `6fc43bdd` (branch `fix/login-google-desligado`, sobre a `qa`).
+  *Fica de fora (decisão de produto):* o diálogo "contas vinculadas" continua oferecendo o Google
+  mesmo com o flag desligado — a API **não** recusa o vínculo (só o `/start` do login), então ali
+  não há contrato quebrado.
 - **[x] ENTREGUE 2026-10-21 — A tela de entrada parou de afirmar o que o produto não tem.**
   O painel de marca do login (e do reset de senha, que tinha o mesmo bloco) trazia **números
   fixos no texto** — "120k+ profissionais", "2.8k mentores ativos", "640 comunidades" — numa
@@ -498,6 +716,21 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
   corporativo) e "usa o artigo masculino da marca".
   *Verificado:* `vitest` 342/342, `tsc --noEmit` sem erro, `eslint` limpo, `vite build` ok, e o
   HTML do SSR do login ja entrega a descricao nova.
+- **[x] ENTREGUE 2026-10-26 — A varredura de responsividade ficou completa: nenhuma rota do app
+  ficou sem medir.** O que faltava eram as **7 telas protegidas** (moderação, denúncias,
+  penalidades, meus-serviços, perfil profissional, painel de projetos, bloqueados): elas exigem
+  sessão de administrador, e a sessão da QA estava morta. Quebrou-se o impasse com o backend local
+  na bancada MariaDB (`enois-bench66`) e a allowlist de admin por variável
+  (`REDE_ADMIN_BOOTSTRAP_ENABLED` + `REDE_ADMIN_EMAILS`) — sem tocar no banco de nenhum ambiente.
+  *O que foi medido (Chrome headless, 390px e 1280px, sessão injetada):* as 7 telas protegidas e
+  mais as que exigem login (feed, mensagens, salvos, carteira, configurações, segurança, minhas
+  vagas) — **overflow horizontal 0 em todas**. Também foram medidas as telas novas do dia (grupos,
+  loja, marketplace, jogos diários, trilha, notificações): limpas nas duas larguras.
+  *Como a sessão foi obtida:* cadastro local → confirmação de e-mail gravando o hash do token na
+  bancada (o e-mail não sai sem SMTP) → `POST /auth/email/verify` devolve a sessão; na bancada
+  foram semeados uma denúncia e uma sanção para as tabelas de moderação terem conteúdo.
+  *Fora do escopo (externo):* Turnstile em produção, CORS do bucket S3 e a aprovação do app do
+  LinkedIn.
 - **[x] ENTREGUE 2026-10-22 — As abas da caixa de entrada cortavam no celular.** Com a quinta aba
   ("Serviços", que veio do chat de serviço), a faixa de abas da caixa de entrada ficava sem
   respiro a 390px e cortava "Arquivadas" na borda a 360px — cortada sem nenhuma pista de que

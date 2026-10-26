@@ -52,6 +52,8 @@ import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 @RequestMapping("/auth")
 class AuthController {
 
+	private static final org.slf4j.Logger AUDIT = org.slf4j.LoggerFactory.getLogger(AuthController.class);
+
 	private final SignupUseCase signupUseCase;
 	private final VerifyEmailUseCase verifyEmailUseCase;
 	private final TwoFactorLoginUseCase twoFactorLoginUseCase;
@@ -77,10 +79,12 @@ class AuthController {
 	private final com.socialcoisa.rede.shared.security.SignupAttackGuard signupAttackGuard;
 	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles;
 	private final com.socialcoisa.rede.shared.security.ClientIpResolver ipResolver;
+	private final tools.jackson.databind.ObjectMapper objectMapper;
 	/** Cadastros abertos? Desligado, o POST /auth/signup responde 403 SIGNUP_DISABLED. */
 	private final boolean signupEnabled;
 	/** Login social desligável por ambiente (QA sem app OAuth configurado). */
 	private final boolean googleLoginEnabled;
+	private final com.socialcoisa.rede.shared.web.SessionCookies sessionCookies;
 
 	AuthController(SignupUseCase signupUseCase, VerifyEmailUseCase verifyEmailUseCase,
 			TwoFactorLoginUseCase twoFactorLoginUseCase, TwoFactorUseCase twoFactorUseCase,
@@ -104,8 +108,10 @@ class AuthController {
 			com.socialcoisa.rede.shared.security.SignupAttackGuard signupAttackGuard,
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles,
 			com.socialcoisa.rede.shared.security.ClientIpResolver ipResolver,
+			tools.jackson.databind.ObjectMapper objectMapper,
 			@Value("${rede.auth.signup-enabled:true}") boolean signupEnabled,
-			@Value("${rede.oauth.google.enabled:true}") boolean googleLoginEnabled) {
+			@Value("${rede.oauth.google.enabled:true}") boolean googleLoginEnabled,
+			com.socialcoisa.rede.shared.web.SessionCookies sessionCookies) {
 		this.signupUseCase = signupUseCase;
 		this.verifyEmailUseCase = verifyEmailUseCase;
 		this.twoFactorLoginUseCase = twoFactorLoginUseCase;
@@ -131,8 +137,10 @@ class AuthController {
 		this.signupAttackGuard = signupAttackGuard;
 		this.profiles = profiles;
 		this.ipResolver = ipResolver;
+		this.objectMapper = objectMapper;
 		this.signupEnabled = signupEnabled;
 		this.googleLoginEnabled = googleLoginEnabled;
+		this.sessionCookies = sessionCookies;
 	}
 
 	/** Bloqueio de IP pela moderacao (V115): nenhum fluxo de autenticacao emite sessao de IP banido. */
@@ -175,18 +183,16 @@ class AuthController {
 	@PostMapping("/signup")
 	@RateLimiter(name = "auth")
 	ResponseEntity<String> signup(@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
-			@RequestHeader(value = "X-Forwarded-For", required = false) String forwardedFor,
 			@RequestHeader(value = "X-Device-Fingerprint", required = false) String deviceFingerprint,
 			@RequestBody SignupRequest body,
 			jakarta.servlet.http.HttpServletRequest request) {
 		String ip = ipResolver.resolve(request);
 		exigeIpNaoBloqueado(ip);
-		// Contenção imediata: nome com o padrão do ataque não cria conta e o IP cai na lista
-		// (as contas "probe" de 20/10 e 22/10 nasciam em série do mesmo provedor).
+		// Contenção imediata: nome com o padrão do ataque não cria conta; repeated hits pause
+		// signups from the IP (as contas "probe" de 20/10 e 22/10 nasciam em série do mesmo provedor).
 		signupAttackGuard.checkSignup(body.name(), body.email(), ip);
-		// Cadastro em massa reaproveita o MESMO e-mail com alias (fulano+1@, fu.lano@gmail).
-		// Comparar a forma normalizada fecha o buraco sem punir ninguém.
-		exigeEmailUnico(body.email());
+		// An already registered e-mail goes through every gate below and gets the same 201 body as
+		// a new signup; the service e-mails the existing account instead (see AuthService.signup).
 		// Portao de cadastros: a operacao pode fechar a criacao de contas (a Mel pediu em
 		// 2026-10-20). Antes de Turnstile/throttle: nao adianta o cliente resolver captcha.
 		if (!signupEnabled) {
@@ -196,12 +202,12 @@ class AuthController {
 		// Honeypot: bots preenchem o campo "website" que humanos nunca veem.
 		// Resposta fake (201) para nao dar dica ao atacante.
 		if (body.website() != null && !body.website().isBlank()) {
-			return ResponseEntity.status(201)
-				.body("{\"email\":\"" + body.email() + "\",\"verificationRequired\":true,\"emailSent\":true}");
+			return fakeSignupAccepted(body.email());
 		}
 		throttle.exigeSignupPermitido(ip, deviceFingerprint);
 		String scope = authScope(body.email());
-		String hash = idempotency.hash(body);
+		// Hash sem senha: a idempotência não pode virar um hash rápido de credencial no banco (E-03).
+		String hash = idempotency.hash("signup:" + body.email().trim().toLowerCase(Locale.ROOT));
 		return idempotency.execute(scope, "POST", "/api/auth/signup", idempotencyKey, hash, () -> {
 			// Dentro do idempotente: repetir a MESMA requisição devolve a resposta em cache sem
 			// queimar um captcha novo (Turnstile e desafio são de uso único).
@@ -244,42 +250,45 @@ class AuthController {
 	 */
 	@PostMapping("/login")
 	@RateLimiter(name = "auth")
-	ResponseEntity<String> login(@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+	ResponseEntity<?> login(@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@RequestHeader(value = "X-Device-Fingerprint", required = false) String deviceFingerprint,
 			@RequestBody LoginRequest body,
 			jakarta.servlet.http.HttpServletRequest httpRequest) {
 		String ip = ipResolver.resolve(httpRequest);
 		exigeIpNaoBloqueado(ip);
-		if (turnstile.isAvailable()) {
-			turnstile.require(body.turnstileToken());
-		}
-		String scope = authScope(body.email());
-		String hash = idempotency.hash(body);
-		throttle.exigeLoginPermitido(body.email());
-		return idempotency.execute(scope, "POST", "/api/auth/login", idempotencyKey, hash, () -> {
-			try {
-				LoginResult result = loginUseCase.login(new LoginCommand(body.email(), body.password(), ip));
-				throttle.limpaLogin(body.email());
-				if (!result.requiresTwoFactor()) {
-					newDeviceNotifier.check(result.session().user().id(), deviceFingerprint);
-					return new CommandResponse(200, result.session());
-				}
-				return new CommandResponse(202, Map.of("twoFactorRequired", true,
-					"challengeId", result.challenge().challengeId(),
-					"method", result.challenge().method(),
-					"expiresAt", result.challenge().expiresAt().toString()));
-			} catch (ApiException falha) {
-				if (falha.status() == 401) {
-					throttle.registraFalhaLogin(body.email());
-				}
-				throw falha;
+		// Login NÃO exige Turnstile: o widget invisível não gera token em tempo (bloqueador de
+		// scripts, Cloudflare lento, submit rápido) e travava login de gente de verdade. A porta
+		// fica fechada por IP bloqueado, limite por conta e travamento de tentativas — o captcha
+		// anti-bot fica no cadastro, que é onde nascem as contas falsas.
+		throttle.exigeLoginPermitido(body.email(), ip);
+		// SEM idempotência persistida: a resposta contém access/refresh token e o hash do corpo
+		// incluiria a senha (E-03/E-19). Repetir um login é seguro — gera outra sessão.
+		try {
+			LoginResult result = loginUseCase.login(new LoginCommand(body.email(), body.password(), ip));
+			throttle.limpaLogin(body.email(), ip);
+			if (!result.requiresTwoFactor()) {
+				newDeviceNotifier.check(result.session().user().id(), deviceFingerprint);
+				// Tokens go out as HttpOnly cookies (AuthCookieAdvice), never in the body.
+				return ResponseEntity.ok(result.session());
 			}
-		});
+			return ResponseEntity.status(202).contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+				.body(objectMapper.writeValueAsString(Map.of(
+				"twoFactorRequired", true,
+				"challengeId", result.challenge().challengeId(),
+				"method", result.challenge().method(),
+				"expiresAt", result.challenge().expiresAt().toString())));
+		}
+		catch (ApiException falha) {
+			if (falha.status() == 401) {
+				throttle.registraFalhaLogin(body.email(), ip);
+			}
+			throw falha;
+		}
 	}
 
 	/** Conclui o login com o codigo do segundo fator (ou com um codigo de recuperacao). */
 	@PostMapping("/2fa/verify")
-	@RateLimiter(name = "auth")
+	@RateLimiter(name = "twofa")
 	ResponseEntity<AuthResponse> verifyTwoFactor(
 			@RequestHeader(value = "X-Device-Fingerprint", required = false) String deviceFingerprint,
 			@RequestBody VerifyTwoFactorRequest body,
@@ -300,13 +309,18 @@ class AuthController {
 
 	@PostMapping("/logout")
 	ResponseEntity<String> logout(@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
-			@RequestHeader(value = "X-Session-Token", required = false) String token) {
+			@RequestHeader(value = "X-Session-Token", required = false) String token,
+			@org.springframework.web.bind.annotation.CookieValue(name = com.socialcoisa.rede.shared.web.SessionCookies.REFRESH,
+				required = false) String refreshCookie,
+			jakarta.servlet.http.HttpServletResponse httpResponse) {
+		sessionCookies.clear().forEach(value -> httpResponse.addHeader(org.springframework.http.HttpHeaders.SET_COOKIE, value));
 		// O escopo da idempotencia e chave de tabela: vai como HASH do token, nunca o token vivo
 		// em texto puro (quem le a tabela — backup, DBA — nao ganha uma sessao com isso).
-		String scope = "session:" + (token == null ? "anonymous" : idempotency.hash(token.trim()));
+		String credential = StringUtils.hasText(token) ? token : refreshCookie;
+		String scope = "session:" + (credential == null ? "anonymous" : idempotency.hash(credential.trim()));
 		String hash = idempotency.hash(Map.of("token", scope));
 		return idempotency.execute(scope, "POST", "/api/auth/logout", idempotencyKey, hash, () -> {
-			logoutUseCase.logout(token);
+			logoutUseCase.logout(token, refreshCookie);
 			return new CommandResponse(200, Map.of("status", "LOGGED_OUT"));
 		});
 	}
@@ -349,26 +363,27 @@ class AuthController {
 
 	/** Comeca a configuracao do aplicativo authenticator (segredo pendente + URI otpauth). */
 	@PostMapping("/2fa/totp/setup")
-	@RateLimiter(name = "auth")
+	@RateLimiter(name = "twofa")
 	TwoFactorUseCase.TotpSetup startTotpSetup(
-			@RequestHeader(value = "X-Session-Token", required = false) String token) {
-		return twoFactorUseCase.startTotpSetup(requireUserId(token));
+			@RequestHeader(value = "X-Session-Token", required = false) String token,
+			@RequestBody(required = false) PasswordConfirmationRequest request) {
+		return twoFactorUseCase.startTotpSetup(requireUserId(token), request == null ? null : request.password());
 	}
 
 	@PostMapping("/2fa/totp/enable")
-	@RateLimiter(name = "auth")
+	@RateLimiter(name = "twofa")
 	Map<String, Object> enableTotp(@RequestHeader(value = "X-Session-Token", required = false) String token,
-			@RequestBody TwoFactorCodeRequest request) {
-		List<String> backupCodes = twoFactorUseCase.enableTotp(requireUserId(token), request.code());
+			@RequestBody EnableTotpRequest request) {
+		List<String> backupCodes = twoFactorUseCase.enableTotp(requireUserId(token), request.code(), request.password(), token);
 		return Map.of("status", "TOTP_ENABLED", "backupCodes", backupCodes);
 	}
 
 	/** Desativar exige a senha: uma sessao roubada nao pode desligar o segundo fator sozinha. */
 	@PostMapping("/2fa/totp/disable")
-	@RateLimiter(name = "auth")
+	@RateLimiter(name = "twofa")
 	StatusResponse disableTotp(@RequestHeader(value = "X-Session-Token", required = false) String token,
 			@RequestBody PasswordConfirmationRequest request) {
-		twoFactorUseCase.disableTotp(requireUserId(token), request.password());
+		twoFactorUseCase.disableTotp(requireUserId(token), request.password(), token);
 		return new StatusResponse("2fa", "TOTP_DISABLED");
 	}
 
@@ -382,18 +397,18 @@ class AuthController {
 	}
 
 	@PostMapping("/2fa/email/confirm")
-	@RateLimiter(name = "auth")
+	@RateLimiter(name = "twofa")
 	StatusResponse confirmEmailOtp(@RequestHeader(value = "X-Session-Token", required = false) String token,
 			@RequestBody TwoFactorCodeRequest request) {
-		twoFactorUseCase.confirmEmailOtpSetup(requireUserId(token), request.code());
+		twoFactorUseCase.confirmEmailOtpSetup(requireUserId(token), request.code(), token);
 		return new StatusResponse("2fa", "EMAIL_OTP_ENABLED");
 	}
 
 	@PostMapping("/2fa/email/disable")
-	@RateLimiter(name = "auth")
+	@RateLimiter(name = "twofa")
 	StatusResponse disableEmailOtp(@RequestHeader(value = "X-Session-Token", required = false) String token,
 			@RequestBody PasswordConfirmationRequest request) {
-		twoFactorUseCase.disableEmailOtp(requireUserId(token), request.password());
+		twoFactorUseCase.disableEmailOtp(requireUserId(token), request.password(), token);
 		return new StatusResponse("2fa", "EMAIL_OTP_DISABLED");
 	}
 
@@ -403,10 +418,18 @@ class AuthController {
 	 * quem tem 2FA por app voltar a logar com e-mail + senha e reativar em /seguranca.
 	 */
 	@PostMapping("/admin/two-factor/reset-broken")
-	Map<String, Integer> resetBrokenTwoFactor(
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader("X-Session-Token") String sessionToken) {
-		return Map.of("reset", twoFactorService.resetBrokenTotp());
+	Map<String, Boolean> resetBrokenTwoFactor(@RequestHeader("X-Session-Token") String sessionToken) {
+		// Está sob /auth, então o interceptor de /admin não o cobre: exige admin explicitamente,
+		// by the same server-side users.is_admin flag AdminGuard uses.
+		String callerId = requireUserId(sessionToken);
+		boolean admin = profiles.findById(callerId).map(profile -> profile.admin()).orElse(false);
+		if (!admin) {
+			AUDIT.warn("admin_two_factor_reset_denied userId={}", callerId);
+			throw new ApiException(403, "FORBIDDEN", "Acesso restrito a administradores.");
+		}
+		int reset = twoFactorService.resetBrokenTotp();
+		AUDIT.warn("admin_two_factor_reset userId={} accounts={}", callerId, reset);
+		return Map.of("ok", true);
 	}
 
 	@GetMapping("/oauth/providers")
@@ -479,12 +502,11 @@ class AuthController {
 	private Object finishOAuth(AuthResponse auth) {
 		String redirectUrl = oAuthProperties.getFrontendRedirectUrl();
 		if (StringUtils.hasText(redirectUrl)) {
-			String location = redirectUrl
-				+ "?token=" + auth.token()
-				+ "&refreshToken=" + auth.refreshToken()
-				+ "&expiresAt=" + auth.expiresAt()
-				+ "&refreshExpiresAt=" + auth.refreshExpiresAt();
-			return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(location)).build();
+			// No credential in the URL (history, logs, Referer): the session rides on the 302 cookies.
+			return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(redirectUrl + "?status=ok"))
+				.header(org.springframework.http.HttpHeaders.SET_COOKIE, sessionCookies.issue(auth.token(),
+					auth.expiresAt(), auth.refreshToken(), auth.refreshExpiresAt()).toArray(String[]::new))
+				.build();
 		}
 		return auth;
 	}
@@ -509,8 +531,14 @@ class AuthController {
 	}
 
 	@PostMapping("/refresh")
-	Object refreshSession(@RequestBody RefreshRequest request) {
-		return refreshSessionUseCase.refresh(request.refreshToken());
+	@RateLimiter(name = "refresh")
+	Object refreshSession(@RequestBody(required = false) RefreshRequest request,
+			@org.springframework.web.bind.annotation.CookieValue(name = com.socialcoisa.rede.shared.web.SessionCookies.REFRESH,
+				required = false) String refreshCookie) {
+		// Browsers send no body: the refresh token comes from the HttpOnly cookie.
+		String refreshToken = request != null && StringUtils.hasText(request.refreshToken()) ? request.refreshToken()
+			: refreshCookie;
+		return refreshSessionUseCase.refresh(refreshToken);
 	}
 
 	@PostMapping("/oauth/{provider}/token")
@@ -542,7 +570,7 @@ class AuthController {
 	ResponseEntity<String> forgotPassword(@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@RequestBody ForgotPasswordRequest request) {
 		String scope = authScope(request.email());
-		String hash = idempotency.hash(request);
+		String hash = idempotency.hash("forgot:" + request.email().trim().toLowerCase(Locale.ROOT));
 		return idempotency.execute(scope, "POST", "/api/auth/password/forgot", idempotencyKey, hash,
 			() -> {
 				requestPasswordResetUseCase.requestReset(request.email());
@@ -556,7 +584,8 @@ class AuthController {
 			@RequestBody ResetPasswordRequest request) {
 		String scope = "reset:" + (StringUtils.hasText(request.token()) ? idempotency.hash(request.token().trim())
 			: "anonymous");
-		String hash = idempotency.hash(request);
+		// Só o escopo (hash do token), nunca a senha nova.
+		String hash = idempotency.hash(scope);
 		return idempotency.execute(scope, "POST", "/api/auth/password/reset", idempotencyKey, hash,
 			() -> {
 				resetPasswordUseCase.reset(request.token(), request.password());
@@ -568,7 +597,38 @@ class AuthController {
 	Object changeEmail(@RequestHeader(value = "X-Session-Token", required = false) String token,
 			@RequestBody ChangeEmailRequest request) {
 		changeEmailUseCase.changeEmail(token, request.email(), request.password());
-		return new StatusResponse("me", "EMAIL_CHANGED");
+		return ResponseEntity.accepted().body(new StatusResponse("me", "EMAIL_CONFIRMATION_SENT"));
+	}
+
+	/**
+	 * Link do e-mail enviado ao NOVO endereço. É uma navegação do cliente de e-mail (sem Origin),
+	 * por isso responde HTML e fica isento no gate de origem.
+	 */
+	@GetMapping(value = "/email/change/confirm", produces = org.springframework.http.MediaType.TEXT_HTML_VALUE)
+	ResponseEntity<String> confirmEmailChange(@RequestParam(required = false) String token) {
+		try {
+			changeEmailUseCase.confirmEmailChange(token);
+			return emailPage(200, "E-mail alterado",
+				"Pronto! O novo endereço já é o da sua conta. Por segurança, entre novamente.");
+		}
+		catch (ApiException failure) {
+			return emailPage(failure.status(), "Não foi possível confirmar",
+				"Link inválido ou expirado.");
+		}
+	}
+
+	private static ResponseEntity<String> emailPage(int status, String title, String message) {
+		String html = "<!DOCTYPE html><html lang=\"pt-BR\"><head><meta charset=\"UTF-8\">"
+			+ "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><title>"
+			+ org.springframework.web.util.HtmlUtils.htmlEscape(title) + "</title></head>"
+			+ "<body style=\"margin:0;background:#f8f7ff;font-family:system-ui,sans-serif;display:grid;"
+			+ "place-items:center;min-height:100vh\"><div style=\"max-width:440px;background:#fff;"
+			+ "border-radius:16px;padding:32px;margin:16px;text-align:center\"><h1 style=\"font-size:20px\">"
+			+ org.springframework.web.util.HtmlUtils.htmlEscape(title) + "</h1><p style=\"color:#4b5563\">"
+			+ org.springframework.web.util.HtmlUtils.htmlEscape(message) + "</p>"
+			+ "<a href=\"https://enois.ia.br/seguranca\" style=\"color:#6366f1\">Ir para o Énóis</a>"
+			+ "</div></body></html>";
+		return ResponseEntity.status(status).contentType(org.springframework.http.MediaType.TEXT_HTML).body(html);
 	}
 
 	@PostMapping("/password/change")
@@ -598,28 +658,13 @@ class AuthController {
 	record AuthConfig(String captchaMode, String turnstileSiteKey, boolean googleLoginEnabled) {
 }
 
-
-	/**
-	 * Forma canônica do e-mail: minúsculo, sem "+tag" e, nos provedores que ignoram pontos,
-	 * sem os pontos do usuário. Duas contas não podem nascer da mesma caixa de entrada.
-	 */
-	private static String normalizeEmail(String email) {
-		if (email == null || !email.contains("@")) {
-			return null;
-		}
-		String clean = email.trim().toLowerCase(java.util.Locale.ROOT);
-		int at = clean.lastIndexOf('@');
-		String local = clean.substring(0, at);
-		String domain = clean.substring(at);
-		int plus = local.indexOf('+');
-		if (plus > 0) {
-			local = local.substring(0, plus);
-		}
-		if (domain.equals("@gmail.com") || domain.equals("@googlemail.com")) {
-			local = local.replace(".", "");
-		}
-		return local + domain;
-
+	/** Same shape as a real signup response, serialized by the JSON mapper. */
+	private ResponseEntity<String> fakeSignupAccepted(String email) {
+		String normalized = email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
+		return ResponseEntity.status(201)
+			.contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+			.body(objectMapper.writeValueAsString(Map.of("email", normalized, "verificationRequired", true,
+				"emailSent", true)));
 	}
 
 	private String authScope(String email) {
@@ -644,23 +689,16 @@ class AuthController {
 	record ResendTwoFactorRequest(String challengeId) {
 	}
 
+	record TwoFactorEnableRequest(String code, String password) {
+	}
+
 	record TwoFactorCodeRequest(String code) {
 	}
 
-	record PasswordConfirmationRequest(String password) {
+	record EnableTotpRequest(String code, String password) {
 	}
 
-	/** Recusa quando o e-mail, normalizado, já pertence a uma conta. */
-	private void exigeEmailUnico(String email) {
-		String normalized = normalizeEmail(email);
-		if (normalized == null) {
-			return;
-		}
-		if (profiles.findByEmail(email == null ? normalized : email.trim()).isPresent()
-			|| profiles.findByEmail(normalized).isPresent()) {
-			throw new ApiException(409, "EMAIL_IN_USE",
-				"Este e-mail ja tem conta no Enois. Entre ou recupere a senha.");
-		}
+	record PasswordConfirmationRequest(String password) {
 	}
 
 }

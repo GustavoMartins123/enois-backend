@@ -13,12 +13,14 @@ import org.springframework.stereotype.Component;
 
 import com.socialcoisa.rede.shared.web.ApiException;
 
+import tools.jackson.databind.ObjectMapper;
+
 /**
  * Valida tokens do Cloudflare Turnstile.
  *
- * Quando {@code TURNSTILE_SECRET_KEY} nao esta configurada, a validacao e ignorada — assim o
- * desenvolvimento local e os testes rodam sem depender do servico externo. Em producao, a chave
- * deve ser configurada para ativar a protecao.
+ * Fail-closed em produção (E-35): uma falha de rede ou uma resposta ambígua NÃO libera o cadastro/
+ * login — o Cloudflare é a fronteira anti-bot. A resposta é lida como JSON de verdade, não por
+ * substring. Sem secret configurado (dev/testes), a validação é ignorada de propósito.
  */
 @Component
 public class TurnstileValidator {
@@ -28,18 +30,39 @@ public class TurnstileValidator {
 
 	private final String secretKey;
 	private final String siteKey;
+	private final boolean rejectTestKeys;
+	private final ObjectMapper objectMapper;
 	private final HttpClient httpClient;
 
 	public TurnstileValidator(@Value("${rede.turnstile.secret-key:}") String secretKey,
-			@Value("${rede.turnstile.site-key:}") String siteKey) {
+			@Value("${rede.turnstile.site-key:}") String siteKey,
+			@Value("${rede.turnstile.reject-test-keys:true}") boolean rejectTestKeys,
+			ObjectMapper objectMapper) {
 		this.secretKey = secretKey;
 		this.siteKey = siteKey;
+		this.rejectTestKeys = rejectTestKeys;
+		this.objectMapper = objectMapper;
 		this.httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+		// Cloudflare's documented test keys accept any token: outside dev the app refuses to boot
+		// with them instead of running without a real captcha.
+		if (rejectTestKeys && (isTestKey(secretKey) || isTestKey(siteKey))) {
+			throw new IllegalStateException("TURNSTILE_SITE_KEY/TURNSTILE_SECRET_KEY are Cloudflare test keys. "
+				+ "Configure real keys or leave both empty (the signup challenge is used instead).");
+		}
 	}
 
 	/** A proteção externa está configurada? Sem isso, o cadastro usa o desafio próprio. */
 	public boolean isConfigured() {
-		return secretKey != null && !secretKey.isBlank();
+		return secretKey != null && !secretKey.isBlank()
+			&& !(rejectTestKeys && isTestKey(secretKey));
+	}
+
+	private static boolean isTestKey(String key) {
+		if (key == null) {
+			return false;
+		}
+		String value = key.trim().toLowerCase(java.util.Locale.ROOT);
+		return value.startsWith("1x000") || value.startsWith("2x000") || value.startsWith("3x000");
 	}
 
 	public String siteKey() {
@@ -48,22 +71,21 @@ public class TurnstileValidator {
 
 	/** Configurado E com site key: é o que o front consegue renderizar. */
 	public boolean isAvailable() {
-		return isConfigured() && siteKey != null && !siteKey.isBlank();
+		return isConfigured() && siteKey != null && !siteKey.isBlank()
+			&& !(rejectTestKeys && isTestKey(siteKey));
 	}
 
-	/**
-	 * Valida o token Turnstile. Lanca 403 se o token for invalido.
-	 * Se a secret key nao estiver configurada, a validacao e ignorada (modo dev).
-	 */
 	public void require(String token) {
-		if (secretKey == null || secretKey.isBlank()) {
+		if (!isConfigured()) {
 			return;
 		}
 		if (token == null || token.isBlank()) {
 			throw new ApiException(403, "TURNSTILE_REQUIRED", "Verificacao anti-bot obrigatoria.");
 		}
 		try {
-			String body = "secret=" + secretKey + "&response=" + token;
+			// Encoded: a token containing '&' or '=' must not add form fields to the verification call.
+			String body = "secret=" + java.net.URLEncoder.encode(secretKey, java.nio.charset.StandardCharsets.UTF_8)
+				+ "&response=" + java.net.URLEncoder.encode(token, java.nio.charset.StandardCharsets.UTF_8);
 			HttpRequest request = HttpRequest.newBuilder()
 				.uri(URI.create(VERIFY_URL))
 				.header("Content-Type", "application/x-www-form-urlencoded")
@@ -71,15 +93,19 @@ public class TurnstileValidator {
 				.timeout(Duration.ofSeconds(5))
 				.build();
 			HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-			if (!response.body().contains("\"success\":true")) {
+			boolean success = objectMapper.readTree(response.body()).path("success").asBoolean(false);
+			if (!success) {
 				LOG.warn("Turnstile rejeitou o token: {}", response.body());
 				throw new ApiException(403, "TURNSTILE_FAILED", "Verificacao anti-bot falhou. Tente novamente.");
 			}
-		} catch (ApiException e) {
-			throw e;
-		} catch (Exception e) {
-			LOG.error("Erro ao validar Turnstile: {}", e.getMessage());
-			// Falha de rede com o Cloudflare nao deve impedir o usuario de entrar.
+		}
+		catch (ApiException rejected) {
+			throw rejected;
+		}
+		catch (Exception failure) {
+			LOG.error("Erro ao validar Turnstile: {}", failure.getMessage());
+			throw new ApiException(503, "TURNSTILE_UNAVAILABLE",
+				"Verificacao anti-bot indisponivel agora. Tente novamente em instantes.");
 		}
 	}
 }

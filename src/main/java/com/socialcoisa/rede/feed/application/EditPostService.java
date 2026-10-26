@@ -132,13 +132,13 @@ public class EditPostService implements EditPostUseCase {
 			}
 			throw new ApiException(400, "INVALID_CONTENT", "Conteudo obrigatorio.");
 		}
-		String normalized = PlainText.defuse(content.trim());
-		// Mesmo limite da criacao, por tipo: editar nao pode ser a porta dos fundos do limite.
+		// Mesmo limite da criacao, por tipo: editar nao pode ser a porta dos fundos do limite. Measured on
+		// the text as sent, like creation does — defuse shortens repeated runs and would let it through.
 		int maxContent = com.socialcoisa.rede.feed.domain.PostContentLimits.of(type);
-		if (normalized.length() > maxContent) {
+		if (content.trim().length() > maxContent) {
 			throw new ApiException(400, "CONTENT_TOO_LONG", "Este tipo de post aceita no maximo " + maxContent + " caracteres.");
 		}
-		return normalized;
+		return PlainText.defuse(content.trim());
 	}
 
 	private List<String> normalizeTags(List<String> tags) {

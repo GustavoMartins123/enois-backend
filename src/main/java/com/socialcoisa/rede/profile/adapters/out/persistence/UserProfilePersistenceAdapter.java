@@ -190,6 +190,13 @@ class UserProfilePersistenceAdapter implements UserProfileRepository {
 	}
 
 	@Override
+	public List<UserProfile> findAdmins() {
+		return repository.findByIsAdminTrue().stream()
+			.map(UserProfileJpaEntity::toDomain)
+			.toList();
+	}
+
+	@Override
 	public List<UserProfile> findNewestProfiles(int limit) {
 		// O ranking público virou a vitrine de chegada (decisão do dono do produto, 2026-10-20):
 		// mais recentes primeiro, ordenado NO BANCO (antes a lista inteira vinha para a memória e
@@ -201,7 +208,9 @@ class UserProfilePersistenceAdapter implements UserProfileRepository {
 
 	@Override
 	public List<UserProfile> searchByQuery(String query) {
-		return repository.findTop20ByNameContainingIgnoreCaseOrUsernameContainingIgnoreCaseOrderByReputationDesc(query, query)
+		return repository.searchByNameOrUsername(
+				com.socialcoisa.rede.shared.web.LikePattern.contains(query),
+				org.springframework.data.domain.PageRequest.of(0, 20))
 			.stream()
 			.map(UserProfileJpaEntity::toDomain)
 			.toList();

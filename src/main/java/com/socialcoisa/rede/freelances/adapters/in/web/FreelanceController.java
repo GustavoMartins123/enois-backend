@@ -31,11 +31,10 @@ class FreelanceController {
 	Map<String, Object> list(@RequestParam(required = false) Integer limit,
 			@RequestParam(required = false) String cursor,
 			@RequestParam(required = false) String q,
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		int size = limit == null ? 24 : Math.min(60, Math.max(1, limit));
 		int offset = parseCursor(cursor);
-		String viewer = viewerIdOrNull(userId, sessionToken);
+		String viewer = viewerIdOrNull(sessionToken);
 		List<FreelanceView> items = views(freelances.list(q, size, offset), viewer);
 		Map<String, Object> result = new HashMap<>();
 		result.put("items", items);
@@ -44,25 +43,22 @@ class FreelanceController {
 	}
 
 	@GetMapping("/me/freelances")
-	List<FreelanceView> mine(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader("X-Session-Token") String sessionToken) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+	List<FreelanceView> mine(@RequestHeader("X-Session-Token") String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		return views(freelances.mine(user.id().value()), user.id().value());
 	}
 
 	@PostMapping("/freelances")
-	FreelanceView create(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader("X-Session-Token") String sessionToken, @RequestBody CreateFreelanceRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+	FreelanceView create(@RequestHeader("X-Session-Token") String sessionToken, @RequestBody CreateFreelanceRequest request) {
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		Freelance f = freelances.create(user.id().value(), request.title(), request.scope(),
 			request.budgetMin(), request.budgetMax(), request.deadline(), request.paymentMethod());
 		return FreelanceView.of(f, freelances.usernameOf(user.id().value()), user.id().value());
 	}
 
 	@PostMapping("/freelances/{id}/close")
-	Map<String, Object> close(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String id) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+	Map<String, Object> close(@RequestHeader("X-Session-Token") String sessionToken, @PathVariable String id) {
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		Freelance f = freelances.close(id, user.id().value());
 		return Map.of("id", f.id(), "status", f.status().name());
 	}
@@ -74,9 +70,9 @@ class FreelanceController {
 		return list.stream().map(f -> FreelanceView.of(f, names.get(f.userId()), viewer)).toList();
 	}
 
-	private String viewerIdOrNull(String userId, String sessionToken) {
+	private String viewerIdOrNull(String sessionToken) {
 		try {
-			return currentUserResolver.resolve(userId, sessionToken).id().value();
+			return currentUserResolver.resolve(sessionToken).id().value();
 		}
 		catch (Exception ignored) {
 			return null;

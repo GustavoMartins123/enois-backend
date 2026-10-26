@@ -1,47 +1,48 @@
 package com.socialcoisa.rede.shared.web;
 
-import java.util.Arrays;
 import java.util.Locale;
 import java.util.Set;
-import java.util.stream.Collectors;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.profile.domain.UserProfile;
 
 /**
- * Restringe operacoes administrativas a uma allowlist de e-mails ({@code REDE_ADMIN_EMAILS}) e de
- * usernames ({@code REDE_ADMIN_USERNAMES}) separados por virgula. O papel de admin nao existe no
- * schema, entao a autorizacao e por configuracao.
+ * Autoriza administração pelo papel IMUTÁVEL gravado em {@code users.is_admin} (V170).
  *
- * O username entra como alternativa para o painel de moderacao: as contas donas do projeto
- * (aminadojava e mrfoxxo) precisam de admin independentemente do e-mail cadastrado. Usernames
- * podem ser renomeados; por isso a allowlist de e-mail continua valendo e a de username e
- * configuravel no cluster.
+ * Não usa username nem e-mail: ambos são editáveis pelo usuário e a allowlist por esses campos
+ * permitia escalação (EN-01/E-01). A promoção a admin é uma operação de banco, não um cadastro.
+ * Os usernames históricos da equipe ficam RESERVADOS para ninguém assumir o nome depois.
  */
 @Component
 public class AdminGuard {
 
+	/**
+	 * Team handles and staff-like names: nobody can sign up or rename to them, so a profile cannot
+	 * impersonate the team even though the name grants no permission.
+	 */
+	public static final Set<String> RESERVED_USERNAMES = Set.of("aminadojava", "mrfoxxo", "admin", "admins",
+		"administrator", "administrador", "administracao", "root", "superuser", "sysadmin", "system", "sistema",
+		"staff", "equipe", "moderator", "moderador", "moderacao", "mod", "support", "suporte", "security",
+		"seguranca", "enois", "enois-admin", "enois-team", "enois-suporte", "official", "oficial");
+
 	private final UserProfileRepository profileRepository;
-	private final Set<String> adminEmails;
-	private final Set<String> adminUsernames;
+	/**
+	 * TESTS ONLY: e-mail allowlist enabled by `rede.admin.bootstrap-enabled` (default false, empty
+	 * list). Never enable it in a deployed profile: production admins are `users.is_admin` rows.
+	 */
+	private final Set<String> bootstrapEmails;
 
 	public AdminGuard(UserProfileRepository profileRepository,
-			@Value("${rede.admin.emails:}") String adminEmails,
-			@Value("${rede.admin.usernames:aminadojava,mrfoxxo}") String adminUsernames) {
+			@org.springframework.beans.factory.annotation.Value("${rede.admin.bootstrap-enabled:false}") boolean bootstrap,
+			@org.springframework.beans.factory.annotation.Value("${rede.admin.emails:}") String adminEmails) {
 		this.profileRepository = profileRepository;
-		this.adminEmails = normalize(adminEmails);
-		this.adminUsernames = normalize(adminUsernames);
-	}
-
-	private static Set<String> normalize(String value) {
-		return Arrays.stream(value.split(","))
+		this.bootstrapEmails = bootstrap ? java.util.Arrays.stream(adminEmails.split(","))
 			.map(String::trim)
 			.filter(item -> !item.isEmpty())
 			.map(item -> item.toLowerCase(Locale.ROOT))
-			.collect(Collectors.toUnmodifiableSet());
+			.collect(java.util.stream.Collectors.toUnmodifiableSet()) : Set.of();
 	}
 
 	public void requireAdmin(CurrentUser user) {
@@ -53,19 +54,24 @@ public class AdminGuard {
 	/** Mesma regra do requireAdmin, mas devolve o resultado para a tela decidir o que mostrar. */
 	public boolean isAdmin(CurrentUser user) {
 		return profileRepository.findById(user.id().value())
-			.map(this::isAdmin)
+			.map(this::isAdminProfile)
 			.orElse(false);
 	}
 
-	private boolean isAdmin(UserProfile profile) {
-		return isAdmin(profile.email(), profile.username());
-	}
-
-	/** Mesma allowlist, para identificadores já carregados (ex.: triagem de contas suspeitas). */
-	public boolean isAdmin(String email, String username) {
-		if (email != null && adminEmails.contains(email.toLowerCase(Locale.ROOT))) {
+	/** Para quem já carregou o perfil (triagem, varredura): não recarrega do banco. */
+	public boolean isAdminProfile(UserProfile profile) {
+		if (profile.admin()) {
 			return true;
 		}
-		return username != null && adminUsernames.contains(username.toLowerCase(Locale.ROOT));
+		return profile.email() != null && bootstrapEmails.contains(profile.email().toLowerCase(Locale.ROOT));
+	}
+
+	/** Para projeções que só trazem o id (fila de suspeitos). */
+	public boolean isAdminId(String userId) {
+		return profileRepository.findById(userId).map(this::isAdminProfile).orElse(false);
+	}
+
+	public static boolean isReservedUsername(String username) {
+		return username != null && RESERVED_USERNAMES.contains(username.trim().toLowerCase(Locale.ROOT));
 	}
 }

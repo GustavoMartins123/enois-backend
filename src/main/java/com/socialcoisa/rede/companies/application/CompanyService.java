@@ -15,6 +15,7 @@ import com.socialcoisa.rede.companies.domain.Company;
 import com.socialcoisa.rede.companies.domain.CompanyMember;
 import com.socialcoisa.rede.companies.domain.CompanyRole;
 import com.socialcoisa.rede.shared.web.ApiException;
+import com.socialcoisa.rede.shared.web.TextFieldLimit;
 
 /**
  * Paginas empresariais. Autorizacao por papel acontece AQUI (nunca no front); dono e unico e a
@@ -37,13 +38,17 @@ public class CompanyService {
 		if (!StringUtils.hasText(name) || name.trim().length() < 2) {
 			throw new ApiException(400, "INVALID_COMPANY_NAME", "Nome da empresa e obrigatorio.");
 		}
+		checkCampos(name, description, sector, size, location, website);
 		String slug = uniqueSlug(slugFrom(name));
+		String safeWebsite = StringUtils.hasText(website)
+			? com.socialcoisa.rede.shared.web.SafeUrl.requireHttpUrl(website.trim(), "website")
+			: null;
 		Company company = Company.create("comp_" + UUID.randomUUID().toString().replace("-", ""), slug,
 			name.trim(), StringUtils.hasText(description) ? description.trim() : null,
 			StringUtils.hasText(sector) ? sector.trim() : null,
 			StringUtils.hasText(size) ? size.trim() : null,
 			StringUtils.hasText(location) ? location.trim() : null,
-			StringUtils.hasText(website) ? website.trim() : null,
+			safeWebsite,
 			userId, clock.instant());
 		Company saved = companies.save(company);
 		companies.saveMember(CompanyMember.create("cmemb_" + UUID.randomUUID().toString().replace("-", ""),
@@ -56,11 +61,14 @@ public class CompanyService {
 			String location, String website, String logo, String cover) {
 		Company company = company(companyId);
 		requireRole(company, userId, CompanyRole.EDITOR);
+		checkCampos(name, description, sector, size, location, website);
 		Company updated = company.update(
 			StringUtils.hasText(name) ? name.trim() : null,
 			StringUtils.hasText(description) ? description.trim() : description,
 			sector, size, location,
-			StringUtils.hasText(website) ? website.trim() : website,
+			StringUtils.hasText(website)
+				? com.socialcoisa.rede.shared.web.SafeUrl.requireHttpUrl(website.trim(), "website")
+				: website,
 			StringUtils.hasText(logo) ? logo.trim() : logo,
 			StringUtils.hasText(cover) ? cover.trim() : cover,
 			clock.instant());
@@ -123,6 +131,10 @@ public class CompanyService {
 	@Transactional
 	public CompanyMember addMember(String companyId, String userId, CompanyRole role) {
 		Company company = company(companyId);
+		// OWNER é o dono da página (owner_user_id), não um papel concedível por convite (E-57).
+		if (role == CompanyRole.OWNER) {
+			throw new ApiException(400, "INVALID_ROLE", "O papel de proprietario nao pode ser concedido por convite.");
+		}
 		if (companies.findMember(companyId, userId).isPresent()) {
 			throw new ApiException(409, "ALREADY_MEMBER", "Esta pessoa ja faz parte da pagina.");
 		}
@@ -145,5 +157,20 @@ public class CompanyService {
 			n++;
 		}
 		return candidate;
+	}
+
+	/**
+	 * Os mesmos tetos das colunas (`companies.name varchar(160)`, `sector varchar(80)`...): sem esta
+	 * checagem o banco recusava a gravacao com "Data too long" e a pessoa recebia 409 "Operacao
+	 * conflita com o estado atual dos dados" — que nao diz qual campo passou do limite.
+	 */
+	private void checkCampos(String name, String description, String sector, String size, String location,
+			String website) {
+		TextFieldLimit.check("COMPANY_FIELD_TOO_LONG", "nome", name, 160);
+		TextFieldLimit.check("COMPANY_FIELD_TOO_LONG", "descricao", description, 4000);
+		TextFieldLimit.check("COMPANY_FIELD_TOO_LONG", "setor", sector, 80);
+		TextFieldLimit.check("COMPANY_FIELD_TOO_LONG", "porte", size, 40);
+		TextFieldLimit.check("COMPANY_FIELD_TOO_LONG", "localizacao", location, 160);
+		TextFieldLimit.check("COMPANY_FIELD_TOO_LONG", "site", website, 300);
 	}
 }

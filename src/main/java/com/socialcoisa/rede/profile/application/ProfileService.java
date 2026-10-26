@@ -236,18 +236,26 @@ public class ProfileService implements GetMeUseCase, GetUserProfileUseCase, Upda
 			if (repository.existsByUsername(slug)) {
 				throw new ApiException(409, "USERNAME_TAKEN", "Nome de usuario ja esta em uso.");
 			}
+			if (com.socialcoisa.rede.shared.web.AdminGuard.isReservedUsername(slug) && !profile.admin()) {
+				throw new ApiException(409, "USERNAME_RESERVED",
+					"Este nome de usuario e reservado para a equipe.");
+			}
 			username = slug;
 		}
 		validateLengths(command);
+		String portfolio = com.socialcoisa.rede.shared.web.SafeUrl.requireHttpUrl(trim(command.portfolio()), "portfolio");
+		List<String> externalLinks = com.socialcoisa.rede.shared.web.SafeUrl
+			.requireHttpUrls(clean(command.externalLinks()), "link");
 		profile.update(trim(command.name()), trim(command.headline()), trim(command.company()), trim(command.location()),
 			trim(command.avatar()), trim(command.banner()), trim(command.badge()), trim(command.bio()),
 			clean(command.skills()),
-			clean(command.goals()), trim(command.availability()), trim(command.portfolio()), clean(command.externalLinks()),
+			clean(command.goals()), trim(command.availability()), portfolio, externalLinks,
 			command.openToWork(), command.isMentor(), username, trim(command.aka()), clock.instant());
 		// Curriculo: ausente no corpo da requisicao mantem o que ja estava; vazio limpa. Nao passa
 		// pelo `update` geral porque nao e campo de exibicao — e arquivo, e so o dono le.
 		if (command.resumeUrl() != null) {
-			profile.updateResume(command.resumeUrl(), command.resumeName(), clock.instant());
+			profile.updateResume(com.socialcoisa.rede.shared.web.SafeUrl.requireHttpUrl(command.resumeUrl(), "curriculo"), command.resumeName(),
+				clock.instant());
 		}
 		// A bio em HTML e sanitizada aqui, como o HTML do post de pagina: allowlist de tags e CSS.
 		// Vazio limpa (o perfil volta para a bio de texto); ausente no corpo da requisicao mantem.

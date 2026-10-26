@@ -21,7 +21,8 @@ import ch.qos.logback.core.read.ListAppender;
 
 class RequestObservabilityFilterTests {
 
-	private final RequestObservabilityFilter filter = new RequestObservabilityFilter(new ClientIpResolver());
+	private final RequestObservabilityFilter filter = new RequestObservabilityFilter(new ClientIpResolver(),
+		org.mockito.Mockito.mock(com.socialcoisa.rede.ops.monitoring.MonitoringService.class));
 	private final ListAppender<ILoggingEvent> audit = new ListAppender<>();
 
 	@BeforeEach
@@ -38,7 +39,8 @@ class RequestObservabilityFilterTests {
 	@Test
 	void exposesRequestContextInMdcDuringTheRequestAndClearsItAfter() throws Exception {
 		MockHttpServletRequest request = new MockHttpServletRequest("GET", "/feed");
-		// Last hop is the one the load balancer appended; the first entry is client-forgeable.
+		// The left-most entry is whatever the client sent; the hop our (trusted, loopback) proxy appended
+		// is the real client address, and that is what the logs must carry.
 		request.addHeader("X-Forwarded-For", "6.6.6.6, 203.0.113.7");
 		MockHttpServletResponse response = new MockHttpServletResponse();
 		Map<String, String> seen = new HashMap<>();

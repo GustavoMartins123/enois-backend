@@ -66,7 +66,7 @@ class PendingSignupFlowTests {
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(verifyBody))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.token").isString())
+			.andExpect(jsonPath("$.token").doesNotExist())
 			.andExpect(jsonPath("$.user.emailVerified").value(true));
 
 		// Agora sim: a conta existe, ja verificada, e o pendente sumiu.
@@ -155,7 +155,10 @@ class PendingSignupFlowTests {
 				.header("Idempotency-Key", "pending-signup-dup-2")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(signupPayload(email)))
-			.andExpect(status().isConflict())
-			.andExpect(jsonPath("$.code").value("EMAIL_ALREADY_REGISTERED"));
+			// Duplicate answers like a new signup (it does not reveal that the e-mail exists).
+			// emailSent reflects the real send of the owner notice, as it does for a new signup.
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.verificationRequired").value(true))
+			.andExpect(jsonPath("$.emailSent").isBoolean());
 	}
 }

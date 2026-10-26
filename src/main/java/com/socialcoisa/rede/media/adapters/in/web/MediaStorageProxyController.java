@@ -42,12 +42,15 @@ class MediaStorageProxyController {
 	private final ObjectProvider<MediaObjectStore> storeProvider;
 	private final MediaAssetRepository assets;
 	private final CurrentUserResolver currentUserResolver;
+	private final com.socialcoisa.rede.media.application.MediaMetadataSanitizer sanitizer;
 
 	MediaStorageProxyController(ObjectProvider<MediaObjectStore> storeProvider, MediaAssetRepository assets,
-			CurrentUserResolver currentUserResolver) {
+			CurrentUserResolver currentUserResolver,
+			com.socialcoisa.rede.media.application.MediaMetadataSanitizer sanitizer) {
 		this.storeProvider = storeProvider;
 		this.assets = assets;
 		this.currentUserResolver = currentUserResolver;
+		this.sanitizer = sanitizer;
 	}
 
 	private MediaObjectStore store() {
@@ -62,6 +65,11 @@ class MediaStorageProxyController {
 	 * Leitura publica, como o `GET /media/{id}`: a chave so aparece em conteudo que qualquer
 	 * pessoa ja pode ver, e `<img src>` nao manda `Origin` — exigir sessao aqui deixaria o post
 	 * sem imagem para quem nao entrou.
+	 *
+	 * <p>Sem migracao oportunista: a leitura e streaming direto do storage ativo. Objetos antigos
+	 * gravados no ImageKit continuam servidos pelas URLs dele gravadas no banco; objetos novos
+	 * nascem no S3 ja limpos (a sanitizacao acontece na escrita). Nada de escrita dentro de
+	 * leitura — era isso que causava hangs de 30-60s no primeiro acesso (25/10).</p>
 	 */
 	@GetMapping("/{*key}")
 	ResponseEntity<StreamingResponseBody> read(@PathVariable String key,
@@ -74,10 +82,15 @@ class MediaStorageProxyController {
 		catch (RuntimeException missing) {
 			throw new ApiException(404, "MEDIA_NOT_FOUND", "Midia nao encontrada.");
 		}
+		MediaAsset asset = assets.findById(mediaIdOf(objectKey)).orElse(null);
+		String mime = asset != null ? asset.mimeType() : object.contentType();
+		// Only the media types the upload accepts render inline; anything else (legacy objects with an
+		// unexpected type) is served as an opaque download. nosniff comes from SecurityHeadersFilter.
+		boolean inline = com.socialcoisa.rede.media.application.MediaService.isAllowedMimeType(mime);
 		ResponseEntity.BodyBuilder response = ResponseEntity
 			.status(object.contentRange() == null ? HttpStatus.OK : HttpStatus.PARTIAL_CONTENT)
-			.header(HttpHeaders.CONTENT_TYPE,
-				object.contentType() == null ? "application/octet-stream" : object.contentType())
+			.header(HttpHeaders.CONTENT_TYPE, inline ? mime : "application/octet-stream")
+			.header(HttpHeaders.CONTENT_DISPOSITION, inline ? "inline" : "attachment")
 			.header(HttpHeaders.ACCEPT_RANGES, "bytes")
 			// A chave tem uuid: o conteúdo daquele endereço nunca muda, então pode ficar em cache.
 			.header(HttpHeaders.CACHE_CONTROL, "public, max-age=31536000, immutable");
@@ -104,7 +117,7 @@ class MediaStorageProxyController {
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = HttpHeaders.CONTENT_TYPE, required = false) String contentType,
 			HttpServletRequest request) {
-		CurrentUser user = currentUserResolver.resolve(null, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String objectKey = objectKey(key);
 		MediaAsset asset = assets.findById(mediaIdOf(objectKey))
 			.orElseThrow(() -> new ApiException(404, "MEDIA_NOT_FOUND", "Midia nao encontrada."));
@@ -118,8 +131,30 @@ class MediaStorageProxyController {
 		if (length <= 0) {
 			throw new ApiException(411, "MEDIA_LENGTH_REQUIRED", "Informe o tamanho do arquivo.");
 		}
+		String mime = asset.mimeType();
 		try {
-			store().write(objectKey, contentType, length, request.getInputStream());
+			if (length > com.socialcoisa.rede.media.application.MediaMetadataSanitizer.MAX_IN_MEMORY) {
+				if (sanitizer.supportsInMemory(mime)) {
+					throw new ApiException(413, "MEDIA_TOO_LARGE",
+						"Arquivo grande demais para a limpeza de metadados.");
+				}
+				// Vídeo/áudio grande: arquivo temporário + ffmpeg, sem carregar tudo em memória.
+				java.nio.file.Path sanitized = sanitizer.sanitizeToFile(request.getInputStream(), mime, objectKey);
+				try {
+					try (var body = java.nio.file.Files.newInputStream(sanitized)) {
+						store().write(objectKey, mime, java.nio.file.Files.size(sanitized), body);
+					}
+				}
+				finally {
+					java.nio.file.Files.deleteIfExists(sanitized);
+				}
+			}
+			else {
+				byte[] raw = request.getInputStream().readAllBytes();
+				// LIMPEZA NA ESCRITA: EXIF/GPS/XMP/IPTC não chegam ao bucket.
+				byte[] clean = sanitizer.sanitize(raw, mime, objectKey);
+				store().write(objectKey, mime, clean.length, new java.io.ByteArrayInputStream(clean));
+			}
 		}
 		catch (java.io.IOException failure) {
 			throw new ApiException(400, "MEDIA_UPLOAD_FAILED", "Nao foi possivel ler o arquivo enviado.");
@@ -136,12 +171,13 @@ class MediaStorageProxyController {
 		return objectKey;
 	}
 
-	/** `uploads/media_<id>/media/<uuid>/arquivo` — o id e o segundo segmento. */
+	/** `uploads/media_<id>/media/<uuid>/arquivo` — o prefixo do bucket pode ou não ter `uploads/`. */
 	private static String mediaIdOf(String objectKey) {
-		String[] parts = objectKey.split("/");
-		if (parts.length < 2 || !parts[1].startsWith("media_")) {
-			throw new ApiException(400, "MEDIA_INVALID_KEY", "Chave de midia invalida.");
+		for (String part : objectKey.split("/")) {
+			if (part.startsWith("media_")) {
+				return part;
+			}
 		}
-		return parts[1];
+		throw new ApiException(400, "MEDIA_INVALID_KEY", "Chave de midia invalida.");
 	}
 }

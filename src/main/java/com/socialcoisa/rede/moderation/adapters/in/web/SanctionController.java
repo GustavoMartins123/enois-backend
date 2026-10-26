@@ -18,6 +18,7 @@ import com.socialcoisa.rede.moderation.domain.UserSanction;
 import com.socialcoisa.rede.shared.web.AdminGuard;
 import com.socialcoisa.rede.shared.web.CurrentUser;
 import com.socialcoisa.rede.shared.web.CurrentUserResolver;
+import com.socialcoisa.rede.shared.web.ModeratorGuard;
 
 /**
  * Penalidades do proprio usuario (com recurso) e a fila de recursos para o admin.
@@ -29,21 +30,22 @@ class SanctionController {
 	private final SanctionService sanctions;
 	private final CurrentUserResolver currentUserResolver;
 	private final AdminGuard adminGuard;
+	private final ModeratorGuard moderatorGuard;
 	private final AuthSessionRepository sessions;
 
 	SanctionController(SanctionService sanctions, CurrentUserResolver currentUserResolver, AdminGuard adminGuard,
-			AuthSessionRepository sessions) {
+			ModeratorGuard moderatorGuard, AuthSessionRepository sessions) {
 		this.sanctions = sanctions;
 		this.currentUserResolver = currentUserResolver;
 		this.adminGuard = adminGuard;
+		this.moderatorGuard = moderatorGuard;
 		this.sessions = sessions;
 	}
 
 	/** Penalidades do proprio usuario (o que a conta carrega e o historico). */
 	@GetMapping("/me/sanctions")
-	Map<String, Object> mine(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+	Map<String, Object> mine(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		return Map.of(
 			"sanctions", sanctions.sanctionsOf(user.id().value()).stream().map(SanctionView::from).toList(),
 			"appeals", sanctions.appealsOf(user.id().value()).stream().map(AppealView::from).toList());
@@ -51,45 +53,42 @@ class SanctionController {
 
 	/** Abre um recurso para a sancao ativa. */
 	@PostMapping("/me/sanctions/appeals")
-	Map<String, Object> appeal(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	Map<String, Object> appeal(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestBody CreateAppealRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		Appeal created = sanctions.appeal(user.id().value(), request.message());
 		return Map.of("status", "PENDING", "id", created.id());
 	}
 
 	/** Fila de recursos (admin). */
 	@GetMapping("/admin/appeals")
-	List<AppealView> pending(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	List<AppealView> pending(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestParam(defaultValue = "30") int limit) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		adminGuard.requireAdmin(user);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
+		moderatorGuard.requireModerator(user);
 		return sanctions.pendingAppeals(limit).stream().map(AppealView::from).toList();
 	}
 
 	/** Recurso aceito: restricao sai e a conta volta ao normal. */
 	@PostMapping("/admin/appeals/{appealId}/approve")
-	Map<String, Object> approve(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	Map<String, Object> approve(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String appealId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		adminGuard.requireAdmin(user);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
+		moderatorGuard.requireModerator(user);
 		UserSanction sanction = sanctions.approveAppeal(appealId, user.id().value());
 		return Map.of("status", "APPROVED", "sanction", SanctionView.from(sanction));
 	}
 
 	/** Recurso negado: conta banida (sessoes revogadas na hora). */
 	@PostMapping("/admin/appeals/{appealId}/deny")
-	Map<String, Object> deny(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	Map<String, Object> deny(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String appealId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
-		adminGuard.requireAdmin(user);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
+		moderatorGuard.requireModerator(user);
 		UserSanction sanction = sanctions.denyAppeal(appealId, user.id().value(), sessions);
 		return Map.of("status", "DENIED", "sanction", SanctionView.from(sanction));
 	}
+
 
 	record CreateAppealRequest(String message) {
 	}

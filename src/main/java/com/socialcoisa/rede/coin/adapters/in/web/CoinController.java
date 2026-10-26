@@ -52,6 +52,7 @@ class CoinController {
 	 * A MINI BOLSA (monitor público): a cotação de referência da faísca em BRL e o
 	 * histórico que alimenta o gráfico. NÃO é câmbio — não compra faísca com dinheiro.
 	 */
+
 	@GetMapping("/coin/cotacao")
 	Map<String, Object> quote(@RequestParam(defaultValue = "90") int history) {
 		var current = rates.latest();
@@ -66,10 +67,9 @@ class CoinController {
 
 	/** Publica uma nova cotação de referência (só administração). */
 	@PostMapping("/coin/cotacao")
-	Map<String, Object> setQuote(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	Map<String, Object> setQuote(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestBody SetQuoteRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		adminGuard.requireAdmin(user);
 		var published = rates.publish(request.brlCents(), request.note());
 		return Map.of("brlCents", published.brlCents(), "em", published.effectiveAt().toString());
@@ -83,10 +83,9 @@ class CoinController {
 	 * concessão vira lançamento auditável no ledger. Idempotente por ref.
 	 */
 	@PostMapping("/carteira/premios")
-	Map<String, Object> grantPrize(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	Map<String, Object> grantPrize(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestBody PrizeRequest request) {
-		CurrentUser admin = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser admin = currentUserResolver.resolve(sessionToken);
 		adminGuard.requireAdmin(admin);
 		var target = profiles.findByUsername(request.toUsername().trim().toLowerCase())
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuário de destino não encontrado."));
@@ -101,19 +100,17 @@ class CoinController {
 
 	/** A vítima (quem enviou) contesta a transferência — vai para a fila de moderação. */
 	@PostMapping("/carteira/transacoes/{refId}/contestar")
-	Map<String, Object> contest(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	Map<String, Object> contest(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String refId, @RequestBody ContestRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		var dispute = disputes.contest(user.id().value(), refId, request.reason(), request.description());
 		return Map.of("id", dispute.id(), "state", dispute.state().name());
 	}
 
 	/** As contestações da pessoa (o acompanhamento). */
 	@GetMapping("/carteira/contestacoes")
-	List<Map<String, Object>> myContestations(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+	List<Map<String, Object>> myContestations(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		return disputes.bySender(user.id().value()).stream().map(CoinDisputeService::disputeView).toList();
 	}
 
@@ -124,11 +121,10 @@ class CoinController {
 	 * investigação).
 	 */
 	@GetMapping("/admin/carteira/usuarios/{username}/extrato")
-	Map<String, Object> adminExtract(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	Map<String, Object> adminExtract(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String username,
 			@RequestParam(defaultValue = "100") int limit) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		adminGuard.requireAdmin(user);
 		var profile = profiles.findByUsername(username.trim().toLowerCase())
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuário não encontrado."));
@@ -140,21 +136,30 @@ class CoinController {
 			"entries", wallet.entries().stream().map(EntryView::from).toList());
 	}
 
+	/** Supply da faísca: total fixo, o que está no cofre e o que circula (observabilidade). */
+	@GetMapping("/admin/carteira/supply")
+	Map<String, Object> supply(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser admin = currentUserResolver.resolve(sessionToken);
+		// Saldo do cofre é dado financeiro: só a administração vê.
+		adminGuard.requireAdmin(admin);
+		CoinService.SupplyView supply = coins.supply();
+		return Map.of("total", supply.total(), "cofre", supply.cofre(), "circulacao", supply.circulacao(),
+			"somaSaldos", supply.somaSaldos(), "coerente", supply.coerente());
+	}
+
 	@GetMapping("/admin/carteira/disputas")
-	List<Map<String, Object>> disputesQueue(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	List<Map<String, Object>> disputesQueue(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestParam(defaultValue = "30") int limit) {
-		CurrentUser admin = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser admin = currentUserResolver.resolve(sessionToken);
 		adminGuard.requireAdmin(admin);
 		return disputes.pending(limit).stream().map(CoinDisputeService::disputeView).toList();
 	}
 
 	/** Contestação VERDADEIRA: reverte a transferência e restringe o golpista. */
 	@PostMapping("/admin/carteira/disputas/{disputeId}/deferir")
-	Map<String, Object> uphold(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	Map<String, Object> uphold(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String disputeId, @RequestBody(required = false) DisputeDecisionRequest request) {
-		CurrentUser admin = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser admin = currentUserResolver.resolve(sessionToken);
 		adminGuard.requireAdmin(admin);
 		var saved = disputes.uphold(disputeId, admin.id().value(),
 			request == null ? null : request.note());
@@ -163,10 +168,9 @@ class CoinController {
 
 	/** Contestação FALSA: quem contestou é restringido. */
 	@PostMapping("/admin/carteira/disputas/{disputeId}/rejeitar")
-	Map<String, Object> reject(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	Map<String, Object> reject(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String disputeId, @RequestBody(required = false) DisputeDecisionRequest request) {
-		CurrentUser admin = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser admin = currentUserResolver.resolve(sessionToken);
 		adminGuard.requireAdmin(admin);
 		var saved = disputes.reject(disputeId, admin.id().value(),
 			request == null ? null : request.note());
@@ -180,9 +184,8 @@ class CoinController {
 	}
 
 	@GetMapping("/carteira")
-	Map<String, Object> wallet(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+	Map<String, Object> wallet(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		com.socialcoisa.rede.coin.application.CoinService.Wallet wallet;
 		try {
 			wallet = coins.wallet(user.id().value(), usernameOf(user.id().value()));
@@ -199,11 +202,10 @@ class CoinController {
 	}
 
 	@PostMapping("/carteira/transferencias")
-	ResponseEntity<String> transfer(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> transfer(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@RequestBody TransferRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		if (request.toUsername() == null || request.toUsername().isBlank() || request.amount() == null
 				|| request.amount() <= 0) {
 			throw new ApiException(400, "BAD_REQUEST", "Informe o destinatário e o valor.");

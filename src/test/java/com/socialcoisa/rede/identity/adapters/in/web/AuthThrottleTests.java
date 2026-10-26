@@ -45,19 +45,18 @@ class AuthThrottleTests {
 					.header("Idempotency-Key", "thr-login-fail-" + i)
 					.contentType(MediaType.APPLICATION_JSON)
 					.content(objectMapper.writeValueAsString(Map.of(
-						"email", "throttle-vitima@test.com", "password", "senha-errada-" + i))))
+						"email", "throttle_vitima@test.com", "password", "senha-errada-" + i))))
 				.andExpect(status().isUnauthorized());
 		}
 
-		// A 6ª já está travada: 429 LOGIN_THROTTLED — nem com a senha CERTA (o lock é por conta).
-		// A senha do helper é a constante "Test1234!".
+		// A 6ª sofre atraso progressivo, mas a senha CERTA continua entrando (E-13: ninguém
+		// derruba a conta da vítima com 5 senhas erradas).
 		mockMvc.perform(post("/auth/login")
 				.header("Idempotency-Key", "thr-login-lock")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(objectMapper.writeValueAsString(Map.of(
-					"email", "throttle-vitima@test.com", "password", "Test1234!"))))
-			.andExpect(status().isTooManyRequests())
-			.andExpect(jsonPath("$.code").value("LOGIN_THROTTLED"));
+					"email", "throttle_vitima@test.com", "password", "Test1234!"))))
+			.andExpect(status().isOk());
 	}
 
 	private TestAuthHelper.AuthSession auth(String name) throws Exception {

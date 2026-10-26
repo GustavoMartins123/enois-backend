@@ -7,6 +7,33 @@ fica no repositório `enois-frontend` — o contrato entre os dois é a API, e m
 Antes de começar: leia o [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md). Falha de segurança **não** vira
 issue — o canal está no [`SECURITY.md`](SECURITY.md).
 
+## Verificando o ambiente local
+
+Antes de iniciar o backend, execute o diagnóstico de pré-requisitos:
+
+```bash
+bash scripts/dev-doctor.sh
+```
+
+O Dev Doctor verifica Git, Java/JDK 25, Maven Wrapper e a porta 8081.
+Docker é opcional para o desenvolvimento com H2 em memória.
+
+- `[PASS]`: requisito encontrado.
+- `[WARN]`: possível limitação que não impede o desenvolvimento.
+- `[FAIL]`: requisito essencial ausente ou incompatível.
+
+O comando retorna código `0` quando não há falhas essenciais e `1`
+quando o ambiente precisa de ajustes.
+
+Para executar os testes do próprio diagnóstico:
+
+```bash
+bash scripts/tests/dev-doctor-test.sh
+```
+
+O diagnóstico não instala dependências, não modifica o ambiente e não
+acessa a infraestrutura de deploy do projeto.
+
 ## Rodando
 
 ```bash
@@ -87,3 +114,22 @@ Regras que valem em toda parte:
 
 O deploy é por imagem no ECR + manifesto no GitOps (não é `fly deploy`). O fluxo, as pendências de
 infraestrutura e as ações manuais estão no README.
+
+## Contribuições com IA
+
+Este projeto aceita e usa código escrito com ajuda de IA — com as mesmas regras de sempre e mais
+algumas próprias:
+
+1. **Declare o uso.** Mencione na PR que a mudança foi feita com auxílio de IA e qual ferramenta.
+2. **Quem submete responde pelo código.** Entenda cada linha antes de abrir a PR; saída de IA colada
+   sem revisão é a forma mais rápida de introduzir regressão sutil.
+3. **Prova, não promessa.** "Deveria funcionar" não é verificação: rode os testes do escopo e
+   descreva o resultado na PR.
+4. **Zero slop.** Sem comentário narrando o óbvio, sem arquivo gerado em massa, sem dependência nova
+   sem justificativa, sem refatoração que a tarefa não pediu.
+5. **Segurança vem primeiro.** As regras do [`AGENTS.md`](AGENTS.md) valem integralmente — em
+   especial: mensagem de commit neutra, nenhum detalhe de correção de segurança no texto público,
+   nenhum segredo ou dado pessoal em qualquer artefato.
+6. **Revisão humana antes do merge continua sendo a regra**, com aprovação de quem não empurrou.
+
+O contrato completo para agentes está no [`AGENTS.md`](AGENTS.md).

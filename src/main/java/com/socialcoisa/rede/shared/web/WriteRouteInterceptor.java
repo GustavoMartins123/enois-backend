@@ -30,6 +30,9 @@ class WriteRouteInterceptor implements HandlerInterceptor {
 		"/auth/signup",
 		"/auth/login",
 		"/auth/refresh",
+		// Logout only revokes the credentials the caller sends; it must work once the access token
+		// has expired, or the refresh cookie would outlive the "logout".
+		"/auth/logout",
 		"/auth/email/verify",
 		"/auth/email/resend",
 		"/auth/password/forgot",
@@ -38,6 +41,8 @@ class WriteRouteInterceptor implements HandlerInterceptor {
 		"/auth/2fa/resend",
 		"/auth/2fa/email/request",
 		"/auth/2fa/email/confirm",
+		// Formulário público de contribuição da landing: limitado por IP e pelo gate de origem.
+		"/contributors/applications",
 		"/auth/oauth/*/callback",
 		"/auth/oauth/*/token",
 		"/games/tokens/validate",
