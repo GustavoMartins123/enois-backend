@@ -48,10 +48,6 @@ public class TwoFactorChallenge {
 		return new TwoFactorChallenge(id, userId, method, newCodeHash, 0, newExpiry, consumedAt, createdAt);
 	}
 
-	public TwoFactorChallenge consume(Instant now) {
-		return new TwoFactorChallenge(id, userId, method, codeHash, attempts, expiresAt, now, createdAt);
-	}
-
 	public boolean isExpired(Instant now) {
 		return now.isAfter(expiresAt);
 	}

@@ -21,6 +21,12 @@ public interface TwoFactorRepository {
 	 */
 	boolean claimAttempt(String challengeId);
 
+	/**
+	 * Marks the challenge consumed in the caller's transaction; true only for the one request that
+	 * flips it, so two parallel correct codes cannot both complete.
+	 */
+	boolean consumeChallenge(String challengeId, Instant now);
+
 	/** Marks the TOTP step as used; false when this step (or a later one) was already accepted. */
 	boolean markTotpStepUsed(String userId, long step);
 
