@@ -15,6 +15,10 @@ public interface MarketplaceRepository {
 
 	Optional<MarketplaceListing> findListingById(String id);
 
+	Optional<MarketplaceListing> findListingByIdForUpdate(String id);
+
+	boolean hasPurchaseForItem(String buyerId, String itemKind, String itemId);
+
 	Optional<MarketplaceListing> findActiveByItem(String itemKind, String itemId);
 
 	List<MarketplaceListing> findActive(int limit);
