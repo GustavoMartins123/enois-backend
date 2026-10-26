@@ -59,28 +59,25 @@ class BlogController {
 	}
 
 	@GetMapping("/{slug}")
-	BlogView blog(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	BlogView blog(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String slug) {
-		CurrentUser user = resolveSafely(userId, sessionToken);
+		CurrentUser user = resolveSafely(sessionToken);
 		return blogService.blogOf(slug, user == null ? null : user.id().value())
 			.orElseThrow(() -> new ApiException(404, "BLOG_NOT_FOUND", "Blog nao encontrado."));
 	}
 
 	/** O meu blog, para o editor. `null` = ainda nao existe (a tela oferece criar). */
 	@GetMapping("/me")
-	BlogView mine(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+	BlogView mine(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		return blogService.mine(user.id().value()).orElse(null);
 	}
 
 	@PutMapping("/me")
-	ResponseEntity<String> save(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> save(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@RequestBody BlogRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(request);
 		return idempotency.execute(user.id(), "PUT", "/api/blogs/me", idempotencyKey, hash,
 			() -> new CommandResponse(200, blogService
@@ -89,11 +86,10 @@ class BlogController {
 	}
 
 	@PostMapping("/me/posts")
-	ResponseEntity<String> publish(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> publish(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@RequestBody BlogPostRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(request);
 		return idempotency.execute(user.id(), "POST", "/api/blogs/me/posts", idempotencyKey, hash,
 			() -> new CommandResponse(201, blogService.publish(user.id().value(), request.title(), request.body(),
@@ -101,11 +97,10 @@ class BlogController {
 	}
 
 	@PatchMapping("/me/posts/{postId}")
-	ResponseEntity<String> edit(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> edit(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String postId, @RequestBody BlogPostRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(request);
 		return idempotency.execute(user.id(), "PATCH", "/api/blogs/me/posts/" + postId, idempotencyKey, hash,
 			() -> new CommandResponse(200, blogService.edit(user.id().value(), postId, request.title(),
@@ -113,36 +108,33 @@ class BlogController {
 	}
 
 	@DeleteMapping("/me/posts/{postId}")
-	StatusResponse delete(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	StatusResponse delete(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String postId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		blogService.delete(user.id().value(), postId);
 		return new StatusResponse(postId, "DELETED");
 	}
 
 	@PostMapping("/{slug}/subscription")
-	StatusResponse subscribe(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	StatusResponse subscribe(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String slug) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		blogService.subscribe(user.id().value(), slug);
 		return new StatusResponse(slug, "SUBSCRIBED");
 	}
 
 	@DeleteMapping("/{slug}/subscription")
-	StatusResponse unsubscribe(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	StatusResponse unsubscribe(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String slug) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		blogService.unsubscribe(user.id().value(), slug);
 		return new StatusResponse(slug, "NOT_SUBSCRIBED");
 	}
 
 	/** Sessao opcional: sem sessao (ou com sessao invalida) a leitura publica continua. */
-	private CurrentUser resolveSafely(String userId, String sessionToken) {
+	private CurrentUser resolveSafely(String sessionToken) {
 		try {
-			return currentUserResolver.resolve(userId, sessionToken);
+			return currentUserResolver.resolve(sessionToken);
 		}
 		catch (Exception ignored) {
 			return null;

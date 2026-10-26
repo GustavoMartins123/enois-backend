@@ -79,11 +79,10 @@ class MentoringContractController {
 	}
 
 	@PostMapping
-	ResponseEntity<String> create(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> create(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@RequestBody CreateMentorRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(request);
 		return idempotency.execute(user.id(), "POST", "/api/mentors", idempotencyKey, hash,
 			() -> {
@@ -95,11 +94,10 @@ class MentoringContractController {
 	}
 
 	@PatchMapping("/{mentorId}")
-	ResponseEntity<String> update(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> update(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String mentorId, @RequestBody CreateMentorRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of("mentorId", mentorId, "request", request));
 		return idempotency.execute(user.id(), "PATCH", "/api/mentors/{mentorId}", idempotencyKey, hash,
 			() -> {
@@ -111,11 +109,10 @@ class MentoringContractController {
 	}
 
 	@DeleteMapping("/{mentorId}")
-	ResponseEntity<String> delete(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> delete(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String mentorId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of("mentorId", mentorId));
 		return idempotency.execute(user.id(), "DELETE", "/api/mentors/{mentorId}", idempotencyKey, hash,
 			() -> {
@@ -125,11 +122,10 @@ class MentoringContractController {
 	}
 
 	@PostMapping("/{mentorId}/slots")
-	ResponseEntity<String> createSlot(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> createSlot(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String mentorId, @RequestBody CreateSlotRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of("mentorId", mentorId, "request", request));
 		return idempotency.execute(user.id(), "POST", "/api/mentors/{mentorId}/slots", idempotencyKey, hash,
 			() -> {
@@ -143,11 +139,10 @@ class MentoringContractController {
 	}
 
 	@PostMapping("/{mentorId}/sessions")
-	ResponseEntity<String> session(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> session(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String mentorId, @RequestBody MentorSessionRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of("mentorId", mentorId, "request", request));
 		return idempotency.execute(user.id(), "POST", "/api/mentors/{mentorId}/sessions", idempotencyKey, hash,
 			() -> {
@@ -162,10 +157,9 @@ class MentoringContractController {
 	}
 
 	@org.springframework.web.bind.annotation.DeleteMapping("/{mentorId}/slots/{slotId}")
-	ResponseEntity<Void> deleteSlot(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<Void> deleteSlot(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String mentorId, @PathVariable String slotId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		mentorService.deleteSlot(mentorId, slotId, user.id().value());
 		return ResponseEntity.noContent().build();
 	}

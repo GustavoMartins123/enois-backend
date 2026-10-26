@@ -51,11 +51,10 @@ class CompanyController {
 	}
 
 	@GetMapping("/empresa/{slug}")
-	CompanyDetailView bySlug(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	CompanyDetailView bySlug(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String slug) {
 		Company company = companies.bySlug(slug);
-		CurrentUser viewer = resolveSafely(userId, sessionToken);
+		CurrentUser viewer = resolveSafely(sessionToken);
 		CompanyRole role = viewer == null ? null : companies.roleOf(company.id(), viewer.id().value());
 		return new CompanyDetailView(company.id(), company.slug(), company.name(), company.description(),
 			company.sector(), company.size(), company.location(), company.website(), company.logo(), company.cover(),
@@ -66,20 +65,18 @@ class CompanyController {
 	// --- equipe ---
 
 	@PostMapping("/empresas")
-	Map<String, Object> create(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	Map<String, Object> create(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestBody CreateCompanyRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		Company created = companies.create(user.id().value(), request.name(), request.description(),
 			request.sector(), request.size(), request.location(), request.website());
 		return Map.of("id", created.id(), "slug", created.slug(), "name", created.name());
 	}
 
 	@PatchMapping("/empresas/{companyId}")
-	CompanySummaryView update(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	CompanySummaryView update(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String companyId, @RequestBody UpdateCompanyRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		Company updated = companies.update(companyId, user.id().value(), request.name(), request.description(),
 			request.sector(), request.size(), request.location(), request.website(), request.logo(),
 			request.cover());
@@ -87,25 +84,22 @@ class CompanyController {
 	}
 
 	@GetMapping("/empresas/mine")
-	List<CompanySummaryView> mine(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+	List<CompanySummaryView> mine(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		return companies.ownedBy(user.id().value()).stream().map(CompanySummaryView::from).toList();
 	}
 
 	@GetMapping("/empresas/{companyId}/members")
-	List<MemberView> members(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	List<MemberView> members(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String companyId) {
-		currentUserResolver.resolve(userId, sessionToken);
+		currentUserResolver.resolve(sessionToken);
 		return companies.members(companyId).stream().map(MemberView::from).toList();
 	}
 
 	@PostMapping("/empresas/{companyId}/members")
-	MemberView addMember(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	MemberView addMember(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String companyId, @RequestBody AddMemberRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		Company company = companies.company(companyId);
 		companies.requireRole(company, user.id().value(), CompanyRole.ADMIN);
 		CompanyMember member = companies.addMember(companyId, request.userId(),
@@ -126,10 +120,9 @@ class CompanyController {
 	}
 
 	@GetMapping("/microprojetos/{projectId}")
-	Map<String, Object> project(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	Map<String, Object> project(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String projectId) {
-		CurrentUser viewer = resolveSafely(userId, sessionToken);
+		CurrentUser viewer = resolveSafely(sessionToken);
 		MicroProject project = microProjects.project(projectId);
 		List<MicroProjectProposal> proposals = viewer == null ? List.of()
 			: microProjects.proposals(projectId, viewer.id().value());
@@ -138,45 +131,41 @@ class CompanyController {
 	}
 
 	@PostMapping("/empresas/{companyId}/microprojetos")
-	Map<String, Object> publishProject(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	Map<String, Object> publishProject(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String companyId, @RequestBody PublishProjectRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		MicroProject created = microProjects.publish(companyId, user.id().value(), request.title(), request.problem(),
 			request.scope(), request.deliverables(), request.acceptanceCriteria(), request.budget(), request.deadline());
 		return Map.of("id", created.id(), "status", created.status().name());
 	}
 
 	@PostMapping("/microprojetos/{projectId}/proposals")
-	Map<String, Object> propose(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	Map<String, Object> propose(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String projectId, @RequestBody ProposeRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		MicroProjectProposal proposal = microProjects.propose(projectId, user.id().value(), request.message());
 		return Map.of("id", proposal.id(), "status", proposal.status().name());
 	}
 
 	@PostMapping("/microprojetos/{projectId}/proposals/{proposalId}/select")
-	Map<String, Object> selectProposal(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	Map<String, Object> selectProposal(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String projectId, @PathVariable String proposalId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		MicroProject selected = microProjects.selectProposal(projectId, proposalId, user.id().value());
 		return Map.of("status", selected.status().name());
 	}
 
 	@PostMapping("/microprojetos/{projectId}/complete")
-	Map<String, Object> complete(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	Map<String, Object> complete(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String projectId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		MicroProject completed = microProjects.complete(projectId, user.id().value());
 		return Map.of("status", completed.status().name());
 	}
 
-	private CurrentUser resolveSafely(String userId, String sessionToken) {
+	private CurrentUser resolveSafely(String sessionToken) {
 		try {
-			return currentUserResolver.resolve(userId, sessionToken);
+			return currentUserResolver.resolve(sessionToken);
 		} catch (Exception notAuthenticated) {
 			return null;
 		}

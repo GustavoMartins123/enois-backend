@@ -11,6 +11,8 @@ import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
@@ -31,10 +33,28 @@ import com.socialcoisa.rede.shared.web.ApiException;
 public class LinkedinImportService {
 
 	private static final int MAX_ZIP_BYTES = 5 * 1024 * 1024;
-	/** Orçamento de descompressão (EN-10/E-08): ZIP pequeno pode expandir para centenas de MB. */
+	/**
+	 * Decompression budget: a small ZIP can expand to hundreds of MB. Every entry (CSV or not) is
+	 * streamed against these caps and the read stops as soon as one is crossed.
+	 */
 	private static final int MAX_ENTRIES = 50;
-	private static final long MAX_ENTRY_BYTES = 2L * 1024 * 1024;
-	private static final long MAX_TOTAL_BYTES = 8L * 1024 * 1024;
+	private static final long MAX_ENTRY_BYTES = 10L * 1024 * 1024;
+	/** Expansion ratio cap, only checked past {@link #RATIO_FLOOR_BYTES} so tiny exports never trip it. */
+	private static final long MAX_EXPANSION_RATIO = 100;
+	private static final long RATIO_FLOOR_BYTES = 1024L * 1024;
+	private static final long DEFAULT_MAX_TOTAL_BYTES = 20L * 1024 * 1024;
+
+	private final long maxTotalBytes;
+
+	public LinkedinImportService() {
+		this(DEFAULT_MAX_TOTAL_BYTES);
+	}
+
+	@Autowired
+	public LinkedinImportService(
+			@Value("${rede.import.linkedin.max-uncompressed-bytes:20971520}") long maxTotalBytes) {
+		this.maxTotalBytes = maxTotalBytes;
+	}
 
 	// ===== retrato devolvido para revisão no front =====
 
@@ -82,22 +102,24 @@ public class LinkedinImportService {
 			ZipEntry entry;
 			int entries = 0;
 			long totalRead = 0;
+			long ratioBudget = Math.max(RATIO_FLOOR_BYTES, file.getSize() * MAX_EXPANSION_RATIO);
 			while ((entry = zip.getNextEntry()) != null) {
 				if (++entries > MAX_ENTRIES) {
-					throw new ApiException(400, "FILE_TOO_LARGE", "O ZIP tem entradas demais para um export do LinkedIn.");
+					throw tooLarge();
 				}
 				String name = entry.getName();
-				if (entry.isDirectory() || !name.endsWith(".csv")) {
-					continue;
+				boolean csv = !entry.isDirectory() && name.endsWith(".csv");
+				// Non-CSV entries are drained (not kept) so they still count against the budget.
+				ByteArrayOutputStream out = csv ? new ByteArrayOutputStream() : null;
+				totalRead = readBounded(zip, out, totalRead, Math.min(maxTotalBytes, ratioBudget));
+				if (csv) {
+					// O ZIP do LinkedIn guarda os CSVs numa pasta (".../Positions.csv") — casa pelo nome.
+					String simple = name.substring(name.lastIndexOf('/') + 1);
+					csvs.putIfAbsent(simple, stripBom(out.toString(StandardCharsets.UTF_8)));
 				}
-				// O ZIP do LinkedIn guarda os CSVs numa pasta (".../Positions.csv") — casa pelo nome.
-				String simple = name.substring(name.lastIndexOf('/') + 1);
-				byte[] bytes = readBounded(zip, MAX_TOTAL_BYTES - totalRead);
-				totalRead += bytes.length;
-				csvs.putIfAbsent(simple, stripBom(new String(bytes, StandardCharsets.UTF_8)));
 				zip.closeEntry();
 			}
-		} catch (IOException error) {
+		} catch (IOException | IllegalArgumentException error) {
 			throw new ApiException(400, "INVALID_FILE", "Não foi possível ler o arquivo. É um .zip do LinkedIn?");
 		}
 		// O export RÁPIDO ("fast file") só traz Profile.csv + Registration.csv — aceitamos ele com
@@ -670,19 +692,31 @@ public class LinkedinImportService {
 	}
 
 	/** Lê uma entrada com teto por entrada e pelo orçamento total restante (anti ZIP bomb). */
-	private static byte[] readBounded(ZipInputStream zip, long remaining) throws IOException {
-		ByteArrayOutputStream out = new ByteArrayOutputStream();
+	/**
+	 * Streams the current entry into {@code out} (or discards it when null), aborting as soon as the
+	 * entry or the running total crosses its cap. Returns the new running total.
+	 */
+	private static long readBounded(ZipInputStream zip, ByteArrayOutputStream out, long totalSoFar, long totalCap)
+			throws IOException {
 		byte[] buffer = new byte[8192];
-		long total = 0;
+		long entryBytes = 0;
+		long total = totalSoFar;
 		int read;
 		while ((read = zip.read(buffer)) != -1) {
+			entryBytes += read;
 			total += read;
-			if (total > MAX_ENTRY_BYTES || total > remaining) {
-				throw new ApiException(400, "FILE_TOO_LARGE",
-					"O conteudo descompactado do ZIP e grande demais para um export do LinkedIn.");
+			if (entryBytes > MAX_ENTRY_BYTES || total > totalCap) {
+				throw tooLarge();
 			}
-			out.write(buffer, 0, read);
+			if (out != null) {
+				out.write(buffer, 0, read);
+			}
 		}
-		return out.toByteArray();
+		return total;
+	}
+
+	private static ApiException tooLarge() {
+		return new ApiException(413, "IMPORT_TOO_LARGE",
+			"O conteudo descompactado do ZIP e grande demais para um export do LinkedIn.");
 	}
 }

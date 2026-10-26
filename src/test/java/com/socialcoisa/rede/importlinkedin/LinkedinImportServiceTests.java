@@ -296,6 +296,60 @@ class LinkedinImportServiceTests {
 		assertThat(preview.profile().summary()).contains("Gosto de café");
 	}
 
+	static MockMultipartFile highRatioZip(String prefix, String suffix, int count, int size) {
+		return zipOf(prefix, suffix, count, new byte[size]);
+	}
+
+	/** ZIP with {@code count} entries named {@code prefix + i + suffix}, each holding {@code content}. */
+	static MockMultipartFile zipOf(String prefix, String suffix, int count, byte[] zeros) {
+		ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+		try (ZipOutputStream zip = new ZipOutputStream(bytes)) {
+			for (int i = 0; i < count; i++) {
+				zip.putNextEntry(new ZipEntry(prefix + i + suffix));
+				zip.write(zeros);
+				zip.closeEntry();
+			}
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
+		return new MockMultipartFile("file", "linkedin.zip", "application/zip", bytes.toByteArray());
+	}
+
+	private void assertTooLarge(MockMultipartFile file) {
+		assertThatThrownBy(() -> service.parse(file))
+			.isInstanceOfSatisfying(ApiException.class, error -> {
+				assertThat(error.status()).isEqualTo(413);
+				assertThat(error.code()).isEqualTo("IMPORT_TOO_LARGE");
+			});
+	}
+
+	@Test
+	void rejectsHighRatioCsvEntry() {
+		MockMultipartFile bomb = highRatioZip("Positions", ".csv", 1, 60 * 1024 * 1024);
+		assertThat(bomb.getSize()).isLessThan(200 * 1024);
+		assertTooLarge(bomb);
+	}
+
+	@Test
+	void rejectsHighRatioEntryEvenWhenItIsNotACsv() {
+		assertTooLarge(highRatioZip("padding", ".bin", 1, 60 * 1024 * 1024));
+	}
+
+	@Test
+	void rejectsWhenTheTotalCrossesTheBudget() {
+		var small = new LinkedinImportService(1024 * 1024);
+		// Incompressible content: only the total budget can stop it, not the ratio cap.
+		byte[] noise = new byte[512 * 1024];
+		new java.util.Random(7).nextBytes(noise);
+		assertThatThrownBy(() -> small.parse(zipOf("Part", ".csv", 3, noise)))
+			.isInstanceOfSatisfying(ApiException.class, error -> assertThat(error.code()).isEqualTo("IMPORT_TOO_LARGE"));
+	}
+
+	@Test
+	void rejectsTooManyEntries() {
+		assertTooLarge(highRatioZip("Entry", ".csv", 51, 1));
+	}
+
 	@Test
 	void rejectsEmptyPastedText() {
 		assertThatThrownBy(() -> service.parseTexto("   ")).isInstanceOf(ApiException.class);

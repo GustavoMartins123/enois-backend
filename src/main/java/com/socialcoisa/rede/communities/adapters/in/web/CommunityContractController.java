@@ -65,11 +65,10 @@ class CommunityContractController {
 	}
 
 	@GetMapping
-	PageResponse<CommunityView> communities(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	PageResponse<CommunityView> communities(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestParam(required = false) String topic, @RequestParam(required = false) String q,
 			@RequestParam(required = false) String cursor, @RequestParam(defaultValue = "20") int limit) {
-		CurrentUser user = resolveSafely(userId, sessionToken);
+		CurrentUser user = resolveSafely(sessionToken);
 		Instant before = cursorCodec.decode(cursor).orElse(null);
 		List<Community> communities = communityService.list(topic, q, before, limit);
 		var items = communities.stream()
@@ -83,30 +82,28 @@ class CommunityContractController {
 	}
 
 	@GetMapping("/{communityId}")
-	CommunityView community(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	CommunityView community(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String communityId) {
-		CurrentUser user = resolveSafely(userId, sessionToken);
+		CurrentUser user = resolveSafely(sessionToken);
 		Community c = communityService.getById(communityId);
 		return new CommunityView(c.id(), c.name(), c.description(),
 			communityService.countMembers(c.id()), c.topic(), c.cover(), c.avatar(), c.bannerHtml(),
 			user != null && communityService.isMember(c.id(), user.id().value()));
 	}
 
-	private CurrentUser resolveSafely(String userId, String sessionToken) {
+	private CurrentUser resolveSafely(String sessionToken) {
 		try {
-			return currentUserResolver.resolve(userId, sessionToken);
+			return currentUserResolver.resolve(sessionToken);
 		} catch (Exception e) {
 			return null;
 		}
 	}
 
 	@PostMapping
-	ResponseEntity<String> create(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> create(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@RequestBody CommunityRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(request);
 		return idempotency.execute(user.id(), "POST", "/api/communities", idempotencyKey, hash,
 			() -> {
@@ -118,11 +115,10 @@ class CommunityContractController {
 	}
 
 	@PatchMapping("/{communityId}")
-	ResponseEntity<String> update(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> update(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String communityId, @RequestBody CommunityRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of("communityId", communityId, "request", request));
 		return idempotency.execute(user.id(), "PATCH", "/api/communities/{communityId}", idempotencyKey, hash,
 			() -> {
@@ -136,11 +132,10 @@ class CommunityContractController {
 	}
 
 	@PostMapping("/{communityId}/members")
-	ResponseEntity<String> join(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> join(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String communityId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of("communityId", communityId));
 		return idempotency.execute(user.id(), "POST", "/api/communities/{communityId}/members", idempotencyKey, hash,
 			() -> {
@@ -150,11 +145,10 @@ class CommunityContractController {
 	}
 
 	@DeleteMapping("/{communityId}/members")
-	ResponseEntity<String> leave(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> leave(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String communityId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of("communityId", communityId));
 		return idempotency.execute(user.id(), "DELETE", "/api/communities/{communityId}/members", idempotencyKey, hash,
 			() -> {
@@ -165,10 +159,9 @@ class CommunityContractController {
 
 	/** Comunidades favoritadas pelo usuario (bookmark), para o menu lateral e a estrela dos cards. */
 	@GetMapping("/favorites")
-	PageResponse<CommunityView> favorites(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	PageResponse<CommunityView> favorites(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestParam(defaultValue = "50") int limit) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		var items = communityService.listFavorites(user.id().value(), limit).stream()
 			.map(c -> new CommunityView(c.id(), c.name(), c.description(), communityService.countMembers(c.id()),
 				c.topic(), c.cover(), c.avatar(), c.bannerHtml(), communityService.isMember(c.id(), user.id().value())))
@@ -177,11 +170,10 @@ class CommunityContractController {
 	}
 
 	@PostMapping("/{communityId}/favorite")
-	ResponseEntity<String> favorite(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> favorite(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String communityId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of("communityId", communityId, "op", "favorite"));
 		return idempotency.execute(user.id(), "POST", "/api/communities/{communityId}/favorite", idempotencyKey, hash,
 			() -> {
@@ -191,11 +183,10 @@ class CommunityContractController {
 	}
 
 	@DeleteMapping("/{communityId}/favorite")
-	ResponseEntity<String> unfavorite(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> unfavorite(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String communityId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of("communityId", communityId, "op", "unfavorite"));
 		return idempotency.execute(user.id(), "DELETE", "/api/communities/{communityId}/favorite", idempotencyKey, hash,
 			() -> {
@@ -206,10 +197,9 @@ class CommunityContractController {
 
 	/** Comunidades do usuario (menu lateral). Exige sessao: e a lista pessoal, nao o catalogo publico. */
 	@GetMapping("/mine")
-	PageResponse<CommunityView> mine(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	PageResponse<CommunityView> mine(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestParam(defaultValue = "20") int limit) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		var items = communityService.listMine(user.id().value(), limit).stream()
 			.map(c -> new CommunityView(c.id(), c.name(), c.description(), communityService.countMembers(c.id()),
 				c.topic(), c.cover(), c.avatar(), c.bannerHtml(), true))
@@ -219,11 +209,10 @@ class CommunityContractController {
 
 	/** Transfere a administracao para outro membro (so o dono atual). */
 	@PostMapping("/{communityId}/transfer")
-	ResponseEntity<String> transfer(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> transfer(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String communityId, @RequestBody TransferOwnershipRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of("communityId", communityId, "newOwnerId",
 			request.newOwnerId() == null ? "" : request.newOwnerId()));
 		return idempotency.execute(user.id(), "POST", "/api/communities/{communityId}/transfer", idempotencyKey, hash,
@@ -237,11 +226,10 @@ class CommunityContractController {
 
 	/** Exclui a comunidade (so o dono). */
 	@DeleteMapping("/{communityId}")
-	ResponseEntity<String> delete(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> delete(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String communityId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of("communityId", communityId));
 		return idempotency.execute(user.id(), "DELETE", "/api/communities/{communityId}", idempotencyKey, hash,
 			() -> {
@@ -251,10 +239,11 @@ class CommunityContractController {
 	}
 
 	@GetMapping("/{communityId}/members")
-	PageResponse<MemberView> members(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	PageResponse<MemberView> members(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String communityId) {
-		resolveSafely(userId, sessionToken);
+		// Anonymous viewers get what the page renders (name, @username, avatar, admin badge); the
+		// internal user id is only for signed-in viewers (admin checks, ownership transfer).
+		boolean signedIn = resolveSafely(sessionToken) != null;
 		List<CommunityMember> members = communityService.findMembers(communityId);
 		Set<String> userIds = members.stream().map(CommunityMember::userId).collect(Collectors.toSet());
 		Map<String, UserProfile> profiles = userProfileRepository.findAllByIds(userIds).stream()
@@ -262,7 +251,7 @@ class CommunityContractController {
 		var items = members.stream()
 			.map(m -> {
 				UserProfile p = profiles.get(m.userId());
-				return new MemberView(m.userId(),
+				return new MemberView(signedIn ? m.userId() : null,
 					p != null ? p.username() : null,
 					p != null ? p.displayWithNickname() : null,
 					p != null ? p.avatar() : null,
@@ -275,18 +264,16 @@ class CommunityContractController {
 	/** Canais privados: qualquer membro lê e cria; quem não participa recebe 403. */
 	@GetMapping("/{communityId}/channels")
 	List<CommunityChannelService.ChannelView> channels(@PathVariable String communityId,
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		return channelService.list(communityId, user.id().value());
 	}
 
 	@PostMapping("/{communityId}/channels")
 	CommunityChannelService.ChannelView createChannel(@PathVariable String communityId,
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestBody CreateChannelRequest body) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		return channelService.create(communityId, user.id().value(), body.name(), body.topic(), body.description());
 	}
 
@@ -294,9 +281,8 @@ class CommunityContractController {
 	FeedPage channelFeed(@PathVariable String communityId, @PathVariable String channelId,
 			@RequestParam(required = false) String cursor,
 			@RequestParam(defaultValue = "20") int limit,
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		Instant before = cursorCodec.decode(cursor).orElse(null);
 		return getFeedService.getChannelFeed(communityId, channelId, before, limit, user.id());
 	}
@@ -308,9 +294,8 @@ class CommunityContractController {
 	FeedPage communityFeed(@PathVariable String communityId,
 			@RequestParam(required = false) String cursor,
 			@RequestParam(defaultValue = "20") int limit,
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		CurrentUser user = resolveSafely(userId, sessionToken);
+		CurrentUser user = resolveSafely(sessionToken);
 		Instant before = cursorCodec.decode(cursor).orElse(null);
 		return getFeedService.getCommunityFeed(communityId, before, limit,
 			user != null ? user.id() : new com.socialcoisa.rede.feed.domain.UserId("anonymous"));
@@ -319,9 +304,8 @@ class CommunityContractController {
 	/** O post fixado no topo (um só). Visitante pode ler: o feed da comunidade é público. */
 	@GetMapping("/{communityId}/pin")
 	Object pinned(@PathVariable String communityId,
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		CurrentUser user = resolveSafely(userId, sessionToken);
+		CurrentUser user = resolveSafely(sessionToken);
 		String postId = communityService.pinnedPostId(communityId)
 			.orElseThrow(() -> new com.socialcoisa.rede.shared.web.ApiException(404, "NO_PINNED_POST",
 				"Nao ha publicacao fixada nesta comunidade."));
@@ -329,11 +313,10 @@ class CommunityContractController {
 	}
 
 	@PostMapping("/{communityId}/pin")
-	ResponseEntity<String> pin(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> pin(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String communityId, @RequestBody PinRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		if (request == null || request.postId() == null || request.postId().isBlank()) {
 			throw new com.socialcoisa.rede.shared.web.ApiException(400, "BAD_REQUEST", "Informe o post.");
 		}
@@ -346,11 +329,10 @@ class CommunityContractController {
 	}
 
 	@DeleteMapping("/{communityId}/pin")
-	ResponseEntity<String> unpin(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> unpin(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String communityId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of("communityId", communityId, "action", "unpin"));
 		return idempotency.execute(user.id(), "DELETE", "/api/communities/{communityId}/pin", idempotencyKey, hash,
 			() -> {

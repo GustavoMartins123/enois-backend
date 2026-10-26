@@ -119,6 +119,36 @@ class CompanyFlowTests {
 			.andExpect(jsonPath("$.projects[0].status").value("COMPLETED"));
 	}
 
+	@Test
+	void ownerRoleCannotBeGrantedToAMember() throws Exception {
+		var owner = auth("cflow_role_owner");
+		var other = auth("cflow_role_other");
+		MvcResult created = mockMvc.perform(post("/empresas")
+				.header("X-Session-Token", owner.token())
+				.header("Idempotency-Key", "cflow-role-create")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of(
+					"name", "Empresa Papeis " + java.util.UUID.randomUUID().toString().substring(0, 8),
+					"description", "Pagina para testar papeis.", "sector", "Tecnologia", "size", "1-10",
+					"location", "Remoto"))))
+			.andExpect(status().isOk())
+			.andReturn();
+		String companyId = objectMapper.readTree(created.getResponse().getContentAsString()).get("id").asText();
+
+		mockMvc.perform(post("/empresas/" + companyId + "/members")
+				.header("X-Session-Token", owner.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("userId", other.userId(), "role", "OWNER"))))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_ROLE"));
+
+		mockMvc.perform(post("/empresas/" + companyId + "/members")
+				.header("X-Session-Token", owner.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of("userId", other.userId(), "role", "SUPERUSER"))))
+			.andExpect(status().isBadRequest());
+	}
+
 	private TestAuthHelper.AuthSession auth(String name) throws Exception {
 		return new TestAuthHelper(mockMvc, objectMapper).authenticate(name);
 	}
