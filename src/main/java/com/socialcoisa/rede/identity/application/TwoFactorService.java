@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import com.socialcoisa.rede.identity.application.port.in.TwoFactorUseCase;
+import com.socialcoisa.rede.identity.application.port.out.AuthSessionRepository;
 import com.socialcoisa.rede.identity.application.port.out.CredentialRepository;
 import com.socialcoisa.rede.identity.application.port.out.StoredCredential;
 import com.socialcoisa.rede.identity.application.port.out.TwoFactorRepository;
@@ -53,13 +54,15 @@ public class TwoFactorService implements TwoFactorUseCase {
 	private final SecretCipher secretCipher;
 	private final EmailService emailService;
 	private final com.socialcoisa.rede.notifications.application.NotificationService notifications;
+	private final AuthSessionRepository sessions;
 	private final Clock clock;
 	private final SecureRandom secureRandom = new SecureRandom();
 
 	public TwoFactorService(TwoFactorRepository repository, UserProfileRepository userProfileRepository,
 			CredentialRepository credentialRepository, PasswordHasher passwordHasher, SecretCipher secretCipher,
 			EmailService emailService,
-			com.socialcoisa.rede.notifications.application.NotificationService notifications, Clock clock) {
+			com.socialcoisa.rede.notifications.application.NotificationService notifications,
+			AuthSessionRepository sessions, Clock clock) {
 		this.repository = repository;
 		this.userProfileRepository = userProfileRepository;
 		this.credentialRepository = credentialRepository;
@@ -67,6 +70,7 @@ public class TwoFactorService implements TwoFactorUseCase {
 		this.secretCipher = secretCipher;
 		this.emailService = emailService;
 		this.notifications = notifications;
+		this.sessions = sessions;
 		this.clock = clock;
 	}
 
@@ -102,7 +106,8 @@ public class TwoFactorService implements TwoFactorUseCase {
 
 	@Transactional
 	@Override
-	public TotpSetup startTotpSetup(String userId) {
+	public TotpSetup startTotpSetup(String userId, String password) {
+		requirePassword(userId, password);
 		secretCipher.requireEnabled();
 		UserProfile profile = requireProfile(userId);
 		if (profile.totpEnabled()) {
@@ -117,7 +122,7 @@ public class TwoFactorService implements TwoFactorUseCase {
 	/** Confirma o setup com um codigo do app e devolve os codigos de recuperacao (mostrados uma vez). */
 	@Transactional
 	@Override
-	public List<String> enableTotp(String userId, String code, String password) {
+	public List<String> enableTotp(String userId, String code, String password, String sessionToken) {
 		requirePassword(userId, password);
 		secretCipher.requireEnabled();
 		String pendingEncrypted = repository.findPendingSecret(userId)
@@ -132,7 +137,8 @@ public class TwoFactorService implements TwoFactorUseCase {
 			});
 
 		String secret = secretCipher.decrypt(pendingEncrypted);
-		if (!Totp.verify(secret, code, now)) {
+		long step = Totp.matchingStep(secret, code, now, Totp.DEFAULT_WINDOW);
+		if (step < 0) {
 			throw new ApiException(400, "INVALID_TWO_FACTOR_CODE", "Codigo invalido. Confira o app e tente de novo.");
 		}
 
@@ -140,6 +146,9 @@ public class TwoFactorService implements TwoFactorUseCase {
 		profile.enableTotp(now);
 		userProfileRepository.save(profile);
 		repository.activateTotpSecret(userId, pendingEncrypted, now);
+		// The enrollment code is spent: it cannot complete a login inside the same window.
+		repository.markTotpStepUsed(userId, step);
+		sessions.revokeOthersByUser(userId, sessionToken, now);
 		return issueBackupCodes(userId, now);
 	}
 
@@ -185,13 +194,14 @@ public class TwoFactorService implements TwoFactorUseCase {
 	}
 
 	@Transactional
-	public void disableTotp(String userId, String password) {
+	public void disableTotp(String userId, String password, String sessionToken) {
 		UserProfile profile = requireProfile(userId);
 		requirePassword(userId, password);
 		profile.disableTotp();
 		userProfileRepository.save(profile);
 		repository.clearSecrets(userId);
 		repository.deleteBackupCodes(userId);
+		sessions.revokeOthersByUser(userId, sessionToken, clock.instant());
 	}
 
 	// ------------------------------------------------------------------ codigo por e-mail
@@ -221,7 +231,7 @@ public class TwoFactorService implements TwoFactorUseCase {
 
 	@Transactional
 	@Override
-	public void confirmEmailOtpSetup(String userId, String code) {
+	public void confirmEmailOtpSetup(String userId, String code, String sessionToken) {
 		if (!StringUtils.hasText(code)) {
 			throw new ApiException(400, "INVALID_TWO_FACTOR_CODE", "Informe o codigo enviado por e-mail.");
 		}
@@ -237,7 +247,7 @@ public class TwoFactorService implements TwoFactorUseCase {
 			throw new ApiException(410, "TWO_FACTOR_CHALLENGE_EXPIRED", "O codigo expirou. Peca um novo.");
 		}
 		if (!Hashes.sha256Hex(code.trim()).equals(challenge.codeHash())) {
-			repository.saveChallenge(challenge.registerFailedAttempt());
+			repository.recordFailedAttempt(challenge.id());
 			throw new ApiException(400, "INVALID_TWO_FACTOR_CODE", "Codigo incorreto.");
 		}
 
@@ -245,15 +255,17 @@ public class TwoFactorService implements TwoFactorUseCase {
 		UserProfile profile = requireProfile(userId);
 		profile.enableEmailOtp(now);
 		userProfileRepository.save(profile);
+		sessions.revokeOthersByUser(userId, sessionToken, now);
 	}
 
 	@Transactional
 	@Override
-	public void disableEmailOtp(String userId, String password) {
+	public void disableEmailOtp(String userId, String password, String sessionToken) {
 		UserProfile profile = requireProfile(userId);
 		requirePassword(userId, password);
 		profile.disableEmailOtp();
 		userProfileRepository.save(profile);
+		sessions.revokeOthersByUser(userId, sessionToken, clock.instant());
 	}
 
 	// ------------------------------------------------------------------ desafio do login
@@ -311,9 +323,8 @@ public class TwoFactorService implements TwoFactorUseCase {
 	 * Aceita codigo do aplicativo (TOTP) ou um codigo de recuperacao. Erro de codigo incrementa as
 	 * tentativas do mesmo desafio: sem isso, daria para testar codigos indefinidamente.
 	 */
-	// Sem @Transactional de propósito: a tentativa falha é gravada e precisa SOBREVIVER ao erro
-	// (EN-08/E-09). Dentro de uma transação, o save era revertido junto com a exceção e o contador
-	// nunca subia.
+	// The caller (AuthService.verifyTwoFactor) is transactional and rolls back on the error below, so
+	// a wrong code is counted through recordFailedAttempt, which commits on its own.
 	public String verifyChallenge(String challengeId, String code) {
 		Instant now = clock.instant();
 		TwoFactorChallenge challenge = repository.findChallenge(challengeId)
@@ -337,9 +348,11 @@ public class TwoFactorService implements TwoFactorUseCase {
 
 		boolean valid = switch (challenge.method()) {
 			case EMAIL -> Hashes.sha256Hex(code.trim()).equals(challenge.codeHash());
+			// Each time step is accepted once: a replayed code fails like a wrong one.
 			case TOTP -> repository.findActiveSecret(challenge.userId())
 				.map(secretCipher::decrypt)
-				.filter(secret -> Totp.verify(secret, code, now))
+				.map(secret -> Totp.matchingStep(secret, code, now, Totp.DEFAULT_WINDOW))
+				.filter(step -> step >= 0 && repository.markTotpStepUsed(challenge.userId(), step))
 				.isPresent();
 		};
 
@@ -348,7 +361,7 @@ public class TwoFactorService implements TwoFactorUseCase {
 			boolean recovered = repository.consumeBackupCode(challenge.userId(), Hashes.sha256Hex(normalizeBackup(code)),
 				now);
 			if (!recovered) {
-				repository.saveChallenge(challenge.registerFailedAttempt());
+				repository.recordFailedAttempt(challenge.id());
 				throw new ApiException(400, "INVALID_TWO_FACTOR_CODE", "Codigo incorreto.");
 			}
 		}

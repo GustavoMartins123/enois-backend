@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -65,7 +66,8 @@ class TwoFactorFlowTests {
 
 		// 1) setup devolve o segredo e a URI do aplicativo
 		MvcResult setup = mockMvc.perform(post("/auth/2fa/totp/setup").header("X-Session-Token", session.token())
-				.header("Idempotency-Key", "totp-setup-1"))
+				.header("Idempotency-Key", "totp-setup-1")
+				.contentType(MediaType.APPLICATION_JSON).content(password("Test1234!")))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.secret").isNotEmpty())
 			.andExpect(jsonPath("$.otpauthUri").value(org.hamcrest.Matchers.startsWith("otpauth://totp/")))
@@ -116,11 +118,11 @@ class TwoFactorFlowTests {
 				.contentType(MediaType.APPLICATION_JSON).content(challenge(challengeId, "123456")))
 			.andExpect(status().isBadRequest());
 
-		// 6) codigo certo conclui o login
+		// 6) codigo certo conclui o login (o do passo seguinte: o da ativacao ja foi gasto)
 		MvcResult verified = mockMvc.perform(post("/auth/2fa/verify").header("Idempotency-Key", "totp-verify-ok")
-				.contentType(MediaType.APPLICATION_JSON).content(challenge(challengeId, validCode(secret))))
+				.contentType(MediaType.APPLICATION_JSON).content(challenge(challengeId, nextCode(secret))))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.token").isNotEmpty())
+			.andExpect(jsonPath("$.token").doesNotExist())
 			.andExpect(jsonPath("$.user.twoFactorEnabled").value(true))
 			.andReturn();
 
@@ -131,7 +133,7 @@ class TwoFactorFlowTests {
 			.andExpect(jsonPath("$.code").value("TWO_FACTOR_CHALLENGE_ALREADY_USED"));
 
 		// 8) codigo de recuperacao tambem entra (e vale uma vez so)
-		String sessionToken = objectMapper.readTree(verified.getResponse().getContentAsString()).get("token").asText();
+		String sessionToken = TestAuthHelper.sessionToken(verified);
 		assertThat(sessionToken).isNotBlank();
 
 		MvcResult recoveryLogin = mockMvc.perform(post("/auth/login").header("Idempotency-Key", "totp-login-2")
@@ -145,7 +147,7 @@ class TwoFactorFlowTests {
 		mockMvc.perform(post("/auth/2fa/verify").header("Idempotency-Key", "totp-verify-recovery")
 				.contentType(MediaType.APPLICATION_JSON).content(challenge(recoveryChallenge, backupCodes.get(0))))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.token").isNotEmpty());
+			.andExpect(cookie().exists("enois_session"));
 
 		mockMvc.perform(get("/auth/2fa/status").header("X-Session-Token", sessionToken))
 			.andExpect(jsonPath("$.backupCodesLeft").value(7));
@@ -180,7 +182,7 @@ class TwoFactorFlowTests {
 		mockMvc.perform(post("/auth/2fa/verify").header("Idempotency-Key", "email-verify-1")
 				.contentType(MediaType.APPLICATION_JSON).content(challenge(challengeId, lastEmailedCode)))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.token").isNotEmpty());
+			.andExpect(cookie().exists("enois_session"));
 	}
 
 	@Test
@@ -188,7 +190,8 @@ class TwoFactorFlowTests {
 		var session = new TestAuthHelper(mockMvc, objectMapper).authenticate("two_factor_disable");
 
 		MvcResult setup = mockMvc.perform(post("/auth/2fa/totp/setup").header("X-Session-Token", session.token())
-				.header("Idempotency-Key", "disable-setup"))
+				.header("Idempotency-Key", "disable-setup")
+				.contentType(MediaType.APPLICATION_JSON).content(password("Test1234!")))
 			.andExpect(status().isOk())
 			.andReturn();
 		String secret = objectMapper.readTree(setup.getResponse().getContentAsString()).get("secret").asText();
@@ -213,7 +216,7 @@ class TwoFactorFlowTests {
 		mockMvc.perform(post("/auth/login").header("Idempotency-Key", "disable-login")
 				.contentType(MediaType.APPLICATION_JSON).content(loginPayload("two_factor_disable@test.com")))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.token").isNotEmpty());
+			.andExpect(cookie().exists("enois_session"));
 	}
 
 	@Test
@@ -252,6 +255,129 @@ class TwoFactorFlowTests {
 		com.socialcoisa.rede.shared.web.TestDatabase.enableTwoFactor(session.userId(), Instant.now());
 		mockMvc.perform(get("/notifications").header("X-Session-Token", session.token()))
 			.andExpect(status().isOk());
+	}
+
+	@Test
+	void totpSetupAndEnableRequireThePasswordAndRevokeOtherSessions() throws Exception {
+		TestAuthHelper helper = new TestAuthHelper(mockMvc, objectMapper);
+		var session = helper.authenticate("two_factor_reauth");
+		var otherDevice = helper.authenticate("two_factor_reauth");
+
+		mockMvc.perform(post("/auth/2fa/totp/setup").header("X-Session-Token", session.token()))
+			.andExpect(status().isUnauthorized());
+		mockMvc.perform(post("/auth/2fa/totp/setup").header("X-Session-Token", session.token())
+				.contentType(MediaType.APPLICATION_JSON).content(password("errada")))
+			.andExpect(status().isUnauthorized());
+		String secret = enrollSecret(session.token());
+
+		mockMvc.perform(post("/auth/2fa/totp/enable").header("X-Session-Token", session.token())
+				.contentType(MediaType.APPLICATION_JSON).content(code(validCode(secret))))
+			.andExpect(status().isUnauthorized());
+		mockMvc.perform(post("/auth/2fa/totp/enable").header("X-Session-Token", session.token())
+				.contentType(MediaType.APPLICATION_JSON).content(codeWithPassword(validCode(secret), "Test1234!")))
+			.andExpect(status().isOk());
+
+		// The device that made the change stays signed in; every other session is gone.
+		mockMvc.perform(get("/auth/me").header("X-Session-Token", session.token())).andExpect(status().isOk());
+		mockMvc.perform(get("/auth/me").header("X-Session-Token", otherDevice.token()))
+			.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void wrongCodesLockTheChallengeEvenForTheRightCode() throws Exception {
+		var session = new TestAuthHelper(mockMvc, objectMapper).authenticate("two_factor_lockout");
+		String secret = enrollSecret(session.token());
+		mockMvc.perform(post("/auth/2fa/totp/enable").header("X-Session-Token", session.token())
+				.contentType(MediaType.APPLICATION_JSON).content(codeWithPassword(validCode(secret), "Test1234!")))
+			.andExpect(status().isOk());
+		String challengeId = loginChallenge("two_factor_lockout@test.com");
+
+		for (int attempt = 0; attempt < com.socialcoisa.rede.identity.domain.TwoFactorChallenge.MAX_ATTEMPTS; attempt++) {
+			mockMvc.perform(post("/auth/2fa/verify").contentType(MediaType.APPLICATION_JSON)
+					.content(challenge(challengeId, wrongCode(secret))))
+				.andExpect(status().isBadRequest());
+		}
+		mockMvc.perform(post("/auth/2fa/verify").contentType(MediaType.APPLICATION_JSON)
+				.content(challenge(challengeId, nextCode(secret))))
+			.andExpect(status().isTooManyRequests())
+			.andExpect(jsonPath("$.code").value("TOO_MANY_ATTEMPTS"));
+	}
+
+	@Test
+	void aTotpCodeIsAcceptedOnlyOnce() throws Exception {
+		var session = new TestAuthHelper(mockMvc, objectMapper).authenticate("two_factor_replay");
+		String secret = enrollSecret(session.token());
+		String enrollmentCode = validCode(secret);
+		mockMvc.perform(post("/auth/2fa/totp/enable").header("X-Session-Token", session.token())
+				.contentType(MediaType.APPLICATION_JSON).content(codeWithPassword(enrollmentCode, "Test1234!")))
+			.andExpect(status().isOk());
+
+		// The enrollment code cannot complete a login.
+		mockMvc.perform(post("/auth/2fa/verify").contentType(MediaType.APPLICATION_JSON)
+				.content(challenge(loginChallenge("two_factor_replay@test.com"), enrollmentCode)))
+			.andExpect(status().isBadRequest());
+
+		String code = nextCode(secret);
+		mockMvc.perform(post("/auth/2fa/verify").contentType(MediaType.APPLICATION_JSON)
+				.content(challenge(loginChallenge("two_factor_replay@test.com"), code)))
+			.andExpect(status().isOk());
+		// Same code on a fresh challenge: rejected.
+		mockMvc.perform(post("/auth/2fa/verify").contentType(MediaType.APPLICATION_JSON)
+				.content(challenge(loginChallenge("two_factor_replay@test.com"), code)))
+			.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void wrongEmailSetupCodesAreCountedDespiteTheRollback() throws Exception {
+		var session = new TestAuthHelper(mockMvc, objectMapper).authenticate("two_factor_email_lockout");
+		mockMvc.perform(post("/auth/2fa/email/request").header("X-Session-Token", session.token()))
+			.andExpect(status().isAccepted());
+		String wrong = "000000".equals(lastEmailedCode) ? "111111" : "000000";
+		for (int attempt = 0; attempt < com.socialcoisa.rede.identity.domain.TwoFactorChallenge.MAX_ATTEMPTS; attempt++) {
+			mockMvc.perform(post("/auth/2fa/email/confirm").header("X-Session-Token", session.token())
+					.contentType(MediaType.APPLICATION_JSON).content(code(wrong)))
+				.andExpect(status().isBadRequest());
+		}
+		mockMvc.perform(post("/auth/2fa/email/confirm").header("X-Session-Token", session.token())
+				.contentType(MediaType.APPLICATION_JSON).content(code(lastEmailedCode)))
+			.andExpect(status().isTooManyRequests());
+	}
+
+	private String enrollSecret(String token) throws Exception {
+		MvcResult setup = mockMvc.perform(post("/auth/2fa/totp/setup").header("X-Session-Token", token)
+				.contentType(MediaType.APPLICATION_JSON).content(password("Test1234!")))
+			.andExpect(status().isOk())
+			.andReturn();
+		return objectMapper.readTree(setup.getResponse().getContentAsString()).get("secret").asText();
+	}
+
+	private String loginChallenge(String email) throws Exception {
+		MvcResult login = mockMvc.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
+				.content(loginPayload(email)))
+			.andExpect(status().isAccepted())
+			.andReturn();
+		return objectMapper.readTree(login.getResponse().getContentAsString()).get("challengeId").asText();
+	}
+
+	/** A six-digit code that matches no step inside the verification window. */
+	private String wrongCode(String secret) {
+		long step = Instant.now().getEpochSecond() / 30;
+		java.util.Set<String> valid = java.util.Set.of(Totp.codeAt(secret, step - 1), Totp.codeAt(secret, step),
+			Totp.codeAt(secret, step + 1), Totp.codeAt(secret, step + 2));
+		for (int candidate = 0;; candidate++) {
+			String code = String.format("%06d", candidate);
+			if (!valid.contains(code)) {
+				return code;
+			}
+		}
+	}
+
+	private String nextCode(String secret) {
+		return Totp.codeAt(secret, Instant.now().getEpochSecond() / 30 + 1);
+	}
+
+	private String password(String value) throws Exception {
+		return objectMapper.writeValueAsString(Map.of("password", value));
 	}
 
 	private String validCode(String secret) {
