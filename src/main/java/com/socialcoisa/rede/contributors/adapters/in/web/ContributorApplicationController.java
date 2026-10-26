@@ -65,19 +65,17 @@ class ContributorApplicationController {
 	}
 
 	@GetMapping("/admin/contributors/applications")
-	List<AdminView> list(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	List<AdminView> list(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestParam(required = false) ContributorApplicationStatus status,
 			@RequestParam(defaultValue = "100") int limit) {
-		adminGuard.requireAdmin(currentUserResolver.resolve(userId, sessionToken));
+		adminGuard.requireAdmin(currentUserResolver.resolve(sessionToken));
 		return service.list(status, limit).stream().map(AdminView::from).toList();
 	}
 
 	@PatchMapping("/admin/contributors/applications/{id}")
-	AdminView updateStatus(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	AdminView updateStatus(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String id, @RequestBody UpdateStatusRequest request) {
-		adminGuard.requireAdmin(currentUserResolver.resolve(userId, sessionToken));
+		adminGuard.requireAdmin(currentUserResolver.resolve(sessionToken));
 		return AdminView.from(service.updateStatus(id, request.status()));
 	}
 

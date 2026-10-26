@@ -423,7 +423,6 @@ class AuthController {
 	 */
 	@PostMapping("/admin/two-factor/reset-broken")
 	Map<String, Integer> resetBrokenTwoFactor(
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader("X-Session-Token") String sessionToken) {
 		// Está sob /auth, então o interceptor de /admin não o cobre: exige admin explicitamente
 		// (N-09 — qualquer sessão resetava o TOTP global).

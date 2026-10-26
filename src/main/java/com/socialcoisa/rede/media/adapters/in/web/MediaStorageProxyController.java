@@ -84,9 +84,13 @@ class MediaStorageProxyController {
 		}
 		MediaAsset asset = assets.findById(mediaIdOf(objectKey)).orElse(null);
 		String mime = asset != null ? asset.mimeType() : object.contentType();
+		// Only the media types the upload accepts render inline; anything else (legacy objects with an
+		// unexpected type) is served as an opaque download. nosniff comes from SecurityHeadersFilter.
+		boolean inline = com.socialcoisa.rede.media.application.MediaService.isAllowedMimeType(mime);
 		ResponseEntity.BodyBuilder response = ResponseEntity
 			.status(object.contentRange() == null ? HttpStatus.OK : HttpStatus.PARTIAL_CONTENT)
-			.header(HttpHeaders.CONTENT_TYPE, mime == null ? "application/octet-stream" : mime)
+			.header(HttpHeaders.CONTENT_TYPE, inline ? mime : "application/octet-stream")
+			.header(HttpHeaders.CONTENT_DISPOSITION, inline ? "inline" : "attachment")
 			.header(HttpHeaders.ACCEPT_RANGES, "bytes")
 			// A chave tem uuid: o conteúdo daquele endereço nunca muda, então pode ficar em cache.
 			.header(HttpHeaders.CACHE_CONTROL, "public, max-age=31536000, immutable");
@@ -113,7 +117,7 @@ class MediaStorageProxyController {
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = HttpHeaders.CONTENT_TYPE, required = false) String contentType,
 			HttpServletRequest request) {
-		CurrentUser user = currentUserResolver.resolve(null, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String objectKey = objectKey(key);
 		MediaAsset asset = assets.findById(mediaIdOf(objectKey))
 			.orElseThrow(() -> new ApiException(404, "MEDIA_NOT_FOUND", "Midia nao encontrada."));
@@ -135,8 +139,7 @@ class MediaStorageProxyController {
 						"Arquivo grande demais para a limpeza de metadados.");
 				}
 				// Vídeo/áudio grande: arquivo temporário + ffmpeg, sem carregar tudo em memória.
-				java.nio.file.Path sanitized = sanitizer.sanitizeToFile(request.getInputStream(), mime,
-					asset.fileName());
+				java.nio.file.Path sanitized = sanitizer.sanitizeToFile(request.getInputStream(), mime, objectKey);
 				try {
 					try (var body = java.nio.file.Files.newInputStream(sanitized)) {
 						store().write(objectKey, mime, java.nio.file.Files.size(sanitized), body);
@@ -149,7 +152,7 @@ class MediaStorageProxyController {
 			else {
 				byte[] raw = request.getInputStream().readAllBytes();
 				// LIMPEZA NA ESCRITA: EXIF/GPS/XMP/IPTC não chegam ao bucket.
-				byte[] clean = sanitizer.sanitize(raw, mime, asset.fileName());
+				byte[] clean = sanitizer.sanitize(raw, mime, objectKey);
 				store().write(objectKey, mime, clean.length, new java.io.ByteArrayInputStream(clean));
 			}
 		}

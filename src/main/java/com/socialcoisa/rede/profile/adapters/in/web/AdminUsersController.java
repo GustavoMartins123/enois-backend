@@ -37,9 +37,8 @@ class AdminUsersController {
 
 	@GetMapping("/admin/admins")
 	List<AdminUserService.AdminView> list(
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		adminGuard.requireAdmin(user);
 		return admins.admins();
 	}
@@ -49,20 +48,18 @@ class AdminUsersController {
 
 	@PostMapping("/admin/admins")
 	AdminUserService.AdminView promote(
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestBody PromoteRequest request) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		adminGuard.requireAdmin(user);
 		return admins.promote(request.username(), user);
 	}
 
 	@PostMapping("/admin/admins/{username}/revoke")
 	AdminUserService.AdminView revoke(
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String username) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		adminGuard.requireAdmin(user);
 		return admins.revoke(username, user);
 	}

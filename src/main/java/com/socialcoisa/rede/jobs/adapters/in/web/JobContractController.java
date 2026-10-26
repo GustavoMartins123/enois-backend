@@ -81,10 +81,9 @@ class JobContractController {
 	/** Candidaturas recebidas (somente quem publicou a vaga). */
 	@GetMapping("/{jobId}/applications")
 	List<ApplicationView> applications(@PathVariable String jobId,
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestParam(defaultValue = "50") int limit) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		return jobService.applicationsOf(jobId, user.id().value(), limit).stream()
 			.map(application -> new ApplicationView(application.id(), application.jobId(), application.status().name(),
 				application.appliedAt().toString(), application.answers().size(),
@@ -99,9 +98,8 @@ class JobContractController {
 
 	@PostMapping
 	ResponseEntity<JobView> create(@RequestBody CreateJobRequest body,
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		Job job = jobService.create(body.title(), body.company(), body.logo(), body.location(), body.type(), body.level(),
 			body.salary(), body.currency(), body.salaryMin(), body.salaryMax(), body.salaryPeriod(),
 			body.description(), body.skills(), toFieldInputs(body.applicationFields()), user.id().value(),
@@ -116,7 +114,6 @@ class JobContractController {
 			@RequestParam(required = false) List<String> skills,
 			@RequestParam(required = false) String source, @RequestParam(required = false) String platform,
 			@RequestParam(required = false) String cursor, @RequestParam(defaultValue = "20") int limit,
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		// As ABAS: EXTERNAL devolve SO as externas (com filtro de agregador); INTERNAL nunca
 		// mistura. Sem `source` mantem o comportamento antigo (internas + externas na 1a pagina).
@@ -137,15 +134,14 @@ class JobContractController {
 			|| org.springframework.util.StringUtils.hasText(location)
 			|| (skills != null && !skills.isEmpty());
 		boolean firstPage = cursor == null;
-		return page(jobs, limit, viewerId(userId, sessionToken), PageKind.LIST,
+		return page(jobs, limit, viewerId(sessionToken), PageKind.LIST,
 			!soInternas && firstPage && !structuralFilters, query);
 	}
 
 	/** As FAVORITAS: ids salvos resolvidos dos dois lados (interna e externa), na ordem do save. */
 	@GetMapping("/saved")
-	PageResponse<JobView> saved(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		String viewer = viewerId(userId, sessionToken);
+	PageResponse<JobView> saved(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		String viewer = viewerId(sessionToken);
 		if (viewer == null) {
 			throw new com.socialcoisa.rede.shared.web.ApiException(401, "UNAUTHENTICATED",
 				"Sessao obrigatoria para ver as vagas favoritas.");
@@ -201,10 +197,9 @@ class JobContractController {
 	 */
 	@PostMapping("/external")
 	ResponseEntity<String> createExternal(@RequestBody CreateExternalJobRequest body,
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of(
 			"title", body.title() == null ? "" : body.title(),
 			"company", body.company() == null ? "" : body.company(),
@@ -221,9 +216,8 @@ class JobContractController {
 
 	/** As vagas externas que EU cadastrei (a tela lista e permite excluir). */
 	@GetMapping("/external/mine")
-	List<JobView> myExternalJobs(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+	List<JobView> myExternalJobs(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		return externalJobSubmission.mine(user.id().value()).stream()
 			.map(job -> toExternalView(job, true))
 			.toList();
@@ -232,9 +226,8 @@ class JobContractController {
 	/** Exclui uma vaga externa CADASTRADA POR MIM (as importadas nao tem dono). */
 	@DeleteMapping("/external/{externalJobId}")
 	ResponseEntity<Void> deleteExternal(@PathVariable String externalJobId,
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		externalJobSubmission.remove(user.id().value(), externalJobId);
 		return ResponseEntity.noContent().build();
 	}
@@ -243,9 +236,8 @@ class JobContractController {
 	@GetMapping("/mine")
 	PageResponse<JobView> mine(@RequestParam(required = false) String cursor,
 			@RequestParam(defaultValue = "20") int limit,
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		Instant before = cursorCodec.decode(cursor).orElse(null);
 		List<Job> jobs = jobService.listMine(user.id().value(), before, limit);
 		return page(jobs, limit, user.id().value(), PageKind.MINE, false, null);
@@ -255,9 +247,8 @@ class JobContractController {
 	@GetMapping("/applications")
 	PageResponse<JobView> applications(@RequestParam(required = false) String cursor,
 			@RequestParam(defaultValue = "20") int limit,
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		Instant before = cursorCodec.decode(cursor).orElse(null);
 		List<Job> jobs = jobService.listApplications(user.id().value(), before, limit);
 		return page(jobs, limit, user.id().value(), PageKind.APPLICATIONS, false, null);
@@ -276,7 +267,6 @@ class JobContractController {
 
 	@GetMapping("/{jobId}")
 	JobView job(@PathVariable String jobId,
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		// A listagem publica inclui vagas externas persistidas em tabela separada.
 		// Seus identificadores pertencem ao namespace ext_; elas nao aceitam candidatura interna.
@@ -284,7 +274,7 @@ class JobContractController {
 			var external = externalJobRepository.findById(jobId);
 			if (external.isPresent()) return toExternalView(external.get());
 		}
-		String viewer = viewerId(userId, sessionToken);
+		String viewer = viewerId(sessionToken);
 		Job job = jobService.getById(jobId);
 		boolean owner = viewer != null && viewer.equals(job.postedBy());
 		// O dono NUNCA e candidato na propria vaga (o apply bloqueia isso). Se houver uma
@@ -297,9 +287,8 @@ class JobContractController {
 
 	@PutMapping("/{jobId}")
 	ResponseEntity<JobView> update(@PathVariable String jobId, @RequestBody CreateJobRequest body,
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		Job job = jobService.update(jobId, body.title(), body.company(), body.logo(), body.location(), body.type(),
 			body.level(), body.salary(), body.currency(), body.salaryMin(), body.salaryMax(), body.salaryPeriod(),
 			body.description(), body.skills(), toFieldInputs(body.applicationFields()), user.id().value());
@@ -320,10 +309,9 @@ class JobContractController {
 	 * motivo so existia no aviso — quem quisesse reler tinha de garimpar a conversa.
 	 */
 	@GetMapping("/applications/mine")
-	List<MyApplicationView> myApplications(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	List<MyApplicationView> myApplications(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestParam(defaultValue = "50") int limit) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		return jobService.myApplications(user.id().value(), Math.min(limit, 100)).stream()
 			.map(application -> {
 				Job job = jobService.getById(application.jobId());
@@ -343,10 +331,9 @@ class JobContractController {
 	@PatchMapping("/{jobId}/applications/{applicationId}")
 	ResponseEntity<ApplicationView> updateApplicationStatus(@PathVariable String jobId,
 			@PathVariable String applicationId,
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestBody UpdateApplicationStatusRequest body) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		JobApplicationStatus status = parseStatus(body == null ? null : body.status());
 		JobApplication updated = jobService.updateApplicationStatus(jobId, applicationId, user.id().value(), status,
 			body == null ? null : body.feedback());
@@ -374,9 +361,8 @@ class JobContractController {
 	 */
 	@PostMapping("/{jobId}/close")
 	ResponseEntity<JobView> close(@PathVariable String jobId,
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		Job job = jobService.close(jobId, user.id().value());
 		return ResponseEntity.ok(
 			toView(job, user.id().value(), false, false, jobService.applicationsCount(job.id())));
@@ -384,9 +370,8 @@ class JobContractController {
 
 	@DeleteMapping("/{jobId}")
 	ResponseEntity<DeleteResultView> delete(@PathVariable String jobId,
-			@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		JobService.DeleteResult result = jobService.delete(jobId, user.id().value());
 		// O aviso volta na resposta: quem excluiu com candidatos sem resposta precisa saber
 		// na hora que a credibilidade é afetada (item 7 do backlog).
@@ -401,12 +386,11 @@ class JobContractController {
 	 * os obrigatorios sao validados aqui, e a candidatura e entregue ao empregador por e-mail e DM.
 	 */
 	@PostMapping("/{jobId}/applications")
-	ResponseEntity<String> apply(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> apply(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String jobId,
 			@RequestBody(required = false) ApplyRequest body) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of("jobId", jobId, "body", body == null ? Map.of() : body));
 		return idempotency.execute(user.id(), "POST", "/api/jobs/{jobId}/applications", idempotencyKey, hash,
 			() -> {
@@ -418,11 +402,10 @@ class JobContractController {
 	}
 
 	@PostMapping("/{jobId}/saves")
-	ResponseEntity<String> save(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> save(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String jobId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of("jobId", jobId));
 		return idempotency.execute(user.id(), "POST", "/api/jobs/{jobId}/saves", idempotencyKey, hash,
 			() -> {
@@ -432,11 +415,10 @@ class JobContractController {
 	}
 
 	@DeleteMapping("/{jobId}/saves")
-	ResponseEntity<String> removeSave(@RequestHeader(value = "X-User-Id", required = false) String userId,
-			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+	ResponseEntity<String> removeSave(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@PathVariable String jobId) {
-		CurrentUser user = currentUserResolver.resolve(userId, sessionToken);
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(Map.of("jobId", jobId));
 		return idempotency.execute(user.id(), "DELETE", "/api/jobs/{jobId}/saves", idempotencyKey, hash,
 			() -> {
@@ -621,9 +603,9 @@ class JobContractController {
 	}
 
 	/** Resolve o usuario quando ha sessao; listas publicas seguem funcionando sem login. */
-	private String viewerId(String userId, String sessionToken) {
+	private String viewerId(String sessionToken) {
 		try {
-			return currentUserResolver.resolve(userId, sessionToken).id().value();
+			return currentUserResolver.resolve(sessionToken).id().value();
 		}
 		catch (RuntimeException exception) {
 			return null;
