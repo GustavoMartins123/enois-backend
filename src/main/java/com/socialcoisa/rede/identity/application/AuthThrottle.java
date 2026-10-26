@@ -57,9 +57,13 @@ public class AuthThrottle {
 	}
 
 	/**
-	 * Atraso progressivo, nunca bloqueio: o lockout por conta deixava qualquer pessoa derrubar a
-	 * vítima com 5 senhas erradas, inclusive impedindo a senha CORRETA. Keyed by account + IP, so
-	 * failures from another network never slow the owner down; os limites por IP seguem.
+	 * Recusa progressiva, nunca bloqueio permanente: o lockout por conta deixava qualquer pessoa
+	 * derrubar a vítima com 5 senhas erradas, inclusive impedindo a senha CORRETA. Keyed by
+	 * account + IP, so failures from another network never slow the owner down.
+	 *
+	 * Não usa Thread.sleep: segurar a thread do Tomcat permitia DoS por esgotamento de threads
+	 * (atacante com IPs distribuídos ocupa todas as threads dormindo). Em vez disso, retorna 429
+	 * com Retry-After e libera a thread imediatamente — o cliente que espere.
 	 */
 	public void exigeLoginPermitido(String email, String ip) {
 		if (accountThrottled(email, ip)) {
@@ -70,12 +74,14 @@ public class AuthThrottle {
 		if (millis <= 0) {
 			return;
 		}
-		try {
-			Thread.sleep(millis);
-		}
-		catch (InterruptedException interrupted) {
-			Thread.currentThread().interrupt();
-		}
+		long seconds = Math.max(1, (millis + 999) / 1000);
+		throw retryAfter(seconds);
+	}
+
+	private static ApiException retryAfter(long seconds) {
+		return new ApiException(429, "LOGIN_THROTTLED",
+			"Aguarde " + seconds + " segundo" + (seconds > 1 ? "s" : "") + " e tente de novo.")
+			.withRetryAfter(seconds);
 	}
 
 	/** Progressive delay for this account from this network; 0 below the failure limit. */
