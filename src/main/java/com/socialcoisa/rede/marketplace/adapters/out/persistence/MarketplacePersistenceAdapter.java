@@ -44,6 +44,10 @@ interface SpringDataMarketplacePurchaseRepository
 
 	Optional<MarketplacePurchaseJpaEntity> findById(String id);
 
+	@Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+	@Query("select p from MarketplacePurchaseJpaEntity p where p.id = :id")
+	Optional<MarketplacePurchaseJpaEntity> findByIdForUpdate(String id);
+
 	List<MarketplacePurchaseJpaEntity> findByStateAndCreatedAtBefore(String state, java.time.Instant before,
 			Pageable pageable);
 
@@ -142,6 +146,11 @@ class MarketplacePersistenceAdapter implements MarketplaceRepository {
 	@Override
 	public Optional<MarketplacePurchase> findPurchaseById(String id) {
 		return purchases.findById(id).map(MarketplacePurchaseJpaEntity::toDomain);
+	}
+
+	@Override
+	public Optional<MarketplacePurchase> findPurchaseByIdForUpdate(String id) {
+		return purchases.findByIdForUpdate(id).map(MarketplacePurchaseJpaEntity::toDomain);
 	}
 
 	@Override
