@@ -113,12 +113,11 @@ class JobApplicationDeliveryAdapter implements JobApplicationDelivery {
 	}
 
 	private String emailBody(Job job, JobApplication application, String summary) {
-		String escaped = summary.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
 		return "<div style=\"font-family:Inter,Arial,sans-serif;font-size:14px;line-height:1.6;color:#1f2937\">"
 			+ "<p>Você recebeu uma candidatura para <strong>"
-			+ org.springframework.web.util.HtmlUtils.htmlEscape(job.title()) + "</strong>.</p>"
+			+ EmailService.escapeHtml(job.title()) + "</strong>.</p>"
 			+ "<pre style=\"white-space:pre-wrap;font-family:inherit;background:#f6f5ff;padding:16px;border-radius:12px\">"
-			+ escaped + "</pre>"
+			+ EmailService.escapeHtml(summary) + "</pre>"
 			+ "<p>Responda pelo app, na conversa direta com o candidato.</p></div>";
 	}
 
