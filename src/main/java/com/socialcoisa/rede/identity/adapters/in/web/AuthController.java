@@ -82,6 +82,7 @@ class AuthController {
 	private final boolean signupEnabled;
 	/** Login social desligável por ambiente (QA sem app OAuth configurado). */
 	private final boolean googleLoginEnabled;
+	private final com.socialcoisa.rede.shared.web.SessionCookies sessionCookies;
 
 	AuthController(SignupUseCase signupUseCase, VerifyEmailUseCase verifyEmailUseCase,
 			TwoFactorLoginUseCase twoFactorLoginUseCase, TwoFactorUseCase twoFactorUseCase,
@@ -107,7 +108,8 @@ class AuthController {
 			com.socialcoisa.rede.shared.security.ClientIpResolver ipResolver,
 			tools.jackson.databind.ObjectMapper objectMapper,
 			@Value("${rede.auth.signup-enabled:true}") boolean signupEnabled,
-			@Value("${rede.oauth.google.enabled:true}") boolean googleLoginEnabled) {
+			@Value("${rede.oauth.google.enabled:true}") boolean googleLoginEnabled,
+			com.socialcoisa.rede.shared.web.SessionCookies sessionCookies) {
 		this.signupUseCase = signupUseCase;
 		this.verifyEmailUseCase = verifyEmailUseCase;
 		this.twoFactorLoginUseCase = twoFactorLoginUseCase;
@@ -136,6 +138,7 @@ class AuthController {
 		this.objectMapper = objectMapper;
 		this.signupEnabled = signupEnabled;
 		this.googleLoginEnabled = googleLoginEnabled;
+		this.sessionCookies = sessionCookies;
 	}
 
 	/** Bloqueio de IP pela moderacao (V115): nenhum fluxo de autenticacao emite sessao de IP banido. */
@@ -260,7 +263,7 @@ class AuthController {
 	 */
 	@PostMapping("/login")
 	@RateLimiter(name = "auth")
-	ResponseEntity<String> login(@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+	ResponseEntity<?> login(@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@RequestHeader(value = "X-Device-Fingerprint", required = false) String deviceFingerprint,
 			@RequestBody LoginRequest body,
 			jakarta.servlet.http.HttpServletRequest httpRequest) {
@@ -278,8 +281,8 @@ class AuthController {
 			throttle.limpaLogin(body.email());
 			if (!result.requiresTwoFactor()) {
 				newDeviceNotifier.check(result.session().user().id(), deviceFingerprint);
-				return ResponseEntity.ok().contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-					.body(objectMapper.writeValueAsString(result.session()));
+				// Tokens go out as HttpOnly cookies (AuthCookieAdvice), never in the body.
+				return ResponseEntity.ok(result.session());
 			}
 			return ResponseEntity.status(202).contentType(org.springframework.http.MediaType.APPLICATION_JSON)
 				.body(objectMapper.writeValueAsString(Map.of(
@@ -319,7 +322,9 @@ class AuthController {
 
 	@PostMapping("/logout")
 	ResponseEntity<String> logout(@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
-			@RequestHeader(value = "X-Session-Token", required = false) String token) {
+			@RequestHeader(value = "X-Session-Token", required = false) String token,
+			jakarta.servlet.http.HttpServletResponse httpResponse) {
+		sessionCookies.clear().forEach(value -> httpResponse.addHeader(org.springframework.http.HttpHeaders.SET_COOKIE, value));
 		// O escopo da idempotencia e chave de tabela: vai como HASH do token, nunca o token vivo
 		// em texto puro (quem le a tabela — backup, DBA — nao ganha uma sessao com isso).
 		String scope = "session:" + (token == null ? "anonymous" : idempotency.hash(token.trim()));
@@ -370,15 +375,16 @@ class AuthController {
 	@PostMapping("/2fa/totp/setup")
 	@RateLimiter(name = "twofa")
 	TwoFactorUseCase.TotpSetup startTotpSetup(
-			@RequestHeader(value = "X-Session-Token", required = false) String token) {
-		return twoFactorUseCase.startTotpSetup(requireUserId(token));
+			@RequestHeader(value = "X-Session-Token", required = false) String token,
+			@RequestBody(required = false) PasswordConfirmationRequest request) {
+		return twoFactorUseCase.startTotpSetup(requireUserId(token), request == null ? null : request.password());
 	}
 
 	@PostMapping("/2fa/totp/enable")
 	@RateLimiter(name = "twofa")
 	Map<String, Object> enableTotp(@RequestHeader(value = "X-Session-Token", required = false) String token,
 			@RequestBody EnableTotpRequest request) {
-		List<String> backupCodes = twoFactorUseCase.enableTotp(requireUserId(token), request.code(), request.password());
+		List<String> backupCodes = twoFactorUseCase.enableTotp(requireUserId(token), request.code(), request.password(), token);
 		return Map.of("status", "TOTP_ENABLED", "backupCodes", backupCodes);
 	}
 
@@ -387,7 +393,7 @@ class AuthController {
 	@RateLimiter(name = "twofa")
 	StatusResponse disableTotp(@RequestHeader(value = "X-Session-Token", required = false) String token,
 			@RequestBody PasswordConfirmationRequest request) {
-		twoFactorUseCase.disableTotp(requireUserId(token), request.password());
+		twoFactorUseCase.disableTotp(requireUserId(token), request.password(), token);
 		return new StatusResponse("2fa", "TOTP_DISABLED");
 	}
 
@@ -404,7 +410,7 @@ class AuthController {
 	@RateLimiter(name = "twofa")
 	StatusResponse confirmEmailOtp(@RequestHeader(value = "X-Session-Token", required = false) String token,
 			@RequestBody TwoFactorCodeRequest request) {
-		twoFactorUseCase.confirmEmailOtpSetup(requireUserId(token), request.code());
+		twoFactorUseCase.confirmEmailOtpSetup(requireUserId(token), request.code(), token);
 		return new StatusResponse("2fa", "EMAIL_OTP_ENABLED");
 	}
 
@@ -412,7 +418,7 @@ class AuthController {
 	@RateLimiter(name = "twofa")
 	StatusResponse disableEmailOtp(@RequestHeader(value = "X-Session-Token", required = false) String token,
 			@RequestBody PasswordConfirmationRequest request) {
-		twoFactorUseCase.disableEmailOtp(requireUserId(token), request.password());
+		twoFactorUseCase.disableEmailOtp(requireUserId(token), request.password(), token);
 		return new StatusResponse("2fa", "EMAIL_OTP_DISABLED");
 	}
 
@@ -505,12 +511,11 @@ class AuthController {
 	private Object finishOAuth(AuthResponse auth) {
 		String redirectUrl = oAuthProperties.getFrontendRedirectUrl();
 		if (StringUtils.hasText(redirectUrl)) {
-			String location = redirectUrl
-				+ "?token=" + auth.token()
-				+ "&refreshToken=" + auth.refreshToken()
-				+ "&expiresAt=" + auth.expiresAt()
-				+ "&refreshExpiresAt=" + auth.refreshExpiresAt();
-			return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(location)).build();
+			// No credential in the URL (history, logs, Referer): the session rides on the 302 cookies.
+			return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(redirectUrl + "?status=ok"))
+				.header(org.springframework.http.HttpHeaders.SET_COOKIE, sessionCookies.issue(auth.token(),
+					auth.expiresAt(), auth.refreshToken(), auth.refreshExpiresAt()).toArray(String[]::new))
+				.build();
 		}
 		return auth;
 	}
@@ -536,8 +541,13 @@ class AuthController {
 
 	@PostMapping("/refresh")
 	@RateLimiter(name = "refresh")
-	Object refreshSession(@RequestBody RefreshRequest request) {
-		return refreshSessionUseCase.refresh(request.refreshToken());
+	Object refreshSession(@RequestBody(required = false) RefreshRequest request,
+			@org.springframework.web.bind.annotation.CookieValue(name = com.socialcoisa.rede.shared.web.SessionCookies.REFRESH,
+				required = false) String refreshCookie) {
+		// Browsers send no body: the refresh token comes from the HttpOnly cookie.
+		String refreshToken = request != null && StringUtils.hasText(request.refreshToken()) ? request.refreshToken()
+			: refreshCookie;
+		return refreshSessionUseCase.refresh(refreshToken);
 	}
 
 	@PostMapping("/oauth/{provider}/token")

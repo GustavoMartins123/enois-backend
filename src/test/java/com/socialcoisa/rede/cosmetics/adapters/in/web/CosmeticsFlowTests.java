@@ -240,8 +240,7 @@ class CosmeticsFlowTests {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.user.emailVerified").value(true))
 			.andReturn();
-		var session = objectMapper.readTree(verified.getResponse().getContentAsString());
-		return new TestAuthHelper.AuthSession(session.get("token").asText(),
-				session.get("refreshToken").asText(), TestDatabase.userIdByEmail(email).orElseThrow());
+		return new TestAuthHelper.AuthSession(TestAuthHelper.sessionToken(verified),
+				TestAuthHelper.refreshToken(verified), TestDatabase.userIdByEmail(email).orElseThrow());
 	}
 }

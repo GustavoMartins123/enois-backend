@@ -14,6 +14,15 @@ public interface TwoFactorRepository {
 
 	void saveChallenge(TwoFactorChallenge challenge);
 
+	/**
+	 * Counts a wrong code in its own transaction: the request then fails and rolls back, and the
+	 * attempt must survive that rollback or the attempt limit never triggers.
+	 */
+	void recordFailedAttempt(String challengeId);
+
+	/** Marks the TOTP step as used; false when this step (or a later one) was already accepted. */
+	boolean markTotpStepUsed(String userId, long step);
+
 	Optional<TwoFactorChallenge> findChallenge(String id);
 
 	/** Desafio mais recente do usuario por metodo (usado ao confirmar a ativacao por e-mail). */

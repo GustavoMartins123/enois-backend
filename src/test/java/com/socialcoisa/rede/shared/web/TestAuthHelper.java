@@ -9,7 +9,6 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 public class TestAuthHelper {
@@ -76,8 +75,7 @@ public class TestAuthHelper {
 			String createdUserId = TestDatabase.userIdByEmail(email)
 				.orElseThrow(() -> new IllegalStateException("usuario nao criado: " + email));
 			markTestAdmin(email, createdUserId);
-			JsonNode node = objectMapper.readTree(verified.getResponse().getContentAsString());
-			return new AuthSession(node.get("token").asText(), node.get("refreshToken").asText(), createdUserId);
+			return new AuthSession(sessionToken(verified), refreshToken(verified), createdUserId);
 		}
 
 		// A conta ja existia (replay do cadastro): entra pelo login normal.
@@ -92,8 +90,24 @@ public class TestAuthHelper {
 		String createdUserId = TestDatabase.userIdByEmail(email)
 			.orElseThrow(() -> new IllegalStateException("usuario nao criado: " + email));
 		markTestAdmin(email, createdUserId);
-		JsonNode node = objectMapper.readTree(login.getResponse().getContentAsString());
-		return new AuthSession(node.get("token").asText(), node.get("refreshToken").asText(), createdUserId);
+		return new AuthSession(sessionToken(login), refreshToken(login), createdUserId);
+	}
+
+	/** Access token issued by an auth endpoint: it travels only in the HttpOnly cookie. */
+	public static String sessionToken(MvcResult result) {
+		return cookie(result, SessionCookies.SESSION);
+	}
+
+	public static String refreshToken(MvcResult result) {
+		return cookie(result, SessionCookies.REFRESH);
+	}
+
+	private static String cookie(MvcResult result, String name) {
+		jakarta.servlet.http.Cookie cookie = result.getResponse().getCookie(name);
+		if (cookie == null || cookie.getValue().isEmpty()) {
+			throw new IllegalStateException("cookie de sessao ausente: " + name);
+		}
+		return cookie.getValue();
 	}
 
 	/** O papel admin é uma flag no banco; a conta de teste da equipe é promovida aqui. */

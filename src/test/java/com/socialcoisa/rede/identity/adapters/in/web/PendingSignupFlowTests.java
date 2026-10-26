@@ -66,7 +66,7 @@ class PendingSignupFlowTests {
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(verifyBody))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.token").isString())
+			.andExpect(jsonPath("$.token").doesNotExist())
 			.andExpect(jsonPath("$.user.emailVerified").value(true));
 
 		// Agora sim: a conta existe, ja verificada, e o pendente sumiu.

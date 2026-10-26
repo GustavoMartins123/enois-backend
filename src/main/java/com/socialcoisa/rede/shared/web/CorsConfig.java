@@ -42,6 +42,8 @@ class CorsConfig {
 				// senão o navegador do frontend leva "Invalid CORS request" mesmo com origem válida.
 				patterns.addAll(Arrays.stream(trustedOrigins.split(",")).map(String::trim)
 					.filter(s -> !s.isEmpty()).toList());
+				// Credentials (session cookie) are never offered to every origin.
+				patterns.remove("*");
 				registry.addMapping("/**")
 					.allowedOriginPatterns(patterns.toArray(String[]::new))
 					.allowedMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")

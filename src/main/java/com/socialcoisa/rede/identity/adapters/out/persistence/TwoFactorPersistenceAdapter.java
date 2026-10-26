@@ -9,6 +9,8 @@ import java.util.Optional;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.socialcoisa.rede.identity.application.port.out.TwoFactorRepository;
 import com.socialcoisa.rede.identity.domain.TwoFactorChallenge;
@@ -48,6 +50,19 @@ class TwoFactorPersistenceAdapter implements TwoFactorRepository {
 				values (?, ?, ?, ?, ?, ?, ?, ?)""",
 			challenge.id(), challenge.userId(), challenge.method().name(), challenge.codeHash(), challenge.attempts(),
 			challenge.expiresAt(), challenge.consumedAt(), challenge.createdAt());
+	}
+
+	@Override
+	@Transactional(propagation = Propagation.REQUIRES_NEW)
+	public void recordFailedAttempt(String challengeId) {
+		jdbc.update("update two_factor_challenges set attempts = attempts + 1 where id = ?", challengeId);
+	}
+
+	@Override
+	public boolean markTotpStepUsed(String userId, long step) {
+		return jdbc.update("""
+				update user_two_factor_secrets set totp_last_step = ?
+				where user_id = ? and (totp_last_step is null or totp_last_step < ?)""", step, userId, step) > 0;
 	}
 
 	@Override

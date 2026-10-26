@@ -138,6 +138,8 @@ class RequestOriginFilter extends OncePerRequestFilter {
 			// moderacao nunca abria (`NetworkError` no console). O resto segue no CORS estatico.
 			if ("OPTIONS".equalsIgnoreCase(method) && StringUtils.hasText(origin)) {
 				setCors(response, origin);
+				// Only the app's own origins may send the HttpOnly session cookie.
+				response.setHeader("Access-Control-Allow-Credentials", "true");
 				if (preflight(request, response)) {
 					return;
 				}
