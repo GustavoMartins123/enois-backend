@@ -42,6 +42,8 @@ import com.socialcoisa.rede.shared.web.ApiException;
 @Service
 public class TwoFactorService implements TwoFactorUseCase {
 
+	private static final org.slf4j.Logger LOG =
+		org.slf4j.LoggerFactory.getLogger(TwoFactorService.class);
 	private static final Duration CHALLENGE_TTL = Duration.ofMinutes(10);
 	private static final Duration PENDING_SECRET_TTL = Duration.ofMinutes(15);
 	private static final int BACKUP_CODE_COUNT = 8;
@@ -348,14 +350,18 @@ public class TwoFactorService implements TwoFactorUseCase {
 		requireClaim(challenge.id(), "Este login ja foi concluido. Entre novamente.",
 			"Tentativas demais. Entre com sua senha novamente.");
 
-		boolean valid = switch (challenge.method()) {
+		TwoFactorMethod method = challenge.method();
+		if (method == null) {
+			// Linha sem metodo (legado/corrompida) nao tem como ser validada: erro explicito, nunca um
+			// NPE virando 500 e escondendo a causa de quem tentou entrar.
+			LOG.warn("two_factor_challenge sem metodo: {}", challenge.id());
+			throw new ApiException(409, "TWO_FACTOR_CHALLENGE_INVALID",
+				"Este login nao pode ser concluido. Entre com sua senha novamente.");
+		}
+		boolean valid = switch (method) {
 			case EMAIL -> Hashes.sha256Hex(code.trim()).equals(challenge.codeHash());
-			// Each time step is accepted once: a replayed code fails like a wrong one.
-			case TOTP -> repository.findActiveSecret(challenge.userId())
-				.map(secretCipher::decrypt)
-				.map(secret -> Totp.matchingStep(secret, code, now, Totp.DEFAULT_WINDOW))
-				.filter(step -> step >= 0 && repository.markTotpStepUsed(challenge.userId(), step))
-				.isPresent();
+			// Cada passo de tempo vale uma vez: codigo repetido falha como codigo errado.
+			case TOTP -> totpMatches(challenge.userId(), code, now);
 		};
 
 		if (!valid) {
@@ -375,6 +381,31 @@ public class TwoFactorService implements TwoFactorUseCase {
 	}
 
 	// ------------------------------------------------------------------ apoio
+
+	/**
+	 * Confere o código TOTP do desafio de login.
+	 *
+	 * <p>Segredo ilegível (chave de cifragem trocada, linha corrompida) vira erro explícito — antes
+	 * a exceção do decifrador subia crua e o usuário via 500 sem saber que o problema é o segundo
+	 * fator da própria conta.</p>
+	 */
+	private boolean totpMatches(String userId, String code, Instant now) {
+		java.util.Optional<String> secret = repository.findActiveSecret(userId);
+		if (secret.isEmpty()) {
+			return false;
+		}
+		String plain;
+		try {
+			plain = secretCipher.decrypt(secret.get());
+		}
+		catch (RuntimeException failure) {
+			LOG.warn("segredo TOTP ilegivel para {}: {}", userId, failure.getMessage());
+			throw new ApiException(409, "TWO_FACTOR_SECRET_UNREADABLE",
+				"O segundo fator desta conta precisa ser reconfigurado. Fale com o suporte.");
+		}
+		long step = Totp.matchingStep(plain, code, now, Totp.DEFAULT_WINDOW);
+		return step >= 0 && repository.markTotpStepUsed(userId, step);
+	}
 
 	/** A refused claim on a challenge another request just consumed reads as "already used", not 429. */
 	private void requireClaim(String challengeId, String alreadyUsedMessage, String tooManyMessage) {

@@ -54,6 +54,11 @@ public class MonitoringService {
 	private static final int MAX_MESSAGE = 1000;
 	private static final long MINUTE = 60_000L;
 	private static final long SLOW_MS = 2000L;
+	/**
+	 * Quantas linhas do arquivo a busca por período/termo percorre. O painel ao vivo continua lendo
+	 * só o topo; a busca precisa alcançar o incidente que o usuário reportou minutos depois.
+	 */
+	private static final int SEARCH_WINDOW = 20_000;
 
 	private final Clock clock;
 	private final int maxEventsPerMinute;
@@ -353,9 +358,16 @@ public class MonitoringService {
 		Instant toAt = instantOrNull(to);
 		Instant beforeAt = instantOrNull(before);
 		int teto = Math.max(1, Math.min(limit, 200));
+		// A janela recente é barata e serve ao painel ao vivo. Quando a pessoa filtra por período ou
+		// termo, ela está atrás de um incidente que já saiu do topo — aí a varredura vai bem mais
+		// fundo. Sem isso, um 500 de dez minutos atrás respondia "nenhum evento" e a investigação
+		// morria ali (aconteceu em 2026-10-26, com o 500 do /auth/2fa/verify).
+		boolean procurandoIncidente = fromAt != null || toAt != null || beforeAt != null
+			|| (needle != null && !needle.isBlank());
+		int janela = procurandoIncidente ? Math.max(teto * 4, SEARCH_WINDOW) : Math.max(teto * 4, 400);
 		// Lê com folga: o filtro descarta, então busca mais linhas do que o teto final.
 		List<EventView> found = new ArrayList<>(teto);
-		for (EventView event : sink.read(Math.max(teto * 4, 400))) {
+		for (EventView event : sink.read(janela)) {
 			if (wantLevel != null && !wantLevel.equals(event.level())) {
 				continue;
 			}
