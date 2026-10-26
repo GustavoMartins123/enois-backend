@@ -62,14 +62,15 @@ class IdentityRateLimitTests {
 
 	@Test
 	void forwardedForCountsTheLastHopOnly() throws Exception {
-		// Os hops a direita mudam a cada tentativa; o primeiro item e o mesmo IP de verdade.
+		// The left-most items are client-controlled and rotate on every attempt; the hop appended by
+		// our proxy (right-most untrusted) is the real address and is what gets counted.
 		for (int i = 0; i < 3; i++) {
-			loginWithForwarded("203.0.113.30, 198.51.100.7").andExpect(status().isUnauthorized());
+			loginWithForwarded("198.51.100." + i + ", 203.0.113.30").andExpect(status().isUnauthorized());
 		}
-		loginWithForwarded("203.0.113.30, 10.0.0.99").andExpect(status().isTooManyRequests());
+		loginWithForwarded("198.51.100.99, 203.0.113.30, 10.0.0.99").andExpect(status().isTooManyRequests());
 
-		// Mudar o PRIMEIRO item e mudar de IP: janela propria, ainda pode tentar.
-		loginWithForwarded("203.0.113.31, 198.51.100.7").andExpect(status().isUnauthorized());
+		// Another real address has its own window.
+		loginWithForwarded("198.51.100.7, 203.0.113.31").andExpect(status().isUnauthorized());
 	}
 
 	@Test

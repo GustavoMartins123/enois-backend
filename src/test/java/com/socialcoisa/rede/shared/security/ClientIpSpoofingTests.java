@@ -71,6 +71,48 @@ class ClientIpSpoofingTests {
 	}
 
 	@Test
+	void cloudflareHeaderIsIgnoredWhenTheHopIsNotACloudflareEdge() {
+		// Direct hit on the origin proxy: it records the client's own address, which is not a
+		// Cloudflare edge, so a CF-Connecting-IP sent by that client is not trusted.
+		MockHttpServletRequest request = new MockHttpServletRequest("POST", "/auth/login");
+		request.addHeader("CF-Connecting-IP", "198.51.100.250");
+		request.addHeader("X-Forwarded-For", REAL_IP);
+		request.setRemoteAddr("10.0.0.5");
+
+		assertThat(resolver.resolve(request)).isEqualTo(REAL_IP);
+	}
+
+	@Test
+	void cloudflareHeaderWithoutForwardedChainIsIgnored() {
+		MockHttpServletRequest request = new MockHttpServletRequest("POST", "/auth/login");
+		request.addHeader("CF-Connecting-IP", "198.51.100.250");
+		request.setRemoteAddr("10.0.0.5");
+
+		assertThat(resolver.resolve(request)).isEqualTo("10.0.0.5");
+	}
+
+	@Test
+	void forgedRealIpFromAnUntrustedPeerIsIgnored() {
+		MockHttpServletRequest request = new MockHttpServletRequest("POST", "/auth/login");
+		request.addHeader("X-Real-IP", "198.51.100.250");
+		request.addHeader("X-Forwarded-For", "198.51.100.251");
+		request.setRemoteAddr(REAL_IP);
+
+		assertThat(resolver.resolve(request)).isEqualTo(REAL_IP);
+	}
+
+	@Test
+	void trustedProxiesAcceptCidrs() {
+		ClientIpResolver withCidr = new ClientIpResolver("31.220.102.0/24");
+		MockHttpServletRequest request = new MockHttpServletRequest("POST", "/auth/login");
+		request.addHeader("X-Forwarded-For", REAL_IP);
+		request.setRemoteAddr("31.220.102.169");
+
+		assertThat(withCidr.resolve(request)).isEqualTo(REAL_IP);
+		assertThat(withCidr.isTrustedProxy("31.220.103.1")).isFalse();
+	}
+
+	@Test
 	void oProxyQueSubstituiOCabecalhoTambemServe() {
 		// Convenção "substitui": a cadeia tem um item só, o IP real.
 		MockHttpServletRequest request = new MockHttpServletRequest("GET", "/feed");

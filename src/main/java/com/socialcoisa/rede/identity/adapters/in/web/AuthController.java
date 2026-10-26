@@ -186,8 +186,8 @@ class AuthController {
 			jakarta.servlet.http.HttpServletRequest request) {
 		String ip = ipResolver.resolve(request);
 		exigeIpNaoBloqueado(ip);
-		// Contenção imediata: nome com o padrão do ataque não cria conta e o IP cai na lista
-		// (as contas "probe" de 20/10 e 22/10 nasciam em série do mesmo provedor).
+		// Contenção imediata: nome com o padrão do ataque não cria conta; repeated hits pause
+		// signups from the IP (as contas "probe" de 20/10 e 22/10 nasciam em série do mesmo provedor).
 		signupAttackGuard.checkSignup(body.name(), body.email(), ip);
 		// Enumeração de e-mail (E-24): e-mail já cadastrado responde IGUAL a um cadastro novo.
 		// Não cria conta nem revela que ele existe; quem tem conta usa "esqueci a senha".
