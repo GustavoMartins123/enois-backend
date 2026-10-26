@@ -27,7 +27,7 @@ class RateLimitSessionsTests {
 	private RateLimitSessions sessions() {
 		ObjectProvider<AuthSessionRepository> provider = mock(ObjectProvider.class);
 		when(provider.getObject()).thenReturn(repository);
-		return new RateLimitSessions(provider, clock);
+		return new RateLimitSessions(provider, clock, new ClientIpResolver(), 50);
 	}
 
 	@Test
@@ -52,6 +52,18 @@ class RateLimitSessionsTests {
 
 		// Another address has its own budget.
 		sessions.userId("invented-x", "203.0.113.3");
+		verify(repository, times(61)).findActiveUserId(anyString(), any());
+	}
+
+	@Test
+	void aTrustedProxyAddressGetsTheSharedMultiplier() {
+		when(repository.findActiveUserId(anyString(), any())).thenReturn(Optional.empty());
+		RateLimitSessions sessions = sessions();
+
+		// Private ranges are trusted proxies by default: one address in front of many people.
+		for (int i = 0; i < 61; i++) {
+			sessions.userId("behind-proxy-" + i, "10.0.0.1");
+		}
 		verify(repository, times(61)).findActiveUserId(anyString(), any());
 	}
 }

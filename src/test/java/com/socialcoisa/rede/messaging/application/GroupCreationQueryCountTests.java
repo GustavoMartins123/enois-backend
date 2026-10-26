@@ -18,8 +18,6 @@ import org.junit.jupiter.api.Test;
 
 import com.socialcoisa.rede.messaging.application.port.out.MessagingRepository;
 import com.socialcoisa.rede.network.application.port.out.ConnectionRepository;
-import com.socialcoisa.rede.network.domain.ConnectionStatus;
-import com.socialcoisa.rede.network.domain.UserConnection;
 import com.socialcoisa.rede.shared.age.AgeGate;
 import com.socialcoisa.rede.shared.age.AgePolicyReader;
 import com.socialcoisa.rede.shared.blocks.BlockedUsersReader;
@@ -43,15 +41,15 @@ class GroupCreationQueryCountTests {
 	void largeGroupIsCheckedWithOneReadPerKind() {
 		when(blockedUsers.hiddenIdsFor("creator")).thenReturn(Set.of());
 		when(agePolicy.minorIds(any())).thenReturn(Set.of("member-7"));
-		when(connections.findRequests("creator", ConnectionStatus.ACCEPTED))
-			.thenReturn(List.of(UserConnection.request("member-7", "creator", java.time.Instant.now())));
+		when(connections.findAcceptedAmong("creator", Set.of("member-7"))).thenReturn(Set.of("member-7"));
 
 		service.createConversation("GROUP", "Grupo", members, "creator");
 
 		verify(blockedUsers, times(1)).hiddenIdsFor(anyString());
 		verify(agePolicy, times(1)).minorIds(any());
 		verify(agePolicy, never()).isMinor(anyString());
-		verify(connections, never()).existsActiveConnection(anyString(), anyString());
+		verify(connections, never()).existsAcceptedConnection(anyString(), anyString());
+		verify(connections, never()).findRequests(anyString(), any());
 	}
 
 	@Test

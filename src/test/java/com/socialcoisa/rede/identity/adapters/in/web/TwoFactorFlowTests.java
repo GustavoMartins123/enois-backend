@@ -386,6 +386,24 @@ class TwoFactorFlowTests {
 	}
 
 	@Test
+	void aResendNeverReopensAConsumedChallenge() {
+		String challengeId = "resend-race-" + java.util.UUID.randomUUID();
+		Instant now = Instant.now();
+		twoFactorRepository.saveChallenge(com.socialcoisa.rede.identity.domain.TwoFactorChallenge.create(challengeId,
+			"resend-race-user", com.socialcoisa.rede.identity.domain.TwoFactorMethod.EMAIL, "hash",
+			now.plusSeconds(300), now));
+		assertThat(twoFactorRepository.consumeChallenge(challengeId, now)).isTrue();
+
+		// The resend read the challenge before the verify consumed it; its write must not undo that.
+		assertThat(twoFactorRepository.replaceCode(challengeId, "new-hash", now.plusSeconds(300))).isFalse();
+		assertThat(twoFactorRepository.findChallenge(challengeId).orElseThrow().isConsumed()).isTrue();
+		assertThat(twoFactorRepository.consumeChallenge(challengeId, now)).isFalse();
+		// A claim on it says why it failed, without relying on the caller's snapshot.
+		assertThat(twoFactorRepository.claimAttempt(challengeId))
+			.isEqualTo(com.socialcoisa.rede.identity.application.port.out.TwoFactorRepository.AttemptClaim.CONSUMED);
+	}
+
+	@Test
 	void parallelVerifiesCannotShareOneReadOfTheAttemptCounter() throws Exception {
 		String challengeId = "claim-race-" + java.util.UUID.randomUUID();
 		Instant now = Instant.now();
@@ -400,7 +418,8 @@ class TwoFactorFlowTests {
 			for (int index = 0; index < threads; index++) {
 				claims.add(pool.submit(() -> {
 					start.await();
-					return twoFactorRepository.claimAttempt(challengeId);
+					return twoFactorRepository.claimAttempt(challengeId)
+						== com.socialcoisa.rede.identity.application.port.out.TwoFactorRepository.AttemptClaim.CLAIMED;
 				}));
 			}
 			start.countDown();

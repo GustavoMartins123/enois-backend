@@ -44,10 +44,6 @@ public class TwoFactorChallenge {
 		return new TwoFactorChallenge(id, userId, method, codeHash, attempts, expiresAt, consumedAt, createdAt);
 	}
 
-	public TwoFactorChallenge replaceCode(String newCodeHash, Instant newExpiry) {
-		return new TwoFactorChallenge(id, userId, method, newCodeHash, 0, newExpiry, consumedAt, createdAt);
-	}
-
 	public boolean isExpired(Instant now) {
 		return now.isAfter(expiresAt);
 	}

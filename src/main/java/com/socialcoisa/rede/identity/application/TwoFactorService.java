@@ -243,10 +243,8 @@ public class TwoFactorService implements TwoFactorUseCase {
 		if (challenge.isExpired(now)) {
 			throw new ApiException(410, "TWO_FACTOR_CHALLENGE_EXPIRED", "O codigo expirou. Peca um novo.");
 		}
-		if (!repository.claimAttempt(challenge.id())) {
-			requireNotConsumedMeanwhile(challenge.id(), "Este codigo ja foi usado. Peca um novo.");
-			throw new ApiException(429, "TOO_MANY_ATTEMPTS", "Tentativas demais. Peca um novo codigo.");
-		}
+		requireClaim(challenge.id(), "Este codigo ja foi usado. Peca um novo.",
+			"Tentativas demais. Peca um novo codigo.");
 		if (!Hashes.sha256Hex(code.trim()).equals(challenge.codeHash())) {
 			throw new ApiException(400, "INVALID_TWO_FACTOR_CODE", "Codigo incorreto.");
 		}
@@ -311,7 +309,10 @@ public class TwoFactorService implements TwoFactorUseCase {
 				"Este login expirou. Entre com sua senha novamente.");
 		}
 		String code = numericCode();
-		repository.saveChallenge(challenge.replaceCode(Hashes.sha256Hex(code), now.plus(CHALLENGE_TTL)));
+		if (!repository.replaceCode(challenge.id(), Hashes.sha256Hex(code), now.plus(CHALLENGE_TTL))) {
+			throw new ApiException(410, "TWO_FACTOR_CHALLENGE_EXPIRED",
+				"Este login expirou. Entre com sua senha novamente.");
+		}
 		UserProfile profile = requireProfile(challenge.userId());
 		if (!emailService.sendTwoFactorCode(profile.email(), profile.name(), code)) {
 			throw new ApiException(503, "EMAIL_SEND_FAILED",
@@ -344,11 +345,8 @@ public class TwoFactorService implements TwoFactorUseCase {
 			throw new ApiException(400, "INVALID_TWO_FACTOR_CODE", "Informe o codigo do segundo fator.");
 		}
 		// Claimed before the code is checked, so parallel guesses cannot all read the same counter.
-		if (!repository.claimAttempt(challenge.id())) {
-			requireNotConsumedMeanwhile(challenge.id(), "Este login ja foi concluido. Entre novamente.");
-			throw new ApiException(429, "TOO_MANY_ATTEMPTS",
-				"Tentativas demais. Entre com sua senha novamente.");
-		}
+		requireClaim(challenge.id(), "Este login ja foi concluido. Entre novamente.",
+			"Tentativas demais. Entre com sua senha novamente.");
 
 		boolean valid = switch (challenge.method()) {
 			case EMAIL -> Hashes.sha256Hex(code.trim()).equals(challenge.codeHash());
@@ -379,9 +377,11 @@ public class TwoFactorService implements TwoFactorUseCase {
 	// ------------------------------------------------------------------ apoio
 
 	/** A refused claim on a challenge another request just consumed reads as "already used", not 429. */
-	private void requireNotConsumedMeanwhile(String challengeId, String message) {
-		if (repository.findChallenge(challengeId).map(TwoFactorChallenge::isConsumed).orElse(false)) {
-			throw alreadyUsed(message);
+	private void requireClaim(String challengeId, String alreadyUsedMessage, String tooManyMessage) {
+		switch (repository.claimAttempt(challengeId)) {
+			case CLAIMED -> { }
+			case CONSUMED -> throw alreadyUsed(alreadyUsedMessage);
+			case OUT_OF_ATTEMPTS -> throw new ApiException(429, "TOO_MANY_ATTEMPTS", tooManyMessage);
 		}
 	}
 
