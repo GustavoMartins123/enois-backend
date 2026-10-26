@@ -7,13 +7,17 @@ import java.util.Set;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
+import jakarta.annotation.PostConstruct;
+
 @Configuration
+@Lazy(false) // the wildcard check below must run at boot even with spring.main.lazy-initialization=true
 class CorsConfig {
 
-	private static final String[] DEFAULT_ORIGINS = { "https://enois.ia.br", "http://localhost:5173" };
+	private static final String[] DEFAULT_ORIGINS = { "https://enois.ia.br" };
 
 	@Value("${rede.cors.allowed-origins:}")
 	private String allowedOrigins;
@@ -21,6 +25,18 @@ class CorsConfig {
 	/** Padrões confiáveis do app (aceita curinga, ex.: https://*.b7cloud.com.br). */
 	@Value("${rede.origins.trusted:https://*.b7cloud.com.br}")
 	private String trustedOrigins;
+
+	/** Credentialed CORS with an "any origin" pattern would let every site call the API as the user. */
+	@PostConstruct
+	void rejectWildcardOrigins() {
+		for (String origin : (allowedOrigins + "," + trustedOrigins).split(",")) {
+			String trimmed = origin.trim();
+			if (trimmed.equals("*") || trimmed.endsWith("://*")) {
+				throw new IllegalStateException(
+						"Wildcard CORS origin '" + trimmed + "' is not allowed; list the origins explicitly");
+			}
+		}
+	}
 
 	@Bean
 	WebMvcConfigurer corsConfigurer() {
