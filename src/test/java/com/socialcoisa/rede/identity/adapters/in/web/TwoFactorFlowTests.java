@@ -48,6 +48,9 @@ class TwoFactorFlowTests {
 	@MockitoBean
 	private EmailService emailService;
 
+	@Autowired
+	private com.socialcoisa.rede.identity.application.port.out.TwoFactorRepository twoFactorRepository;
+
 	private String lastEmailedCode;
 
 	@BeforeEach
@@ -341,6 +344,33 @@ class TwoFactorFlowTests {
 		mockMvc.perform(post("/auth/2fa/email/confirm").header("X-Session-Token", session.token())
 				.contentType(MediaType.APPLICATION_JSON).content(code(lastEmailedCode)))
 			.andExpect(status().isTooManyRequests());
+	}
+
+	@Test
+	void parallelVerifiesCannotShareOneReadOfTheAttemptCounter() throws Exception {
+		String challengeId = "claim-race-" + java.util.UUID.randomUUID();
+		Instant now = Instant.now();
+		twoFactorRepository.saveChallenge(com.socialcoisa.rede.identity.domain.TwoFactorChallenge.create(challengeId,
+			"claim-race-user", com.socialcoisa.rede.identity.domain.TwoFactorMethod.EMAIL, "hash",
+			now.plusSeconds(300), now));
+
+		int threads = 20;
+		var start = new java.util.concurrent.CountDownLatch(1);
+		try (var pool = java.util.concurrent.Executors.newFixedThreadPool(threads)) {
+			List<java.util.concurrent.Future<Boolean>> claims = new java.util.ArrayList<>();
+			for (int index = 0; index < threads; index++) {
+				claims.add(pool.submit(() -> {
+					start.await();
+					return twoFactorRepository.claimAttempt(challengeId);
+				}));
+			}
+			start.countDown();
+			int granted = 0;
+			for (var claim : claims) {
+				granted += claim.get() ? 1 : 0;
+			}
+			assertThat(granted).isEqualTo(com.socialcoisa.rede.identity.domain.TwoFactorChallenge.MAX_ATTEMPTS);
+		}
 	}
 
 	private String enrollSecret(String token) throws Exception {

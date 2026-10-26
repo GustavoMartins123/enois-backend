@@ -60,10 +60,6 @@ public class TwoFactorChallenge {
 		return consumedAt != null;
 	}
 
-	public boolean isOutOfAttempts() {
-		return attempts >= MAX_ATTEMPTS;
-	}
-
 	public String id() {
 		return id;
 	}
