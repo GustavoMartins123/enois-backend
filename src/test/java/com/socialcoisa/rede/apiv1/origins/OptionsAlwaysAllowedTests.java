@@ -43,6 +43,32 @@ class OptionsAlwaysAllowedTests {
 				org.hamcrest.Matchers.containsString("x-session-token")));
 	}
 
+	/**
+	 * O front chama a API cross-origin com o cookie de sessao. Sem a credencial ecoada no preflight o
+	 * navegador descarta a resposta ("must be 'true' when the request's credentials mode is
+	 * 'include'") e a tela aparece vazia — foi o que quebrou a QA depois do resposta por cookie.
+	 */
+	@Test
+	void trustedOriginPreflightCarriesCredentials() throws Exception {
+		mockMvc.perform(options("/feed/posts/x/reactions")
+				.header("Origin", "https://enois.ia.br")
+				.header("Access-Control-Request-Method", "POST")
+				.header("Access-Control-Request-Headers", "content-type"))
+			.andExpect(status().is2xxSuccessful())
+			.andExpect(header().string("Access-Control-Allow-Origin", "https://enois.ia.br"))
+			.andExpect(header().string("Access-Control-Allow-Credentials", "true"));
+	}
+
+	/** Origem de terceiro cadastrada (ou desconhecida) nao recebe credencial cross-origin. */
+	@Test
+	void unknownOriginPreflightDoesNotCarryCredentials() throws Exception {
+		mockMvc.perform(options("/feed/posts/x/reactions")
+				.header("Origin", "https://exemplo-nao-cadastrado.test")
+				.header("Access-Control-Request-Method", "POST"))
+			.andExpect(status().is2xxSuccessful())
+			.andExpect(header().doesNotExist("Access-Control-Allow-Credentials"));
+	}
+
 	@Test
 	void pathThatDoesNotExistAlsoGetsPreflightAnswered() throws Exception {
 		mockMvc.perform(options("/caminho/que/nao/existe")
