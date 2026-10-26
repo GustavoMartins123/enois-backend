@@ -103,9 +103,14 @@ class LinkSchemeAllowlistTests {
 			}
 			assertThat(websiteAfterMigration(companyId, unsafe)).as(unsafe).isNull();
 		}
+		for (String unsafe : List.of("javascript:1/alert(1)//", "javascript:1?alert(1):0", "\u0001 javascript:alert(1)",
+				"FILE:///etc/passwd", "  \u001f\tvbscript:x")) {
+			assertThat(websiteAfterMigration(companyId, unsafe)).as(unsafe).isNull();
+		}
 		// Scheme-less values, host:port and allowed schemes stay.
 		for (String kept : List.of("meusite.com", "meusite.com:8080", "meusite.com:8080/a", "localhost:3000",
-				"www.site.com/a:b", "HTTPS://X.TEST", "mailto:a@b.test", "Data e hora")) {
+				"www.site.com/a:b", "HTTPS://X.TEST", "mailto:a@b.test", "Data e hora",
+				"https://x.test/?q=javascript:1")) {
 			assertThat(websiteAfterMigration(companyId, kept)).as(kept).isEqualTo(kept);
 		}
 	}
