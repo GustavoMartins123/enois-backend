@@ -271,7 +271,8 @@ class GamePlatformController {
 		return GameDetails.of(request.shortDescription(), request.genres(), request.languages(), request.controls(),
 			request.requirements(), request.contentWarnings(), parseStage(request.stage()),
 			parseDistribution(request.distribution()), request.priceCoins() == null ? 0 : request.priceCoins(),
-			parseAspect(request.aspect()), request.version(), request.websiteUrl(), request.supportUrl(),
+			parseAspect(request.aspect()), request.version(), com.socialcoisa.rede.shared.web.SafeUrl.requireHttpUrl(request.websiteUrl(), "site"),
+			com.socialcoisa.rede.shared.web.SafeUrl.requireHttpUrl(request.supportUrl(), "suporte"),
 			request.mediaIds() == null ? null : String.join(",", request.mediaIds()))
 			.withBranding(request.icon(), request.banner(), request.bannerHtml());
 	}
