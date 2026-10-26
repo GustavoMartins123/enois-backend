@@ -55,12 +55,26 @@ jobs:
           cache-to: type=gha,mode=max
 
   # ===========================================================================
-  # Schema check: boot against a database built only from the Flyway migrations
-  # (ddl-auto=validate). An entity without its migration fails here, not in prod.
+  # Schema check: boot against MariaDB 11.4 (the production engine) built only from the Flyway
+  # migrations (ddl-auto=validate). A migration MariaDB refuses, or an entity without its
+  # migration, fails here, not in prod. The SPRING_* env vars override the test profile's H2.
   # ===========================================================================
   schema-check:
     name: 🧪 Schema x migrations
     runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11.4@sha256:250e1609e93c0e6aecf64bfbab2d84d5e89d2481540fe77447ff6c855c3b1873
+        env:
+          MARIADB_ROOT_PASSWORD: schema-check
+          MARIADB_DATABASE: enois
+          MARIADB_USER: enois
+          MARIADB_PASSWORD: schema-check
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 5s --health-timeout 5s --health-retries 20
     steps:
       - name: 📥 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -72,7 +86,14 @@ jobs:
           java-version: '25'
           cache: maven
 
-      - name: 🧪 Boot with schema validation
+      - name: 🧪 Boot with schema validation (MariaDB)
+        env:
+          # Same driver and dialect as application-prd.properties.
+          SPRING_DATASOURCE_URL: jdbc:mysql://127.0.0.1:3306/enois?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+          SPRING_DATASOURCE_DRIVER_CLASS_NAME: com.mysql.cj.jdbc.Driver
+          SPRING_DATASOURCE_USERNAME: enois
+          SPRING_DATASOURCE_PASSWORD: schema-check
+          SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: org.hibernate.dialect.MySQLDialect
         run: ./mvnw -B -q -Dtest=RedeApplicationTests test
 
   # ===========================================================================
@@ -221,7 +242,11 @@ jobs:
           # 0.55GB de 1GB. Subir para 2GB (reserva 1GB) e dar 60% do limite a JVM (heap ate
           # 1.2GB, em vez dos 256MB que 25% davam) cabe sem disputo com os vizinhos.
           # (O JSON abaixo NAO aceita comentario: ele vai cru no corpo do POST da Portainer.)
-          cat > /tmp/enois-backend-deploy.json <<EOF
+          # The payload carries every secret: private temp file, removed however the step ends
+          # (self-hosted runners keep /tmp between jobs).
+          DEPLOY_JSON=$(mktemp)
+          trap 'rm -f "$DEPLOY_JSON"' EXIT
+          cat > "$DEPLOY_JSON" <<EOF
           {
             "Image": "${IMAGE_REF}",
             "Env": [
@@ -284,7 +309,7 @@ jobs:
           }
           EOF
           curl -sf -X POST "${AUTH[@]}" -H "Content-Type: application/json" \
-            "${API}/containers/create?name=${CONTAINER_NAME}" -d @/tmp/enois-backend-deploy.json
+            "${API}/containers/create?name=${CONTAINER_NAME}" -d @"$DEPLOY_JSON"
 
           echo "==> Start"
           curl -sf -X POST "${AUTH[@]}" "${API}/containers/${CONTAINER_NAME}/start"
@@ -382,7 +407,11 @@ jobs:
           AUTH=(-H "X-API-Key: ${PORTAINER_API_KEY}" -H "Referer: ${PORTAINER_BASE_URL}")
 
           echo "==> Gerar docker-compose da stack com a imagem/secrets atuais"
-          cat > /tmp/enois-prod-backend-stack.yml <<EOF
+          # Stack file and payload carry every secret: private temp files, removed however the step ends.
+          STACK_YML=$(mktemp)
+          STACK_PAYLOAD=$(mktemp)
+          trap 'rm -f "$STACK_YML" "$STACK_PAYLOAD"' EXIT
+          cat > "$STACK_YML" <<EOF
           version: "3.8"
           services:
             backend:
@@ -457,18 +486,18 @@ jobs:
 
           echo "==> Montar payload JSON (python escapa o YAML certo pro body)"
           python3 -c "
-          import json
-          with open('/tmp/enois-prod-backend-stack.yml') as f:
+          import json, sys
+          with open(sys.argv[1]) as f:
               content = f.read()
           payload = {'stackFileContent': content, 'env': [], 'prune': True, 'pullImage': True}
-          with open('/tmp/stack-update-payload.json', 'w') as f:
+          with open(sys.argv[2], 'w') as f:
               json.dump(payload, f)
-          "
+          " "$STACK_YML" "$STACK_PAYLOAD"
 
           echo "==> PUT /stacks/${PROD_STACK_ID} (endpointId=${PORTAINER_ENDPOINT_ID_PROD})"
           curl -sf -X PUT "${AUTH[@]}" -H "Content-Type: application/json" \
             "${PORTAINER_BASE_URL}/api/stacks/${PROD_STACK_ID}?endpointId=${PORTAINER_ENDPOINT_ID_PROD}" \
-            -d @/tmp/stack-update-payload.json
+            -d @"$STACK_PAYLOAD"
 
       - name: 🩺 Health check
         run: |

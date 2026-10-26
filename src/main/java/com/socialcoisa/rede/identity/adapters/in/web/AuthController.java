@@ -310,14 +310,17 @@ class AuthController {
 	@PostMapping("/logout")
 	ResponseEntity<String> logout(@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
 			@RequestHeader(value = "X-Session-Token", required = false) String token,
+			@org.springframework.web.bind.annotation.CookieValue(name = com.socialcoisa.rede.shared.web.SessionCookies.REFRESH,
+				required = false) String refreshCookie,
 			jakarta.servlet.http.HttpServletResponse httpResponse) {
 		sessionCookies.clear().forEach(value -> httpResponse.addHeader(org.springframework.http.HttpHeaders.SET_COOKIE, value));
 		// O escopo da idempotencia e chave de tabela: vai como HASH do token, nunca o token vivo
 		// em texto puro (quem le a tabela — backup, DBA — nao ganha uma sessao com isso).
-		String scope = "session:" + (token == null ? "anonymous" : idempotency.hash(token.trim()));
+		String credential = StringUtils.hasText(token) ? token : refreshCookie;
+		String scope = "session:" + (credential == null ? "anonymous" : idempotency.hash(credential.trim()));
 		String hash = idempotency.hash(Map.of("token", scope));
 		return idempotency.execute(scope, "POST", "/api/auth/logout", idempotencyKey, hash, () -> {
-			logoutUseCase.logout(token);
+			logoutUseCase.logout(token, refreshCookie);
 			return new CommandResponse(200, Map.of("status", "LOGGED_OUT"));
 		});
 	}

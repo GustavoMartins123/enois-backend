@@ -3,6 +3,7 @@ package com.socialcoisa.rede.identity.adapters.in.web;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -59,6 +60,15 @@ class SessionCookieTests {
 		mockMvc.perform(post("/auth/logout").cookie(session))
 			.andExpect(status().isForbidden())
 			.andExpect(jsonPath("$.code").value("CSRF_REQUIRED"));
+		// The browser must be able to read the refusal from the app's own origin, and only from it.
+		mockMvc.perform(post("/auth/logout").cookie(session).header("Origin", "https://enois.ia.br"))
+			.andExpect(status().isForbidden())
+			.andExpect(header().string("Access-Control-Allow-Origin", "https://enois.ia.br"))
+			.andExpect(header().string("Access-Control-Allow-Credentials", "true"));
+		mockMvc.perform(post("/auth/logout").cookie(session).header("Origin", "https://attacker.example"))
+			.andExpect(status().isForbidden())
+			.andExpect(header().doesNotExist("Access-Control-Allow-Origin"))
+			.andExpect(header().doesNotExist("Access-Control-Allow-Credentials"));
 
 		MvcResult logout = mockMvc.perform(post("/auth/logout").cookie(session)
 				.header("X-CSRF-Protection", "1").header("Idempotency-Key", "cookie-logout"))
@@ -85,6 +95,20 @@ class SessionCookieTests {
 			.andReturn();
 		String newSession = TestAuthHelper.sessionToken(refreshed);
 		mockMvc.perform(get("/auth/me").cookie(new Cookie("enois_session", newSession))).andExpect(status().isOk());
+	}
+
+	@Test
+	void logoutWithOnlyTheRefreshCookieRevokesTheSession() throws Exception {
+		new TestAuthHelper(mockMvc, objectMapper).authenticate("cookie_refresh_logout");
+		Cookie refresh = new Cookie("enois_refresh", TestAuthHelper.refreshToken(login("cookie_refresh_logout@test.com")));
+
+		// The access cookie has expired: only the refresh cookie is sent.
+		mockMvc.perform(post("/auth/logout").cookie(refresh).header("X-CSRF-Protection", "1")
+				.header("Idempotency-Key", "cookie-refresh-logout"))
+			.andExpect(status().isOk());
+
+		mockMvc.perform(post("/auth/refresh").cookie(refresh).header("X-CSRF-Protection", "1"))
+			.andExpect(status().isUnauthorized());
 	}
 
 	@Test

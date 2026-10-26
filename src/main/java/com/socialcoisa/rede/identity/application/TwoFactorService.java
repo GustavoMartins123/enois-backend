@@ -240,18 +240,20 @@ public class TwoFactorService implements TwoFactorUseCase {
 			.findLatestChallenge(userId, TwoFactorMethod.EMAIL)
 			.orElseThrow(() -> new ApiException(400, "TWO_FACTOR_CHALLENGE_NOT_FOUND",
 				"Peca um novo codigo por e-mail."));
-		if (challenge.isOutOfAttempts()) {
-			throw new ApiException(429, "TOO_MANY_ATTEMPTS", "Tentativas demais. Peca um novo codigo.");
-		}
 		if (challenge.isExpired(now)) {
 			throw new ApiException(410, "TWO_FACTOR_CHALLENGE_EXPIRED", "O codigo expirou. Peca um novo.");
 		}
+		if (!repository.claimAttempt(challenge.id())) {
+			requireNotConsumedMeanwhile(challenge.id(), "Este codigo ja foi usado. Peca um novo.");
+			throw new ApiException(429, "TOO_MANY_ATTEMPTS", "Tentativas demais. Peca um novo codigo.");
+		}
 		if (!Hashes.sha256Hex(code.trim()).equals(challenge.codeHash())) {
-			repository.recordFailedAttempt(challenge.id());
 			throw new ApiException(400, "INVALID_TWO_FACTOR_CODE", "Codigo incorreto.");
 		}
 
-		repository.saveChallenge(challenge.consume(now));
+		if (!repository.consumeChallenge(challenge.id(), now)) {
+			throw alreadyUsed("Este codigo ja foi usado. Peca um novo.");
+		}
 		UserProfile profile = requireProfile(userId);
 		profile.enableEmailOtp(now);
 		userProfileRepository.save(profile);
@@ -324,7 +326,7 @@ public class TwoFactorService implements TwoFactorUseCase {
 	 * tentativas do mesmo desafio: sem isso, daria para testar codigos indefinidamente.
 	 */
 	// The caller (AuthService.verifyTwoFactor) is transactional and rolls back on the error below, so
-	// a wrong code is counted through recordFailedAttempt, which commits on its own.
+	// the attempt is counted through claimAttempt, which commits on its own.
 	public String verifyChallenge(String challengeId, String code) {
 		Instant now = clock.instant();
 		TwoFactorChallenge challenge = repository.findChallenge(challengeId)
@@ -334,16 +336,18 @@ public class TwoFactorService implements TwoFactorUseCase {
 			throw new ApiException(409, "TWO_FACTOR_CHALLENGE_ALREADY_USED",
 				"Este login ja foi concluido. Entre novamente.");
 		}
-		if (challenge.isOutOfAttempts()) {
-			throw new ApiException(429, "TOO_MANY_ATTEMPTS",
-				"Tentativas demais. Entre com sua senha novamente.");
-		}
 		if (challenge.isExpired(now)) {
 			throw new ApiException(410, "TWO_FACTOR_CHALLENGE_EXPIRED",
 				"Este login expirou. Entre com sua senha novamente.");
 		}
 		if (!StringUtils.hasText(code)) {
 			throw new ApiException(400, "INVALID_TWO_FACTOR_CODE", "Informe o codigo do segundo fator.");
+		}
+		// Claimed before the code is checked, so parallel guesses cannot all read the same counter.
+		if (!repository.claimAttempt(challenge.id())) {
+			requireNotConsumedMeanwhile(challenge.id(), "Este login ja foi concluido. Entre novamente.");
+			throw new ApiException(429, "TOO_MANY_ATTEMPTS",
+				"Tentativas demais. Entre com sua senha novamente.");
 		}
 
 		boolean valid = switch (challenge.method()) {
@@ -361,16 +365,29 @@ public class TwoFactorService implements TwoFactorUseCase {
 			boolean recovered = repository.consumeBackupCode(challenge.userId(), Hashes.sha256Hex(normalizeBackup(code)),
 				now);
 			if (!recovered) {
-				repository.recordFailedAttempt(challenge.id());
 				throw new ApiException(400, "INVALID_TWO_FACTOR_CODE", "Codigo incorreto.");
 			}
 		}
 
-		repository.saveChallenge(challenge.consume(now));
+		// Atomic: of two parallel requests with a valid code, only one completes the login.
+		if (!repository.consumeChallenge(challenge.id(), now)) {
+			throw alreadyUsed("Este login ja foi concluido. Entre novamente.");
+		}
 		return challenge.userId();
 	}
 
 	// ------------------------------------------------------------------ apoio
+
+	/** A refused claim on a challenge another request just consumed reads as "already used", not 429. */
+	private void requireNotConsumedMeanwhile(String challengeId, String message) {
+		if (repository.findChallenge(challengeId).map(TwoFactorChallenge::isConsumed).orElse(false)) {
+			throw alreadyUsed(message);
+		}
+	}
+
+	private static ApiException alreadyUsed(String message) {
+		return new ApiException(409, "TWO_FACTOR_CHALLENGE_ALREADY_USED", message);
+	}
 
 	private List<String> issueBackupCodes(String userId, Instant now) {
 		List<String> codes = new ArrayList<>();

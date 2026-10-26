@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -300,6 +301,26 @@ class LinkedinImportServiceTests {
 		return zipOf(prefix, suffix, count, new byte[size]);
 	}
 
+	/** ZIP with the given entries, in order. */
+	static MockMultipartFile namedZip(Map<String, byte[]> entries) {
+		ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+		try (ZipOutputStream zip = new ZipOutputStream(bytes)) {
+			for (Map.Entry<String, byte[]> entry : entries.entrySet()) {
+				zip.putNextEntry(new ZipEntry(entry.getKey()));
+				zip.write(entry.getValue());
+				zip.closeEntry();
+			}
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
+		return new MockMultipartFile("file", "linkedin.zip", "application/zip", bytes.toByteArray());
+	}
+
+	/** A Positions.csv that inflates to {@code size} bytes of zeros: a bomb in an entry that is read. */
+	static MockMultipartFile positionsBomb(int size) {
+		return namedZip(Map.of("Basic_LinkedInDataExport/Positions.csv", new byte[size]));
+	}
+
 	/** ZIP with {@code count} entries named {@code prefix + i + suffix}, each holding {@code content}. */
 	static MockMultipartFile zipOf(String prefix, String suffix, int count, byte[] zeros) {
 		ByteArrayOutputStream bytes = new ByteArrayOutputStream();
@@ -325,14 +346,25 @@ class LinkedinImportServiceTests {
 
 	@Test
 	void rejectsHighRatioCsvEntry() {
-		MockMultipartFile bomb = highRatioZip("Positions", ".csv", 1, 60 * 1024 * 1024);
+		MockMultipartFile bomb = positionsBomb(60 * 1024 * 1024);
 		assertThat(bomb.getSize()).isLessThan(200 * 1024);
 		assertTooLarge(bomb);
 	}
 
 	@Test
-	void rejectsHighRatioEntryEvenWhenItIsNotACsv() {
-		assertTooLarge(highRatioZip("padding", ".bin", 1, 60 * 1024 * 1024));
+	void entriesTheImporterDoesNotUseAreNeverInflated() {
+		// A large photo or message dump in a full export must not cost the import: it is skipped
+		// from the central directory, so even a 60 MB bomb there is harmless.
+		var entries = new java.util.LinkedHashMap<String, byte[]>();
+		entries.put("Basic_LinkedInDataExport/Rich_Media/huge.bin", new byte[60 * 1024 * 1024]);
+		entries.put("Basic_LinkedInDataExport/messages.csv", new byte[60 * 1024 * 1024]);
+		entries.put("Basic_LinkedInDataExport/Positions.csv",
+			"Company Name,Title,Started On\nAcme,Engenheira,Jan 2020\n".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+		var preview = service.parse(namedZip(entries));
+
+		assertThat(preview.experiences()).hasSize(1);
+		assertThat(preview.experiences().get(0).company()).isEqualTo("Acme");
 	}
 
 	@Test
@@ -341,7 +373,8 @@ class LinkedinImportServiceTests {
 		// Incompressible content: only the total budget can stop it, not the ratio cap.
 		byte[] noise = new byte[512 * 1024];
 		new java.util.Random(7).nextBytes(noise);
-		assertThatThrownBy(() -> small.parse(zipOf("Part", ".csv", 3, noise)))
+		assertThatThrownBy(() -> small.parse(namedZip(Map.of("Positions.csv", noise, "Education.csv", noise,
+				"Skills.csv", noise))))
 			.isInstanceOfSatisfying(ApiException.class, error -> assertThat(error.code()).isEqualTo("IMPORT_TOO_LARGE"));
 	}
 

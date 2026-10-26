@@ -27,7 +27,7 @@ class LinkedinImportBombTests {
 	@Test
 	void highRatioArchiveIsRejectedWith413() throws Exception {
 		var session = new TestAuthHelper(mockMvc, objectMapper).authenticate("linkedin_bomb");
-		var bomb = LinkedinImportServiceTests.highRatioZip("Positions", ".csv", 1, 60 * 1024 * 1024);
+		var bomb = LinkedinImportServiceTests.positionsBomb(60 * 1024 * 1024);
 
 		mockMvc.perform(multipart("/me/import/linkedin").file(bomb).header("X-Session-Token", session.token()))
 			.andExpect(status().isPayloadTooLarge())

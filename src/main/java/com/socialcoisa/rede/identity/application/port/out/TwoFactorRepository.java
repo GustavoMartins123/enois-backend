@@ -15,10 +15,17 @@ public interface TwoFactorRepository {
 	void saveChallenge(TwoFactorChallenge challenge);
 
 	/**
-	 * Counts a wrong code in its own transaction: the request then fails and rolls back, and the
-	 * attempt must survive that rollback or the attempt limit never triggers.
+	 * Atomically claims one attempt before the code is checked, in its own transaction: a wrong code
+	 * fails and rolls the request back, and the attempt must survive that. False when the challenge
+	 * is consumed, gone or out of attempts, so parallel requests cannot share one read of the counter.
 	 */
-	void recordFailedAttempt(String challengeId);
+	boolean claimAttempt(String challengeId);
+
+	/**
+	 * Marks the challenge consumed in the caller's transaction; true only for the one request that
+	 * flips it, so two parallel correct codes cannot both complete.
+	 */
+	boolean consumeChallenge(String challengeId, Instant now);
 
 	/** Marks the TOTP step as used; false when this step (or a later one) was already accepted. */
 	boolean markTotpStepUsed(String userId, long step);

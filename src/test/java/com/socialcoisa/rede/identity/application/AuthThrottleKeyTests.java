@@ -25,4 +25,35 @@ class AuthThrottleKeyTests {
 		assertThat(otherIpMillis).isLessThan(100);
 		assertThat(sameIpMillis).isGreaterThanOrEqualTo(200);
 	}
+
+	@Test
+	void sprayingOneAccountFromManyIpsAddsACappedDelayButNeverALock() {
+		AuthThrottle throttle = new AuthThrottle(5, 10);
+		// 19 failures, each from a different network: under the account-wide threshold (4 x 5).
+		for (int i = 0; i < 19; i++) {
+			throttle.registraFalhaLogin("sprayed@test.com", "198.51.100." + i);
+		}
+		assertThat(throttle.loginDelayMillis("sprayed@test.com", "203.0.113.7")).isZero();
+
+		for (int i = 19; i < 500; i++) {
+			throttle.registraFalhaLogin("sprayed@test.com", "198.51." + (i / 250) + "." + (i % 250));
+		}
+		long ownerDelay = throttle.loginDelayMillis("sprayed@test.com", "203.0.113.7");
+		assertThat(ownerDelay).isPositive().isLessThanOrEqualTo(1_000L);
+		// Another account is untouched.
+		assertThat(throttle.loginDelayMillis("other@test.com", "203.0.113.7")).isZero();
+
+		throttle.limpaLogin("sprayed@test.com", "203.0.113.7");
+		assertThat(throttle.loginDelayMillis("sprayed@test.com", "203.0.113.7")).isZero();
+	}
+
+	@Test
+	void accountAndIpDelayStillAppliesOnItsOwn() {
+		AuthThrottle throttle = new AuthThrottle(5, 10);
+		for (int i = 0; i < 5; i++) {
+			throttle.registraFalhaLogin("target@test.com", "198.51.100.1");
+		}
+		assertThat(throttle.loginDelayMillis("target@test.com", "198.51.100.1")).isEqualTo(1_000L);
+		assertThat(throttle.loginDelayMillis("target@test.com", "203.0.113.7")).isZero();
+	}
 }
