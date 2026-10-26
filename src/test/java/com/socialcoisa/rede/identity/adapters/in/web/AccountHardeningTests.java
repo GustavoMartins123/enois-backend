@@ -111,6 +111,18 @@ class AccountHardeningTests {
 		verify(emailService, never()).sendPasswordResetEmail(eq("acch_mail_new@test.com"), anyString(), anyString());
 	}
 
+	@Test
+	void weakOrOversizedPasswordsAreRejected() throws Exception {
+		for (String password : List.of("Senha123", "a".repeat(129))) {
+			mockMvc.perform(post("/auth/signup")
+					.header("Idempotency-Key", "acch-weak-" + password.length())
+					.contentType(MediaType.APPLICATION_JSON)
+					.content(objectMapper.writeValueAsString(signupBody("acch_weak@test.com", password))))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("WEAK_PASSWORD"));
+		}
+	}
+
 	private JsonNode signup(String email, String password, String key) throws Exception {
 		String response = mockMvc.perform(post("/auth/signup")
 				.header("Idempotency-Key", key)

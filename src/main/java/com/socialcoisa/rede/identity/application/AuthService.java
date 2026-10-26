@@ -54,6 +54,9 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 
 	private static final Duration RESET_TOKEN_TTL = Duration.ofHours(24);
 
+	private static final int MAX_PASSWORD_LENGTH = 128;
+	private static final java.util.Set<String> COMMON_PASSWORDS = loadCommonPasswords();
+
 	/** Validade do link de confirmacao de e-mail. */
 	private static final Duration VERIFICATION_TOKEN_TTL = Duration.ofHours(24);
 
@@ -655,18 +658,32 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		}
 	}
 
-	/** Mínimo, máximo e uma pequena blocklist (E-39): senha longa demais também é abuso. */
-	private static void validatePasswordStrength(String password) {
+	/** Max length bounds the hashing cost; the blocklist is bundled, so no network call is made. */
+	static void validatePasswordStrength(String password) {
 		if (!StringUtils.hasText(password) || password.length() < 8) {
 			throw new ApiException(400, "WEAK_PASSWORD", "Senha deve ter pelo menos 8 caracteres.");
 		}
-		if (password.length() > 128) {
+		if (password.length() > MAX_PASSWORD_LENGTH) {
 			throw new ApiException(400, "WEAK_PASSWORD", "Senha deve ter no maximo 128 caracteres.");
 		}
-		String normalized = password.toLowerCase(Locale.ROOT);
-		if (java.util.Set.of("12345678", "123456789", "1234567890", "password", "senha123",
-				"qwerty123", "abc12345", "admin123", "enois123").contains(normalized)) {
+		if (COMMON_PASSWORDS.contains(password.toLowerCase(Locale.ROOT))) {
 			throw new ApiException(400, "WEAK_PASSWORD", "Escolha uma senha menos previsivel.");
+		}
+	}
+
+	private static java.util.Set<String> loadCommonPasswords() {
+		try (var in = AuthService.class.getResourceAsStream("/security/common-passwords.txt")) {
+			if (in == null) {
+				throw new IllegalStateException("security/common-passwords.txt missing from the classpath");
+			}
+			return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).lines()
+				.map(String::trim)
+				.filter(line -> !line.isEmpty() && !line.startsWith("#"))
+				.map(line -> line.toLowerCase(Locale.ROOT))
+				.collect(java.util.stream.Collectors.toUnmodifiableSet());
+		}
+		catch (java.io.IOException exception) {
+			throw new java.io.UncheckedIOException(exception);
 		}
 	}
 
