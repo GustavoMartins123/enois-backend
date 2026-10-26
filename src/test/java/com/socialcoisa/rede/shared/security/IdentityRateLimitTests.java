@@ -46,6 +46,8 @@ class IdentityRateLimitTests {
 		registry.add("rede.security.rate-limit.login.window-minutes", () -> 5);
 		registry.add("rede.security.rate-limit.signup.limit", () -> 2);
 		registry.add("rede.security.rate-limit.signup.window-minutes", () -> 5);
+		registry.add("rede.security.rate-limit.refresh.limit", () -> 2);
+		registry.add("rede.security.rate-limit.refresh.window-minutes", () -> 5);
 	}
 
 	@Test
@@ -93,6 +95,24 @@ class IdentityRateLimitTests {
 		signup(ip).andExpect(status().isBadRequest());
 		signup(ip).andExpect(status().isBadRequest());
 		signup(ip).andExpect(status().isTooManyRequests());
+	}
+
+	@Test
+	void refreshHasItsOwnBucket() throws Exception {
+		String ip = "203.0.113.70";
+		for (int i = 0; i < 2; i++) {
+			refresh(ip).andExpect(status().isUnauthorized());
+		}
+		refresh(ip).andExpect(status().isTooManyRequests());
+		// Exhausting refresh does not consume the login bucket of the same address.
+		login(ip).andExpect(status().isUnauthorized());
+	}
+
+	private org.springframework.test.web.servlet.ResultActions refresh(String ip) throws Exception {
+		return mockMvc.perform(post("/auth/refresh")
+			.contentType(MediaType.APPLICATION_JSON)
+			.header("X-Forwarded-For", ip)
+			.content(objectMapper.writeValueAsString(Map.of("refreshToken", "not-a-real-token"))));
 	}
 
 	private org.springframework.test.web.servlet.ResultActions login(String ip) throws Exception {
