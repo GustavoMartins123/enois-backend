@@ -57,7 +57,7 @@ class RequestOriginFilter extends OncePerRequestFilter {
 	private final boolean enforce;
 
 	RequestOriginFilter(DeveloperOriginService origins, OriginAbuseGuard abuse,
-			@Value("${rede.cors.allowed-origins:https://enois.ia.br,http://localhost:5173}") String allowed,
+			@Value("${rede.cors.allowed-origins:https://enois.ia.br}") String allowed,
 			@Value("${rede.origins.trusted:https://*.b7cloud.com.br}") String trusted,
 			@Value("${rede.origins.enforce:true}") boolean enforce) {
 		this.origins = origins;

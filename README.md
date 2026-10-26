@@ -72,9 +72,12 @@ This starts with the `dev` profile using an **H2 in-memory database**. Swagger U
 
 | Profile | Database    | How to activate                          |
 |---------|-------------|------------------------------------------|
-| `dev`   | H2 (memory) | `SPRING_PROFILES_ACTIVE=dev` (default)   |
+| `dev`   | H2 (memory) | `SPRING_PROFILES_ACTIVE=dev`             |
 | `hml`   | MariaDB     | `SPRING_PROFILES_ACTIVE=hml`             |
 | `prd`   | MySQL       | `SPRING_PROFILES_ACTIVE=prd`             |
+
+There is no default profile: the packaged app refuses to boot without `SPRING_PROFILES_ACTIVE`.
+`./mvnw spring-boot:run` runs as `dev`; pick another with `-Dspring-boot.run.profiles=<profile>`.
 
 ### hml (MariaDB)
 
@@ -88,7 +91,7 @@ docker run -d --name rede-mariadb \
   -p 3306:3306 mariadb:11
 
 # Run with hml profile
-SPRING_PROFILES_ACTIVE=hml ./mvnw spring-boot:run
+./mvnw spring-boot:run -Dspring-boot.run.profiles=hml
 ```
 
 ### prd (MySQL 8+)
@@ -103,7 +106,7 @@ docker run -d --name rede-mysql \
   -p 3307:3306 mysql:8
 
 # Run with prd profile
-SPRING_PROFILES_ACTIVE=prd ./mvnw spring-boot:run
+./mvnw spring-boot:run -Dspring-boot.run.profiles=prd
 ```
 
 ## Building

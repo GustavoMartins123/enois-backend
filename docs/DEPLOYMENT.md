@@ -261,9 +261,12 @@ As migrações Flyway em `src/main/resources/db/migration/` são executadas auto
 
 ### Scripts auxiliares
 
+Origem e destino nao tem default (escolha o alvo a cada execucao) e as senhas vem de variaveis de
+ambiente, nunca da linha de comando. Veja `--help` de cada script.
+
 ```bash
-# Exportar banco MariaDB remoto
-./scripts/db-export.sh
+# Exportar banco MariaDB (dumps/ e ignorado pelo git)
+./scripts/db-export.sh > dumps/backup.sql
 
 # Importar dump para banco local
 ./scripts/db-import.sh
