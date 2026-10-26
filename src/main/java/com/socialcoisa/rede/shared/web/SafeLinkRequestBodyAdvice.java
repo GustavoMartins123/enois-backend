@@ -19,7 +19,8 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Every string of every JSON request body goes through {@link SafeUrl#requireSafeMarkdownLinks}.
+ * Every string of every JSON request body bound to an object goes through
+ * {@link SafeUrl#requireSafeMarkdownLinks}.
  *
  * Markdown is rendered by the front in posts, comments, messages, blog, bios, job and community
  * descriptions and more; checking here is the one place all of them route through, instead of a
@@ -38,7 +39,9 @@ class SafeLinkRequestBodyAdvice extends RequestBodyAdviceAdapter {
 	@Override
 	public boolean supports(MethodParameter parameter, Type targetType,
 			Class<? extends HttpMessageConverter<?>> converterType) {
-		return true;
+		// Raw byte[]/String bodies are not user content bound to a DTO: they are payloads a handler
+		// verifies or relays as-is (the GitHub webhook checks an HMAC over the exact bytes).
+		return targetType != byte[].class && targetType != String.class;
 	}
 
 	@Override
