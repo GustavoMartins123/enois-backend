@@ -80,15 +80,19 @@ public class MessagingService {
 		}
 		ageGate.requireCanWrite(createdBy);
 		unique.add(createdBy);
+		// One read per kind for the whole group (up to 100 people), never one per participant.
+		// hiddenIdsFor covers blocks in both directions.
 		var creatorHidden = blockedUsers.hiddenIdsFor(createdBy);
-		for (String pid : unique) {
-			if (!pid.equals(createdBy)
-					&& (creatorHidden.contains(pid) || blockedUsers.hiddenIdsFor(pid).contains(createdBy))) {
-				throw new com.socialcoisa.rede.shared.web.ApiException(403, "USER_BLOCKED",
-					"Nao e possivel conversar com este usuario.");
-			}
-			if (!pid.equals(createdBy)) {
-				requireMayContactMinor(createdBy, pid);
+		java.util.List<String> others = unique.stream().filter(pid -> !pid.equals(createdBy)).toList();
+		if (others.stream().anyMatch(creatorHidden::contains)) {
+			throw new com.socialcoisa.rede.shared.web.ApiException(403, "USER_BLOCKED",
+				"Nao e possivel conversar com este usuario.");
+		}
+		var minors = agePolicy.minorIds(others);
+		if (!minors.isEmpty()) {
+			var connected = activeConnectionIds(createdBy);
+			if (!connected.containsAll(minors)) {
+				throw minorDmRestricted();
 			}
 		}
 		String id = "conversation_" + UUID.randomUUID().toString().replace("-", "");
@@ -242,9 +246,26 @@ public class MessagingService {
 	/** ECA Digital: a minor is only reachable by someone with an ACCEPTED connection to them. */
 	private void requireMayContactMinor(String actorId, String recipientId) {
 		if (agePolicy.isMinor(recipientId) && !connections.existsActiveConnection(actorId, recipientId)) {
-			throw new ApiException(403, "MINOR_DM_RESTRICTED",
-				"Para proteger usuarios menores de idade, so e possivel conversar com eles apos uma conexao aceita.");
+			throw minorDmRestricted();
 		}
+	}
+
+	private static ApiException minorDmRestricted() {
+		return new ApiException(403, "MINOR_DM_RESTRICTED",
+			"Para proteger usuarios menores de idade, so e possivel conversar com eles apos uma conexao aceita.");
+	}
+
+	/** People with a pending or accepted connection to the user: what existsActiveConnection checks. */
+	private java.util.Set<String> activeConnectionIds(String userId) {
+		java.util.Set<String> ids = new java.util.HashSet<>();
+		for (var status : java.util.List.of(com.socialcoisa.rede.network.domain.ConnectionStatus.PENDING,
+				com.socialcoisa.rede.network.domain.ConnectionStatus.ACCEPTED)) {
+			for (var connection : connections.findRequests(userId, status)) {
+				ids.add(userId.equals(connection.requesterUserId()) ? connection.receiverUserId()
+					: connection.requesterUserId());
+			}
+		}
+		return ids;
 	}
 
 	@Transactional
