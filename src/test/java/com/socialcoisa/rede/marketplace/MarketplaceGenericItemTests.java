@@ -101,5 +101,13 @@ class MarketplaceGenericItemTests {
 			.andExpect(status().isOk())
 			.andReturn().getResponse().getContentAsString();
 		assertThat(purchases).contains("TEMPLATE").contains("Template de apresentação");
+
+		mockMvc.perform(post("/marketplace/purchases/" + purchaseId + "/refund")
+				.header("X-Session-Token", buyer.token()))
+			.andExpect(status().isOk());
+		mockMvc.perform(get("/marketplace/purchases/" + purchaseId + "/content")
+				.header("X-Session-Token", buyer.token()))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("PURCHASE_REFUNDED"));
 	}
 }
