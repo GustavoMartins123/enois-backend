@@ -140,6 +140,25 @@ Os 4 últimos são **BLOQUEADOS** por dependência externa (não é código meu)
     *Escopo que fica para o item 13:* escopos OAuth de aplicações de terceiros (aqui o escopo é o
     nível de acesso da API de cada rota).
     Front: `925b048a` (branch `fix/lint-higiene-front`).
+    - **[x] ENTREGUE 2026-10-26 — A matriz prometia rota aberta que a API recusa, e faltavam sete
+      rotas (o Labirinto inteiro).** O item acima prometia os pares (método, caminho) batendo com
+      o backend — e batem. Mas o **escopo** de cada rota (a coluna `public`/`auth`/`admin`, que é
+      o que quem integra acredita) nunca foi conferido: a auditoria chamou as 41 leituras
+      documentadas **sem sessão** e achou duas prometidas como `public` que respondem **401** —
+      `GET /daily-games/blocks/today` e `GET /daily-games/words/today` (a própria descrição da
+      primeira dizia "com sessão", e o rótulo dizia o contrário). E a seção de jogos diários
+      documentava 6 das 13 rotas da API: faltava o Labirinto inteiro (estado, início, movimento,
+      ranking) e o ranking/início/guesses de Palavras.
+      *O que foi feito:* os dois rótulos viraram `auth` e as sete rotas entraram na matriz. E a
+      conferência de escopo virou **código**: `npm run check:api-matrix` agora sonda as leituras
+      documentadas sem credencial e compara com o escopo prometido (rota `public` que responde
+      401/403 é promessa quebrada; rota `auth`/`admin` que responde 200 é rota escondida).
+      *A prova de que a trava pega:* com os dois rótulos errados de volta, o script accuse
+      exatamente as duas e sai com erro.
+      *Testes:* `src/lib/developers/api-matrix-check.test.ts` (17 no total, +4 do escopo).
+      *Verificado:* `vitest` 467/467, `eslint` limpo, `tsc --noEmit` sem erro, `vite build` ok, e o
+      script fechando em "a página documenta só o que existe, com o escopo certo".
+      Front: #264 (`fix/matriz-escopos-daily-games`, sobre a `qa`).
 13. **Registro de aplicações de terceiros (OAuth + PKCE, escopos, revogação)** — programa de auth de
     terceiros. Exige decisão de produto/segurança antes. *Aceite:* app só recebe escopo autorizado; revogável.
 14. **CI de segurança + testes adversariais** — secret-scanning, SCA, SAST com política de bloqueio;
