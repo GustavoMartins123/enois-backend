@@ -66,9 +66,9 @@ public class SuspiciousAutoBanWorker {
 			AuthSessionRepository sessions, IpBlockService ipBlocks, SuspiciousUserReader reader,
 			java.time.Clock clock,
 			@Value("${rede.security.suspicious.name-patterns:probe}") String patternList,
-			@Value("${rede.moderation.auto-ban.enabled:true}") boolean enabled,
-			@Value("${rede.moderation.auto-ban.risk:60}") int threshold,
-			@Value("${rede.moderation.auto-ban.max-per-run:50}") int maxPerRun,
+		@Value("${rede.moderation.auto-ban.enabled:true}") boolean enabled,
+		@Value("${rede.moderation.auto-ban.risk:60}") int threshold,
+		@Value("${rede.moderation.auto-ban.max-per-run:50}") int maxPerRun,
 			@Value("${rede.moderation.auto-ban.ips-per-account:3}") int ipsToInspect,
 			@Value("${rede.moderation.auto-ban.accounts-per-ip:3}") int accountsPerIpToBlock) {
 		this.suspiciousUsers = suspiciousUsers;
@@ -185,8 +185,8 @@ public class SuspiciousAutoBanWorker {
 			}
 			String reason = reasonFor(target);
 			try {
-				var result = moderators.sanctionUser(ACTOR, target.username(), SanctionType.BAN, reason);
-				if ("ALREADY_BANNED".equals(result.status())) {
+			var result = moderators.sanctionUser(ACTOR, target.username(), SanctionType.SUSPENDED, reason);
+			if ("ALREADY_BANNED".equals(result.status())) {
 					continue;
 				}
 				List<String> ips = sessions.findRecentIpsByUser(result.userId(), ipsToInspect);

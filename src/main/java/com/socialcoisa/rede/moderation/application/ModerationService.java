@@ -220,7 +220,7 @@ public class ModerationService {
 		Report saved = reportRepository.save(report);
 		String id = "sanc_" + java.util.UUID.randomUUID().toString().replace("-", "");
 		var sanction = com.socialcoisa.rede.moderation.domain.UserSanction
-			.create(id, authorId, report.id(), "Banimento por decisão humana (denúncia " + report.id() + ")",
+			.suspended(id, authorId, report.id(), "Banimento por decisão humana (denúncia " + report.id() + ")",
 				Instant.now(clock));
 		sanctions_save_banned(sanction, authorId, reviewerId, sessions);
 		learning.record(saved, "BAN", "HUMAN", reviewerId);

@@ -127,6 +127,9 @@ class ModeratorPermissionsTests {
 				negadas.add(rota + " -> " + status);
 			}
 		}
+		mockMvc.perform(get(java.net.URI.create("/admin;v=1/users/" + plainUsername + "/ips;v=1"))
+				.header("X-Session-Token", mod.token()))
+			.andExpect(status().isOk());
 		if (!negadas.isEmpty()) {
 			org.junit.jupiter.api.Assertions.fail("Rotas negadas ao moderador: " + String.join(", ", negadas));
 		}

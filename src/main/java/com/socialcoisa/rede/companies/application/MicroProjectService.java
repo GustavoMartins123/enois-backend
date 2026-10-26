@@ -15,6 +15,7 @@ import com.socialcoisa.rede.companies.domain.MicroProject;
 import com.socialcoisa.rede.companies.domain.MicroProjectProposal;
 import com.socialcoisa.rede.notifications.application.NotificationService;
 import com.socialcoisa.rede.shared.web.ApiException;
+import com.socialcoisa.rede.shared.web.TextFieldLimit;
 
 /**
  * Marketplace de microprojetos: a empresa publica um problema real com entregaveis e criterios
@@ -67,6 +68,8 @@ public class MicroProjectService {
 		if (!access.hasRole()) {
 			throw new ApiException(403, "NOT_COMPANY_MEMBER", "Voce nao faz parte desta pagina empresarial.");
 		}
+		// O teto e o da COLUNA (`micro_projects.title varchar(200)`).
+		TextFieldLimit.check("COMPANY_FIELD_TOO_LONG", "titulo", title, 200);
 		if (!StringUtils.hasText(title) || title.trim().length() < 8) {
 			throw new ApiException(400, "INVALID_TITLE", "Titulo do microprojeto precisa de pelo menos 8 caracteres.");
 		}

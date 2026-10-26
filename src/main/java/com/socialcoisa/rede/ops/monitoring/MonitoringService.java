@@ -10,7 +10,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Deque;
@@ -32,7 +31,6 @@ import javax.sql.DataSource;
 
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -40,11 +38,13 @@ import org.springframework.util.StringUtils;
 import com.zaxxer.hikari.HikariDataSource;
 
 /**
- * Monitorabilidade do painel admin: carga, latência, recursos, eventos persistidos e logs.
+ * Monitorabilidade do painel admin: carga, latência, recursos, eventos e logs.
  *
  * <p>As métricas são em memória (séries de 60 minutos) e por pod; os eventos/erros/logs vão para
- * o banco de forma assíncrona. Nada bloqueia a requisição: a fila tem teto e o excedente é contado
- * em {@code droppedEvents}. Dados sensíveis são redigidos antes de persistir.</p>
+ * arquivo JSONL na VPS de forma assíncrona — a observabilidade NUNCA usa o pool do banco, para não
+ * concorrer com as requisições dos usuários. Nada bloqueia a requisição: a fila tem teto e o
+ * excedente é contado em {@code droppedEvents}. Dados sensíveis são redigidos antes de persistir.
+ * Só 5xx vira evento; 4xx conta métrica (não vira linha) para o painel não afogar em ruído.</p>
  */
 @Service
 public class MonitoringService {
@@ -55,12 +55,10 @@ public class MonitoringService {
 	private static final long MINUTE = 60_000L;
 	private static final long SLOW_MS = 2000L;
 
-	private final JdbcTemplate jdbc;
 	private final Clock clock;
-	private final int retentionDays;
 	private final int maxEventsPerMinute;
-	private final long maxRows;
 	private final ObjectProvider<DataSource> dataSource;
+	private final FileEventSink sink;
 	private final ArrayBlockingQueue<EventRow> queue = new ArrayBlockingQueue<>(QUEUE_LIMIT);
 	private final ConcurrentLinkedDeque<EventView> recent = new ConcurrentLinkedDeque<>();
 	private final ConcurrentHashMap<Long, MinuteMetrics> minutes = new ConcurrentHashMap<>();
@@ -78,16 +76,12 @@ public class MonitoringService {
 	private volatile List<CountView> typeCounts = List.of();
 	private volatile long countsAt;
 
-	MonitoringService(JdbcTemplate jdbc, Clock clock, ObjectProvider<DataSource> dataSource,
-			@Value("${rede.monitoring.retention-days:7}") int retentionDays,
-			@Value("${rede.monitoring.max-events-per-minute:1000}") int maxEventsPerMinute,
-			@Value("${rede.monitoring.max-rows:250000}") long maxRows) {
-		this.jdbc = jdbc;
+	MonitoringService(Clock clock, ObjectProvider<DataSource> dataSource, FileEventSink sink,
+			@Value("${rede.monitoring.max-events-per-minute:1000}") int maxEventsPerMinute) {
 		this.clock = clock;
 		this.dataSource = dataSource;
-		this.retentionDays = Math.max(1, retentionDays);
+		this.sink = sink;
 		this.maxEventsPerMinute = Math.max(1, maxEventsPerMinute);
-		this.maxRows = Math.max(0, maxRows);
 	}
 
 	// ------------------------------------------------------------------ ingestão
@@ -105,7 +99,7 @@ public class MonitoringService {
 		inFlight.updateAndGet(value -> Math.max(0, value - 1));
 	}
 
-	/** Chamado pelo filtro: métricas de TODA requisição; 4xx/5xx também viram evento. */
+	/** Chamado pelo filtro: métricas de TODA requisição; só 5xx vira evento. */
 	public void recordRequest(String method, String path, String route, int status, long durationMs,
 			String requestId, String userId, String clientIp, String deviceId) {
 		inFlight.updateAndGet(value -> Math.max(0, value - 1));
@@ -140,8 +134,9 @@ public class MonitoringService {
 		metrics.methods.computeIfAbsent(method == null ? "?" : method, key -> new LongAdder()).increment();
 		metrics.routes.computeIfAbsent(route == null ? "UNMATCHED" : route, key -> new LongAdder()).increment();
 		seconds.computeIfAbsent(now / 1000, key -> new LongAdder()).increment();
-		// TODA requisição vira evento no painel (200, 4xx e 5xx), com nível por status:
-		// 5xx ERROR, 4xx WARN, resto INFO. O filtro "só falhas" do painel continua funcionando.
+		// TODO: request inteira no painel (200, 4xx, 5xx — tudo). O nível reflete o status:
+		// 5xx ERROR, 4xx WARN, resto INFO. A fila tem teto e o painel pagina, então o volume
+		// extra não derruba nada.
 		String level = status >= 500 ? "ERROR" : status >= 400 ? "WARN" : "INFO";
 		String message = method + " " + (route == null ? path : route) + " -> " + status;
 		enqueue(new EventRow(id(), clock.instant(), level, "REQUEST", message, requestId, method, path,
@@ -152,9 +147,16 @@ public class MonitoringService {
 	// da tentativa que gerou o erro, não do erro em si.
 	public void recordException(int status, String code, String message, String method, String path,
 			String requestId, String userId) {
+		recordException(status, code, message, method, path, requestId, userId, null);
+	}
+
+	/** Exceções com pilha: o painel mostra a causa sem expor corpo de requisição nem segredo. */
+	public void recordException(int status, String code, String message, String method, String path,
+			String requestId, String userId, Throwable failure) {
 		enqueue(new EventRow(id(), clock.instant(), status >= 500 ? "ERROR" : "WARN", "EXCEPTION",
 			code + ": " + safe(message), requestId, method, path, null, status, null, userId,
-			org.slf4j.MDC.get(RequestObservabilityFilter.MDC_CLIENT_IP), null, null));
+			org.slf4j.MDC.get(RequestObservabilityFilter.MDC_CLIENT_IP), null,
+			safeStackTrace(failure, 4000)));
 	}
 
 	public void recordEvent(String level, String type, String message, Map<String, Object> metadata) {
@@ -204,41 +206,10 @@ public class MonitoringService {
 		if (batch.isEmpty()) {
 			return;
 		}
-		try {
-			jdbc.batchUpdate("""
-				insert into system_events (id, created_at, level, type, message, request_id, method, path, route,
-					status, duration_ms, user_id, client_ip, device_id, metadata)
-				values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-				""", batch, 100, (statement, row) -> {
-					statement.setString(1, row.id());
-					statement.setTimestamp(2, java.sql.Timestamp.from(row.createdAt()));
-					statement.setString(3, row.level());
-					statement.setString(4, row.type());
-					statement.setString(5, row.message());
-					statement.setString(6, row.requestId());
-					statement.setString(7, row.method());
-					statement.setString(8, row.path());
-					statement.setString(9, row.route());
-					if (row.status() == null) {
-						statement.setNull(10, java.sql.Types.INTEGER);
-					}
-					else {
-						statement.setInt(10, row.status());
-					}
-					if (row.durationMs() == null) {
-						statement.setNull(11, java.sql.Types.BIGINT);
-					}
-					else {
-						statement.setLong(11, row.durationMs());
-					}
-					statement.setString(12, row.userId());
-					statement.setString(13, row.clientIp());
-					statement.setString(14, row.deviceId());
-					statement.setString(15, row.metadata());
-				});
-		}
-		catch (RuntimeException failure) {
-			dropped.addAndGet(batch.size());
+		// Arquivo na VPS, fora do pool do banco: a observabilidade nunca disputa conexão
+		// com as requisições dos usuários.
+		for (EventRow row : batch) {
+			sink.append(row.view());
 		}
 	}
 
@@ -269,26 +240,8 @@ public class MonitoringService {
 
 	@Scheduled(fixedDelay = 3_600_000, initialDelay = 60_000)
 	void purgeOld() {
-		try {
-			jdbc.update("delete from system_events where created_at < ?",
-				java.sql.Timestamp.from(clock.instant().minus(retentionDays, ChronoUnit.DAYS)));
-			// Redes contra volume patológico: mesmo com o teto por minuto, uma semana cheia
-			// poderia somar milhões de linhas. Acima do limite, as mais antigas saem primeiro.
-			if (maxRows > 0) {
-				jdbc.update("""
-					delete from system_events where id in (
-						select id from system_events order by created_at asc offset ? rows
-					)""", Math.max(0, countRows() - maxRows));
-			}
-		}
-		catch (RuntimeException ignored) {
-			// Banco indisponível: tenta de novo no próximo ciclo.
-		}
-	}
-
-	private long countRows() {
-		Long total = jdbc.queryForObject("select count(*) from system_events", Long.class);
-		return total == null ? 0 : total;
+		// Rotação por dia no próprio sink: fecha o dia anterior e apaga além da retenção.
+		sink.rotate();
 	}
 
 	// ------------------------------------------------------------------ leitura
@@ -391,63 +344,58 @@ public class MonitoringService {
 	}
 
 	public List<EventView> events(String level, String type, String q, String from, String to, String before, int limit) {
-		StringBuilder sql = new StringBuilder("""
-			select id, created_at, level, type, message, request_id, method, path, route, status, duration_ms,
-				user_id, client_ip, device_id from system_events where 1=1
-			""");
-		List<Object> params = new ArrayList<>();
-		if (StringUtils.hasText(level)) {
-			sql.append(" and level = ?");
-			params.add(level.trim().toUpperCase(Locale.ROOT));
-		}
-		if (StringUtils.hasText(type)) {
-			sql.append(" and type = ?");
-			params.add(type.trim().toUpperCase(Locale.ROOT));
-		}
-		String pattern = com.socialcoisa.rede.shared.web.LikePattern.contains(q);
-		if (pattern != null) {
-			sql.append(" and (lower(message) like ? escape '!' or lower(path) like ? escape '!')");
-			params.add(pattern);
-			params.add(pattern);
-		}
-		if (StringUtils.hasText(from)) {
-			try {
-				sql.append(" and created_at >= ?");
-				params.add(java.sql.Timestamp.from(Instant.parse(from.trim())));
+		// Lê do arquivo na VPS (sem banco): dias mais novos primeiro, filtrando em memória e
+		// parando quando o limite do painel é atingido.
+		String wantLevel = StringUtils.hasText(level) ? level.trim().toUpperCase(Locale.ROOT) : null;
+		String wantType = StringUtils.hasText(type) ? type.trim().toUpperCase(Locale.ROOT) : null;
+		String needle = StringUtils.hasText(q) ? q.trim().toLowerCase(Locale.ROOT) : null;
+		Instant fromAt = instantOrNull(from);
+		Instant toAt = instantOrNull(to);
+		Instant beforeAt = instantOrNull(before);
+		int teto = Math.max(1, Math.min(limit, 200));
+		// Lê com folga: o filtro descarta, então busca mais linhas do que o teto final.
+		List<EventView> found = new ArrayList<>(teto);
+		for (EventView event : sink.read(Math.max(teto * 4, 400))) {
+			if (wantLevel != null && !wantLevel.equals(event.level())) {
+				continue;
 			}
-			catch (RuntimeException ignored) {
-				// Data inicial inválida é ignorada; o filtro fica com o que veio válido.
+			if (wantType != null && !wantType.equals(event.type())) {
+				continue;
 			}
-		}
-		if (StringUtils.hasText(to)) {
-			try {
-				sql.append(" and created_at <= ?");
-				params.add(java.sql.Timestamp.from(Instant.parse(to.trim())));
+			if (needle != null && !needle.isBlank()) {
+				String hay = ((event.message() == null ? "" : event.message()) + " "
+					+ (event.path() == null ? "" : event.path())).toLowerCase(Locale.ROOT);
+				if (!hay.contains(needle)) {
+					continue;
+				}
 			}
-			catch (RuntimeException ignored) {
-				// Data final inválida é ignorada; o filtro fica com o que veio válido.
+			Instant at = FileEventSink.instantOf(event);
+			if (fromAt != null && at.isBefore(fromAt)) {
+				continue;
 			}
-		}
-				if (StringUtils.hasText(before)) {
-			try {
-				sql.append(" and created_at < ?");
-				params.add(java.sql.Timestamp.from(Instant.parse(before.trim())));
+			if (toAt != null && at.isAfter(toAt)) {
+				continue;
 			}
-			catch (RuntimeException ignored) {
-				// `before` inválido é ignorado; a lista continua com os mais recentes.
+			if (beforeAt != null && !at.isBefore(beforeAt)) {
+				continue;
+			}
+			found.add(event);
+			if (found.size() >= teto) {
+				break;
 			}
 		}
-		sql.append(" order by created_at desc limit ?");
-		params.add(Math.max(1, Math.min(limit, 200)));
+		return found;
+	}
+
+	private static Instant instantOrNull(String value) {
+		if (!StringUtils.hasText(value)) {
+			return null;
+		}
 		try {
-			return jdbc.query(sql.toString(), (rs, rowNum) -> new EventView(rs.getString(1),
-				rs.getTimestamp(2).toInstant().toString(), rs.getString(3), rs.getString(4), rs.getString(5),
-				rs.getString(6), rs.getString(7), rs.getString(8), rs.getString(9),
-				(Integer) rs.getObject(10), (Long) rs.getObject(11), rs.getString(12), rs.getString(13),
-				rs.getString(14)), params.toArray());
+			return Instant.parse(value.trim());
 		}
-		catch (RuntimeException failure) {
-			return List.of();
+		catch (RuntimeException ignored) {
+			return null;
 		}
 	}
 
@@ -455,7 +403,7 @@ public class MonitoringService {
 		return recent.stream().limit(Math.max(1, Math.min(limit, RECENT_LIMIT))).toList();
 	}
 
-	/** Contagens de 24h não precisam bater no banco a cada polling de 2,5s. */
+	/** Contagens de 24h a partir do buffer em memória (sem banco, sem custo por polling). */
 	private void refreshCounts() {
 		if (clock.millis() - countsAt < 30_000) {
 			return;
@@ -464,23 +412,28 @@ public class MonitoringService {
 			if (clock.millis() - countsAt < 30_000) {
 				return;
 			}
-			levelCounts = countBy("level");
-			typeCounts = countBy("type");
+			Map<String, Long> levels = new LinkedHashMap<>();
+			Map<String, Long> types = new LinkedHashMap<>();
+			for (EventView event : recent) {
+				if (event.level() != null) {
+					levels.merge(event.level(), 1L, Long::sum);
+				}
+				if (event.type() != null) {
+					types.merge(event.type(), 1L, Long::sum);
+				}
+			}
+			levelCounts = top(levels);
+			typeCounts = top(types);
 			countsAt = clock.millis();
 		}
 	}
 
-	private List<CountView> countBy(String column) {
-		try {
-			return jdbc.query("""
-				select %s, count(*) from system_events
-				where created_at >= ? group by %s order by count(*) desc limit 12
-				""".formatted(column, column), (rs, rowNum) -> new CountView(rs.getString(1), rs.getLong(2)),
-				java.sql.Timestamp.from(clock.instant().minus(24, ChronoUnit.HOURS)));
-		}
-		catch (RuntimeException failure) {
-			return List.of();
-		}
+	private static List<CountView> top(Map<String, Long> counts) {
+		return counts.entrySet().stream()
+			.sorted(Map.Entry.<String, Long>comparingByValue(Comparator.reverseOrder()))
+			.limit(12)
+			.map(entry -> new CountView(entry.getKey(), entry.getValue()))
+			.toList();
 	}
 
 	// ------------------------------------------------------------------ recursos
@@ -546,8 +499,9 @@ public class MonitoringService {
 	}
 
 	/**
-	 * O DataSource pode estar embrulhado (LazyConnectionDataSourceProxy do bootstrap-mode=deferred,
-	 * TransactionAware etc.): o instanceof direto falhava e o painel mostrava 0/0 sempre.
+	 * O DataSource pode estar embrulhado: com `bootstrap-mode=deferred` o Spring usa um
+	 * `LazyConnectionDataSourceProxy` por cima do Hikari, e o instanceof direto falha — o painel
+	 * mostrava 0/0 sempre. Desembrulha até chegar no Hikari real.
 	 */
 	private static HikariDataSource unwrapHikari(DataSource source) {
 		if (source instanceof HikariDataSource hikari) {
@@ -556,6 +510,8 @@ public class MonitoringService {
 		if (source == null) {
 			return null;
 		}
+		// DataSource.unwrap é o contrato padrão e cobre os proxies do Spring (Lazy/TransactionAware);
+		// o fallback por DelegatingDataSource pega versões que não implementam unwrap.
 		try {
 			HikariDataSource unwrapped = source.unwrap(HikariDataSource.class);
 			if (unwrapped != null) {
@@ -563,7 +519,7 @@ public class MonitoringService {
 			}
 		}
 		catch (java.sql.SQLException | RuntimeException ignored) {
-			// Segue para o fallback abaixo.
+			// Segue para o fallback.
 		}
 		if (source instanceof org.springframework.jdbc.datasource.DelegatingDataSource delegating) {
 			return unwrapHikari(delegating.getTargetDataSource());
@@ -797,12 +753,41 @@ public class MonitoringService {
 		return clean.length() > MAX_MESSAGE ? clean.substring(0, MAX_MESSAGE) : clean;
 	}
 
+	/** Pilha de erro redigida para o painel: passa pelo mesmo filtro da mensagem. */
+	static String safeStackTrace(Throwable failure, int maxChars) {
+		if (failure == null) {
+			return null;
+		}
+		StringBuilder pilha = new StringBuilder();
+		java.util.Set<Throwable> visitados = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+		Throwable atual = failure;
+		while (atual != null && visitados.add(atual)) {
+			if (pilha.length() > 0) {
+				pilha.append("Caused by: ");
+			}
+			pilha.append(atual.getClass().getName());
+			if (atual.getMessage() != null) {
+				pilha.append(": ").append(atual.getMessage());
+			}
+			pilha.append('\n');
+			StackTraceElement[] elementos = atual.getStackTrace();
+			int teto = Math.min(elementos.length, 40);
+			for (int i = 0; i < teto; i++) {
+				pilha.append("\tat ").append(elementos[i]).append('\n');
+			}
+			atual = atual.getCause();
+		}
+		String limpa = safe(pilha.toString());
+		int teto = Math.max(500, Math.min(maxChars, 8000));
+		return limpa.length() > teto ? limpa.substring(0, teto) : limpa;
+	}
+
 	private record EventRow(String id, Instant createdAt, String level, String type, String message,
 			String requestId, String method, String path, String route, Integer status, Long durationMs,
 			String userId, String clientIp, String deviceId, String metadata) {
 		EventView view() {
 			return new EventView(id, createdAt.toString(), level, type, message, requestId, method, path, route,
-				status, durationMs, userId, clientIp, deviceId);
+				status, durationMs, userId, clientIp, deviceId, metadata);
 		}
 	}
 
@@ -824,7 +809,7 @@ public class MonitoringService {
 
 	public record EventView(String id, String createdAt, String level, String type, String message,
 			String requestId, String method, String path, String route, Integer status, Long durationMs,
-			String userId, String clientIp, String deviceId) {
+			String userId, String clientIp, String deviceId, String metadata) {
 	}
 
 	public record MinutePoint(String minute, long requests, long requests2xx, long requests3xx, long errors4xx,

@@ -3,6 +3,7 @@ package com.socialcoisa.rede.cosmetics.application;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Comparator;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,34 +24,40 @@ import com.socialcoisa.rede.shared.web.ApiException;
 public class CosmeticsService {
 
 	/** O catálogo fechado da v1: molduras de avatar ("preço baixo", plano C3). */
-	public record CosmeticItem(String id, String name, String description, long priceMf, String cssRing) {
+        public record CosmeticItem(int releaseOrder, String id, String name, String description, long priceMf, String cssRing) {
+                public CosmeticItem {
+                        if (releaseOrder <= 0) {
+                                throw new IllegalArgumentException("A sequência de lançamento deve ser positiva.");
+                        }
+                }
 	}
 
+        // Sequência de entrada no catálogo, independente da posição nesta lista.
 	private static final List<CosmeticItem> CATALOG = List.of(
-		new CosmeticItem("moldura-ambar", "Moldura Âmbar", "Um anel quente de fim de tarde.", 2_000,
+                new CosmeticItem(1, "moldura-ambar", "Moldura Âmbar", "Um anel quente de fim de tarde.", 2_000,
 			"ring-2 ring-amber-400"),
-		new CosmeticItem("moldura-esmeralda", "Moldura Esmeralda", "Verde de vitrine.", 2_000,
+                new CosmeticItem(2, "moldura-esmeralda", "Moldura Esmeralda", "Verde de vitrine.", 2_000,
 			"ring-2 ring-emerald-400"),
-		new CosmeticItem("moldura-violeta", "Moldura Violeta", "O roxo da marca, no seu rosto.", 5_000,
+                new CosmeticItem(3, "moldura-violeta", "Moldura Violeta", "O roxo da marca, no seu rosto.", 5_000,
 			"ring-2 ring-violet-500"),
-		new CosmeticItem("moldura-coral", "Moldura Coral", "Um aro coral para o seu retrato.", 2_000,
+                new CosmeticItem(4, "moldura-coral", "Moldura Coral", "Um aro coral para o seu retrato.", 2_000,
 			"ring-2 ring-rose-400"),
-		new CosmeticItem("moldura-aurora", "Aurora", "Cores que se transformam ao redor do avatar.", 5_000, ""),
-		new CosmeticItem("moldura-pulsar", "Pulsar", "Um brilho violeta que pulsa suavemente.", 5_000, ""),
-		new CosmeticItem("moldura-solar", "Solar", "Um brilho quente e vivo.", 5_000, ""),
+                new CosmeticItem(5, "moldura-aurora", "Aurora", "Cores que se transformam ao redor do avatar.", 5_000, ""),
+                new CosmeticItem(6, "moldura-pulsar", "Pulsar", "Um brilho violeta que pulsa suavemente.", 5_000, ""),
+                new CosmeticItem(7, "moldura-solar", "Solar", "Um brilho quente e vivo.", 5_000, ""),
 		// Molduras com efeito: o desenho sai do círculo (raio, fogo...) e vive no front.
-		new CosmeticItem("moldura-tempestade", "Tempestade", "Raios que estalam em volta do avatar.", 10_000, ""),
-		new CosmeticItem("moldura-inferno", "Inferno", "Labaredas que lambem a borda do retrato.", 10_000, ""),
-		new CosmeticItem("moldura-buraco-negro", "Buraco Negro", "Matéria girando rumo ao horizonte de eventos.",
+                new CosmeticItem(8, "moldura-tempestade", "Tempestade", "Raios que estalam em volta do avatar.", 10_000, ""),
+                new CosmeticItem(9, "moldura-inferno", "Inferno", "Labaredas que lambem a borda do retrato.", 10_000, ""),
+                new CosmeticItem(10, "moldura-buraco-negro", "Buraco Negro", "Matéria girando rumo ao horizonte de eventos.",
 			10_000, ""),
-		new CosmeticItem("moldura-orbita", "Órbita", "Cometas que passam por trás do seu rosto.", 10_000, ""),
-		new CosmeticItem("moldura-glacial", "Glacial", "Cristais de gelo que cintilam no frio.", 10_000, ""),
-		new CosmeticItem("moldura-toxica", "Tóxica", "Gosma radioativa que borbulha e escorre.", 10_000, ""),
-		new CosmeticItem("moldura-nebulosa", "Nebulosa", "Nuvens cósmicas e estrelas envolvendo o seu avatar.", 10_000, ""),
-		new CosmeticItem("moldura-supernova", "Supernova", "Uma explosão estelar com ondas de luz e partículas.", 10_000, ""),
-		new CosmeticItem("moldura-galaxia", "Galáxia", "Braços espirais de gás e poeira, com estrelas e partículas em movimento.", 10_000, ""),
-		new CosmeticItem("moldura-portal", "Portal", "Um vórtice de energia sugando faíscas para dentro.", 10_000, ""),
-		new CosmeticItem("moldura-holograma", "Holograma", "Sinal holográfico com glitch e linhas de varredura.", 10_000,
+                new CosmeticItem(11, "moldura-orbita", "Órbita", "Cometas que passam por trás do seu rosto.", 10_000, ""),
+                new CosmeticItem(12, "moldura-glacial", "Glacial", "Cristais de gelo que cintilam no frio.", 10_000, ""),
+                new CosmeticItem(13, "moldura-toxica", "Tóxica", "Gosma radioativa que borbulha e escorre.", 10_000, ""),
+                new CosmeticItem(14, "moldura-nebulosa", "Nebulosa", "Nuvens cósmicas e estrelas envolvendo o seu avatar.", 10_000, ""),
+                new CosmeticItem(15, "moldura-supernova", "Supernova", "Uma explosão estelar com ondas de luz e partículas.", 10_000, ""),
+                new CosmeticItem(18, "moldura-galaxia", "Galáxia", "Braços espirais de gás e poeira, com estrelas e partículas em movimento.", 10_000, ""),
+                new CosmeticItem(16, "moldura-portal", "Portal", "Um vórtice de energia sugando faíscas para dentro.", 10_000, ""),
+                new CosmeticItem(17, "moldura-holograma", "Holograma", "Sinal holográfico com glitch e linhas de varredura.", 10_000,
 			""));
 
 	private final CoinService coins;
@@ -66,8 +73,20 @@ public class CosmeticsService {
 		this.clock = clock;
 	}
 
-	public List<CosmeticItem> catalog() {
-		return CATALOG;
+        static {
+                if (CATALOG.stream().map(CosmeticItem::releaseOrder).distinct().count() != CATALOG.size()) {
+                        throw new IllegalStateException("Sequência de lançamento duplicada no catálogo.");
+                }
+        }
+
+        public List<CosmeticItem> catalog(String order) {
+                Comparator<CosmeticItem> comparator = switch (order) {
+                        case "oldest" -> Comparator.comparingInt(CosmeticItem::releaseOrder);
+                        case "newest" -> Comparator.comparingInt(CosmeticItem::releaseOrder).reversed();
+                        default -> throw new ApiException(400, "INVALID_CATALOG_ORDER",
+                                        "Escolha a ordem oldest ou newest.");
+                };
+                return CATALOG.stream().sorted(comparator).toList();
 	}
 
 	/** A pessoa já comprou a moldura? A posse é o lançamento do ledger (ref por usuário+item). */

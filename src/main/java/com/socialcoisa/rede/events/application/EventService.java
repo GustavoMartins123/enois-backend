@@ -15,6 +15,7 @@ import com.socialcoisa.rede.events.application.port.out.EventRepository;
 import com.socialcoisa.rede.events.domain.Event;
 import com.socialcoisa.rede.events.domain.EventAttendee;
 import com.socialcoisa.rede.shared.web.ApiException;
+import com.socialcoisa.rede.shared.web.TextFieldLimit;
 
 @Service
 public class EventService {
@@ -44,6 +45,14 @@ public class EventService {
 	@Transactional
 	public Event create(String title, String date, String time, String format, String host, String cover,
 			String streamUrl, String location, String userId) {
+		// Os mesmos tetos das colunas (`events.title varchar(255)`...): sem esta checagem o banco
+		// recusava a gravacao com "Data too long" e a pessoa recebia 409 "Operacao conflita com o
+		// estado atual dos dados" — que nao diz qual campo passou do limite.
+		TextFieldLimit.check("EVENT_FIELD_TOO_LONG", "titulo", title, 255);
+		TextFieldLimit.check("EVENT_FIELD_TOO_LONG", "local", location, 255);
+		TextFieldLimit.check("EVENT_FIELD_TOO_LONG", "host", host, 255);
+		TextFieldLimit.check("EVENT_FIELD_TOO_LONG", "formato", format, 32);
+		TextFieldLimit.check("EVENT_FIELD_TOO_LONG", "transmissao", streamUrl, 500);
 		String id = "event_" + UUID.randomUUID().toString().replace("-", "");
 		Event event = Event.create(id, title, date, time, format, host, cover, httpsOrNull(streamUrl), location,
 			userId, clock.instant());
