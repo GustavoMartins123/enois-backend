@@ -98,6 +98,20 @@ class SessionCookieTests {
 	}
 
 	@Test
+	void logoutWithOnlyTheRefreshCookieRevokesTheSession() throws Exception {
+		new TestAuthHelper(mockMvc, objectMapper).authenticate("cookie_refresh_logout");
+		Cookie refresh = new Cookie("enois_refresh", TestAuthHelper.refreshToken(login("cookie_refresh_logout@test.com")));
+
+		// The access cookie has expired: only the refresh cookie is sent.
+		mockMvc.perform(post("/auth/logout").cookie(refresh).header("X-CSRF-Protection", "1")
+				.header("Idempotency-Key", "cookie-refresh-logout"))
+			.andExpect(status().isOk());
+
+		mockMvc.perform(post("/auth/refresh").cookie(refresh).header("X-CSRF-Protection", "1"))
+			.andExpect(status().isUnauthorized());
+	}
+
+	@Test
 	void anExplicitSessionHeaderNeedsNoCsrfHeader() throws Exception {
 		var session = new TestAuthHelper(mockMvc, objectMapper).authenticate("cookie_header_client");
 

@@ -350,9 +350,14 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 
 	@Override
 	@Transactional
-	public void logout(String token) {
+	public void logout(String token, String refreshToken) {
 		if (StringUtils.hasText(token)) {
 			authSessionRepository.revoke(token.trim(), clock.instant());
+		}
+		// An expired access cookie is gone from the browser while the refresh cookie still is:
+		// without this the session could still be refreshed after "logging out".
+		if (StringUtils.hasText(refreshToken)) {
+			authSessionRepository.revokeByRefreshToken(refreshToken.trim(), clock.instant());
 		}
 	}
 
