@@ -144,6 +144,8 @@ class MarketplaceRulesTests {
 			MarketplaceService.MIN_PRICE);
 		coins.reward(buyer.userId(), CoinService.FAIS(120), "mkt-owned-" + suffix, "Saldo de teste");
 		var purchase = marketplace.buy(listing.id(), buyer.userId());
+		// Registro anterior à correção: o anúncio recebia SOLD e era recriado pelo importador.
+		repository.saveListing(listing.markSold(java.time.Instant.now()));
 		if (confirm) {
 			marketplace.confirm(purchase.id(), buyer.userId());
 		}
@@ -175,6 +177,57 @@ class MarketplaceRulesTests {
 		marketplace.refund(purchase.id(), buyer.userId());
 		assertThat(repository.hasPurchaseForItem(buyer.userId(), "THEME", themeId)).isFalse();
 		assertThat(repository.hasPurchaseForItem(seller.userId(), "THEME", themeId)).isFalse();
+		assertThat(marketplace.catalog(100, "Tema devolvido", "THEME"))
+			.extracting(com.socialcoisa.rede.marketplace.domain.MarketplaceListing::id).contains(listing.id());
+		var boughtAgain = marketplace.buy(listing.id(), buyer.userId());
+		assertThat(boughtAgain.id()).isNotEqualTo(purchase.id());
+		assertThat(repository.hasPurchaseForItem(buyer.userId(), "THEME", themeId)).isTrue();
+	}
+
+	@Test
+	void refundReopensALegacySoldListingImmediately() throws Exception {
+		var auth = new TestAuthHelper(mockMvc, objectMapper);
+		var seller = auth.authenticate("mkt_legacy_refund_seller");
+		var buyer = auth.authenticate("mkt_legacy_refund_buyer");
+		String themeId = publishedTheme(seller, "Tema legado devolvido");
+		var listing = marketplace.publish(seller.userId(), "THEME", themeId, "Tema legado devolvido", null,
+			MarketplaceService.MIN_PRICE);
+		coins.reward(buyer.userId(), CoinService.FAIS(60), "mkt-legacy-refund", "Saldo de teste");
+		var purchase = marketplace.buy(listing.id(), buyer.userId());
+		repository.saveListing(listing.markSold(java.time.Instant.now()));
+		marketplace.refund(purchase.id(), buyer.userId());
+		assertThat(repository.findListingById(listing.id()).orElseThrow().status())
+			.isEqualTo(com.socialcoisa.rede.marketplace.domain.MarketplaceListing.Status.ACTIVE);
+		assertThat(marketplace.buy(listing.id(), buyer.userId()).id()).isNotEqualTo(purchase.id());
+	}
+
+	@Test
+	void unconfirmedPurchaseReleasesOnceAfterTheDecisionWindow() throws Exception {
+		var auth = new TestAuthHelper(mockMvc, objectMapper);
+		var seller = auth.authenticate("mkt_expiry_seller");
+		var buyer = auth.authenticate("mkt_expiry_buyer");
+		String themeId = publishedTheme(seller, "Tema sem confirmacao");
+		var listing = marketplace.publish(seller.userId(), "THEME", themeId, "Tema sem confirmacao", null,
+			MarketplaceService.MIN_PRICE);
+		coins.reward(buyer.userId(), CoinService.FAIS(60), "mkt-expiry-balance", "Saldo de teste");
+		var purchase = marketplace.buy(listing.id(), buyer.userId());
+		long buyerBalance = walletBalance(buyer.token());
+		long sellerBalance = walletBalance(seller.token());
+		assertThat(buyerBalance).isLessThan(CoinService.FAIS(165));
+		repository.savePurchase(new com.socialcoisa.rede.marketplace.domain.MarketplacePurchase(
+			purchase.id(), purchase.listingId(), purchase.buyerId(), purchase.sellerId(), purchase.price(),
+			purchase.state(), java.time.Instant.now().minus(java.time.Duration.ofDays(8)), null));
+
+		marketplace.releaseExpired();
+		assertThat(repository.findPurchaseById(purchase.id()).orElseThrow().state())
+			.isEqualTo(com.socialcoisa.rede.marketplace.domain.MarketplacePurchase.State.RELEASED);
+		assertThat(walletBalance(buyer.token())).isEqualTo(buyerBalance);
+		assertThat(walletBalance(seller.token())).isEqualTo(sellerBalance + CoinService.FAIS(45));
+		marketplace.releaseExpired();
+		assertThat(walletBalance(seller.token())).isEqualTo(sellerBalance + CoinService.FAIS(45));
+		mockMvc.perform(post("/marketplace/purchases/" + purchase.id() + "/refund")
+				.header("X-Session-Token", buyer.token()))
+			.andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("PURCHASE_NOT_HELD"));
 	}
 
 	private long walletBalance(String token) throws Exception {
