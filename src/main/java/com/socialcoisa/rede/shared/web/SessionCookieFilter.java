@@ -51,6 +51,7 @@ class SessionCookieFilter extends OncePerRequestFilter {
 				&& !"1".equals(request.getHeader(CSRF_HEADER))) {
 			response.setStatus(403);
 			response.setHeader("Cache-Control", "no-store");
+			TrustedOriginCors.apply(request, response);
 			response.setContentType(MediaType.APPLICATION_JSON_VALUE);
 			response.setCharacterEncoding("UTF-8");
 			response.getWriter().write("{\"code\":\"CSRF_REQUIRED\",\"message\":\"Requisicao recusada. "
