@@ -23,7 +23,7 @@ class RateLimitCorsTests {
 	void globalLimitAnswers429WithCorsHeaders() throws Exception {
 		Clock clock = Clock.fixed(Instant.parse("2026-10-25T00:00:00Z"), ZoneOffset.UTC);
 		GlobalApiRateLimitFilter filter = new GlobalApiRateLimitFilter(clock, resolver,
-			org.mockito.Mockito.mock(com.socialcoisa.rede.identity.application.port.out.AuthSessionRepository.class), 1, 50);
+			org.mockito.Mockito.mock(RateLimitSessions.class), 1, 50);
 
 		MockHttpServletRequest first = post("/feed/posts/x/reactions");
 		filter.doFilter(first, new MockHttpServletResponse(), new MockFilterChain());
@@ -45,7 +45,7 @@ class RateLimitCorsTests {
 	void preflightIsNeverCountedByTheGlobalLimit() throws Exception {
 		Clock clock = Clock.fixed(Instant.parse("2026-10-25T00:00:00Z"), ZoneOffset.UTC);
 		GlobalApiRateLimitFilter filter = new GlobalApiRateLimitFilter(clock, resolver,
-			org.mockito.Mockito.mock(com.socialcoisa.rede.identity.application.port.out.AuthSessionRepository.class), 1, 50);
+			org.mockito.Mockito.mock(RateLimitSessions.class), 1, 50);
 
 		MockHttpServletRequest options = new MockHttpServletRequest("OPTIONS", "/feed/posts/x/reactions");
 		options.addHeader("Origin", "https://enois.ia.br");

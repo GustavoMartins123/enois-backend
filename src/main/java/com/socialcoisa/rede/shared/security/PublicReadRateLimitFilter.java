@@ -15,8 +15,6 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import com.socialcoisa.rede.identity.application.port.out.AuthSessionRepository;
-
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -43,10 +41,10 @@ public class PublicReadRateLimitFilter extends OncePerRequestFilter {
 	private final Map<String, Deque<Long>> hits = new ConcurrentHashMap<>();
 	private final Clock clock;
 	private final ClientIpResolver ipResolver;
-	private final AuthSessionRepository sessions;
+	private final RateLimitSessions sessions;
 	private final int perMinute;
 
-	public PublicReadRateLimitFilter(Clock clock, ClientIpResolver ipResolver, AuthSessionRepository sessions,
+	public PublicReadRateLimitFilter(Clock clock, ClientIpResolver ipResolver, RateLimitSessions sessions,
 			@Value("${rede.rate.public-read-per-minute:600}") int perMinute) {
 		this.clock = clock;
 		this.ipResolver = ipResolver;
@@ -70,22 +68,20 @@ public class PublicReadRateLimitFilter extends OncePerRequestFilter {
 			throws ServletException, IOException {
 		// Logado tem balde próprio (sessão); anônimo divide o do IP — é a enumeração anônima
 		// que este teto existe para conter, não o usuário navegando entre perfis.
-		// Only a live session earns its own bucket, keyed by the user: an invented token falls back to the IP.
-		String session = request.getHeader("X-Session-Token");
-		String userId = org.springframework.util.StringUtils.hasText(session)
-			? sessions.findActiveUserId(session.trim(), clock.instant()).orElse(null)
-			: null;
-		String key;
-		String who;
-		if (userId != null) {
-			key = "u:" + userId;
-			who = "sessao";
-		}
-		else {
-			key = "ip:" + ipResolver.resolve(request);
-			who = key;
-		}
+		// Only a live session earns its own bucket, keyed by the user; anything else counts against the IP.
 		long now = clock.millis();
+		String ip = ipResolver.resolve(request);
+		String ipKey = "ip:" + ip;
+		String key = ipKey;
+		String who = ipKey;
+		String session = request.getHeader("X-Session-Token");
+		if (org.springframework.util.StringUtils.hasText(session)) {
+			String userId = sessions.userId(session, ip);
+			if (userId != null) {
+				key = "u:" + userId;
+				who = "sessao";
+			}
+		}
 		Deque<Long> marks = hits.computeIfAbsent(key, k -> new ArrayDeque<>());
 		synchronized (marks) {
 			while (!marks.isEmpty() && marks.peekFirst() < now - WINDOW_MS) {
@@ -104,4 +100,5 @@ public class PublicReadRateLimitFilter extends OncePerRequestFilter {
 		}
 		chain.doFilter(request, response);
 	}
+
 }
