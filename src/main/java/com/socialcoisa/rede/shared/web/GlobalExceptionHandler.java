@@ -52,8 +52,11 @@ public class GlobalExceptionHandler {
 		else {
 			LOGGER.debug("api_client_error status={} code={}", exception.status(), exception.code());
 		}
-		return ResponseEntity.status(exception.status())
-			.body(new ErrorResponse(exception.code(), exception.getMessage(), Instant.now()));
+		var response = ResponseEntity.status(exception.status());
+		if (exception.retryAfterSeconds() > 0) {
+			response.header("Retry-After", Long.toString(exception.retryAfterSeconds()));
+		}
+		return response.body(new ErrorResponse(exception.code(), exception.getMessage(), Instant.now()));
 	}
 
 	/**
