@@ -311,7 +311,10 @@ public class TwoFactorService implements TwoFactorUseCase {
 				"Este login expirou. Entre com sua senha novamente.");
 		}
 		String code = numericCode();
-		repository.saveChallenge(challenge.replaceCode(Hashes.sha256Hex(code), now.plus(CHALLENGE_TTL)));
+		if (!repository.replaceCode(challenge.id(), Hashes.sha256Hex(code), now.plus(CHALLENGE_TTL))) {
+			throw new ApiException(410, "TWO_FACTOR_CHALLENGE_EXPIRED",
+				"Este login expirou. Entre com sua senha novamente.");
+		}
 		UserProfile profile = requireProfile(challenge.userId());
 		if (!emailService.sendTwoFactorCode(profile.email(), profile.name(), code)) {
 			throw new ApiException(503, "EMAIL_SEND_FAILED",

@@ -12,7 +12,14 @@ import com.socialcoisa.rede.identity.domain.TwoFactorChallenge;
  */
 public interface TwoFactorRepository {
 
+	/** Inserts a new challenge. Existing challenges change only through the conditional updates below. */
 	void saveChallenge(TwoFactorChallenge challenge);
+
+	/**
+	 * New code for a challenge that is still open (attempts reset). False when it was consumed in
+	 * the meantime: a resend must never reopen a completed login.
+	 */
+	boolean replaceCode(String challengeId, String codeHash, Instant expiresAt);
 
 	/**
 	 * Atomically claims one attempt before the code is checked, in its own transaction: a wrong code

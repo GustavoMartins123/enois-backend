@@ -36,20 +36,19 @@ class TwoFactorPersistenceAdapter implements TwoFactorRepository {
 
 	@Override
 	public void saveChallenge(TwoFactorChallenge challenge) {
-		if (findChallenge(challenge.id()).isPresent()) {
-			jdbc.update("""
-					update two_factor_challenges set code_hash = ?, attempts = ?, expires_at = ?, consumed_at = ?
-					where id = ?""",
-				challenge.codeHash(), challenge.attempts(), challenge.expiresAt(), challenge.consumedAt(),
-				challenge.id());
-			return;
-		}
 		jdbc.update("""
 				insert into two_factor_challenges (id, user_id, method, code_hash, attempts, expires_at,
 					consumed_at, created_at)
 				values (?, ?, ?, ?, ?, ?, ?, ?)""",
 			challenge.id(), challenge.userId(), challenge.method().name(), challenge.codeHash(), challenge.attempts(),
 			challenge.expiresAt(), challenge.consumedAt(), challenge.createdAt());
+	}
+
+	@Override
+	public boolean replaceCode(String challengeId, String codeHash, Instant expiresAt) {
+		return jdbc.update("""
+				update two_factor_challenges set code_hash = ?, attempts = 0, expires_at = ?
+				where id = ? and consumed_at is null""", codeHash, java.sql.Timestamp.from(expiresAt), challengeId) == 1;
 	}
 
 	@Override
