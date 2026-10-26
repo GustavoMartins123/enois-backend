@@ -155,8 +155,10 @@ class PendingSignupFlowTests {
 				.header("Idempotency-Key", "pending-signup-dup-2")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(signupPayload(email)))
-			// E-24: duplicado responde igual a um cadastro novo (não revela que o e-mail existe).
+			// Duplicate answers like a new signup (it does not reveal that the e-mail exists).
+			// emailSent reflects the real send of the owner notice, as it does for a new signup.
 			.andExpect(status().isCreated())
-			.andExpect(jsonPath("$.emailSent").value(true));
+			.andExpect(jsonPath("$.verificationRequired").value(true))
+			.andExpect(jsonPath("$.emailSent").isBoolean());
 	}
 }

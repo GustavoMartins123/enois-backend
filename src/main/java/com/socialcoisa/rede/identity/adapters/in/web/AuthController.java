@@ -52,6 +52,8 @@ import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 @RequestMapping("/auth")
 class AuthController {
 
+	private static final org.slf4j.Logger AUDIT = org.slf4j.LoggerFactory.getLogger(AuthController.class);
+
 	private final SignupUseCase signupUseCase;
 	private final VerifyEmailUseCase verifyEmailUseCase;
 	private final TwoFactorLoginUseCase twoFactorLoginUseCase;
@@ -181,21 +183,16 @@ class AuthController {
 	@PostMapping("/signup")
 	@RateLimiter(name = "auth")
 	ResponseEntity<String> signup(@RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
-			@RequestHeader(value = "X-Forwarded-For", required = false) String forwardedFor,
 			@RequestHeader(value = "X-Device-Fingerprint", required = false) String deviceFingerprint,
 			@RequestBody SignupRequest body,
 			jakarta.servlet.http.HttpServletRequest request) {
 		String ip = ipResolver.resolve(request);
 		exigeIpNaoBloqueado(ip);
-		// Contenção imediata: nome com o padrão do ataque não cria conta e o IP cai na lista
-		// (as contas "probe" de 20/10 e 22/10 nasciam em série do mesmo provedor).
+		// Contenção imediata: nome com o padrão do ataque não cria conta; repeated hits pause
+		// signups from the IP (as contas "probe" de 20/10 e 22/10 nasciam em série do mesmo provedor).
 		signupAttackGuard.checkSignup(body.name(), body.email(), ip);
-		// Enumeração de e-mail (E-24): e-mail já cadastrado responde IGUAL a um cadastro novo.
-		// Não cria conta nem revela que ele existe; quem tem conta usa "esqueci a senha".
-		String normalizedEmail = normalizeEmail(body.email());
-		if (normalizedEmail != null && profiles.findByEmail(normalizedEmail).isPresent()) {
-			return fakeSignupAccepted(body.email());
-		}
+		// An already registered e-mail goes through every gate below and gets the same 201 body as
+		// a new signup; the service e-mails the existing account instead (see AuthService.signup).
 		// Portao de cadastros: a operacao pode fechar a criacao de contas (a Mel pediu em
 		// 2026-10-20). Antes de Turnstile/throttle: nao adianta o cliente resolver captcha.
 		if (!signupEnabled) {
@@ -205,8 +202,7 @@ class AuthController {
 		// Honeypot: bots preenchem o campo "website" que humanos nunca veem.
 		// Resposta fake (201) para nao dar dica ao atacante.
 		if (body.website() != null && !body.website().isBlank()) {
-			return ResponseEntity.status(201)
-				.body("{\"email\":\"" + body.email() + "\",\"verificationRequired\":true,\"emailSent\":true}");
+			return fakeSignupAccepted(body.email());
 		}
 		throttle.exigeSignupPermitido(ip, deviceFingerprint);
 		String scope = authScope(body.email());
@@ -221,17 +217,8 @@ class AuthController {
 			else {
 				signupCaptcha.require(body.challengeId(), body.challengeAnswer());
 			}
-			try {
-				return new CommandResponse(201, signupUseCase.signup(new SignupCommand(body.name(), "USER",
-					body.email(), body.password(), body.acceptedTerms(), body.birthDate())));
-			}
-			catch (ApiException duplicate) {
-				if ("EMAIL_ALREADY_REGISTERED".equals(duplicate.code()) || "EMAIL_IN_USE".equals(duplicate.code())) {
-					return new CommandResponse(201, Map.of("email", body.email(),
-						"verificationRequired", true, "emailSent", true));
-				}
-				throw duplicate;
-			}
+			return new CommandResponse(201, signupUseCase.signup(new SignupCommand(body.name(), "USER",
+				body.email(), body.password(), body.acceptedTerms(), body.birthDate())));
 		});
 	}
 
@@ -273,12 +260,12 @@ class AuthController {
 		// scripts, Cloudflare lento, submit rápido) e travava login de gente de verdade. A porta
 		// fica fechada por IP bloqueado, limite por conta e travamento de tentativas — o captcha
 		// anti-bot fica no cadastro, que é onde nascem as contas falsas.
-		throttle.exigeLoginPermitido(body.email());
+		throttle.exigeLoginPermitido(body.email(), ip);
 		// SEM idempotência persistida: a resposta contém access/refresh token e o hash do corpo
 		// incluiria a senha (E-03/E-19). Repetir um login é seguro — gera outra sessão.
 		try {
 			LoginResult result = loginUseCase.login(new LoginCommand(body.email(), body.password(), ip));
-			throttle.limpaLogin(body.email());
+			throttle.limpaLogin(body.email(), ip);
 			if (!result.requiresTwoFactor()) {
 				newDeviceNotifier.check(result.session().user().id(), deviceFingerprint);
 				// Tokens go out as HttpOnly cookies (AuthCookieAdvice), never in the body.
@@ -293,7 +280,7 @@ class AuthController {
 		}
 		catch (ApiException falha) {
 			if (falha.status() == 401) {
-				throttle.registraFalhaLogin(body.email());
+				throttle.registraFalhaLogin(body.email(), ip);
 			}
 			throw falha;
 		}
@@ -428,16 +415,18 @@ class AuthController {
 	 * quem tem 2FA por app voltar a logar com e-mail + senha e reativar em /seguranca.
 	 */
 	@PostMapping("/admin/two-factor/reset-broken")
-	Map<String, Integer> resetBrokenTwoFactor(
-			@RequestHeader("X-Session-Token") String sessionToken) {
-		// Está sob /auth, então o interceptor de /admin não o cobre: exige admin explicitamente
-		// (N-09 — qualquer sessão resetava o TOTP global).
+	Map<String, Boolean> resetBrokenTwoFactor(@RequestHeader("X-Session-Token") String sessionToken) {
+		// Está sob /auth, então o interceptor de /admin não o cobre: exige admin explicitamente,
+		// by the same server-side users.is_admin flag AdminGuard uses.
 		String callerId = requireUserId(sessionToken);
 		boolean admin = profiles.findById(callerId).map(profile -> profile.admin()).orElse(false);
 		if (!admin) {
+			AUDIT.warn("admin_two_factor_reset_denied userId={}", callerId);
 			throw new ApiException(403, "FORBIDDEN", "Acesso restrito a administradores.");
 		}
-		return Map.of("reset", twoFactorService.resetBrokenTotp());
+		int reset = twoFactorService.resetBrokenTotp();
+		AUDIT.warn("admin_two_factor_reset userId={} accounts={}", callerId, reset);
+		return Map.of("ok", true);
 	}
 
 	@GetMapping("/oauth/providers")
@@ -666,35 +655,13 @@ class AuthController {
 	record AuthConfig(String captchaMode, String turnstileSiteKey, boolean googleLoginEnabled) {
 }
 
-	/** Resposta neutra para e-mail já cadastrado (E-24): igual a um cadastro novo. */
+	/** Same shape as a real signup response, serialized by the JSON mapper. */
 	private ResponseEntity<String> fakeSignupAccepted(String email) {
+		String normalized = email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
 		return ResponseEntity.status(201)
 			.contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-			.body(objectMapper.writeValueAsString(Map.of("email", email, "verificationRequired", true,
+			.body(objectMapper.writeValueAsString(Map.of("email", normalized, "verificationRequired", true,
 				"emailSent", true)));
-	}
-
-	/**
-	 * Forma canônica do e-mail: minúsculo, sem "+tag" e, nos provedores que ignoram pontos,
-	 * sem os pontos do usuário. Duas contas não podem nascer da mesma caixa de entrada.
-	 */
-	private static String normalizeEmail(String email) {
-		if (email == null || !email.contains("@")) {
-			return null;
-		}
-		String clean = email.trim().toLowerCase(java.util.Locale.ROOT);
-		int at = clean.lastIndexOf('@');
-		String local = clean.substring(0, at);
-		String domain = clean.substring(at);
-		int plus = local.indexOf('+');
-		if (plus > 0) {
-			local = local.substring(0, plus);
-		}
-		if (domain.equals("@gmail.com") || domain.equals("@googlemail.com")) {
-			local = local.replace(".", "");
-		}
-		return local + domain;
-
 	}
 
 	private String authScope(String email) {
@@ -729,19 +696,6 @@ class AuthController {
 	}
 
 	record PasswordConfirmationRequest(String password) {
-	}
-
-	/** Recusa quando o e-mail, normalizado, já pertence a uma conta. */
-	private void exigeEmailUnico(String email) {
-		String normalized = normalizeEmail(email);
-		if (normalized == null) {
-			return;
-		}
-		if (profiles.findByEmail(email == null ? normalized : email.trim()).isPresent()
-			|| profiles.findByEmail(normalized).isPresent()) {
-			throw new ApiException(409, "EMAIL_IN_USE",
-				"Este e-mail ja tem conta no Enois. Entre ou recupere a senha.");
-		}
 	}
 
 }

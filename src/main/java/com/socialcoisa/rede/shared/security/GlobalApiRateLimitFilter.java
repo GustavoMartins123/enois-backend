@@ -85,10 +85,10 @@ public class GlobalApiRateLimitFilter extends OncePerRequestFilter {
 		limit = perMinute;
 	}
 	else {
-		boolean hasHeader = StringUtils.hasText(request.getHeader("X-Forwarded-For"))
-			|| StringUtils.hasText(request.getHeader("X-Real-IP"));
-		key = "ip:" + clientIpResolver.resolve(request);
-		limit = hasHeader ? perMinute : perMinute * sharedMultiplier;
+		// Decided by the resolved address, never by whether the client sent a header.
+		String ip = clientIpResolver.resolve(request);
+		key = "ip:" + ip;
+		limit = clientIpResolver.isTrustedProxy(ip) ? perMinute * sharedMultiplier : perMinute;
 	}
 
 		long now = clock.millis();

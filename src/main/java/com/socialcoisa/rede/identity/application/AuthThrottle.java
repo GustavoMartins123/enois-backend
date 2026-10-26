@@ -16,7 +16,8 @@ import com.socialcoisa.rede.shared.web.ApiException;
  * nem cadastro em massa de UM IP. Aqui: janelas por CHAVE (conta no login, IP no signup)
  * guardadas em memória com expiração — a aplicação continua stateless.
  *
- * <p>Login: 5 falhas em 1 minuto por conta → 429 por 1 minuto (o acerto zera o contador).
+ * <p>Login: after 5 failures in 1 minute for the same account AND IP, each attempt is delayed
+ * progressively (no lock, never a 429; o acerto zera o contador).
  * Signup: 10 por hora por IP. Os tetos são configuráveis — o perfil dev/testes abre
  * (a suíte cria centenas de contas do mesmo IP).</p>
  */
@@ -24,7 +25,6 @@ import com.socialcoisa.rede.shared.web.ApiException;
 public class AuthThrottle {
 
 	private static final Duration LOGIN_WINDOW = Duration.ofMinutes(1);
-	private static final Duration LOGIN_LOCK = Duration.ofMinutes(1);
 	private static final Duration SIGNUP_WINDOW = Duration.ofHours(1);
 	/** Teto do mapa: evita crescer sem fim sob ataque distribuído (as chaves velhas expiram). */
 	private static final int MAX_KEYS = 50_000;
@@ -44,11 +44,11 @@ public class AuthThrottle {
 
 	/**
 	 * Atraso progressivo, nunca bloqueio: o lockout por conta deixava qualquer pessoa derrubar a
-	 * vítima com 5 senhas erradas, inclusive impedindo a senha CORRETA (E-13). O atraso encarece
-	 * o bruteforce sem negar acesso a quem sabe a senha; o Turnstile e os limites por IP seguem.
+	 * vítima com 5 senhas erradas, inclusive impedindo a senha CORRETA. Keyed by account + IP, so
+	 * failures from another network never slow the owner down; os limites por IP seguem.
 	 */
-	public void exigeLoginPermitido(String email) {
-		Janela janela = falhasLogin.get(normaliza(email));
+	public void exigeLoginPermitido(String email, String ip) {
+		Janela janela = falhasLogin.get(loginKey(email, ip));
 		if (janela == null) {
 			return;
 		}
@@ -66,8 +66,8 @@ public class AuthThrottle {
 	}
 
 	/** Falha de credenciais: conta a janela (o êxito limpa). */
-	public void registraFalhaLogin(String email) {
-		String chave = normaliza(email);
+	public void registraFalhaLogin(String email, String ip) {
+		String chave = loginKey(email, ip);
 		if (falhasLogin.size() > MAX_KEYS) {
 			falhasLogin.clear();
 		}
@@ -82,8 +82,12 @@ public class AuthThrottle {
 	}
 
 	/** Login com sucesso: o contador da conta zera. */
-	public void limpaLogin(String email) {
-		falhasLogin.remove(normaliza(email));
+	public void limpaLogin(String email, String ip) {
+		falhasLogin.remove(loginKey(email, ip));
+	}
+
+	private String loginKey(String email, String ip) {
+		return normaliza(email) + "|" + normaliza(ip);
 	}
 
 	/**

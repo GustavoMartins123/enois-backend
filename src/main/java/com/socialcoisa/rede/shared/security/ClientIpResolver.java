@@ -1,9 +1,8 @@
 package com.socialcoisa.rede.shared.security;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.Locale;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,9 +23,15 @@ import jakarta.servlet.http.HttpServletRequest;
  * cliente real — corrigido tornando a lista de proxies confiáveis configurável
  * (`security.trusted-proxy-ips`), em vez de só as faixas privadas fixas.
  *
- * A ordem das fontes: (1) `CF-Connecting-IP`, quando existe — é o IP que o Cloudflare viu, e
- * ele o reescreve a cada requisição (o cliente não forja); (2) a cadeia do `X-Forwarded-For`,
- * lida da direita para a esquerda pulando os proxies confiáveis; (3) o `getRemoteAddr()`.
+ * A ordem das fontes: (1) `CF-Connecting-IP`, only when the hop our proxy saw (right-most
+ * untrusted `X-Forwarded-For` hop) is a Cloudflare edge address ({@code security.cloudflare-ips}):
+ * the origin is reachable without Cloudflare, and a client hitting it directly can send any
+ * `CF-Connecting-IP`; (2) a cadeia do `X-Forwarded-For`, lida da direita para a esquerda pulando os
+ * proxies confiáveis; (3) o `getRemoteAddr()`. No other header (`X-Real-IP`, ...) is ever read, and
+ * headers count only when the immediate peer is a trusted proxy.
+ *
+ * <p>{@code security.trusted-proxy-ips} takes IPs or CIDRs. Loopback and private ranges stay
+ * trusted by default (in-cluster ingress).</p>
  *
  * Sobre confiar no `X-Forwarded-For`: o cabeçalho pode vir forjado pelo cliente, e o item forjado
  * fica no MEIO da lista (o proxy acrescenta o IP real no fim) ou no COMEÇO (quando o proxy
@@ -39,20 +44,30 @@ public class ClientIpResolver {
 
 	private static final int MAX_IP = 45;
 
-	private final Set<String> trustedProxyIps;
+	/** Cloudflare's published edge ranges (https://www.cloudflare.com/ips/). */
+	public static final String CLOUDFLARE_RANGES = "173.245.48.0/20,103.21.244.0/22,103.22.200.0/22,"
+		+ "103.31.4.0/22,141.101.64.0/18,108.162.192.0/18,190.93.240.0/20,188.114.96.0/20,197.234.240.0/22,"
+		+ "198.41.128.0/17,162.158.0.0/15,104.16.0.0/13,104.24.0.0/14,172.64.0.0/13,131.0.72.0/22,"
+		+ "2400:cb00::/32,2606:4700::/32,2803:f800::/32,2405:b500::/32,2405:8100::/32,2a06:98c0::/29,"
+		+ "2c0f:f248::/32";
+
+	private final List<Cidr> trustedProxies;
+	private final List<Cidr> cloudflareRanges;
 
 	/** Default sem proxy extra confiável — usado pelos testes, mantém o comportamento anterior. */
 	public ClientIpResolver() {
 		this("");
 	}
 
+	public ClientIpResolver(String trustedProxyIps) {
+		this(trustedProxyIps, CLOUDFLARE_RANGES);
+	}
+
 	@Autowired
-	public ClientIpResolver(@Value("${security.trusted-proxy-ips:}") String trustedProxyIps) {
-		this.trustedProxyIps = Arrays.stream(trustedProxyIps.split(","))
-			.map(String::trim)
-			.map(ip -> ip.toLowerCase(java.util.Locale.ROOT))
-			.filter(StringUtils::hasText)
-			.collect(Collectors.toUnmodifiableSet());
+	public ClientIpResolver(@Value("${security.trusted-proxy-ips:}") String trustedProxyIps,
+			@Value("${security.cloudflare-ips:" + CLOUDFLARE_RANGES + "}") String cloudflareIps) {
+		this.trustedProxies = Cidr.parseList(trustedProxyIps);
+		this.cloudflareRanges = Cidr.parseList(cloudflareIps);
 	}
 
 	public String resolve(HttpServletRequest request) {
@@ -65,14 +80,14 @@ public class ClientIpResolver {
 		// consegue forjá-lo. É a única fonte do IP real quando o proxy da frente reescreve o
 		// X-Forwarded-For com o endereço da borda dele (os logs mostraram faixas 172.6x, do
 		// próprio Cloudflare, para todo mundo). Só vale vindo de um proxy confiável.
-		String borda = request.getHeader("CF-Connecting-IP");
-		if (isPlausible(borda)) {
-			return borda.trim();
-		}
 		String forwarded = request.getHeader("X-Forwarded-For");
 		if (StringUtils.hasText(forwarded)) {
 			String candidate = clientHop(forwarded);
 			if (isPlausible(candidate)) {
+				String borda = request.getHeader("CF-Connecting-IP");
+				if (isPlausible(borda) && Cidr.anyContains(cloudflareRanges, candidate)) {
+					return borda.trim();
+				}
 				return candidate;
 			}
 			return isPlausible(remote) ? remote.trim() : "desconhecido";
@@ -80,8 +95,8 @@ public class ClientIpResolver {
 		return isPlausible(remote) ? remote.trim() : "desconhecido";
 	}
 
-	/** Loopback, faixas privadas e o(s) IP(s) do proxy reverso atual: onde vivem nginx/ALB/Traefik. */
-	private boolean isTrustedProxy(String ip) {
+	/** Is this address one of our own proxies (loopback, private, or configured)? */
+	public boolean isTrustedProxy(String ip) {
 		if (!StringUtils.hasText(ip)) {
 			return false;
 		}
@@ -89,9 +104,11 @@ public class ClientIpResolver {
 		if (value.startsWith("::ffff:")) {
 			value = value.substring(7);
 		}
-		if (trustedProxyIps.contains(value)) {
-			return true;
-		}
+		return isBuiltInTrusted(value) || Cidr.anyContains(trustedProxies, value);
+	}
+
+	/** Loopback e faixas privadas: onde vivem nginx/ALB/ingress dentro da rede. */
+	private static boolean isBuiltInTrusted(String value) {
 		if (value.equals("127.0.0.1") || value.equals("::1") || value.equals("0:0:0:0:0:0:0:1")) {
 			return true;
 		}
@@ -152,5 +169,70 @@ public class ClientIpResolver {
 			return false;
 		}
 		return value.matches("[0-9a-fA-F:.]{3,}");
+	}
+
+	/** IPv4/IPv6 network; a bare IP is a /32 or /128. Only literal addresses are parsed (no DNS). */
+	record Cidr(byte[] network, int prefix) {
+
+		static List<Cidr> parseList(String value) {
+			if (!StringUtils.hasText(value)) {
+				return List.of();
+			}
+			return Arrays.stream(value.split(","))
+				.map(String::trim)
+				.filter(StringUtils::hasText)
+				.map(Cidr::parse)
+				.toList();
+		}
+
+		static Cidr parse(String value) {
+			int slash = value.indexOf('/');
+			byte[] address = literal(slash < 0 ? value : value.substring(0, slash));
+			if (address == null) {
+				throw new IllegalStateException("Invalid IP/CIDR in proxy configuration: " + value);
+			}
+			int prefix = slash < 0 ? address.length * 8 : Integer.parseInt(value.substring(slash + 1));
+			return new Cidr(address, prefix);
+		}
+
+		static boolean anyContains(List<Cidr> ranges, String ip) {
+			byte[] address = literal(ip);
+			return address != null && ranges.stream().anyMatch(range -> range.contains(address));
+		}
+
+		boolean contains(byte[] address) {
+			if (address.length != network.length) {
+				return false;
+			}
+			int full = prefix / 8;
+			for (int i = 0; i < full; i++) {
+				if (address[i] != network[i]) {
+					return false;
+				}
+			}
+			int rest = prefix % 8;
+			if (rest == 0) {
+				return true;
+			}
+			int mask = (0xFF << (8 - rest)) & 0xFF;
+			return (address[full] & mask) == (network[full] & mask);
+		}
+
+		private static byte[] literal(String ip) {
+			if (ip == null) {
+				return null;
+			}
+			String value = ip.trim();
+			boolean ipv4 = value.matches("\\d{1,3}(\\.\\d{1,3}){3}");
+			if (!ipv4 && !(value.contains(":") && value.matches("[0-9a-fA-F:.]+"))) {
+				return null;
+			}
+			try {
+				return java.net.InetAddress.getByName(value).getAddress();
+			}
+			catch (java.net.UnknownHostException invalid) {
+				return null;
+			}
+		}
 	}
 }

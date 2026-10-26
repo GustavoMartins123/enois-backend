@@ -46,6 +46,8 @@ class IdentityRateLimitTests {
 		registry.add("rede.security.rate-limit.login.window-minutes", () -> 5);
 		registry.add("rede.security.rate-limit.signup.limit", () -> 2);
 		registry.add("rede.security.rate-limit.signup.window-minutes", () -> 5);
+		registry.add("rede.security.rate-limit.refresh.limit", () -> 2);
+		registry.add("rede.security.rate-limit.refresh.window-minutes", () -> 5);
 	}
 
 	@Test
@@ -62,14 +64,15 @@ class IdentityRateLimitTests {
 
 	@Test
 	void forwardedForCountsTheLastHopOnly() throws Exception {
-		// Os hops a direita mudam a cada tentativa; o primeiro item e o mesmo IP de verdade.
+		// The left-most items are client-controlled and rotate on every attempt; the hop appended by
+		// our proxy (right-most untrusted) is the real address and is what gets counted.
 		for (int i = 0; i < 3; i++) {
-			loginWithForwarded("203.0.113.30, 198.51.100.7").andExpect(status().isUnauthorized());
+			loginWithForwarded("198.51.100." + i + ", 203.0.113.30").andExpect(status().isUnauthorized());
 		}
-		loginWithForwarded("203.0.113.30, 10.0.0.99").andExpect(status().isTooManyRequests());
+		loginWithForwarded("198.51.100.99, 203.0.113.30, 10.0.0.99").andExpect(status().isTooManyRequests());
 
-		// Mudar o PRIMEIRO item e mudar de IP: janela propria, ainda pode tentar.
-		loginWithForwarded("203.0.113.31, 198.51.100.7").andExpect(status().isUnauthorized());
+		// Another real address has its own window.
+		loginWithForwarded("198.51.100.7, 203.0.113.31").andExpect(status().isUnauthorized());
 	}
 
 	@Test
@@ -92,6 +95,24 @@ class IdentityRateLimitTests {
 		signup(ip).andExpect(status().isBadRequest());
 		signup(ip).andExpect(status().isBadRequest());
 		signup(ip).andExpect(status().isTooManyRequests());
+	}
+
+	@Test
+	void refreshHasItsOwnBucket() throws Exception {
+		String ip = "203.0.113.70";
+		for (int i = 0; i < 2; i++) {
+			refresh(ip).andExpect(status().isUnauthorized());
+		}
+		refresh(ip).andExpect(status().isTooManyRequests());
+		// Exhausting refresh does not consume the login bucket of the same address.
+		login(ip).andExpect(status().isUnauthorized());
+	}
+
+	private org.springframework.test.web.servlet.ResultActions refresh(String ip) throws Exception {
+		return mockMvc.perform(post("/auth/refresh")
+			.contentType(MediaType.APPLICATION_JSON)
+			.header("X-Forwarded-For", ip)
+			.content(objectMapper.writeValueAsString(Map.of("refreshToken", "not-a-real-token"))));
 	}
 
 	private org.springframework.test.web.servlet.ResultActions login(String ip) throws Exception {
