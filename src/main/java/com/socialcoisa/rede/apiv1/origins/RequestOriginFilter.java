@@ -72,8 +72,10 @@ class RequestOriginFilter extends OncePerRequestFilter {
 	protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
 			throws ServletException, IOException {
 		// Marked even when enforcement is off: filters that answer early reflect only these origins.
+		boolean trustedBrowserOrigin = false;
 		String browserOrigin = request.getHeader("Origin");
 		if (StringUtils.hasText(browserOrigin) && isTrusted(matchForm(browserOrigin))) {
+			trustedBrowserOrigin = true;
 			TrustedOriginCors.markTrusted(request, browserOrigin);
 		}
 		if (!enforce) {
@@ -91,6 +93,13 @@ class RequestOriginFilter extends OncePerRequestFilter {
 			String preflightOrigin = request.getHeader("Origin");
 			if (StringUtils.hasText(preflightOrigin)) {
 				setCors(response, preflightOrigin);
+				// O front chama a API cross-origin com o cookie de sessão: sem ecoar a credencial
+				// aqui o navegador descarta o preflight ("Allow-Credentials ... must be 'true'") e a
+				// tela fica sem dados. Só a origem do próprio app recebe isso — origem de terceiro
+				// cadastrada continua saindo sem credencial.
+				if (trustedBrowserOrigin) {
+					response.setHeader("Access-Control-Allow-Credentials", "true");
+				}
 			}
 			preflight(request, response);
 			return;
