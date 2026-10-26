@@ -117,9 +117,15 @@ class DeveloperOriginTests {
 			.andExpect(status().isNoContent())
 			.andExpect(header().string("Access-Control-Allow-Origin", "https://app.example"));
 
+		// Preflight é sempre respondido, mesmo de origem não cadastrada: ele não executa nada nem
+		// devolve dado, e recusá-lo só vira falha de CORS no navegador. Quem continua barrado é a
+		// operação real (o GET logo abaixo).
 		mockMvc.perform(options("/v1")
 				.header("Origin", "https://evil.example")
 				.header("Access-Control-Request-Method", "GET"))
+			.andExpect(status().isNoContent());
+
+		mockMvc.perform(get("/v1").header("Origin", "https://evil.example"))
 			.andExpect(status().isForbidden())
 			.andExpect(jsonPath("$.code").value("ORIGIN_NOT_ALLOWED"));
 

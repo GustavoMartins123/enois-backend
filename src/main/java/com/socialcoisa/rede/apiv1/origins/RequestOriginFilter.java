@@ -77,6 +77,19 @@ class RequestOriginFilter extends OncePerRequestFilter {
 		String path = RequestPath.applicationPath(request);
 		String method = request.getMethod();
 
+		// Preflight é sempre respondido, de qualquer origem: ele não executa nada nem devolve dado,
+		// e a operação real continua passando por este filtro. Recusar o OPTIONS só transforma a
+		// recusa em falha de CORS no navegador — a ação aparece como "sem conexão" sem nunca ter
+		// chegado ao servidor.
+		if ("OPTIONS".equalsIgnoreCase(method)) {
+			String preflightOrigin = request.getHeader("Origin");
+			if (StringUtils.hasText(preflightOrigin)) {
+				setCors(response, preflightOrigin);
+			}
+			preflight(request, response);
+			return;
+		}
+
 		// Fluxos controlados por terceiros ou infraestrutura que não têm origem do app.
 		if (bypass(method, path)) {
 			chain.doFilter(request, response);
