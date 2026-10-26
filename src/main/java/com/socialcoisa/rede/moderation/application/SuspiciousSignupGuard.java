@@ -44,10 +44,18 @@ public class SuspiciousSignupGuard implements SignupAttackGuard {
 	private static final long SIGNUP_COOLDOWN_MS = 60 * 60 * 1000;
 	private static final int MAX_KEYS = 20_000;
 	private final java.util.Map<String, Long> cooldownUntil = new java.util.concurrent.ConcurrentHashMap<>();
+	/** Ceiling for both maps, so a flood of distinct IPs cannot grow memory without bound. */
+	private final int maxKeys;
 
+	@org.springframework.beans.factory.annotation.Autowired
 	public SuspiciousSignupGuard(
 			@Value("${rede.security.signup-guard-enabled:true}") boolean enabled,
 			@Value("${rede.security.suspicious.name-patterns:probe}") String patterns) {
+		this(enabled, patterns, MAX_KEYS);
+	}
+
+	SuspiciousSignupGuard(boolean enabled, String patterns, int maxKeys) {
+		this.maxKeys = maxKeys;
 		this.enabled = enabled;
 		this.patterns = Arrays.stream(patterns.split(","))
 			.map(String::trim)
@@ -91,6 +99,9 @@ public class SuspiciousSignupGuard implements SignupAttackGuard {
 			return false;
 		}
 		long now = System.currentTimeMillis();
+		if (recentByIp.size() >= maxKeys) {
+			recentByIp.clear();
+		}
 		java.util.Deque<Long> strikes = recentByIp.computeIfAbsent(ip, key -> new java.util.ArrayDeque<>());
 		synchronized (strikes) {
 			while (!strikes.isEmpty() && now - strikes.peekFirst() > STRIKE_WINDOW_MS) {
@@ -106,11 +117,19 @@ public class SuspiciousSignupGuard implements SignupAttackGuard {
 	}
 
 	private void startCooldown(String ip, long now) {
-		if (cooldownUntil.size() > MAX_KEYS) {
+		if (cooldownUntil.size() >= maxKeys) {
 			cooldownUntil.values().removeIf(until -> until <= now);
+			if (cooldownUntil.size() >= maxKeys) {
+				// Same bound as AuthThrottle: live cooldowns are dropped rather than growing without end.
+				cooldownUntil.clear();
+			}
 		}
 		cooldownUntil.put(ip, now + SIGNUP_COOLDOWN_MS);
 		LOG.warn("Cadastros pausados para um IP após indícios repetidos (ip={})", ip);
+	}
+
+	int trackedKeys() {
+		return recentByIp.size() + cooldownUntil.size();
 	}
 
 	/** O e-mail não vai inteiro para o log: só o bastante para o time reconhecer a conta. */
