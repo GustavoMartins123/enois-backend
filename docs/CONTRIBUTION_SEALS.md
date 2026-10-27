@@ -130,6 +130,9 @@ Conta:
 - `PUT /cosmetics/profile/contributor-tag` — `{ "color": "#rrggbb" }` (ou `null` para a cor padrão);
   exige selo ativo e grava `contributorTagColor` no perfil.
 
+O mesmo vínculo também permite **importar repositórios públicos como projetos e o README do perfil
+como bio** — endpoints e regras em [`GITHUB-PROFILE-IMPORT.md`](GITHUB-PROFILE-IMPORT.md).
+
 Admin:
 
 - `GET /admin/contributors/panel` — candidaturas + contribuintes verificados automaticamente.
