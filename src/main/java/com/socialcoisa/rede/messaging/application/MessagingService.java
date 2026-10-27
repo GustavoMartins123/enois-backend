@@ -367,7 +367,7 @@ public class MessagingService {
 
 	public String getLastMessageText(String conversationId) {
 		return repository.findLastMessage(conversationId)
-			.map(Message::text)
+			.map(m -> m.e2e() ? "Mensagem cifrada" : m.text())
 			.orElse(null);
 	}
 
