@@ -25,6 +25,7 @@ import com.socialcoisa.rede.feed.domain.CommentStatus;
 import com.socialcoisa.rede.feed.domain.Post;
 import com.socialcoisa.rede.feed.domain.PostId;
 import com.socialcoisa.rede.notifications.application.NotificationService;
+import com.socialcoisa.rede.profile.application.NameStyleView;
 import com.socialcoisa.rede.shared.blocks.BlockedUsersReader;
 import com.socialcoisa.rede.shared.security.BehavioralTimingGuard;
 import com.socialcoisa.rede.shared.security.NewAccountCooldown;
@@ -125,7 +126,9 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 			profile != null ? profile.displayWithNickname() : null,
 			profile != null ? profile.username() : null,
 			profile != null ? profile.avatar() : null,
-			profile != null ? profile.allBadges() : java.util.List.of()).withAvatarFrame(profile != null ? profile.avatarFrame() : null);
+			profile != null ? profile.allBadges() : java.util.List.of())
+			.withAvatarFrame(profile != null ? profile.avatarFrame() : null)
+			.withAuthorStyle(NameStyleView.from(profile));
 	}
 
 	/**
@@ -183,7 +186,9 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 					p != null ? p.displayWithNickname() : null,
 					p != null ? p.username() : null,
 					p != null ? p.avatar() : null,
-					p != null ? p.allBadges() : java.util.List.of()).withAvatarFrame(p != null ? p.avatarFrame() : null);
+					p != null ? p.allBadges() : java.util.List.of())
+					.withAvatarFrame(p != null ? p.avatarFrame() : null)
+					.withAuthorStyle(NameStyleView.from(p));
 			})
 			.toList();
 		// Reacao do proprio leitor: sem isso o front nao sabe que ele ja reagiu e a reacao

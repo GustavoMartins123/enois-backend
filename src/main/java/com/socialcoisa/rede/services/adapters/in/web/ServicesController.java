@@ -180,12 +180,14 @@ class ServicesController {
 	 * A oferta com QUEM vai prestar o serviço (nome e foto): um serviço sem rosto nao diz para
 	 * quem a pessoa esta contratando.
 	 */
-	record ListingView(String id, String sellerId, String sellerName, String sellerAvatar, String category,
-			String title, String description, String deliverables, long price, String currency, int deliveryDays,
-			String status, String createdAt) {
+	record ListingView(String id, String sellerId, String sellerName, String sellerAvatar,
+			com.socialcoisa.rede.profile.application.NameStyleView sellerStyle, String category, String title,
+			String description, String deliverables, long price, String currency, int deliveryDays, String status,
+			String createdAt) {
 		static ListingView from(ServiceListing l, ServicesService.Seller seller) {
 			return new ListingView(l.id(), l.sellerId(), seller == null ? null : seller.name(),
-				seller == null ? null : seller.avatar(), l.category(), l.title(), l.description(),
+				seller == null ? null : seller.avatar(), seller == null ? null : seller.nameStyle(),
+				l.category(), l.title(), l.description(),
 				l.deliverables(), l.price(), l.currency(), l.deliveryDays(), l.status().name(),
 				l.createdAt().toString());
 		}

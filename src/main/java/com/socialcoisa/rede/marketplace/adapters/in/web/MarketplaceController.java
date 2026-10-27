@@ -17,6 +17,7 @@ import com.socialcoisa.rede.marketplace.domain.MarketplaceListing;
 import com.socialcoisa.rede.marketplace.domain.MarketplacePurchase;
 import com.socialcoisa.rede.idempotency.application.CommandResponse;
 import com.socialcoisa.rede.idempotency.application.IdempotencyApplicationService;
+import com.socialcoisa.rede.profile.application.NameStyleView;
 import com.socialcoisa.rede.shared.web.ApiException;
 import com.socialcoisa.rede.shared.web.CurrentUser;
 import com.socialcoisa.rede.shared.web.CurrentUserResolver;
@@ -201,12 +202,14 @@ class MarketplaceController {
 			return new ListingView(listing.id(), listing.sellerId(),
 				profile == null ? null : profile.name(),
 				profile == null ? null : profile.username(),
+				profile == null ? null : NameStyleView.from(profile),
 				listing.itemKind().name(), listing.itemId(), listing.title(), listing.description(),
 				listing.price(), listing.status().name(), listing.createdAt().toString());
 		}).toList();
 	}
 
-	record ListingView(String id, String sellerId, String sellerName, String sellerUsername, String itemKind,
-			String itemId, String title, String description, long price, String status, String createdAt) {
+	record ListingView(String id, String sellerId, String sellerName, String sellerUsername,
+			NameStyleView sellerStyle, String itemKind, String itemId, String title, String description, long price,
+			String status, String createdAt) {
 	}
 }

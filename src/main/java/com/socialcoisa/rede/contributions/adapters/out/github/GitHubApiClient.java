@@ -21,6 +21,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.socialcoisa.rede.contributions.application.port.out.GitHubGateway;
 import com.socialcoisa.rede.contributions.application.port.out.GitHubIssue;
 import com.socialcoisa.rede.contributions.application.port.out.GitHubPullRequest;
+import com.socialcoisa.rede.githubprofile.application.port.out.GitHubProfileGateway;
 
 /**
  * Cliente REST do GitHub para evidências de contribuição.
@@ -30,7 +31,7 @@ import com.socialcoisa.rede.contributions.application.port.out.GitHubPullRequest
  * conteúdo de usuário: apenas PRs integrados, arquivos e revisões.</p>
  */
 @Component
-public class GitHubApiClient implements GitHubGateway {
+public class GitHubApiClient implements GitHubGateway, GitHubProfileGateway {
 
 	private static final int MAX_FILES = 500;
 	private static final int FILE_PAGES = 3;
@@ -192,34 +193,129 @@ public class GitHubApiClient implements GitHubGateway {
 			instant(issue, "closed_at"), instant(issue, "updated_at"), List.copyOf(labels));
 	}
 
+	@Override
+	public List<GitHubUserRepository> listUserRepositories(String login, int maxPages) {
+		List<GitHubUserRepository> result = new ArrayList<>();
+		String safeLogin = encode(login == null ? "" : login);
+		int pages = Math.max(1, Math.min(maxPages, 20));
+		for (int page = 1; page <= pages; page++) {
+			JsonNode array = get("/users/" + safeLogin + "/repos?per_page=100&page=" + page + "&sort=updated");
+			if (!array.isArray() || array.isEmpty()) {
+				break;
+			}
+			for (JsonNode repo : array) {
+				if (repo.path("private").asBoolean(false)) {
+					continue;
+				}
+				List<String> topics = new ArrayList<>();
+				for (JsonNode topic : repo.path("topics")) {
+					String value = topic.asText("");
+					if (!value.isBlank()) {
+						topics.add(value);
+					}
+				}
+				result.add(new GitHubUserRepository(repo.path("full_name").asText(""), repo.path("name").asText(""),
+					textOrNull(repo, "description"), repo.path("html_url").asText(""), textOrNull(repo, "homepage"),
+					textOrNull(repo, "language"), List.copyOf(topics), repo.path("stargazers_count").asInt(0),
+					repo.path("forks_count").asInt(0), repo.path("fork").asBoolean(false),
+					repo.path("archived").asBoolean(false), instant(repo, "updated_at"),
+					repo.path("default_branch").asText("main")));
+			}
+			if (array.size() < 100) {
+				break;
+			}
+		}
+		return result;
+	}
+
+	@Override
+	public Optional<GitHubProfileReadme> profileReadme(String login) {
+		String safeLogin = encode(login == null ? "" : login);
+		JsonNode repo = getOptional("/repos/" + safeLogin + "/" + safeLogin);
+		if (repo == null) {
+			return Optional.empty();
+		}
+		JsonNode readme = getOptional("/repos/" + safeLogin + "/" + safeLogin + "/readme");
+		if (readme == null) {
+			return Optional.empty();
+		}
+		String download = readme.path("download_url").asText("");
+		if (!download.startsWith("https://raw.githubusercontent.com/")) {
+			return Optional.empty();
+		}
+		String markdown = getRaw(download);
+		if (markdown == null || markdown.isBlank()) {
+			return Optional.empty();
+		}
+		return Optional.of(new GitHubProfileReadme(markdown, repo.path("html_url").asText(""),
+			repo.path("default_branch").asText("main")));
+	}
+
+	private JsonNode getOptional(String path) {
+		HttpResponse<String> response = send(apiBase + path, "application/vnd.github+json");
+		if (response.statusCode() == 404) {
+			return null;
+		}
+		return readJson(response, path);
+	}
+
 	private JsonNode get(String path) {
+		return readJson(send(apiBase + path, "application/vnd.github+json"), path);
+	}
+
+	private JsonNode readJson(HttpResponse<String> response, String label) {
+		if (response.statusCode() == 403 || response.statusCode() == 429) {
+			String remaining = response.headers().firstValue("X-RateLimit-Remaining").orElse("?");
+			throw new GitHubRateLimitException("GitHub recusou a chamada (status=" + response.statusCode()
+				+ ", remaining=" + remaining + ")");
+		}
+		if (response.statusCode() >= 400) {
+			throw new IllegalStateException("GitHub respondeu " + response.statusCode() + " em " + label);
+		}
 		try {
-			HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(apiBase + path))
-				.timeout(Duration.ofSeconds(15))
-				.header("Accept", "application/vnd.github+json")
-				.header("X-GitHub-Api-Version", "2022-11-28")
-				.header("User-Agent", userAgent);
-			if (StringUtils.hasText(token)) {
-				builder.header("Authorization", "Bearer " + token);
-			}
-			HttpResponse<String> response = http.send(builder.GET().build(),
-				HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-			if (response.statusCode() == 403 || response.statusCode() == 429) {
-				String remaining = response.headers().firstValue("X-RateLimit-Remaining").orElse("?");
-				throw new GitHubRateLimitException("GitHub recusou a chamada (status=" + response.statusCode()
-					+ ", remaining=" + remaining + ")");
-			}
-			if (response.statusCode() >= 400) {
-				throw new IllegalStateException("GitHub respondeu " + response.statusCode() + " em " + path);
-			}
 			return json.readTree(response.body());
 		}
-		catch (GitHubRateLimitException rate) {
-			throw rate;
+		catch (Exception failure) {
+			throw new IllegalStateException("Falha ao ler a resposta do GitHub: " + failure.getMessage(), failure);
+		}
+	}
+
+	private String getRaw(String absoluteUrl) {
+		HttpResponse<String> response = send(absoluteUrl, "text/plain");
+		if (response.statusCode() == 404) {
+			return null;
+		}
+		if (response.statusCode() == 403 || response.statusCode() == 429) {
+			throw new GitHubRateLimitException("GitHub recusou a chamada (status=" + response.statusCode() + ")");
+		}
+		if (response.statusCode() >= 400) {
+			throw new IllegalStateException("GitHub respondeu " + response.statusCode() + " no README");
+		}
+		return response.body();
+	}
+
+	private HttpResponse<String> send(String url, String accept) {
+		try {
+			HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url))
+				.timeout(Duration.ofSeconds(15))
+				.header("Accept", accept)
+				.header("X-GitHub-Api-Version", "2022-11-28")
+				.header("User-Agent", userAgent);
+			// O token so vai para a API do GitHub. O README cru baixa de raw.githubusercontent.com,
+			// que e publico e nao precisa (nem deve) receber a credencial.
+			if (StringUtils.hasText(token) && url.startsWith(apiBase)) {
+				builder.header("Authorization", "Bearer " + token);
+			}
+			return http.send(builder.GET().build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
 		}
 		catch (Exception failure) {
 			throw new IllegalStateException("Falha ao consultar o GitHub: " + failure.getMessage(), failure);
 		}
+	}
+
+	private static String textOrNull(JsonNode node, String field) {
+		String value = node.path(field).asText("");
+		return value.isBlank() ? null : value;
 	}
 
 	private static Instant instant(JsonNode node, String field) {

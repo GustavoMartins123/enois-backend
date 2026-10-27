@@ -21,6 +21,7 @@ import com.socialcoisa.rede.idempotency.application.CommandResponse;
 import com.socialcoisa.rede.idempotency.application.IdempotencyApplicationService;
 import com.socialcoisa.rede.notifications.application.NotificationService;
 import com.socialcoisa.rede.notifications.domain.Notification;
+import com.socialcoisa.rede.profile.application.NameStyleView;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.profile.domain.UserProfile;
 import com.socialcoisa.rede.shared.blocks.BlockedUsersReader;
@@ -70,6 +71,7 @@ class NotificationContractController {
 					p != null ? p.name() : null,
 					p != null ? p.username() : null,
 					p != null ? p.avatar() : null,
+					p != null ? NameStyleView.from(p) : null,
 					n.title(), n.body(),
 					n.createdAt() != null ? n.createdAt().toString() : null,
 					n.isRead(), n.href(), n.ctaLabel());
@@ -91,8 +93,8 @@ class NotificationContractController {
 	}
 
 	record NotificationView(String id, String kind, String actorId, String actorName, String actorUsername,
-			String actorAvatar, String title, String body, String createdAt, boolean read, String href,
-			String ctaLabel) {
+			String actorAvatar, NameStyleView actorStyle, String title, String body, String createdAt, boolean read,
+			String href, String ctaLabel) {
 	}
 
 	@PostMapping("/{notificationId}/read")

@@ -9,6 +9,7 @@ import com.socialcoisa.rede.feed.domain.Counters;
 import com.socialcoisa.rede.feed.domain.Post;
 import com.socialcoisa.rede.feed.domain.PostType;
 import com.socialcoisa.rede.feed.domain.ReactionType;
+import com.socialcoisa.rede.profile.application.NameStyleView;
 
 public record PostView(String id, String authorId, String authorUsername, String authorName, String authorAvatar,
 		String authorBadge, List<String> authorBadges,
@@ -39,7 +40,9 @@ public record PostView(String id, String authorId, String authorUsername, String
 		 * per page) so the card does not fetch it per post; null where the read does not compute it
 		 * (publish/edit responses).
 		 */
-		Map<ReactionType, Long> reactionSummary, boolean mediaSpoiler) {
+		Map<ReactionType, Long> reactionSummary, boolean mediaSpoiler,
+		/** Personalizacao do nome do autor (tema/fonte/cor); nulo = padrao. */
+		NameStyleView authorStyle) {
 
 	/** Comunidade onde o post foi publicado (nome para o texto "publicou em ...") + se quem le participa. */
 	public record CommunityView(String id, String name, boolean joined) {
@@ -60,7 +63,7 @@ public record PostView(String id, String authorId, String authorUsername, String
 			post.type(), post.content(), null, null, post.tags(), post.mediaIds(), post.createdAt(), post.counters(),
 			null, post.communityId(), null, post.editedAt(), post.expiresAt(), post.authorIdentity(), null,
 			post.topic(), post.repostOf(), post.repostOfAuthor(), post.repostWithOpinion(), null, List.of(),
-			null, post.mediaSpoiler());
+			null, post.mediaSpoiler(), null);
 	}
 
 	public static PostView from(Post post, String authorUsername, String authorName, String authorAvatar) {
@@ -86,7 +89,7 @@ public record PostView(String id, String authorId, String authorUsername, String
 			badges.isEmpty() ? null : badges.get(0), badges, post.type(), post.content(), null, null, post.tags(),
 			post.mediaIds(), post.createdAt(), post.counters(), null, post.communityId(), null, post.editedAt(),
 			post.expiresAt(), authorIdentity, null, post.topic(), post.repostOf(), post.repostOfAuthor(),
-			post.repostWithOpinion(), null, List.of(), null, post.mediaSpoiler());
+			post.repostWithOpinion(), null, List.of(), null, post.mediaSpoiler(), null);
 	}
 
 	/** Anexa a moldura do avatar do autor (cosmético) depois do enriquecimento do perfil. */
@@ -94,14 +97,14 @@ public record PostView(String id, String authorId, String authorUsername, String
 		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
 			content, pageHtml, articleBody, tags, mediaIds, createdAt, counters, currentUserReaction, communityId,
 			community, editedAt, expiresAt, authorIdentity, frame, topic, repostOf, repostOfAuthor, repostWithOpinion, repostOfContent, repostOfMediaIds,
-			reactionSummary, mediaSpoiler);
+			reactionSummary, mediaSpoiler, authorStyle);
 	}
 
 	public PostView withCurrentUserReaction(ReactionType reaction) {
 		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
 			content, pageHtml, articleBody, tags, mediaIds, createdAt, counters, reaction, communityId, community,
 			editedAt, expiresAt, authorIdentity, authorAvatarFrame, topic, repostOf, repostOfAuthor, repostWithOpinion, repostOfContent, repostOfMediaIds,
-			reactionSummary, mediaSpoiler);
+			reactionSummary, mediaSpoiler, authorStyle);
 	}
 
 	/** Anexa o HTML da pagina; so o post unico faz isso (ver {@link #from(Post)}). */
@@ -109,7 +112,7 @@ public record PostView(String id, String authorId, String authorUsername, String
 		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
 			content, pageHtml, articleBody, tags, mediaIds, createdAt, counters, currentUserReaction, communityId,
 			community, editedAt, expiresAt, authorIdentity, authorAvatarFrame, topic, repostOf, repostOfAuthor, repostWithOpinion, repostOfContent, repostOfMediaIds,
-			reactionSummary, mediaSpoiler);
+			reactionSummary, mediaSpoiler, authorStyle);
 	}
 
 	/** Anexa a comunidade (nome + participacao do leitor) depois do enriquecimento. */
@@ -117,7 +120,7 @@ public record PostView(String id, String authorId, String authorUsername, String
 		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
 			content, pageHtml, articleBody, tags, mediaIds, createdAt, counters, currentUserReaction, communityId,
 			community, editedAt, expiresAt, authorIdentity, authorAvatarFrame, topic, repostOf, repostOfAuthor, repostWithOpinion, repostOfContent, repostOfMediaIds,
-			reactionSummary, mediaSpoiler);
+			reactionSummary, mediaSpoiler, authorStyle);
 	}
 
 	/** Anexa a citação do original (só reposts com opinião precisam; a listagem busca em lote). */
@@ -126,21 +129,29 @@ public record PostView(String id, String authorId, String authorUsername, String
 			content, pageHtml, articleBody, tags, mediaIds, createdAt, counters, currentUserReaction, communityId,
 			community, editedAt, expiresAt, authorIdentity, authorAvatarFrame, topic, repostOf, repostOfAuthor,
 			repostWithOpinion, originalContent, originalMediaIds == null ? List.of() : originalMediaIds,
-			reactionSummary, mediaSpoiler);
+			reactionSummary, mediaSpoiler, authorStyle);
 	}
 
 	public PostView withReactionSummary(Map<ReactionType, Long> summary) {
 		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
 			content, pageHtml, articleBody, tags, mediaIds, createdAt, counters, currentUserReaction, communityId,
 			community, editedAt, expiresAt, authorIdentity, authorAvatarFrame, topic, repostOf, repostOfAuthor,
-			repostWithOpinion, repostOfContent, repostOfMediaIds, summary, mediaSpoiler);
+			repostWithOpinion, repostOfContent, repostOfMediaIds, summary, mediaSpoiler, authorStyle);
 	}
 
 	/** Anexa o corpo do artigo; so a leitura do post unico faz isso (mesma regra da pagina). */
+	/** Anexa a personalizacao do nome do autor (cosmetico) depois do enriquecimento do perfil. */
+	public PostView withAuthorStyle(NameStyleView style) {
+		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
+			content, pageHtml, articleBody, tags, mediaIds, createdAt, counters, currentUserReaction, communityId,
+			community, editedAt, expiresAt, authorIdentity, authorAvatarFrame, topic, repostOf, repostOfAuthor,
+			repostWithOpinion, repostOfContent, repostOfMediaIds, reactionSummary, mediaSpoiler, style);
+	}
+
 	public PostView withArticleBody(String body) {
 		return new PostView(id, authorId, authorUsername, authorName, authorAvatar, authorBadge, authorBadges, type,
 			content, pageHtml, body, tags, mediaIds, createdAt, counters, currentUserReaction, communityId, community,
 			editedAt, expiresAt, authorIdentity, authorAvatarFrame, topic, repostOf, repostOfAuthor, repostWithOpinion, repostOfContent, repostOfMediaIds,
-			reactionSummary, mediaSpoiler);
+			reactionSummary, mediaSpoiler, authorStyle);
 	}
 }

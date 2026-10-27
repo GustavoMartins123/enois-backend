@@ -28,6 +28,7 @@ import com.socialcoisa.rede.network.application.NetworkService;
 import com.socialcoisa.rede.network.domain.ConnectionSuggestion;
 import com.socialcoisa.rede.network.domain.ConnectionStatus;
 import com.socialcoisa.rede.network.domain.UserConnection;
+import com.socialcoisa.rede.profile.application.NameStyleView;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.profile.domain.UserProfile;
 import com.socialcoisa.rede.shared.web.CurrentUser;
@@ -87,7 +88,7 @@ class NetworkContractController {
 					p != null ? p.avatar() : null,
 					p != null ? p.connectionsCount() : 0,
 					p != null ? p.followersCount() : 0,
-					true, p != null ? p.avatarFrame() : null);
+					true, p != null ? p.avatarFrame() : null, NameStyleView.from(p));
 			})
 			.toList();
 		return new PageResponse<>(items, null);
@@ -109,7 +110,7 @@ class NetworkContractController {
 			.map(profiles::get)
 			.filter(p -> p != null)
 			.map(p -> new NetworkUserView(p.id(), p.username(), p.name(), p.headline(), p.avatar(),
-				p.connectionsCount(), p.followersCount(), false, p.avatarFrame()))
+				p.connectionsCount(), p.followersCount(), false, p.avatarFrame(), NameStyleView.from(p)))
 			.toList();
 	}
 
@@ -234,7 +235,7 @@ class NetworkContractController {
 	}
 
 	record NetworkUserView(String id, String username, String name, String headline, String avatar, int connections,
-			int followers, boolean connected, String avatarFrame) {
+			int followers, boolean connected, String avatarFrame, NameStyleView nameStyle) {
 	}
 
 	record BlockedUserView(String userId, String username, String name, String avatar, String blockedAt) {

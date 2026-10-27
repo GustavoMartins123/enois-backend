@@ -83,8 +83,19 @@ class ContributorSealFlowTests {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$[0].type").value("CONTRIBUINTE_SERIO"))
 			.andExpect(jsonPath("$[0].category").value("CODE"))
-			.andExpect(jsonPath("$[0].evidenceCount").value(11))
-			.andExpect(jsonPath("$[0].evidence[0].kind").value("PULL_REQUEST"));
+			.andExpect(jsonPath("$[0].evidenceCount").value(11));
+
+		mockMvc.perform(get("/users/" + username + "/seals/CODE/evidence?page=0&size=5"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.total").value(11))
+			.andExpect(jsonPath("$.items.length()").value(5))
+			.andExpect(jsonPath("$.hasMore").value(true))
+			.andExpect(jsonPath("$.items[0].kind").value("PULL_REQUEST"));
+
+		mockMvc.perform(get("/users/" + username + "/seals/CODE/evidence?page=2&size=5"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.items.length()").value(1))
+			.andExpect(jsonPath("$.hasMore").value(false));
 
 		// Um PR revertido deixa de contar e o nível desce.
 		var first = contributions.findByRepositoryAndKindAndNumber(repo, ContributionKind.PULL_REQUEST, 900)
@@ -131,9 +142,13 @@ class ContributorSealFlowTests {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$[0].type").value("BETA_TESTER"))
 			.andExpect(jsonPath("$[0].category").value("ISSUES"))
-			.andExpect(jsonPath("$[0].evidence[0].kind").value("ISSUE"))
-			.andExpect(jsonPath("$[0].evidence[0].url")
-				.value("https://github.com/Rede-ENois/x/issues/950"));
+			.andExpect(jsonPath("$[0].evidenceCount").value(1));
+
+		mockMvc.perform(get("/users/" + username + "/seals/ISSUES/evidence"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.total").value(1))
+			.andExpect(jsonPath("$.items[0].kind").value("ISSUE"))
+			.andExpect(jsonPath("$.items[0].url").value("https://github.com/Rede-ENois/x/issues/950"));
 
 		MvcResult detail = mockMvc.perform(get("/admin/contributors/contributions/" + id)
 				.header("X-Session-Token", admin.token()))
