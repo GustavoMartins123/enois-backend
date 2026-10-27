@@ -217,6 +217,47 @@ public class MessagingService {
 		return message;
 	}
 
+	/** Envia mensagem E2E: o texto já é ciphertext, o server não lê. */
+	@Transactional
+	public Message sendE2eMessage(String conversationId, String senderId, String ciphertext,
+			String iv, java.util.List<String> mediaIds, boolean mediaSpoiler) {
+		ageGate.requireCanWrite(senderId);
+		sanctionGate.requireNotRestricted(senderId);
+		userRateLimiter.require(senderId, UserRateLimiter.SEND_MESSAGE);
+		behavioralTimingGuard.record(senderId);
+		Conversation conversation = repository.findConversationById(conversationId)
+			.orElseThrow(() -> new ApiException(404, "CONVERSATION_NOT_FOUND", "Conversa nao encontrada."));
+		if (!repository.isParticipant(conversationId, senderId)) {
+			throw new ApiException(403, "NOT_PARTICIPANT", "Voce nao participa desta conversa.");
+		}
+		protegeMenorDestinatario(conversationId, senderId);
+		if (ciphertext == null || ciphertext.isBlank()) {
+			throw new ApiException(400, "EMPTY_MESSAGE", "Mensagem cifrada vazia.");
+		}
+		if (ciphertext.length() > 8000) {
+			throw new ApiException(400, "MESSAGE_TOO_LONG", "Mensagem excede o tamanho maximo.");
+		}
+		if (iv == null || iv.isBlank() || iv.length() > 44) {
+			throw new ApiException(400, "MISSING_IV", "IV obrigatorio para mensagem E2E.");
+		}
+		java.util.List<String> midias = mediaIds == null ? java.util.List.of()
+			: mediaIds.stream().filter(v -> v != null && !v.isBlank()).map(String::trim).distinct().toList();
+		String id = "message_" + UUID.randomUUID().toString().replace("-", "");
+		Message message = Message.createE2e(id, conversationId, senderId, ciphertext, iv, midias, mediaSpoiler,
+			clock.instant());
+		repository.saveMessage(message);
+		repository.markRead(conversationId, senderId, clock.instant());
+		repository.saveConversation(conversation.touch(clock.instant()));
+		List<ConversationParticipant> participants = repository.findParticipantsByConversation(conversationId);
+		for (ConversationParticipant p : participants) {
+			if (p.userId().equals(senderId)) continue;
+			notificationService.create(p.userId(), "NEW_MESSAGE", senderId,
+				"Nova mensagem", "Mensagem cifrada",
+				"/api/conversations/" + conversationId, "Responder");
+		}
+		return message;
+	}
+
 	/**
 	 * ECA Digital: destinatario menor de 18 so recebe mensagem de quem tem conexao ACEITA com ele.
 	 * Desconhecidos nao abrem conversa com menor — o primeiro vetor de contato abusivo fica fechado.

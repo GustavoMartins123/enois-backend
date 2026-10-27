@@ -185,8 +185,15 @@ class MessagingContractController {
 			Boolean.TRUE.equals(request.mediaSpoiler())));
 		return idempotency.execute(user.id(), "POST", "/api/conversations/{conversationId}/messages", idempotencyKey,
 			hash, () -> {
-				Message msg = messagingService.sendMessage(conversationId, user.id().value(), request.text(),
-					request.mediaIds(), Boolean.TRUE.equals(request.mediaSpoiler()));
+				Message msg;
+				if (Boolean.TRUE.equals(request.e2e())) {
+					msg = messagingService.sendE2eMessage(conversationId, user.id().value(), request.text(),
+						request.iv(), request.mediaIds(), Boolean.TRUE.equals(request.mediaSpoiler()));
+				}
+				else {
+					msg = messagingService.sendMessage(conversationId, user.id().value(), request.text(),
+						request.mediaIds(), Boolean.TRUE.equals(request.mediaSpoiler()));
+				}
 				return new CommandResponse(201, new MessageView(msg.id(), msg.conversationId(), msg.senderId(),
 					msg.text(), msg.mediaIds(),
 					msg.createdAt() != null ? msg.createdAt().toString() : null, java.util.Map.of(), null,
@@ -405,7 +412,8 @@ class MessagingContractController {
 	record HideConversationsRequest(List<String> ids) {
 	}
 
-	record SendMessageRequest(String text, List<String> mediaIds, Boolean mediaSpoiler) {
+	record SendMessageRequest(String text, List<String> mediaIds, Boolean mediaSpoiler,
+			Boolean e2e, String iv) {
 	}
 
 }
