@@ -420,9 +420,11 @@ jobs:
           # prod gravaria span de TODA request no Tempo sem necessidade. Ajustar depois com dado
           # real de volume se 20% gerar ruido/custo de storage demais ou pouca amostra.
           TRACING_SAMPLING_PROBABILITY: ${{ vars.TRACING_SAMPLING_PROBABILITY }}
-          GITHUB_CLIENT_ID: ${{ secrets.GITHUB_CLIENT_ID }}
-          GITHUB_CLIENT_SECRET: ${{ secrets.GITHUB_CLIENT_SECRET }}
-          GITHUB_CONTRIBUTIONS_TOKEN: ${{ secrets.GITHUB_CONTRIBUTIONS_TOKEN }}
+          # O GitHub recusa secrets cujo NOME comeca com GITHUB_ (HTTP 422), por isso o nome do
+          # secret e OAUTH_GITHUB_*; a variavel de ambiente que o app le continua GITHUB_*.
+          GITHUB_CLIENT_ID: ${{ secrets.OAUTH_GITHUB_CLIENT_ID }}
+          GITHUB_CLIENT_SECRET: ${{ secrets.OAUTH_GITHUB_CLIENT_SECRET }}
+          GITHUB_CONTRIBUTIONS_TOKEN: ${{ secrets.OAUTH_GITHUB_CONTRIBUTIONS_TOKEN }}
           # ImageKit aposentado (storage no S3), mas o purge/delete de midia antiga ainda
           # conversa com ele ate a migracao de objetos terminar.
           IMAGEKIT_URL_ENDPOINT: ${{ secrets.IMAGEKIT_URL_ENDPOINT }}
