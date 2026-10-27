@@ -58,8 +58,10 @@ financeiro nunca se mistura com reputação técnica.
    tiver label qualificadora; caso contrário `PENDING`, aguardando um mantenedor.
 5. Depois de cada ciclo, os níveis das categorias são recalculados a partir da contagem. Promoção,
    rebaixamento, concessão e revogação geram evento de auditoria.
-6. O perfil público mostra o nível atual e até 12 evidências por categoria. Notas internas,
-   suspeitas, e-mail e detalhes de revisão nunca são públicos.
+6. O perfil público mostra o nível e a contagem verificada; as evidências carregam em **páginas**
+   pelo endpoint `GET /users/{username}/seals/{category}/evidence?page=&size=` — o cartão abre com a
+   primeira página e “Carregar mais” busca o resto, então não existe mais o teto de 12 por
+   categoria. Notas internas, suspeitas, e-mail e detalhes de revisão nunca são públicos.
 
 ## Painel de contribuintes e tag
 
@@ -117,7 +119,9 @@ anterior/novo e nota.
 
 Público:
 
-- `GET /users/{username}/seals` — níveis ativos + evidências (até 12 por categoria).
+- `GET /users/{username}/seals` — níveis ativos + contagem de evidências (sem a lista).
+- `GET /users/{username}/seals/{category}/evidence?page=0&size=50` — evidências paginadas
+  (até 100 por página), com `total` e `hasMore`.
 - `GET /seals/criteria` — categorias, faixas, políticas e repositórios elegíveis.
 
 Conta:

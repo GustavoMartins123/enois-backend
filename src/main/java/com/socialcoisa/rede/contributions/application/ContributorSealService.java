@@ -206,20 +206,30 @@ public class ContributorSealService {
 		return seals.findActiveByUser(profile.id()).stream()
 			.sorted(Comparator.comparing((UserSeal seal) -> seal.category().ordinal()))
 			.map(seal -> {
-				List<EvidenceView> evidence = contributions
-					.findCountableByUser(profile.id(), seal.category(), 12).stream()
-					.map(item -> new EvidenceView(item.kind().name(), item.repository(), item.number(),
-						item.title(), item.url(),
-						item.mergedAt() != null ? item.mergedAt() : item.closedAt(),
-						item.category().name()))
-					.toList();
 				Integer max = seal.sealType().maxCount() == Integer.MAX_VALUE ? null
 					: seal.sealType().maxCount();
 				return new PublicSealView(seal.sealType().name(), seal.sealType().displayName(),
 					seal.sealType().description(), seal.category().name(),
 					seal.category().displayName(), seal.grantedAt(), seal.evidenceCount(),
-					seal.sealType().minCount(), max, evidence);
+					seal.sealType().minCount(), max);
 			}).toList();
+	}
+
+	/** Evidências públicas paginadas; o perfil não tem teto fixo de itens. */
+	public EvidencePage publicEvidence(String username, ContributionCategory category, int page, int size) {
+		UserProfile profile = profiles.findByUsername(username)
+			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuário não encontrado."));
+		int safeSize = Math.max(1, Math.min(size, 100));
+		int safePage = Math.max(0, page);
+		int total = contributions.countCountableByUser(profile.id(), category);
+		List<EvidenceView> items = contributions.findCountablePage(profile.id(), category, safePage, safeSize)
+			.stream()
+			.map(item -> new EvidenceView(item.kind().name(), item.repository(), item.number(), item.title(),
+				item.url(), item.mergedAt() != null ? item.mergedAt() : item.closedAt(),
+				item.category().name()))
+			.toList();
+		boolean hasMore = (long) (safePage + 1) * safeSize < total;
+		return new EvidencePage(items, total, safePage, safeSize, hasMore);
 	}
 
 	public CriteriaView criteria() {
@@ -283,8 +293,10 @@ public class ContributorSealService {
 	}
 
 	public record PublicSealView(String type, String name, String description, String category,
-			String categoryName, Instant grantedAt, int evidenceCount, int minCount, Integer maxCount,
-			List<EvidenceView> evidence) {
+			String categoryName, Instant grantedAt, int evidenceCount, int minCount, Integer maxCount) {
+	}
+
+	public record EvidencePage(List<EvidenceView> items, int total, int page, int size, boolean hasMore) {
 	}
 
 	public record EvidenceView(String kind, String repository, int number, String title, String url,
