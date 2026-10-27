@@ -214,11 +214,15 @@ class PostInteractionPersistenceAdapter implements PostInteractionRepository {
 	}
 
 	@Override
-	public Map<String, Integer> countCommentReactions(Collection<String> commentIds) {
+	public Map<String, Map<ReactionType, Long>> countCommentReactionsByType(Collection<String> commentIds,
+			Collection<String> excludedUserIds) {
 		if (commentIds == null || commentIds.isEmpty()) return Map.of();
-		Map<String, Integer> counts = new HashMap<>();
+		Collection<String> excluded = excludedUserIds == null ? java.util.List.of() : excludedUserIds;
+		Map<String, Map<ReactionType, Long>> counts = new HashMap<>();
 		for (CommentReactionJpaEntity r : commentReactionRepository.findByCommentIdIn(commentIds)) {
-			counts.merge(r.getCommentId(), 1, Integer::sum);
+			if (excluded.contains(r.getUserId())) continue;
+			counts.computeIfAbsent(r.getCommentId(), key -> new HashMap<>())
+				.merge(r.getReactionType(), 1L, Long::sum);
 		}
 		return counts;
 	}

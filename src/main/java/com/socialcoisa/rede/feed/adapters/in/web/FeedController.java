@@ -538,8 +538,13 @@ class FeedController {
 	@GetMapping("/feed/posts/{postId}/comments/{commentId}/reactions")
 	Object listCommentReactions(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@PathVariable String postId, @PathVariable String commentId) {
-		CurrentUser user = currentUserResolver.resolve(sessionToken);
-		var reactions = postInteractionRepository.findReactionsByCommentId(commentId);
+		// Mesma leitura pública das reações do post: o post compartilhado abre sem sessão, e quem
+		// está bloqueado não aparece na lista nem na contagem.
+		UserId viewer = viewerIdOrNull(sessionToken);
+		Set<String> hidden = blockedUsersReader.hiddenIdsFor(viewer == null ? null : viewer.value());
+		var reactions = postInteractionRepository.findReactionsByCommentId(commentId).stream()
+			.filter(reaction -> !hidden.contains(reaction.userId()))
+			.toList();
 		var summary = reactions.stream()
 			.collect(Collectors.groupingBy(PostInteractionRepository.ReactionSummary::type, Collectors.counting()));
 		return Map.of("commentId", commentId, "summary", summary, "reactions", reactions);
