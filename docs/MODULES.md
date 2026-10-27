@@ -833,6 +833,7 @@ Implementa: `CreateMediaUploadUseCase`, `GetMediaAssetUseCase`, `RequestMediaDel
 | `getParticipants(String conversationId)` | Lista participantes |
 | `countUnread(String conversationId, String userId)` | Conta mensagens não lidas |
 | `getMessages(String conversationId, Instant cursor, int limit)` | Lista mensagens com cursor |
+| `hideMessages(String conversationId, String userId, List<String> messageIds)` | Valida o lote e oculta mensagens somente para o solicitante |
 | `getLastMessageText(String conversationId)` | Texto da última mensagem |
 | `getLastMessageTime(String conversationId)` | Timestamp da última mensagem |
 | `addReaction(String messageId, String userId, String reactionType)` | Adiciona/toggle reação em mensagem |
@@ -856,11 +857,15 @@ Implementa: `CreateMediaUploadUseCase`, `GetMediaAssetUseCase`, `RequestMediaDel
 | `search(...)` | GET /api/conversations/search |
 | `conversation(...)` | GET /api/conversations/{conversationId} |
 | `messages(...)` | GET /api/conversations/{conversationId}/messages |
+| `hideMessages(...)` | POST /api/conversations/{conversationId}/messages/hide |
 | `send(...)` | POST /api/conversations/{conversationId}/messages |
 | `read(...)` | POST /api/conversations/{conversationId}/read |
 | `create(...)` | POST /api/conversations |
 | `reactToMessage(...)` | POST /api/conversations/{conversationId}/messages/{messageId}/reactions |
 | `listMessageReactions(...)` | GET /api/conversations/{conversationId}/messages/{messageId}/reactions |
+
+A ocultação afeta somente o solicitante e aceita mensagens da conversa informada. Seleções
+inválidas são rejeitadas integralmente. A operação exige autenticação e chave de idempotência.
 
 ---
 
