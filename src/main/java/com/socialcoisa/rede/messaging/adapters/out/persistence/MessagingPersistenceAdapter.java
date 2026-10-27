@@ -166,6 +166,11 @@ class MessagingPersistenceAdapter implements MessagingRepository {
 	}
 
 	@Override
+	public long countMessagesInConversation(String conversationId, java.util.Collection<String> messageIds) {
+		return messageRepo.countInConversation(conversationId, messageIds);
+	}
+
+	@Override
 	public int hideMessages(String userId, java.util.Collection<String> messageIds, java.time.Instant now) {
 		if (messageIds == null || messageIds.isEmpty()) {
 			return 0;

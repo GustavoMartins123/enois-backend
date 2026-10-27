@@ -58,6 +58,8 @@ public interface MessagingRepository {
 	/** A mensagem por id (para conferir de qual conversa ela e antes de mexer nela). */
 	Optional<Message> findMessageById(String messageId);
 
+	long countMessagesInConversation(String conversationId, Collection<String> messageIds);
+
 	/** Apaga mensagens SO para quem chama (o outro participante mantem). */
 	int hideMessages(String userId, Collection<String> messageIds, java.time.Instant now);
 
