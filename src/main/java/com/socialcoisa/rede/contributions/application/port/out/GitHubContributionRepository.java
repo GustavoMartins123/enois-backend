@@ -21,7 +21,7 @@ public interface GitHubContributionRepository {
 	List<GitHubContribution> list(ContributionStatus status, ContributionKind kind, int limit);
 
 	/** Evidências que contam para o selo: validadas, não revertidas, da categoria pedida. */
-	List<GitHubContribution> findCountableByUser(String userId, ContributionCategory category, int limit);
+	List<GitHubContribution> findCountablePage(String userId, ContributionCategory category, int page, int size);
 
 	int countCountableByUser(String userId, ContributionCategory category);
 

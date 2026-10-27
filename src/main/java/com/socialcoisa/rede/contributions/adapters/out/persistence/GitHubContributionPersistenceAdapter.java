@@ -58,9 +58,10 @@ class GitHubContributionPersistenceAdapter implements GitHubContributionReposito
 	}
 
 	@Override
-	public List<GitHubContribution> findCountableByUser(String userId, ContributionCategory category, int limit) {
+	public List<GitHubContribution> findCountablePage(String userId, ContributionCategory category, int page,
+			int size) {
 		return repository.findByUserIdAndStatusAndRevertedFalseAndCategoryOrderByUpdatedAtDesc(userId,
-			ContributionStatus.VALIDATED, category, PageRequest.of(0, limit)).stream()
+			ContributionStatus.VALIDATED, category, PageRequest.of(page, size)).stream()
 			.map(GitHubContributionJpaEntity::toDomain).toList();
 	}
 
