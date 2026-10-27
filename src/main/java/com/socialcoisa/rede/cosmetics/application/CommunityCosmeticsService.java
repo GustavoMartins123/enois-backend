@@ -33,8 +33,10 @@ public class CommunityCosmeticsService {
 	private static final int MAX_DESCRIPTION_CHARS = 300;
 	private static final Pattern HEX = Pattern.compile("^#[0-9a-fA-F]{6}$");
 	private static final Set<String> LICENSES = Set.of("ORIGINAL", "OPEN_SOURCE", "COMMERCIAL_LICENSE");
-	private static final Set<String> NAME_THEMES = Set.of("DEFAULT", "PIXEL", "GOTHIC", "NEON", "GLITCH", "CANDY");
-	private static final Set<String> NAME_FONTS = Set.of("SYSTEM", "SERIF", "MONO", "ROUNDED", "DISPLAY", "PIXEL", "GOTHIC");
+	private static final Set<String> NAME_THEMES = Set.of("DEFAULT", "PIXEL", "GOTHIC", "NEON", "GLITCH", "CANDY",
+		"RETRO", "OCEAN", "SUNSET", "MATRIX", "GOLD", "ICE");
+	private static final Set<String> NAME_FONTS = Set.of("SYSTEM", "SERIF", "MONO", "ROUNDED", "DISPLAY", "PIXEL",
+		"GOTHIC", "CURSIVE", "CONDENSED", "COMIC", "SLAB");
 	private static final Map<CommunityCosmeticKind, Set<String>> TOP_LEVEL_KEYS = Map.of(
 		CommunityCosmeticKind.FONT, Set.of("version", "kind", "family", "assetRef", "fallback"),
 		CommunityCosmeticKind.PALETTE, Set.of("version", "kind", "colors"),
