@@ -607,7 +607,10 @@ class AuthController {
 		String hash = idempotency.hash(scope);
 		return idempotency.execute(scope, "POST", "/api/auth/password/reset", idempotencyKey, hash,
 			() -> {
-				resetPasswordUseCase.reset(request.token(), request.password());
+				var session = resetPasswordUseCase.reset(request.token(), request.password());
+				if (session.isPresent()) {
+					return new CommandResponse(200, session.get());
+				}
 				return new CommandResponse(200, Map.of("status", "PASSWORD_RESET_ACCEPTED"));
 			});
 	}
