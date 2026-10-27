@@ -3,7 +3,8 @@
 Depois de vincular o GitHub, a pessoa pode trazer para o perfil o que já é público lá:
 
 - **Repositórios → projetos**: os repositórios públicos escolhidos viram cards na seção Projetos,
-  com o link apontando para o repositório, a linguagem e as topics (quando existirem) na stack.
+  com o link apontando para o repositório, a descrição do GitHub, a linguagem e as topics (quando
+  existirem) na stack.
 - **README do perfil → bio**: o README do repositório especial `{login}/{login}` é convertido de
   Markdown para o HTML da bio, com os links e imagens relativos ajustados para o GitHub.
 
