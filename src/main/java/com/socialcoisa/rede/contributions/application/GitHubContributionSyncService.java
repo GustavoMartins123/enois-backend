@@ -218,7 +218,8 @@ public class GitHubContributionSyncService {
 					boolean manual = existing.isPresent() && existing.get().reviewedBy() != null;
 					ContributionStatus status = manual ? existing.get().status()
 						: qualified(issue.labels()) ? ContributionStatus.VALIDATED : ContributionStatus.PENDING;
-					String labels = json(issue.labels());
+					// A coluna guarda as labels como JSON curto; truncar evita estourar o varchar.
+					String labels = truncate(json(issue.labels()), 1000);
 					if (existing.isEmpty()) {
 						GitHubContribution contribution = new GitHubContribution(
 							"ghc_" + UUID.randomUUID().toString().replace("-", ""), userId, issue.authorId(),

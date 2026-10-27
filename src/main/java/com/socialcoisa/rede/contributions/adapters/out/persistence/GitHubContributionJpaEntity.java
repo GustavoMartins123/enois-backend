@@ -76,7 +76,7 @@ class GitHubContributionJpaEntity {
 	@Column(name = "changed_files", nullable = false)
 	private int changedFiles;
 
-	@Column(name = "files_json", length = 20000)
+	@Column(name = "files_json", columnDefinition = "longtext")
 	private String filesJson;
 
 	@Column(length = 1000)
@@ -108,7 +108,7 @@ class GitHubContributionJpaEntity {
 	@Column(nullable = false)
 	private int score;
 
-	@Column(name = "signals_json", length = 20000)
+	@Column(name = "signals_json", columnDefinition = "longtext")
 	private String signalsJson;
 
 	@Column(name = "review_note", length = 2000)
