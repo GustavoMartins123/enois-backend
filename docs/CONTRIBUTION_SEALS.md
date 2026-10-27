@@ -150,6 +150,21 @@ O processo é seguro para reexecução: o índice único e o upsert preservam a 
 | `GITHUB_SYNC_MAX_DETAILS` | PRs com detalhes (arquivos/revisões) por ciclo (default 60) |
 | `GITHUB_QUALIFIED_ISSUE_LABELS` | labels que qualificam issue automaticamente, separadas por vírgula (default vazio = só revisão humana) |
 
+**Nome dos secrets no GitHub:** o GitHub recusa secrets cujo **nome** comece com `GITHUB_`
+(HTTP 422, “Secret names must not start with GITHUB_”). Por isso o deploy usa nomes diferentes do
+nome da variável de ambiente entregue ao app:
+
+| Ambiente | Secret | Variável que o app lê |
+| --- | --- | --- |
+| QA | `QA_GITHUB_CLIENT_ID`, `QA_GITHUB_CLIENT_SECRET` | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` |
+| QA | `QA_GITHUB_CONTRIBUTIONS_TOKEN` | `GITHUB_CONTRIBUTIONS_TOKEN` |
+| Produção | `OAUTH_GITHUB_CLIENT_ID`, `OAUTH_GITHUB_CLIENT_SECRET` | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` |
+| Produção | `OAUTH_GITHUB_CONTRIBUTIONS_TOKEN` | `GITHUB_CONTRIBUTIONS_TOKEN` |
+
+O PAT fine-grained só precisa de **Metadata (read)**, **Pull requests (read)** e **Issues (read)**
+nos repositórios elegíveis; sem ele a API pública limita em 60 requisições/hora, com ele em 5.000.
+`GITHUB_SYNC_ENABLED` continua `false` nos dois ambientes: o primeiro backfill é manual.
+
 ## Segurança e resistência à fraude
 
 - ID imutável do GitHub como chave; login apenas exibição.
