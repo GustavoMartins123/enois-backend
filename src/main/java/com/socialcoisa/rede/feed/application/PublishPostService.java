@@ -18,6 +18,7 @@ import com.socialcoisa.rede.feed.domain.Post;
 import com.socialcoisa.rede.feed.domain.PostType;
 import com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseCase;
 import com.socialcoisa.rede.notifications.application.NotificationService;
+import com.socialcoisa.rede.profile.application.NameStyleView;
 import com.socialcoisa.rede.profile.domain.UserProfile;
 import com.socialcoisa.rede.shared.html.SafeHtml;
 import com.socialcoisa.rede.shared.text.PlainText;
@@ -207,7 +208,9 @@ public class PublishPostService implements PublishPostUseCase {
 		notifyMentions(command.mentionedUserIds(), command.authorId().value(), saved.id().value(), "post");
 		UserProfile author = userProfileRepository.findById(command.authorId().value()).orElse(null);
 		if (author != null) {
-			return PostView.from(saved, author.username(), author.name(), author.avatar(), author.allBadges()).withAvatarFrame(author.avatarFrame());
+			return PostView.from(saved, author.username(), author.name(), author.avatar(), author.allBadges())
+				.withAvatarFrame(author.avatarFrame())
+				.withAuthorStyle(saved.authorIdentity() == AuthorIdentity.SOCIAL ? NameStyleView.from(author) : null);
 		}
 		return PostView.from(saved);
 	}

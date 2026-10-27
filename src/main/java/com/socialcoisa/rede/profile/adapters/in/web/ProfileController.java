@@ -134,10 +134,11 @@ class ProfileController {
 	}
 
 	record PublicNetworkUserView(String id, String username, String name, String headline, String avatar,
-		String avatarFrame) {
+		String avatarFrame, com.socialcoisa.rede.profile.application.NameStyleView nameStyle) {
 		static PublicNetworkUserView from(UserProfile profile) {
 			return new PublicNetworkUserView(profile.id(), profile.username(), profile.displayWithNickname(),
-				profile.headline(), profile.avatar(), profile.avatarFrame());
+				profile.headline(), profile.avatar(), profile.avatarFrame(),
+				com.socialcoisa.rede.profile.application.NameStyleView.from(profile));
 		}
 	}
 

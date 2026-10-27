@@ -26,6 +26,7 @@ import com.socialcoisa.rede.groups.domain.GroupStatus;
 import com.socialcoisa.rede.groups.domain.JoinOutcome;
 import com.socialcoisa.rede.idempotency.application.CommandResponse;
 import com.socialcoisa.rede.idempotency.application.IdempotencyApplicationService;
+import com.socialcoisa.rede.profile.application.NameStyleView;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.profile.domain.UserProfile;
 import com.socialcoisa.rede.shared.web.AdminGuard;
@@ -252,17 +253,17 @@ class GroupController {
 	private MemberView memberView(GroupMember member) {
 		return userProfileRepository.findById(member.userId())
 			.map(profile -> new MemberView(member.userId(), profile.username(), profile.name(), profile.avatar(),
-				member.role().name(), member.joinedAt()))
+				member.role().name(), member.joinedAt(), NameStyleView.from(profile)))
 			.orElseGet(() -> new MemberView(member.userId(), null, null, null, member.role().name(),
-				member.joinedAt()));
+				member.joinedAt(), null));
 	}
 
 	private RequestView requestView(GroupJoinRequest request) {
 		return userProfileRepository.findById(request.userId())
 			.map(profile -> new RequestView(request.id(), request.userId(), profile.username(), profile.name(),
-				profile.avatar(), request.message(), request.createdAt()))
+				profile.avatar(), request.message(), request.createdAt(), NameStyleView.from(profile)))
 			.orElseGet(() -> new RequestView(request.id(), request.userId(), null, null, null, request.message(),
-				request.createdAt()));
+				request.createdAt(), null));
 	}
 
 	private CurrentUser resolveSafely(String sessionToken) {
@@ -300,10 +301,11 @@ class GroupController {
 			boolean joined, boolean requestPending, Instant createdAt) {
 	}
 
-	record MemberView(String userId, String username, String name, String avatar, String role, Instant joinedAt) {
+	record MemberView(String userId, String username, String name, String avatar, String role, Instant joinedAt,
+			NameStyleView nameStyle) {
 	}
 
 	record RequestView(String id, String userId, String username, String name, String avatar, String message,
-			Instant createdAt) {
+			Instant createdAt, NameStyleView nameStyle) {
 	}
 }
