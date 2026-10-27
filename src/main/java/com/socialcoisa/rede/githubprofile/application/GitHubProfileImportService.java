@@ -126,8 +126,8 @@ public class GitHubProfileImportService {
 				continue;
 			}
 			try {
-				projects.create(userId, new UserProject(null, null, 0, title(repo), stack(repo), repo.htmlUrl(),
-					null, List.of(), null, null, null));
+				projects.create(userId, new UserProject(null, null, 0, title(repo), repo.description(), stack(repo),
+					repo.htmlUrl(), null, List.of(), null, null, null));
 				existingUrls.add(repo.htmlUrl().toLowerCase(Locale.ROOT));
 				imported.add(repo.fullName());
 				created++;

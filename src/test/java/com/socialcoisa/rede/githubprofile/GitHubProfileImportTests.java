@@ -108,11 +108,10 @@ class GitHubProfileImportTests {
 
 		var saved = projects.of(user.userId());
 		assertThat(saved).hasSize(2);
-		assertThat(saved).anySatisfy(project -> {
-			assertThat(project.title()).isEqualTo("alpha");
-			assertThat(project.repoUrl()).isEqualTo("https://github.com/" + login + "/alpha");
-			assertThat(project.stack()).contains("java", "spring", "Java");
-		});
+		var alpha = saved.stream().filter(project -> project.title().equals("alpha")).findFirst().orElseThrow();
+		assertThat(alpha.description()).isEqualTo("Projeto Alpha");
+		assertThat(alpha.repoUrl()).isEqualTo("https://github.com/" + login + "/alpha");
+		assertThat(alpha.stack()).contains("java", "spring", "Java");
 
 		mockMvc.perform(post("/me/github/import/projects")
 				.header("X-Session-Token", user.token())
