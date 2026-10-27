@@ -391,6 +391,8 @@ Implementa: `CommentOnPostUseCase`, `GetCommentsUseCase`, `ReactToPostUseCase`, 
 | `comment(...)` | POST /api/feed/posts/{postId}/comments |
 | `comments(...)` | GET /api/feed/posts/{postId}/comments |
 | `deleteComment(...)` | DELETE /api/feed/posts/{postId}/comments/{commentId} |
+| `communityNote(...)` | POST /api/feed/posts/{postId}/notes (nota de rodapé; vai para a moderação) |
+| `communityNotes(...)` | GET /api/feed/posts/{postId}/notes (aprovadas + a do leitor) |
 | `react(...)` | POST /api/feed/posts/{postId}/reactions |
 | `removeReaction(...)` | DELETE /api/feed/posts/{postId}/reactions |
 | `reactions(...)` | GET /api/feed/posts/{postId}/reactions |

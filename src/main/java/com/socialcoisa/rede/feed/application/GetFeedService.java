@@ -63,6 +63,7 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 	private final SubscribedBlogAuthorsReader subscribedBlogAuthors;
 	private final com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles;
 	private final com.socialcoisa.rede.feed.application.port.out.ReaderPreferencesReader readerPreferences;
+	private final PostNoteService postNotes;
 	private static final Instant DEFAULT_BEFORE = Instant.parse("9999-12-31T23:59:59Z");
 
 	public GetFeedService(PostRepository postRepository, ArticleRepository articleRepository,
@@ -74,7 +75,8 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 			com.socialcoisa.rede.feed.application.port.out.CommunityChannelReader communityChannelReader,
 			SubscribedBlogAuthorsReader subscribedBlogAuthors,
 			com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles,
-			com.socialcoisa.rede.feed.application.port.out.ReaderPreferencesReader readerPreferences) {
+			com.socialcoisa.rede.feed.application.port.out.ReaderPreferencesReader readerPreferences,
+			PostNoteService postNotes) {
 		this.postRepository = postRepository;
 		this.articleRepository = articleRepository;
 		this.feedCacheRepository = feedCacheRepository;
@@ -90,6 +92,7 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 		this.subscribedBlogAuthors = subscribedBlogAuthors;
 		this.corporateProfiles = corporateProfiles;
 		this.readerPreferences = readerPreferences;
+		this.postNotes = postNotes;
 	}
 
 	private static final long TRENDING_WINDOW_HOURS = 48;
@@ -313,6 +316,10 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 			.byIds(communityIds, currentUserId == null ? null : currentUserId.value());
 
 		List<PostId> postIds = visible.stream().map(Post::id).toList();
+		List<String> postIdValues = postIds.stream().map(PostId::value).toList();
+		Map<String, List<PostNoteView>> notesByPost = postNotes.viewsByPost(postIdValues, hidden);
+		Map<String, MyPostNoteView> myNotes = currentUserId == null ? Map.of()
+			: postNotes.mineByPost(currentUserId.value(), postIdValues);
 		// Sem sessao (link compartilhado aberto por quem recebeu) nao ha reacao do visitante para
 		// buscar: a leitura publica nao pode depender de um usuario logado.
 		Map<PostId, ReactionType> currentUserReactions = currentUserId == null ? Map.of()
@@ -355,9 +362,11 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 				}
 				PostCommunityReader.CommunityRef community = post.communityId() == null ? null
 					: communities.get(post.communityId());
-				return community == null ? withReaction
+				PostView withCommunity = community == null ? withReaction
 					: withReaction.withCommunity(community.id(),
 						new PostView.CommunityView(community.id(), community.name(), community.joined()));
+				return withCommunity.withNotes(notesByPost.getOrDefault(post.id().value(), List.of()),
+					myNotes.get(post.id().value()));
 			})
 			.toList();
 	}

@@ -49,15 +49,19 @@ public class ReputationService {
 	private final RecommendationRepository recommendationRepository;
 	/** Vagas excluídas com candidatos sem resposta (item 7 do backlog) — implementação no módulo de jobs. */
 	private final com.socialcoisa.rede.profile.application.port.out.JobAbandonPenaltyReader jobAbandonPenalties;
+	/** Notas de rodapé negadas pela moderação (informação falsa) — o feed implementa. */
+	private final com.socialcoisa.rede.profile.application.port.out.NotePenaltyReader notePenalties;
 	private final Clock clock;
 
 	public ReputationService(UserProfileRepository profileRepository, ProfileExtensionRepository extensionRepository,
 			RecommendationRepository recommendationRepository,
-			com.socialcoisa.rede.profile.application.port.out.JobAbandonPenaltyReader jobAbandonPenalties, Clock clock) {
+			com.socialcoisa.rede.profile.application.port.out.JobAbandonPenaltyReader jobAbandonPenalties,
+			com.socialcoisa.rede.profile.application.port.out.NotePenaltyReader notePenalties, Clock clock) {
 		this.profileRepository = profileRepository;
 		this.extensionRepository = extensionRepository;
 		this.recommendationRepository = recommendationRepository;
 		this.jobAbandonPenalties = jobAbandonPenalties;
+		this.notePenalties = notePenalties;
 		this.clock = clock;
 	}
 
@@ -97,13 +101,17 @@ public class ReputationService {
 		// K — consistência temporal (teto de meses; sem privilégio infinito para conta velha).
 		double consistency = Math.min(120, 6 * Math.sqrt(Math.min(months, MAX_MONTHS) * 4.0));
 
-		// I — integridade: uma penalidade por FATO confirmado distinto (denúncia) e uma por vaga
+		// I — integridade: uma penalidade por FATO confirmado distinto (denúncia), uma por vaga
 		// excluída com candidatos sem resposta (item 7 do backlog: 25, depois 75, depois 150 —
-		// teto próprio de 150, porque excluir vaga é infração leve comparada a fraude confirmada).
+		// teto próprio de 150, porque excluir vaga é infração leve comparada a fraude confirmada)
+		// e uma por nota de rodapé NEGADA pela moderação (informação falsa; teto próprio de 150).
+		// Nota aprovada — ou em análise — não muda a credibilidade: corrigir o post é o objetivo.
 		int jobAbandons = jobAbandonPenalties.countByUser(userId);
 		int abandonPenalty = Math.min(150, 25 * jobAbandons * (jobAbandons + 1) / 2);
+		int deniedNotes = notePenalties.countDeniedByUser(userId);
+		int notePenalty = Math.min(150, 25 * deniedNotes * (deniedNotes + 1) / 2);
 		int penalty = Math.min(MAX_PENALTY,
-			60 * confirmedFacts * (confirmedFacts + 1) / 2 + abandonPenalty);
+			60 * confirmedFacts * (confirmedFacts + 1) / 2 + abandonPenalty + notePenalty);
 
 		int raw = (int) Math.round(trajectory + relations + contribution + consistency) - penalty;
 		int capped = Math.max(0, Math.min(MAX_REPUTATION, raw));

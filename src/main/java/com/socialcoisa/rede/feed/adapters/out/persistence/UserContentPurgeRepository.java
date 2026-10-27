@@ -63,6 +63,14 @@ public interface UserContentPurgeRepository extends Repository<PostJpaEntity, St
 	int deleteArticlesByPostIds(@Param("postIds") List<String> postIds);
 
 	@Modifying
+	@Query(value = "delete from post_notes where post_id in (:postIds)", nativeQuery = true)
+	int deletePostNotesByPostIds(@Param("postIds") List<String> postIds);
+
+	@Modifying
+	@Query(value = "delete from post_notes where author_id = :authorId", nativeQuery = true)
+	int deletePostNotesByAuthor(@Param("authorId") String authorId);
+
+	@Modifying
 	@Query(value = "delete from posts where id in (:postIds)", nativeQuery = true)
 	int deletePostsByIds(@Param("postIds") List<String> postIds);
 
