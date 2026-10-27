@@ -1,5 +1,6 @@
 package com.socialcoisa.rede.contributions.adapters.out.persistence;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -15,4 +16,6 @@ interface SpringDataUserSealJpaRepository extends JpaRepository<UserSealJpaEntit
 	List<UserSealJpaEntity> findByUserIdAndStatus(String userId, SealStatus status);
 
 	List<UserSealJpaEntity> findByStatus(SealStatus status);
+
+	List<UserSealJpaEntity> findByUserIdInAndStatus(Collection<String> userIds, SealStatus status);
 }

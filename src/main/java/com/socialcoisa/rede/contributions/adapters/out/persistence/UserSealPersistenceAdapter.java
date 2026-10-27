@@ -1,7 +1,9 @@
 package com.socialcoisa.rede.contributions.adapters.out.persistence;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.stereotype.Repository;
 
@@ -38,5 +40,20 @@ class UserSealPersistenceAdapter implements UserSealRepository {
 	@Override
 	public List<UserSeal> findAllActive() {
 		return repository.findByStatus(SealStatus.ACTIVE).stream().map(UserSealJpaEntity::toDomain).toList();
+	}
+
+	@Override
+	public boolean hasActiveSeal(String userId) {
+		return !repository.findByUserIdAndStatus(userId, SealStatus.ACTIVE).isEmpty();
+	}
+
+	@Override
+	public Set<String> findActiveUserIds(Collection<String> userIds) {
+		if (userIds == null || userIds.isEmpty()) {
+			return Set.of();
+		}
+		return repository.findByUserIdInAndStatus(userIds, SealStatus.ACTIVE).stream()
+			.map(entity -> entity.toDomain().userId())
+			.collect(java.util.stream.Collectors.toUnmodifiableSet());
 	}
 }

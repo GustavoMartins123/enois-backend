@@ -15,6 +15,7 @@ import com.socialcoisa.rede.feed.application.port.out.PostRepository;
 import com.socialcoisa.rede.feed.domain.AuthorIdentity;
 import com.socialcoisa.rede.feed.domain.Post;
 import com.socialcoisa.rede.feed.domain.PostType;
+import com.socialcoisa.rede.profile.application.ContributorTagView;
 import com.socialcoisa.rede.profile.application.NameStyleView;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.shared.html.SafeHtml;
@@ -39,16 +40,19 @@ public class EditPostService implements EditPostUseCase {
 	private final FeedCacheRepository feedCacheRepository;
 	private final AuditLogRepository auditLogRepository;
 	private final UserProfileRepository userProfileRepository;
+	private final com.socialcoisa.rede.contributions.application.port.out.UserSealRepository userSeals;
 	private final Clock clock;
 
 	public EditPostService(PostRepository postRepository, ArticleRepository articleRepository,
 			FeedCacheRepository feedCacheRepository,
-			AuditLogRepository auditLogRepository, UserProfileRepository userProfileRepository, Clock clock) {
+			AuditLogRepository auditLogRepository, UserProfileRepository userProfileRepository,
+			com.socialcoisa.rede.contributions.application.port.out.UserSealRepository userSeals, Clock clock) {
 		this.postRepository = postRepository;
 		this.articleRepository = articleRepository;
 		this.feedCacheRepository = feedCacheRepository;
 		this.auditLogRepository = auditLogRepository;
 		this.userProfileRepository = userProfileRepository;
+		this.userSeals = userSeals;
 		this.clock = clock;
 	}
 
@@ -102,6 +106,8 @@ public class EditPostService implements EditPostUseCase {
 			? PostView.from(saved, author.username(), author.name(), author.avatar(), author.allBadges())
 				.withAvatarFrame(author.avatarFrame())
 				.withAuthorStyle(saved.authorIdentity() == AuthorIdentity.SOCIAL ? NameStyleView.from(author) : null)
+				.withContributor(saved.authorIdentity() == AuthorIdentity.SOCIAL && userSeals.hasActiveSeal(author.id())
+					? ContributorTagView.from(author) : null)
 			: PostView.from(saved);
 	}
 
