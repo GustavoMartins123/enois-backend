@@ -16,7 +16,7 @@ public record UserProfileView(String id, String username, String name, String he
 		String availability, String portfolio, List<String> externalLinks, boolean openToWork, boolean isMentor,
 		int connectionsCount, int followersCount, int reputation, Integer postsCount, String pronouns,
 		List<String> badges, String aka, String avatarFrame,
-		String nameTheme, String nameFont, String nameColor,
+		String nameTheme, String nameFont, String nameColor, String contributorTagColor,
 		/** Quando a pessoa chegou na plataforma: o "ranking" público lista quem chegou por último. */
 		String joinedAt) {
 
@@ -27,7 +27,7 @@ public record UserProfileView(String id, String username, String name, String he
 			profile.openToWork(), profile.mentor(), profile.connectionsCount(), profile.followersCount(),
 			profile.reputation(), profile.postsCount(), profile.pronouns(), profile.badges(), profile.aka(),
 			profile.avatarFrame(), profile.nameTheme(), profile.nameFont(), profile.nameColor(),
-			profile.createdAt() == null ? null : profile.createdAt().toString());
+			profile.contributorTagColor(), profile.createdAt() == null ? null : profile.createdAt().toString());
 
 	}
 
@@ -39,7 +39,7 @@ public record UserProfileView(String id, String username, String name, String he
 		return new UserProfileView(id, username, name, headline, company, location, avatar, banner, badge, bio, bioHtml,
 			bannerHtml, skills, goals, availability, portfolio, externalLinks, openToWork, isMentor, connectionsCount,
 			followersCount, reputation, postsCount, pronouns, badges, aka, avatarFrame, nameTheme, nameFont, nameColor,
-			joinedAt);
+			contributorTagColor, joinedAt);
 	}
 
 	/** Capa em HTML/CSS; so a leitura do perfil anexa (mesmo motivo da bio). */
@@ -47,6 +47,6 @@ public record UserProfileView(String id, String username, String name, String he
 		return new UserProfileView(id, username, name, headline, company, location, avatar, banner, badge, bio, bioHtml,
 			bannerHtml, skills, goals, availability, portfolio, externalLinks, openToWork, isMentor, connectionsCount,
 			followersCount, reputation, postsCount, pronouns, badges, aka, avatarFrame, nameTheme, nameFont, nameColor,
-			joinedAt);
+			contributorTagColor, joinedAt);
 	}
 }

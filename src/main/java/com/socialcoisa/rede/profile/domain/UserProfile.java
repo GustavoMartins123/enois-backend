@@ -17,6 +17,8 @@ public class UserProfile {
 	private String nameTheme;
 	private String nameFont;
 	private String nameColor;
+	/** Cor da tag "Contribuinte" abaixo do nome (hex); so quem tem contribuicao verificada escolhe. */
+	private String contributorTagColor;
 	private String company;
 	private String location;
 	private String avatar;
@@ -466,6 +468,16 @@ public class UserProfile {
 		this.nameColor = color;
 	}
 
+	/** Cor da tag de contribuinte; null volta para a cor padrao do tema. */
+	public void updateContributorTagColor(String color, Instant now) {
+		this.contributorTagColor = color;
+		this.updatedAt = now;
+	}
+
+	public void hydrateContributorTagColor(String color) {
+		this.contributorTagColor = color;
+	}
+
 	/** Declara (ou regulariza) a data de nascimento. Validacao de plausibilidade fica no service. */
 	public void declareBirthDate(java.time.LocalDate birthDate, Instant now) {
 		this.birthDate = birthDate;
@@ -517,6 +529,10 @@ public class UserProfile {
 
 	public String nameColor() {
 		return nameColor;
+	}
+
+	public String contributorTagColor() {
+		return contributorTagColor;
 	}
 
 	public String company() {

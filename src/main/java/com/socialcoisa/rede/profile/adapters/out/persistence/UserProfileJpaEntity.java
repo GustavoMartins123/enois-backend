@@ -44,6 +44,9 @@ class UserProfileJpaEntity {
 	@Column(name = "name_color", length = 7)
 	private String nameColor;
 
+	@Column(name = "contributor_tag_color", length = 7)
+	private String contributorTagColor;
+
 	@Column(nullable = false, unique = true)
 	private String email;
 
@@ -171,6 +174,7 @@ class UserProfileJpaEntity {
 		entity.nameTheme = profile.nameTheme();
 		entity.nameFont = profile.nameFont();
 		entity.nameColor = profile.nameColor();
+		entity.contributorTagColor = profile.contributorTagColor();
 		entity.email = profile.email();
 		entity.company = profile.company();
 		entity.location = profile.location();
@@ -234,6 +238,7 @@ class UserProfileJpaEntity {
 		profile.hydrateResume(resumeUrl, resumeName);
 		profile.hydrateAvatarFrame(avatarFrame);
 		profile.hydrateNameStyle(nameTheme, nameFont, nameColor);
+		profile.hydrateContributorTagColor(contributorTagColor);
 		profile.hydrateBadges(badges == null || badges.isBlank() ? List.of() : List.of(badges.split("\n")));
 		return profile;
 	}

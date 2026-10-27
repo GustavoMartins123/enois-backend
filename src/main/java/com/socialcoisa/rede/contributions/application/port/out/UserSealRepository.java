@@ -13,4 +13,7 @@ public interface UserSealRepository {
 	Optional<UserSeal> findByUserAndType(String userId, SealType type);
 
 	List<UserSeal> findActiveByUser(String userId);
+
+	/** Todos os selos ativos, para o painel de contribuintes verificado. */
+	List<UserSeal> findAllActive();
 }

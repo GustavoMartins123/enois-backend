@@ -95,7 +95,22 @@ class CommunityCosmeticsController {
 		Boolean rightsConfirmed) {
 	}
 
+	@PutMapping("/profile/contributor-tag")
+	ContributorTagView updateContributorTagColor(
+		@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+		@RequestBody ContributorTagRequest request) {
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
+		var profile = cosmetics.updateContributorTagColor(user.id().value(), request.color());
+		return new ContributorTagView(profile.contributorTagColor());
+	}
+
 	record NameStyleRequest(String theme, String font, String color) {
+	}
+
+	record ContributorTagRequest(String color) {
+	}
+
+	record ContributorTagView(String color) {
 	}
 
 	record NameStyleView(String theme, String font, String color) {

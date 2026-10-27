@@ -13,4 +13,6 @@ interface SpringDataUserSealJpaRepository extends JpaRepository<UserSealJpaEntit
 	Optional<UserSealJpaEntity> findByUserIdAndSealType(String userId, SealType sealType);
 
 	List<UserSealJpaEntity> findByUserIdAndStatus(String userId, SealStatus status);
+
+	List<UserSealJpaEntity> findByStatus(SealStatus status);
 }

@@ -61,6 +61,20 @@ financeiro nunca se mistura com reputação técnica.
 6. O perfil público mostra o nível atual e até 12 evidências por categoria. Notas internas,
    suspeitas, e-mail e detalhes de revisão nunca são públicos.
 
+## Painel de contribuintes e tag
+
+- Quem tem contribuição verificada (selo ativo) aparece **automaticamente** no painel de
+  contribuintes, já aprovado pelo GitHub (`source=GITHUB_VERIFIED`, status `APPROVED`), mesmo antes
+  de preencher o formulário.
+- Esse formulário é o **mesmo da landing** e serve só para confirmar nome, e-mail, área e mensagem.
+  O handle do GitHub vem do vínculo verificado (nunca do corpo), a candidatura nasce aprovada — o
+  GitHub é a aprovação — e reenviar atualiza a mesma linha, sem duplicar.
+- Candidaturas feitas pela landing continuam na fila manual (nova → análise → aprovar/recusar).
+- A tag **Contribuinte** aparece abaixo do nome no perfil. Quem tem selo ativo pode escolher a cor
+  em **Aparência** (`PUT /cosmetics/profile/contributor-tag`); a cor fica no perfil
+  (`contributorTagColor`, `null` = cor padrão do tema). A opção só aparece para contribuintes, e o
+  backend recusa a alteração de quem não tem contribuição verificada.
+
 ## Revogação e correção
 
 - Um mantenedor pode **contestar**, **rejeitar** ou **revogar** uma evidência no painel; o recálculo
@@ -111,9 +125,14 @@ Conta:
 - `GET /me/github` — vínculo, última sincronização e estado.
 - `POST /auth/oauth/github/link` — inicia o OAuth de vínculo (exige sessão).
 - `DELETE /auth/oauth/github/link` — desvincula (as regras de último método de login continuam).
+- `GET /contributors/me` — verificado? já confirmou os dados? (usado pelo convite em `/selos`).
+- `POST /contributors/applications/verified` — confirma os dados; nasce `APPROVED` (GitHub aprova).
+- `PUT /cosmetics/profile/contributor-tag` — `{ "color": "#rrggbb" }` (ou `null` para a cor padrão);
+  exige selo ativo e grava `contributorTagColor` no perfil.
 
 Admin:
 
+- `GET /admin/contributors/panel` — candidaturas + contribuintes verificados automaticamente.
 - `GET /admin/contributors/contributions?status=&kind=&limit=` — fila de evidências.
 - `GET /admin/contributors/contributions/{id}` — evidência + auditoria.
 - `POST /admin/contributors/contributions/{id}/review` — `{ "status": "...", "note": "..." }`.
