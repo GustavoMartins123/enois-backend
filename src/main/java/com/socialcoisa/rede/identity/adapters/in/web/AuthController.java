@@ -359,6 +359,19 @@ class AuthController {
 		return oAuthUseCase.startLink(userId, oauthProvider);
 	}
 
+	/**
+	 * Vínculo de moderação: pede ao GitHub o escopo de escrita para responder issues e revisar PRs
+	 * em nome da pessoa. Só existe para GitHub e para quem já está logado.
+	 */
+	@PostMapping("/oauth/{provider}/write-link")
+	@RateLimiter(name = "auth")
+	Object oauthStartWriteLink(@PathVariable String provider,
+			@RequestHeader(value = "X-Session-Token", required = false) String token) {
+		OAuthProvider oauthProvider = parseProvider(provider);
+		String userId = requireUserId(token);
+		return oAuthUseCase.startLinkWithWrite(userId, oauthProvider);
+	}
+
 	// ------------------------------------------------------------------ segundo fator (gestao)
 
 	@GetMapping("/2fa/status")

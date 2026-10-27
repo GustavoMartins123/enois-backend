@@ -17,4 +17,13 @@ public interface GitHubGateway {
 
 	/** Completa arquivos e revisões de um PR (chamado só para PR novo ou atualizado). */
 	GitHubPullRequest withDetails(String repository, GitHubPullRequest pullRequest);
+
+	/** PRs abertos do repositório, para a fila de revisão do painel. */
+	List<GitHubPullRequest> listOpenPullRequests(String repository, int maxPages);
+
+	/**
+	 * Envia uma revisão (APPROVE / REQUEST_CHANGES / COMMENT). {@code tokenOverride} revisa em nome
+	 * de quem vinculou o GitHub com escrita; nulo usa o token de serviço.
+	 */
+	boolean submitReview(String repository, long number, String decision, String body, String tokenOverride);
 }

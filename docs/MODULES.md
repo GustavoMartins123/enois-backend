@@ -223,6 +223,7 @@ Implementa: `OAuthUseCase`
 | `oauthStart(...)` | GET /api/auth/oauth/{provider}/start | Iniciar OAuth |
 | `oauthCallback(...)` | GET /api/auth/oauth/{provider}/callback | Callback OAuth |
 | `oauthToken(...)` | POST /api/auth/oauth/{provider}/token | Troca de token |
+| `oauthWriteLink(...)` | POST /api/auth/oauth/github/write-link | Vínculo GitHub com escrita (revisar PRs/responder issues) |
 | `refreshSession(...)` | POST /api/auth/refresh | Refresh de sessão |
 | `forgotPassword(...)` | POST /api/auth/password/forgot | Solicitar reset |
 | `resetPassword(...)` | POST /api/auth/password/reset | Resetar senha |
@@ -1081,7 +1082,8 @@ integração com issues do GitHub e log de e-mails no painel.
 | `GET /support/config` | Configuração pública (e-mail do time, categorias) |
 | `POST /support/requests` / `GET /support/requests/mine` | Abrir pedido / meus pedidos |
 | `GET /admin/support` / `PATCH /admin/support/{id}` / `POST /admin/support/{id}/reply` | Fila, atualizar status, responder (equipe de moderação) |
-| `GET /admin/support/github` / `PUT /admin/support/github` / `POST /webhooks/github` | Integração de issues |
+| `GET /admin/support/{id}/messages` | Conversa do ticket: respostas do painel + comentários da issue |
+| `GET /admin/support/github` / `PUT /admin/support/github` / `POST /webhooks/github` | Integração de issues (espelho, comentários e estado) |
 | `GET /admin/emails` | Log de metadados de e-mails enviados (sem conteúdo de 2FA) |
 
 ## 23. Ops (Monitoramento e operação)

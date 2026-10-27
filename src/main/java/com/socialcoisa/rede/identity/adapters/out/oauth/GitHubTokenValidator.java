@@ -48,18 +48,21 @@ class GitHubTokenValidator implements TokenValidator {
 			return Optional.empty();
 		}
 		try {
-			String accessToken = exchange(credential.trim());
-			if (!StringUtils.hasText(accessToken)) {
+			TokenExchange exchanged = exchange(credential.trim());
+			if (!StringUtils.hasText(exchanged.accessToken())) {
 				return Optional.empty();
 			}
-			return user(accessToken);
+			return user(exchanged.accessToken(), exchanged.scope());
 		}
 		catch (Exception failure) {
 			return Optional.empty();
 		}
 	}
 
-	private String exchange(String code) throws Exception {
+	private record TokenExchange(String accessToken, String scope) {
+	}
+
+	private TokenExchange exchange(String code) throws Exception {
 		var config = properties.getGithub();
 		String body = "client_id=" + enc(config.getClientId())
 			+ "&client_secret=" + enc(config.getClientSecret())
@@ -74,13 +77,13 @@ class GitHubTokenValidator implements TokenValidator {
 			.build();
 		HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
 		if (response.statusCode() >= 400) {
-			return null;
+			return new TokenExchange(null, null);
 		}
 		JsonNode node = json.readTree(response.body());
-		return node.path("access_token").asText("");
+		return new TokenExchange(node.path("access_token").asText(""), node.path("scope").asText(""));
 	}
 
-	private Optional<TokenValidationResult> user(String accessToken) throws Exception {
+	private Optional<TokenValidationResult> user(String accessToken, String scope) throws Exception {
 		HttpRequest request = HttpRequest.newBuilder(URI.create(USER_URL))
 			.timeout(Duration.ofSeconds(10))
 			.header("Accept", "application/vnd.github+json")
@@ -101,7 +104,7 @@ class GitHubTokenValidator implements TokenValidator {
 		}
 		// E-mail do GitHub pode ser privado; não usamos para vincular por e-mail.
 		String email = node.path("email").asText("");
-		return Optional.of(new TokenValidationResult(id, email, login, false, accessToken, null));
+		return Optional.of(new TokenValidationResult(id, email, login, false, accessToken, null, scope));
 	}
 
 	private static String enc(String value) {
