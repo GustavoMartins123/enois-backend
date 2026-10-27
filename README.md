@@ -34,6 +34,7 @@ próprio no [`SECURITY.md`](SECURITY.md) — não vira issue pública.
 
 | Assunto | Documento |
 | --- | --- |
+| Desenvolvimento local e onboarding | [`docs/LOCAL_DEVELOPMENT.md`](docs/LOCAL_DEVELOPMENT.md) |
 | Arquitetura e módulos | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
 | API publicada | [`docs/API.md`](docs/API.md) |
 | Banco, tabelas e migrações | [`docs/DATABASE.md`](docs/DATABASE.md) |

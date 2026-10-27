@@ -25,6 +25,8 @@ triviais, fragmentados artificialmente ou revertidos por problemas introduzidos 
 
 ## Verificando o ambiente local
 
+Para seguir do clone até a primeira contribuição, consulte o [guia de desenvolvimento local](docs/LOCAL_DEVELOPMENT.md).
+
 Antes de iniciar o backend, execute o diagnóstico de pré-requisitos:
 
 ```bash
