@@ -58,7 +58,11 @@ public class CosmeticsService {
                 new CosmeticItem(18, "moldura-galaxia", "Galáxia", "Braços espirais de gás e poeira, com estrelas e partículas em movimento.", 10_000, ""),
                 new CosmeticItem(16, "moldura-portal", "Portal", "Um vórtice de energia sugando faíscas para dentro.", 10_000, ""),
                 new CosmeticItem(17, "moldura-holograma", "Holograma", "Sinal holográfico com glitch e linhas de varredura.", 10_000,
-			""));
+			""),
+                new CosmeticItem(19, "moldura-mare", "Maré", "Ondas que sobem e descem em volta do avatar, com bolhas e peixes.", 10_000, ""),
+                new CosmeticItem(20, "moldura-trepadeira", "Trepadeira", "Vinhas que brotam folhas e abrem uma flor no topo.", 10_000, ""),
+                new CosmeticItem(21, "moldura-vendaval", "Vendaval", "Rajadas de vento que giram com poeira e folhas.", 10_000, ""),
+                new CosmeticItem(22, "moldura-vaga-lumes", "Vaga-lumes", "Capim ao pé do retrato e vaga-lumes voando em volta.", 10_000, ""));
 
 	private final CoinService coins;
 	private final CoinLedgerRepository ledger;
