@@ -190,12 +190,13 @@ jobs:
           LINKEDIN_REDIRECT_URI: ${{ vars.LINKEDIN_REDIRECT_URI_QA }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-          # GitHub e usado apenas para VINCULAR a conta aos selos de contribuicao.
-          # Os tres secrets abaixo precisam existir no repositorio; sem eles o vínculo responde
+          # GitHub e usado apenas para VINCULAR a conta aos selos de contribuicao. A QA tem
+          # credenciais proprias (prefixo QA_): assim o OAuth App de teste nao vaza para o
+          # deploy de producao, que usa os nomes sem prefixo. Sem eles o vínculo responde
           # OAUTH_NOT_CONFIGURED e o sync usa a API publica (limite baixo).
-          GITHUB_CLIENT_ID: ${{ secrets.GITHUB_CLIENT_ID }}
-          GITHUB_CLIENT_SECRET: ${{ secrets.GITHUB_CLIENT_SECRET }}
-          GITHUB_CONTRIBUTIONS_TOKEN: ${{ secrets.GITHUB_CONTRIBUTIONS_TOKEN }}
+          GITHUB_CLIENT_ID: ${{ secrets.QA_GITHUB_CLIENT_ID }}
+          GITHUB_CLIENT_SECRET: ${{ secrets.QA_GITHUB_CLIENT_SECRET }}
+          GITHUB_CONTRIBUTIONS_TOKEN: ${{ secrets.QA_GITHUB_CONTRIBUTIONS_TOKEN }}
           # Na QA, issue com a label `bug` (aplicada por mantenedor) ja conta para o selo de
           # issues; em producao o default e vazio (so revisao humana). O worker segue desligado:
           # o backfill de teste e disparado pelo painel de moderacao.
