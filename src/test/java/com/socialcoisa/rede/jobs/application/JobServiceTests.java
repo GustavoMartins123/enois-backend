@@ -104,7 +104,7 @@ class JobServiceTests {
 			},
 			new tools.jackson.databind.ObjectMapper(), Clock.systemUTC(),
 			new com.socialcoisa.rede.shared.security.UserRateLimiter(Clock.systemUTC(), noopPublisher,
-				10, 60, 30, 60, 100, 30, 60, 1),
+				10, 60, 30, 60, 100, 30, 60, 1, 3, 60),
 			new com.socialcoisa.rede.shared.security.BehavioralTimingGuard(Clock.systemUTC(), noopPublisher));
 	}
 

@@ -58,6 +58,11 @@ public class GitHubIdentityService {
 		repository.deleteByUserId(userId);
 	}
 
+	/** ID numérico do GitHub vinculado (a chave imutável usada na sincronização). */
+	public String githubUserId(String userId) {
+		return repository.findByUserId(userId).map(GitHubIdentity::githubUserId).orElse(null);
+	}
+
 	public GitHubIdentityView status(String userId) {
 		return repository.findByUserId(userId)
 			.map(identity -> new GitHubIdentityView(true, identity.githubLogin(), identity.linkedAt(),

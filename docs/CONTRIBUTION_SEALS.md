@@ -51,14 +51,20 @@ financeiro nunca se mistura com reputação técnica.
 2. Guardamos o **ID numérico imutável** do GitHub e o login (apenas apresentação). Uma conta GitHub
    só pode estar ligada a uma conta Énóis e vice-versa. O GitHub serve **apenas para vincular**:
    não cria conta nem marca identidade verificada.
-3. A sincronização (`POST /admin/contributors/sync`, ou o worker periódico) lê:
+3. A sincronização roda em três gatilhos: ao concluir o vínculo (só as contribuições daquele
+   GitHub, fora da thread da requisição), no botão **Verificar contribuições**
+   (`POST /me/github/sync`, com limite por usuário) e na varredura completa
+   (`POST /admin/contributors/sync`, ou o worker periódico). Ela lê:
    - PRs integrados (`/repos/{repo}/pulls?state=closed`), com arquivos, revisões e sinais;
    - issues (`/repos/{repo}/issues`), descartando pull requests e guardando as labels.
 4. PR integrado nasce como evidência `VALIDATED` (o GitHub é a fonte). Issue nasce `VALIDATED` se
    tiver label qualificadora; caso contrário `PENDING`, aguardando um mantenedor.
 5. Depois de cada ciclo, os níveis das categorias são recalculados a partir da contagem. Promoção,
    rebaixamento, concessão e revogação geram evento de auditoria.
-6. O perfil público mostra o nível e a contagem verificada; as evidências carregam em **páginas**
+6. A tela de segurança mostra o estado do vínculo e permite verificar de novo; a página de selos
+   explica quando o vínculo existe mas ainda não há contribuição verificada e mostra "dados já
+   confirmados" para quem preencheu o formulário — em nenhum desses estados a tela fica vazia.
+7. O perfil público mostra o nível e a contagem verificada; as evidências carregam em **páginas**
    pelo endpoint `GET /users/{username}/seals/{category}/evidence?page=&size=` — o cartão abre com a
    primeira página e “Carregar mais” busca o resto, então não existe mais o teto de 12 por
    categoria. Notas internas, suspeitas, e-mail e detalhes de revisão nunca são públicos.
