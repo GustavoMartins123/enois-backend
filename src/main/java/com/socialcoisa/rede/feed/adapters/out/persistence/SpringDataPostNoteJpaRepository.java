@@ -17,6 +17,10 @@ interface SpringDataPostNoteJpaRepository extends JpaRepository<PostNoteJpaEntit
 
 	List<PostNoteJpaEntity> findByAuthorIdAndPostIdIn(String authorId, Collection<String> postIds);
 
+	List<PostNoteJpaEntity> findByPostIdAndStatusOrderByCreatedAtAsc(String postId, PostNoteStatus status);
+
+	boolean existsByPostIdAndStatus(String postId, PostNoteStatus status);
+
 	List<PostNoteJpaEntity> findByStatusOrderByCreatedAtAsc(PostNoteStatus status,
 			org.springframework.data.domain.Pageable pageable);
 

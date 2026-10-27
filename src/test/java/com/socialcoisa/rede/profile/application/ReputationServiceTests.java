@@ -16,7 +16,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.socialcoisa.rede.profile.application.port.out.JobAbandonPenaltyReader;
-import com.socialcoisa.rede.profile.application.port.out.NotePenaltyReader;
+import com.socialcoisa.rede.profile.application.port.out.NoteCredibilityReader;
 import com.socialcoisa.rede.profile.application.port.out.ProfileExtensionRepository;
 import com.socialcoisa.rede.profile.application.port.out.RecommendationRepository;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
@@ -46,14 +46,14 @@ class ReputationServiceTests {
 	private JobAbandonPenaltyReader jobAbandonPenalties;
 
 	@Mock
-	private NotePenaltyReader notePenalties;
+	private NoteCredibilityReader noteCredibility;
 
 	private ReputationService service;
 
 	@BeforeEach
 	void setUp() {
 		service = new ReputationService(profileRepository, extensionRepository, recommendationRepository,
-			jobAbandonPenalties, notePenalties, Clock.fixed(AGORA, ZoneOffset.UTC));
+			jobAbandonPenalties, noteCredibility, Clock.fixed(AGORA, ZoneOffset.UTC));
 	}
 
 	@Test
@@ -69,12 +69,36 @@ class ReputationServiceTests {
 	}
 
 	@Test
+	void approvedCommunityNoteGivesUpToFivePointsEach() {
+		UserProfile profile = profile(AGORA.minusSeconds(184L * 24 * 3600));
+		profile.markEmailVerified(AGORA);
+		when(profileRepository.findById(USER)).thenReturn(java.util.Optional.of(profile));
+		stubActivity();
+		when(noteCredibility.countApprovedByUser(USER)).thenReturn(2);
+
+		// 86 dos componentes + 2 fact-checks × 5 = 96.
+		assertThat(service.countsFor(USER).reputation()).isEqualTo(96);
+	}
+
+	@Test
+	void approvedCommunityNoteBonusIsCappedAtFiveNotes() {
+		UserProfile profile = profile(AGORA.minusSeconds(184L * 24 * 3600));
+		profile.markEmailVerified(AGORA);
+		when(profileRepository.findById(USER)).thenReturn(java.util.Optional.of(profile));
+		stubActivity();
+		when(noteCredibility.countApprovedByUser(USER)).thenReturn(9);
+
+		// O bônus conta no máximo 5 notas: 86 + 25 = 111.
+		assertThat(service.countsFor(USER).reputation()).isEqualTo(111);
+	}
+
+	@Test
 	void deniedCommunityNotePenalizes() {
 		UserProfile profile = profile(AGORA.minusSeconds(184L * 24 * 3600));
 		profile.markEmailVerified(AGORA);
 		when(profileRepository.findById(USER)).thenReturn(java.util.Optional.of(profile));
 		stubActivity();
-		when(notePenalties.countDeniedByUser(USER)).thenReturn(1);
+		when(noteCredibility.countDeniedByUser(USER)).thenReturn(1);
 
 		// Uma nota falsa negada desconta 25 dos 86 dos componentes.
 		assertThat(service.countsFor(USER).reputation()).isEqualTo(61);
