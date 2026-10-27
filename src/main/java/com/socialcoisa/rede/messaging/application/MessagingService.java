@@ -365,16 +365,14 @@ public class MessagingService {
 		return repository.hideMessages(userId, messageIds, clock.instant());
 	}
 
-	public String getLastMessageText(String conversationId) {
-		return repository.findLastMessage(conversationId)
-			.map(m -> m.e2e() ? "Mensagem cifrada" : m.text())
-			.orElse(null);
+	public record LastMessagePreview(String text, boolean e2e, String iv, java.time.Instant time) {
+		static final LastMessagePreview EMPTY = new LastMessagePreview(null, false, null, null);
 	}
 
-	public java.time.Instant getLastMessageTime(String conversationId) {
+	public LastMessagePreview getLastMessagePreview(String conversationId) {
 		return repository.findLastMessage(conversationId)
-			.map(Message::createdAt)
-			.orElse(null);
+			.map(m -> new LastMessagePreview(m.text(), m.e2e(), m.iv(), m.createdAt()))
+			.orElse(LastMessagePreview.EMPTY);
 	}
 
 	@Transactional
