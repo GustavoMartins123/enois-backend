@@ -23,6 +23,7 @@ import com.socialcoisa.rede.shared.web.ModeratorGuard;
 import com.socialcoisa.rede.shared.web.PiiMask;
 import com.socialcoisa.rede.support.application.SupportGithubConfig;
 import com.socialcoisa.rede.support.application.SupportService;
+import com.socialcoisa.rede.support.application.SupportThreadService;
 import com.socialcoisa.rede.support.domain.SupportCategory;
 import com.socialcoisa.rede.support.domain.SupportRequest;
 import com.socialcoisa.rede.support.domain.SupportStatus;
@@ -31,16 +32,19 @@ import com.socialcoisa.rede.support.domain.SupportStatus;
 class SupportController {
 
 	private final SupportService supportService;
+	private final SupportThreadService supportThread;
 	private final SupportGithubConfig githubConfig;
 	private final CurrentUserResolver currentUserResolver;
 	private final AdminGuard adminGuard;
 	private final ModeratorGuard moderatorGuard;
 	private final String supportEmail;
 
-	SupportController(SupportService supportService, SupportGithubConfig githubConfig,
-			CurrentUserResolver currentUserResolver, AdminGuard adminGuard, ModeratorGuard moderatorGuard,
+	SupportController(SupportService supportService, SupportThreadService supportThread,
+			SupportGithubConfig githubConfig, CurrentUserResolver currentUserResolver, AdminGuard adminGuard,
+			ModeratorGuard moderatorGuard,
 			@org.springframework.beans.factory.annotation.Value("${rede.support.email:}") String supportEmail) {
 		this.supportService = supportService;
+		this.supportThread = supportThread;
 		this.githubConfig = githubConfig;
 		this.currentUserResolver = currentUserResolver;
 		this.adminGuard = adminGuard;
@@ -106,6 +110,15 @@ class SupportController {
 		return SupportAdminView.from(supportService.reply(id, admin.id().value(), request.message()));
 	}
 
+	/** Conversa do ticket: respostas do painel e comentários trazidos da issue do GitHub. */
+	@GetMapping("/admin/support/{id}/messages")
+	List<SupportMessageView> messages(
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@PathVariable String id) {
+		moderatorGuard.requireModerator(currentUserResolver.resolve(sessionToken));
+		return supportThread.thread(id).stream().map(SupportMessageView::from).toList();
+	}
+
 	/**
 	 * Estado do espelho no GitHub para o painel. Nunca devolve token nem segredo — só se existem.
 	 */
@@ -168,6 +181,14 @@ class SupportController {
 	}
 
 	/** Visão do painel: inclui a issue espelhada para o time abrir o item no GitHub. */
+	record SupportMessageView(String id, String direction, String authorName, String authorGithubLogin,
+			String body, String createdAt) {
+		static SupportMessageView from(com.socialcoisa.rede.support.domain.SupportMessage message) {
+			return new SupportMessageView(message.id(), message.direction().name(), message.authorName(),
+				message.authorGithubLogin(), message.body(), message.createdAt().toString());
+		}
+	}
+
 	record SupportAdminView(String id, String userId, String subject, String message, String contactEmail,
 			String imageUrl, String category, String status, String adminReply, String repliedBy,
 			String repliedAt, String createdAt, Integer githubIssueNumber, String githubIssueUrl) {

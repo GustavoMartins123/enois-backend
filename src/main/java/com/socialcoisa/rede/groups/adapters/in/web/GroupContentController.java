@@ -24,6 +24,7 @@ import com.socialcoisa.rede.groups.domain.GroupTopic;
 import com.socialcoisa.rede.idempotency.application.CommandResponse;
 import com.socialcoisa.rede.idempotency.application.IdempotencyApplicationService;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
+import com.socialcoisa.rede.profile.application.NameStyleView;
 import com.socialcoisa.rede.profile.domain.UserProfile;
 import com.socialcoisa.rede.shared.web.ApiException;
 import com.socialcoisa.rede.shared.web.CurrentUser;
@@ -269,7 +270,7 @@ class GroupContentController {
 			author == null ? null : author.username(),
 			author == null ? null : author.avatar(),
 			author == null ? List.of() : author.allBadges(),
-			comment.parentId(), comment.content(), comment.createdAt(), author == null ? null : author.avatarFrame());
+			comment.parentId(), comment.content(), comment.createdAt(), author == null ? null : author.avatarFrame(), NameStyleView.from(author));
 	}
 
 	private GroupPostView postView(GroupPost post, ReactionType myReaction) {
@@ -281,7 +282,7 @@ class GroupContentController {
 			author == null ? null : author.avatar(),
 			badges,
 			post.content(), post.mediaIds(), post.pinned(), post.reactions(), post.comments(),
-			myReaction == null ? null : myReaction.name(), post.createdAt(), author == null ? null : author.avatarFrame());
+			myReaction == null ? null : myReaction.name(), post.createdAt(), author == null ? null : author.avatarFrame(), NameStyleView.from(author));
 	}
 
 	private static TopicView topicView(GroupTopic topic) {
@@ -305,7 +306,7 @@ class GroupContentController {
 	record GroupPostView(String id, String groupId, String topicId, String authorId, String authorName,
 			String authorUsername, String authorAvatar, List<String> authorBadges, String content,
 			List<String> mediaIds, boolean pinned, int reactions, int comments, String myReaction,
-			Instant createdAt, String authorAvatarFrame) {
+			Instant createdAt, String authorAvatarFrame, NameStyleView authorStyle) {
 	}
 
 	record CommentRequest(String content, String parentCommentId) {
@@ -316,6 +317,6 @@ class GroupContentController {
 
 	record CommentView(String id, String postId, String authorId, String authorName, String authorUsername,
 			String authorAvatar, List<String> authorBadges, String parentCommentId, String content,
-			Instant createdAt, String authorAvatarFrame) {
+			Instant createdAt, String authorAvatarFrame, NameStyleView authorStyle) {
 	}
 }

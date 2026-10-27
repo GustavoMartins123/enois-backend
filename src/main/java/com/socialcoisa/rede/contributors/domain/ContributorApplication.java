@@ -3,13 +3,17 @@ package com.socialcoisa.rede.contributors.domain;
 import java.time.Instant;
 
 /**
- * Registro de quem se ofereceu para contribuir com o projeto. O formulário é público, mas o
- * registro é interno: serve para organizar a fila, documentar o aceite dos termos e não perder
- * contato com quem se apresentou.
+ * Registro de quem se ofereceu para contribuir com o projeto.
+ *
+ * <p>A landing grava uma candidatura pública (sem conta, status NEW, origem LANDING). Quem já tem
+ * contribuição verificada pelo GitHub usa o mesmo formulário só para confirmar os dados: a
+ * candidatura fica ligada à conta, nasce APPROVED e a origem é GITHUB_VERIFIED — o GitHub é a
+ * aprovação, não há revisão manual.</p>
  */
 public class ContributorApplication {
 
 	private final String id;
+	private final String userId;
 	private final String name;
 	private final String github;
 	private final String email;
@@ -18,12 +22,14 @@ public class ContributorApplication {
 	private final String message;
 	private final Instant acceptedTermsAt;
 	private final ContributorApplicationStatus status;
+	private final ContributorApplicationSource source;
 	private final Instant createdAt;
 
-	private ContributorApplication(String id, String name, String github, String email, String area,
-			ContributorExperience experience, String message, Instant acceptedTermsAt,
-			ContributorApplicationStatus status, Instant createdAt) {
+	private ContributorApplication(String id, String userId, String name, String github, String email,
+			String area, ContributorExperience experience, String message, Instant acceptedTermsAt,
+			ContributorApplicationStatus status, ContributorApplicationSource source, Instant createdAt) {
 		this.id = id;
+		this.userId = userId;
 		this.name = name;
 		this.github = github;
 		this.email = email;
@@ -32,29 +38,49 @@ public class ContributorApplication {
 		this.message = message;
 		this.acceptedTermsAt = acceptedTermsAt;
 		this.status = status;
+		this.source = source;
 		this.createdAt = createdAt;
 	}
 
-	public static ContributorApplication create(String id, String name, String github, String email, String area,
-			ContributorExperience experience, String message, Instant now) {
-		return new ContributorApplication(id, name, github, email, area, experience, message, now,
-			ContributorApplicationStatus.NEW, now);
+	public static ContributorApplication createLanding(String id, String name, String github, String email,
+			String area, ContributorExperience experience, String message, Instant now) {
+		return new ContributorApplication(id, null, name, github, email, area, experience, message, now,
+			ContributorApplicationStatus.NEW, ContributorApplicationSource.LANDING, now);
 	}
 
-	public static ContributorApplication restore(String id, String name, String github, String email, String area,
-			ContributorExperience experience, String message, Instant acceptedTermsAt,
-			ContributorApplicationStatus status, Instant createdAt) {
-		return new ContributorApplication(id, name, github, email, area, experience, message, acceptedTermsAt, status,
-			createdAt);
+	/** Confirmação de quem já tem contribuição verificada: nasce aprovada pelo próprio GitHub. */
+	public static ContributorApplication createVerified(String id, String userId, String name, String github,
+			String email, String area, ContributorExperience experience, String message, Instant now) {
+		return new ContributorApplication(id, userId, name, github, email, area, experience, message, now,
+			ContributorApplicationStatus.APPROVED, ContributorApplicationSource.GITHUB_VERIFIED, now);
+	}
+
+	public static ContributorApplication restore(String id, String userId, String name, String github,
+			String email, String area, ContributorExperience experience, String message, Instant acceptedTermsAt,
+			ContributorApplicationStatus status, ContributorApplicationSource source, Instant createdAt) {
+		return new ContributorApplication(id, userId, name, github, email, area, experience, message,
+			acceptedTermsAt, status, source, createdAt);
 	}
 
 	public ContributorApplication withStatus(ContributorApplicationStatus newStatus) {
-		return new ContributorApplication(id, name, github, email, area, experience, message, acceptedTermsAt,
-			newStatus, createdAt);
+		return new ContributorApplication(id, userId, name, github, email, area, experience, message,
+			acceptedTermsAt, newStatus, source, createdAt);
+	}
+
+	/** Liga uma candidatura já existente à conta verificada e atualiza os dados confirmados. */
+	public ContributorApplication withVerifiedData(String newUserId, String newName, String newGithub,
+			String newEmail, String newArea, ContributorExperience newExperience, String newMessage, Instant now) {
+		return new ContributorApplication(id, newUserId, newName, newGithub, newEmail, newArea, newExperience,
+			newMessage, now, ContributorApplicationStatus.APPROVED,
+			ContributorApplicationSource.GITHUB_VERIFIED, createdAt);
 	}
 
 	public String id() {
 		return id;
+	}
+
+	public String userId() {
+		return userId;
 	}
 
 	public String name() {
@@ -87,6 +113,10 @@ public class ContributorApplication {
 
 	public ContributorApplicationStatus status() {
 		return status;
+	}
+
+	public ContributorApplicationSource source() {
+		return source;
 	}
 
 	public Instant createdAt() {

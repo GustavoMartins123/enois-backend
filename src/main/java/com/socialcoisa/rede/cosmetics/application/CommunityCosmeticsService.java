@@ -17,6 +17,7 @@ import com.socialcoisa.rede.cosmetics.application.port.out.CommunityCosmeticRepo
 import com.socialcoisa.rede.cosmetics.domain.CommunityCosmetic;
 import com.socialcoisa.rede.cosmetics.domain.CommunityCosmeticKind;
 import com.socialcoisa.rede.cosmetics.domain.CommunityCosmeticStatus;
+import com.socialcoisa.rede.contributors.application.port.out.VerifiedContributorReader;
 import com.socialcoisa.rede.profile.domain.UserProfile;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.shared.web.ApiException;
@@ -32,8 +33,10 @@ public class CommunityCosmeticsService {
 	private static final int MAX_DESCRIPTION_CHARS = 300;
 	private static final Pattern HEX = Pattern.compile("^#[0-9a-fA-F]{6}$");
 	private static final Set<String> LICENSES = Set.of("ORIGINAL", "OPEN_SOURCE", "COMMERCIAL_LICENSE");
-	private static final Set<String> NAME_THEMES = Set.of("DEFAULT", "PIXEL", "GOTHIC", "NEON", "GLITCH", "CANDY");
-	private static final Set<String> NAME_FONTS = Set.of("SYSTEM", "SERIF", "MONO", "ROUNDED", "DISPLAY", "PIXEL", "GOTHIC");
+	private static final Set<String> NAME_THEMES = Set.of("DEFAULT", "PIXEL", "GOTHIC", "NEON", "GLITCH", "CANDY",
+		"RETRO", "OCEAN", "SUNSET", "MATRIX", "GOLD", "ICE");
+	private static final Set<String> NAME_FONTS = Set.of("SYSTEM", "SERIF", "MONO", "ROUNDED", "DISPLAY", "PIXEL",
+		"GOTHIC", "CURSIVE", "CONDENSED", "COMIC", "SLAB");
 	private static final Map<CommunityCosmeticKind, Set<String>> TOP_LEVEL_KEYS = Map.of(
 		CommunityCosmeticKind.FONT, Set.of("version", "kind", "family", "assetRef", "fallback"),
 		CommunityCosmeticKind.PALETTE, Set.of("version", "kind", "colors"),
@@ -45,13 +48,15 @@ public class CommunityCosmeticsService {
 	private final Clock clock;
 	private final ObjectMapper objectMapper;
 	private final UserProfileRepository profiles;
+	private final VerifiedContributorReader verifiedContributors;
 
 	public CommunityCosmeticsService(CommunityCosmeticRepository cosmetics, Clock clock, ObjectMapper objectMapper,
-		UserProfileRepository profiles) {
+		UserProfileRepository profiles, VerifiedContributorReader verifiedContributors) {
 		this.cosmetics = cosmetics;
 		this.clock = clock;
 		this.objectMapper = objectMapper;
 		this.profiles = profiles;
+		this.verifiedContributors = verifiedContributors;
 	}
 
 	@Transactional
@@ -69,6 +74,23 @@ public class CommunityCosmeticsService {
 		UserProfile profile = profiles.findById(userId)
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Perfil não encontrado."));
 		profile.updateNameStyle(normalizedTheme, font, color.toLowerCase(Locale.ROOT), clock.instant());
+		return profiles.save(profile);
+	}
+
+	/** Cor da tag "Contribuinte"; só quem tem contribuição verificada pode escolher (null = padrão). */
+	@Transactional
+	public UserProfile updateContributorTagColor(String userId, String color) {
+		if (verifiedContributors.find(userId).isEmpty()) {
+			throw new ApiException(403, "CONTRIBUTOR_NOT_VERIFIED",
+				"A tag de contribuinte é exclusiva de quem tem contribuição verificada pelo GitHub.");
+		}
+		String normalized = color == null || color.isBlank() ? null : color.trim().toLowerCase(Locale.ROOT);
+		if (normalized != null && !HEX.matcher(normalized).matches()) {
+			throw new ApiException(400, "INVALID_CONTRIBUTOR_TAG_COLOR", "A cor da tag precisa ser hexadecimal.");
+		}
+		UserProfile profile = profiles.findById(userId)
+			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Perfil não encontrado."));
+		profile.updateContributorTagColor(normalized, clock.instant());
 		return profiles.save(profile);
 	}
 

@@ -25,6 +25,8 @@ import com.socialcoisa.rede.feed.domain.CommentStatus;
 import com.socialcoisa.rede.feed.domain.Post;
 import com.socialcoisa.rede.feed.domain.PostId;
 import com.socialcoisa.rede.notifications.application.NotificationService;
+import com.socialcoisa.rede.profile.application.ContributorTagView;
+import com.socialcoisa.rede.profile.application.NameStyleView;
 import com.socialcoisa.rede.shared.blocks.BlockedUsersReader;
 import com.socialcoisa.rede.shared.security.BehavioralTimingGuard;
 import com.socialcoisa.rede.shared.security.NewAccountCooldown;
@@ -48,6 +50,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 	private final Clock clock;
 	private final NotificationService notificationService;
 	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository;
+	private final com.socialcoisa.rede.contributions.application.port.out.UserSealRepository userSeals;
 	private final BlockedUsersReader blockedUsersReader;
 	private final com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseCase validateMediaOwnership;
 	private final com.socialcoisa.rede.shared.sanctions.SanctionGate sanctionGate;
@@ -66,6 +69,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 			CursorCodec cursorCodec, Clock clock,
 			NotificationService notificationService,
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository,
+			com.socialcoisa.rede.contributions.application.port.out.UserSealRepository userSeals,
 			BlockedUsersReader blockedUsersReader,
 			com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseCase validateMediaOwnership,
 			com.socialcoisa.rede.shared.sanctions.SanctionGate sanctionGate,
@@ -84,6 +88,7 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 		this.clock = clock;
 		this.notificationService = notificationService;
 		this.userProfileRepository = userProfileRepository;
+		this.userSeals = userSeals;
 		this.blockedUsersReader = blockedUsersReader;
 		this.validateMediaOwnership = validateMediaOwnership;
 		this.sanctionGate = sanctionGate;
@@ -125,7 +130,11 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 			profile != null ? profile.displayWithNickname() : null,
 			profile != null ? profile.username() : null,
 			profile != null ? profile.avatar() : null,
-			profile != null ? profile.allBadges() : java.util.List.of()).withAvatarFrame(profile != null ? profile.avatarFrame() : null);
+			profile != null ? profile.allBadges() : java.util.List.of())
+			.withAvatarFrame(profile != null ? profile.avatarFrame() : null)
+			.withAuthorStyle(NameStyleView.from(profile))
+			.withContributor(userSeals.hasActiveSeal(command.authorId().value())
+				? ContributorTagView.from(profile) : null);
 	}
 
 	/**
@@ -175,6 +184,11 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 		var allComments = new java.util.ArrayList<com.socialcoisa.rede.feed.domain.Comment>();
 		pinned.ifPresent(allComments::add);
 		allComments.addAll(fetched);
+		Set<String> commentAuthorIds = allComments.stream()
+			.map(c -> c.authorId().value())
+			.filter(id -> !hidden.contains(id))
+			.collect(java.util.stream.Collectors.toSet());
+		Set<String> contributorIds = userSeals.findActiveUserIds(commentAuthorIds);
 		var comments = allComments.stream()
 			.filter(c -> !hidden.contains(c.authorId().value()))
 			.map(c -> {
@@ -183,7 +197,11 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 					p != null ? p.displayWithNickname() : null,
 					p != null ? p.username() : null,
 					p != null ? p.avatar() : null,
-					p != null ? p.allBadges() : java.util.List.of()).withAvatarFrame(p != null ? p.avatarFrame() : null);
+					p != null ? p.allBadges() : java.util.List.of())
+					.withAvatarFrame(p != null ? p.avatarFrame() : null)
+					.withAuthorStyle(NameStyleView.from(p))
+					.withContributor(contributorIds.contains(c.authorId().value())
+						? ContributorTagView.from(p) : null);
 			})
 			.toList();
 		// Reacao do proprio leitor: sem isso o front nao sabe que ele ja reagiu e a reacao
@@ -192,12 +210,14 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 			.map(viewer -> postInteractionRepository.findCommentReactionsByUser(viewer,
 				comments.stream().map(CommentView::id).toList()))
 			.orElse(java.util.Map.of());
-		var reactionCounts = postInteractionRepository.countCommentReactions(
-			comments.stream().map(CommentView::id).toList());
+		var reactionSummaries = postInteractionRepository.countCommentReactionsByType(
+			comments.stream().map(CommentView::id).toList(), hidden);
 		var withReactions = comments.stream()
 			.map(cv -> {
 				var r = reactions.containsKey(cv.id()) ? cv.withCurrentUserReaction(reactions.get(cv.id())) : cv;
-				return r.withReactionCount(reactionCounts.getOrDefault(r.id(), 0));
+				var summary = reactionSummaries.getOrDefault(r.id(), java.util.Map.of());
+				int total = summary.values().stream().mapToInt(Long::intValue).sum();
+				return r.withReactionCount(total).withReactionSummary(summary);
 			})
 			.toList();
 		// Cursor pela pagina do banco: comentario escondido nao pode encerrar a paginacao.

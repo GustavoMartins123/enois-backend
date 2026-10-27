@@ -64,10 +64,7 @@ class MessagingContractController {
 				List<String> pIds = participants.stream()
 					.map(ConversationParticipant::userId)
 					.toList();
-				return new ConversationView(c.id(), user.id().value(), c.kind(), c.title(), pIds,
-					messagingService.getLastMessageText(c.id()),
-					messagingService.getLastMessageTime(c.id()) != null
-						? messagingService.getLastMessageTime(c.id()).toString() : null,
+				return toView(c.id(), user.id().value(), c.kind(), c.title(), pIds,
 					messagingService.countUnread(c.id(), user.id().value()),
 					otherLastReadAt(participants, user.id().value()));
 			})
@@ -90,10 +87,7 @@ class MessagingContractController {
 				List<String> pIds = participants.stream()
 					.map(ConversationParticipant::userId)
 					.toList();
-				return new ConversationView(c.id(), user.id().value(), c.kind(), c.title(), pIds,
-					messagingService.getLastMessageText(c.id()),
-					messagingService.getLastMessageTime(c.id()) != null
-						? messagingService.getLastMessageTime(c.id()).toString() : null,
+				return toView(c.id(), user.id().value(), c.kind(), c.title(), pIds,
 					messagingService.countUnread(c.id(), user.id().value()),
 					otherLastReadAt(participants, user.id().value()));
 			})
@@ -113,8 +107,7 @@ class MessagingContractController {
 		List<String> pIds = participants.stream()
 			.map(ConversationParticipant::userId)
 			.toList();
-		return new ConversationDetailView(c.id(), c.kind(), c.title(), pIds,
-			messagingService.getLastMessageText(c.id()),
+		return toDetailView(c.id(), c.kind(), c.title(), pIds,
 			messagingService.countUnread(c.id(), user.id().value()),
 			otherLastReadAt(participants, user.id().value()));
 	}
@@ -137,7 +130,8 @@ class MessagingContractController {
 				return new MessageView(m.id(), m.conversationId(), m.senderId(), m.text(), m.mediaIds(),
 					m.createdAt() != null ? m.createdAt().toString() : null,
 					summary == null ? java.util.Map.of() : summary.counts(),
-					summary == null ? null : summary.myReaction(), m.mediaSpoiler());
+					summary == null ? null : summary.myReaction(), m.mediaSpoiler(),
+					m.e2e(), m.iv());
 			})
 			.toList();
 		// Pagina cheia => ainda ha mensagens mais antigas: o cursor aponta para a mais antiga desta pagina.
@@ -184,12 +178,19 @@ class MessagingContractController {
 			Boolean.TRUE.equals(request.mediaSpoiler())));
 		return idempotency.execute(user.id(), "POST", "/api/conversations/{conversationId}/messages", idempotencyKey,
 			hash, () -> {
-				Message msg = messagingService.sendMessage(conversationId, user.id().value(), request.text(),
-					request.mediaIds(), Boolean.TRUE.equals(request.mediaSpoiler()));
+				Message msg;
+				if (Boolean.TRUE.equals(request.e2e())) {
+					msg = messagingService.sendE2eMessage(conversationId, user.id().value(), request.text(),
+						request.iv(), request.mediaIds(), Boolean.TRUE.equals(request.mediaSpoiler()));
+				}
+				else {
+					msg = messagingService.sendMessage(conversationId, user.id().value(), request.text(),
+						request.mediaIds(), Boolean.TRUE.equals(request.mediaSpoiler()));
+				}
 				return new CommandResponse(201, new MessageView(msg.id(), msg.conversationId(), msg.senderId(),
 					msg.text(), msg.mediaIds(),
 					msg.createdAt() != null ? msg.createdAt().toString() : null, java.util.Map.of(), null,
-					msg.mediaSpoiler()));
+					msg.mediaSpoiler(), msg.e2e(), msg.iv()));
 			});
 	}
 
@@ -235,8 +236,7 @@ class MessagingContractController {
 			List<String> pIds = participants.stream()
 				.map(ConversationParticipant::userId)
 				.toList();
-			return new CommandResponse(200, new ConversationDetailView(conversationId, "DIRECT", null, pIds,
-				messagingService.getLastMessageText(conversationId),
+			return new CommandResponse(200, toDetailView(conversationId, "DIRECT", null, pIds,
 				messagingService.countUnread(conversationId, user.id().value()),
 				otherLastReadAt(participants, user.id().value())));
 		});
@@ -277,10 +277,7 @@ class MessagingContractController {
 				List<String> pIds = participants.stream()
 					.map(ConversationParticipant::userId)
 					.toList();
-				return new ConversationView(c.id(), user.id().value(), c.kind(), c.title(), pIds,
-					messagingService.getLastMessageText(c.id()),
-					messagingService.getLastMessageTime(c.id()) != null
-						? messagingService.getLastMessageTime(c.id()).toString() : null,
+				return toView(c.id(), user.id().value(), c.kind(), c.title(), pIds,
 					messagingService.countUnread(c.id(), user.id().value()),
 					otherLastReadAt(participants, user.id().value()));
 			})
@@ -322,8 +319,7 @@ class MessagingContractController {
 				List<String> pIds = participants.stream()
 					.map(ConversationParticipant::userId)
 					.toList();
-				return new CommandResponse(201, new ConversationDetailView(c.id(), c.kind(), c.title(), pIds,
-					messagingService.getLastMessageText(c.id()),
+				return new CommandResponse(201, toDetailView(c.id(), c.kind(), c.title(), pIds,
 					messagingService.countUnread(c.id(), user.id().value()),
 					otherLastReadAt(participants, user.id().value())));
 			});
@@ -382,16 +378,33 @@ class MessagingContractController {
 			.orElse(null);
 	}
 
+	private ConversationView toView(String convId, String userId, String kind, String title,
+			List<String> participantIds, int unread, String otherLastReadAt) {
+		var lm = messagingService.getLastMessagePreview(convId);
+		return new ConversationView(convId, userId, kind, title, participantIds,
+			lm.text(), lm.time() != null ? lm.time().toString() : null, unread, otherLastReadAt,
+			lm.e2e(), lm.iv());
+	}
+
+	private ConversationDetailView toDetailView(String convId, String kind, String title,
+			List<String> participantIds, int unread, String otherLastReadAt) {
+		var lm = messagingService.getLastMessagePreview(convId);
+		return new ConversationDetailView(convId, kind, title, participantIds,
+			lm.text(), unread, otherLastReadAt, lm.e2e(), lm.iv());
+	}
+
 	record ConversationView(String id, String userId, String kind, String title, List<String> participantIds,
-			String lastMessage, String time, int unread, String otherLastReadAt) {
+			String lastMessage, String time, int unread, String otherLastReadAt,
+			boolean lastMessageE2e, String lastMessageIv) {
 	}
 
 	record ConversationDetailView(String id, String kind, String title, List<String> participantIds, String lastMessage,
-			int unread, String otherLastReadAt) {
+			int unread, String otherLastReadAt, boolean lastMessageE2e, String lastMessageIv) {
 	}
 
 	record MessageView(String id, String conversationId, String from, String text, List<String> mediaIds,
-			String time, java.util.Map<String, Integer> reactions, String myReaction, boolean mediaSpoiler) {
+			String time, java.util.Map<String, Integer> reactions, String myReaction, boolean mediaSpoiler,
+			boolean e2e, String iv) {
 	}
 
 	record CreateConversationRequest(String kind, String title, List<String> participantIds) {
@@ -403,7 +416,8 @@ class MessagingContractController {
 	record HideConversationsRequest(List<String> ids) {
 	}
 
-	record SendMessageRequest(String text, List<String> mediaIds, Boolean mediaSpoiler) {
+	record SendMessageRequest(String text, List<String> mediaIds, Boolean mediaSpoiler,
+			Boolean e2e, String iv) {
 	}
 
 }

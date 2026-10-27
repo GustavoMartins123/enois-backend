@@ -223,6 +223,7 @@ Implementa: `OAuthUseCase`
 | `oauthStart(...)` | GET /api/auth/oauth/{provider}/start | Iniciar OAuth |
 | `oauthCallback(...)` | GET /api/auth/oauth/{provider}/callback | Callback OAuth |
 | `oauthToken(...)` | POST /api/auth/oauth/{provider}/token | Troca de token |
+| `oauthWriteLink(...)` | POST /api/auth/oauth/github/write-link | Vínculo GitHub com escrita (revisar PRs/responder issues) |
 | `refreshSession(...)` | POST /api/auth/refresh | Refresh de sessão |
 | `forgotPassword(...)` | POST /api/auth/password/forgot | Solicitar reset |
 | `resetPassword(...)` | POST /api/auth/password/reset | Resetar senha |
@@ -390,6 +391,8 @@ Implementa: `CommentOnPostUseCase`, `GetCommentsUseCase`, `ReactToPostUseCase`, 
 | `comment(...)` | POST /api/feed/posts/{postId}/comments |
 | `comments(...)` | GET /api/feed/posts/{postId}/comments |
 | `deleteComment(...)` | DELETE /api/feed/posts/{postId}/comments/{commentId} |
+| `communityNote(...)` | POST /api/feed/posts/{postId}/notes (nota de rodapé; vai para a moderação) |
+| `communityNotes(...)` | GET /api/feed/posts/{postId}/notes (aprovadas + a do leitor) |
 | `react(...)` | POST /api/feed/posts/{postId}/reactions |
 | `removeReaction(...)` | DELETE /api/feed/posts/{postId}/reactions |
 | `reactions(...)` | GET /api/feed/posts/{postId}/reactions |
@@ -1081,7 +1084,8 @@ integração com issues do GitHub e log de e-mails no painel.
 | `GET /support/config` | Configuração pública (e-mail do time, categorias) |
 | `POST /support/requests` / `GET /support/requests/mine` | Abrir pedido / meus pedidos |
 | `GET /admin/support` / `PATCH /admin/support/{id}` / `POST /admin/support/{id}/reply` | Fila, atualizar status, responder (equipe de moderação) |
-| `GET /admin/support/github` / `PUT /admin/support/github` / `POST /webhooks/github` | Integração de issues |
+| `GET /admin/support/{id}/messages` | Conversa do ticket: respostas do painel + comentários da issue |
+| `GET /admin/support/github` / `PUT /admin/support/github` / `POST /webhooks/github` | Integração de issues (espelho, comentários e estado) |
 | `GET /admin/emails` | Log de metadados de e-mails enviados (sem conteúdo de 2FA) |
 
 ## 23. Ops (Monitoramento e operação)
@@ -1109,7 +1113,7 @@ Temas da galeria (criados pela comunidade, instaláveis com um clique) e cosmét
 | `POST /temas/galeria` / `.../install` / `.../hide` / `.../report` | Publicar, instalar, ocultar, denunciar |
 | `GET /cosmetics/catalog` / `.../loja` / `.../mine` | Catálogo, loja, meus itens |
 | `POST /cosmetics/loja/{itemId}/comprar` / `.../equipar` | Comprar / equipar item |
-| `PUT /cosmetics/profile/name-style` | Estilo do nome no perfil |
+| `PUT /cosmetics/profile/name-style` | Estilo do nome no perfil e em todo lugar onde o nome aparece |
 
 ## 25. DailyGames (Jogos diários)
 
@@ -1224,9 +1228,20 @@ publish.
 Importação de dados do LinkedIn (ZIP do arquivo exportado) e do currículo (PDF) para preencher o
 perfil e o diário, com tetos de tamanho e dedupe.
 
+O `Connections.csv` do mesmo arquivo de dados vira uma lista de contatos: cada um é casado por
+e-mail exato ou nome completo idêntico (sem ambiguidade) com uma conta do Énóis, e o botão de
+convite automático manda a solicitação de conexão para quem ainda não é conexão. O LinkedIn não
+expõe a lista de conexões por API (escopo restrito a parceiros aprovados), então o arquivo
+exportado é o caminho sancionado. Convites já resolvidos não se repetem em reimportações.
+
 | Rota | Descrição |
 |---|---|
+| `POST /me/import/linkedin` | Importar o ZIP do export do LinkedIn (prévia) |
 | `POST /me/import/linkedin/texto` | Importar texto do export do LinkedIn |
+| `POST /me/import/linkedin/contatos` | Importar `Connections.csv` (CSV avulso ou dentro do ZIP) e convidar quem casar |
+| `GET /me/import/linkedin/contatos/resumo` | Contagem por estado e o botão de convite automático |
+| `PUT /me/import/linkedin/contatos/auto-convite` | Ligar/desligar o convite automático (ligar processa a fila) |
+| `GET /me/import/linkedin/contatos` | Lista dos contatos importados e o motivo de cada estado |
 | `POST /me/import/resume` | Importar currículo |
 | `POST /me/integrations/linkedin` | Integração com a conta do LinkedIn |
 

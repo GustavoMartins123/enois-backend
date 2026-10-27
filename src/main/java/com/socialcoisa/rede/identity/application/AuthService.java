@@ -213,6 +213,16 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 			LOG.warn("auth_login_failed reason=invalid_password");
 			throw new ApiException(401, "INVALID_CREDENTIALS", "Email ou senha invalidos.");
 		}
+		if (credential.resetNeeded()) {
+			LOG.info("auth_login_reset_needed userId={}", credential.userId());
+			String rawToken = newResetToken();
+			Instant now = clock.instant();
+			passwordResetTokenRepository.deleteByUserId(credential.userId());
+			passwordResetTokenRepository.save(
+				com.socialcoisa.rede.identity.domain.PasswordResetToken.create(
+					hashToken(rawToken), credential.userId(), now.plus(RESET_TOKEN_TTL), now));
+			return LoginResult.passwordExpired(rawToken);
+		}
 		UserProfile profile = userProfileRepository.findById(credential.userId())
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
 		requireVerifiedIdentity(profile);
@@ -408,7 +418,7 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 
 	@Override
 	@Transactional
-	public void reset(String token, String newPassword) {
+	public java.util.Optional<AuthResponse> reset(String token, String newPassword) {
 		if (!StringUtils.hasText(token)) {
 			throw new ApiException(400, "INVALID_TOKEN", "Token obrigatorio.");
 		}
@@ -416,7 +426,6 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		String tokenHash = hashToken(token.trim());
 		PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(tokenHash)
 			.orElseThrow(() -> new ApiException(404, "INVALID_TOKEN", "Token invalido ou nao encontrado."));
-		// Used first: a consumed link must say so even after it also expired.
 		if (resetToken.isUsed()) {
 			throw new ApiException(409, "TOKEN_ALREADY_USED", "Token ja utilizado.");
 		}
@@ -425,9 +434,16 @@ public class AuthService implements SignupUseCase, LoginUseCase, LogoutUseCase, 
 		}
 		StoredCredential credential = credentialRepository.findByUserId(resetToken.userId())
 			.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
+		boolean wasExpired = credential.resetNeeded();
 		credentialRepository.save(credential.userId(), credential.email(), passwordHasher.hash(newPassword));
 		passwordResetTokenRepository.markUsed(tokenHash);
 		authSessionRepository.revokeAllByUser(resetToken.userId(), clock.instant());
+		if (wasExpired) {
+			UserProfile profile = userProfileRepository.findById(resetToken.userId())
+				.orElseThrow(() -> new ApiException(404, "USER_NOT_FOUND", "Usuario nao encontrado."));
+			return java.util.Optional.of(createResponse(profile, null));
+		}
+		return java.util.Optional.empty();
 	}
 
 	@Override

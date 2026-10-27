@@ -3,6 +3,7 @@ package com.socialcoisa.rede.marketplace.adapters.in.web;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -14,6 +15,9 @@ import org.springframework.web.bind.annotation.RestController;
 import com.socialcoisa.rede.marketplace.application.MarketplaceService;
 import com.socialcoisa.rede.marketplace.domain.MarketplaceListing;
 import com.socialcoisa.rede.marketplace.domain.MarketplacePurchase;
+import com.socialcoisa.rede.idempotency.application.CommandResponse;
+import com.socialcoisa.rede.idempotency.application.IdempotencyApplicationService;
+import com.socialcoisa.rede.profile.application.NameStyleView;
 import com.socialcoisa.rede.shared.web.ApiException;
 import com.socialcoisa.rede.shared.web.CurrentUser;
 import com.socialcoisa.rede.shared.web.CurrentUserResolver;
@@ -30,18 +34,21 @@ class MarketplaceController {
 	private final MarketplaceService marketplace;
 	private final ThemeGalleryService gallery;
 	private final CurrentUserResolver currentUserResolver;
+	private final IdempotencyApplicationService idempotency;
 	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles;
 	private final com.socialcoisa.rede.marketplace.application.MarketplaceSanitizeWorker sanitizeWorker;
 	private final com.socialcoisa.rede.shared.web.AdminGuard adminGuard;
 
 	MarketplaceController(MarketplaceService marketplace, ThemeGalleryService gallery,
 			CurrentUserResolver currentUserResolver,
+			IdempotencyApplicationService idempotency,
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository profiles,
 			com.socialcoisa.rede.marketplace.application.MarketplaceSanitizeWorker sanitizeWorker,
 			com.socialcoisa.rede.shared.web.AdminGuard adminGuard) {
 		this.marketplace = marketplace;
 		this.gallery = gallery;
 		this.currentUserResolver = currentUserResolver;
+		this.idempotency = idempotency;
 		this.profiles = profiles;
 		this.sanitizeWorker = sanitizeWorker;
 		this.adminGuard = adminGuard;
@@ -120,24 +127,37 @@ class MarketplaceController {
 	}
 
 	@PostMapping("/marketplace/{listingId}/buy")
-	Map<String, Object> buy(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken, @PathVariable String listingId) {
+	ResponseEntity<String> buy(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestHeader(value = "Idempotency-Key", required = false) String key, @PathVariable String listingId) {
 		CurrentUser user = currentUserResolver.resolve(sessionToken);
-		MarketplacePurchase purchase = marketplace.buy(listingId, user.id().value());
-		return Map.of("purchaseId", purchase.id(), "state", purchase.state().name(), "price", purchase.price());
+		return idempotency.execute(user.id(), "POST", "/marketplace/" + listingId + "/buy", key,
+			idempotency.hash(Map.of()), () -> {
+				MarketplacePurchase purchase = marketplace.buy(listingId, user.id().value());
+				return new CommandResponse(200, Map.of("purchaseId", purchase.id(),
+					"state", purchase.state().name(), "price", purchase.price()));
+			});
 	}
 
 	@PostMapping("/marketplace/purchases/{purchaseId}/confirm")
-	Map<String, Object> confirm(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken, @PathVariable String purchaseId) {
+	ResponseEntity<String> confirm(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestHeader(value = "Idempotency-Key", required = false) String key, @PathVariable String purchaseId) {
 		CurrentUser user = currentUserResolver.resolve(sessionToken);
-		MarketplacePurchase purchase = marketplace.confirm(purchaseId, user.id().value());
-		return Map.of("purchaseId", purchase.id(), "state", purchase.state().name());
+		return idempotency.execute(user.id(), "POST", "/marketplace/purchases/" + purchaseId + "/confirm", key,
+			idempotency.hash(Map.of()), () -> {
+				MarketplacePurchase purchase = marketplace.confirm(purchaseId, user.id().value());
+				return new CommandResponse(200, Map.of("purchaseId", purchase.id(), "state", purchase.state().name()));
+			});
 	}
 
 	@PostMapping("/marketplace/purchases/{purchaseId}/refund")
-	Map<String, Object> refund(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken, @PathVariable String purchaseId) {
+	ResponseEntity<String> refund(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+			@RequestHeader(value = "Idempotency-Key", required = false) String key, @PathVariable String purchaseId) {
 		CurrentUser user = currentUserResolver.resolve(sessionToken);
-		MarketplacePurchase purchase = marketplace.refund(purchaseId, user.id().value());
-		return Map.of("purchaseId", purchase.id(), "state", purchase.state().name());
+		return idempotency.execute(user.id(), "POST", "/marketplace/purchases/" + purchaseId + "/refund", key,
+			idempotency.hash(Map.of()), () -> {
+				MarketplacePurchase purchase = marketplace.refund(purchaseId, user.id().value());
+				return new CommandResponse(200, Map.of("purchaseId", purchase.id(), "state", purchase.state().name()));
+			});
 	}
 
 	private MarketplaceListing.ItemKind parseKind(String raw) {
@@ -182,12 +202,14 @@ class MarketplaceController {
 			return new ListingView(listing.id(), listing.sellerId(),
 				profile == null ? null : profile.name(),
 				profile == null ? null : profile.username(),
+				profile == null ? null : NameStyleView.from(profile),
 				listing.itemKind().name(), listing.itemId(), listing.title(), listing.description(),
 				listing.price(), listing.status().name(), listing.createdAt().toString());
 		}).toList();
 	}
 
-	record ListingView(String id, String sellerId, String sellerName, String sellerUsername, String itemKind,
-			String itemId, String title, String description, long price, String status, String createdAt) {
+	record ListingView(String id, String sellerId, String sellerName, String sellerUsername,
+			NameStyleView sellerStyle, String itemKind, String itemId, String title, String description, long price,
+			String status, String createdAt) {
 	}
 }

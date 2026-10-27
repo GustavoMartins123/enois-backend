@@ -266,6 +266,12 @@ class AuthController {
 		try {
 			LoginResult result = loginUseCase.login(new LoginCommand(body.email(), body.password(), ip));
 			throttle.limpaLogin(body.email(), ip);
+			if (result.requiresPasswordReset()) {
+				return ResponseEntity.status(200).contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+					.body(objectMapper.writeValueAsString(Map.of(
+					"passwordExpired", true,
+					"resetToken", result.resetToken())));
+			}
 			if (!result.requiresTwoFactor()) {
 				newDeviceNotifier.check(result.session().user().id(), deviceFingerprint);
 				// Tokens go out as HttpOnly cookies (AuthCookieAdvice), never in the body.
@@ -351,6 +357,19 @@ class AuthController {
 		OAuthProvider oauthProvider = parseProvider(provider);
 		String userId = requireUserId(token);
 		return oAuthUseCase.startLink(userId, oauthProvider);
+	}
+
+	/**
+	 * Vínculo de moderação: pede ao GitHub o escopo de escrita para responder issues e revisar PRs
+	 * em nome da pessoa. Só existe para GitHub e para quem já está logado.
+	 */
+	@PostMapping("/oauth/{provider}/write-link")
+	@RateLimiter(name = "auth")
+	Object oauthStartWriteLink(@PathVariable String provider,
+			@RequestHeader(value = "X-Session-Token", required = false) String token) {
+		OAuthProvider oauthProvider = parseProvider(provider);
+		String userId = requireUserId(token);
+		return oAuthUseCase.startLinkWithWrite(userId, oauthProvider);
 	}
 
 	// ------------------------------------------------------------------ segundo fator (gestao)
@@ -588,7 +607,10 @@ class AuthController {
 		String hash = idempotency.hash(scope);
 		return idempotency.execute(scope, "POST", "/api/auth/password/reset", idempotencyKey, hash,
 			() -> {
-				resetPasswordUseCase.reset(request.token(), request.password());
+				var session = resetPasswordUseCase.reset(request.token(), request.password());
+				if (session.isPresent()) {
+					return new CommandResponse(200, session.get());
+				}
 				return new CommandResponse(200, Map.of("status", "PASSWORD_RESET_ACCEPTED"));
 			});
 	}

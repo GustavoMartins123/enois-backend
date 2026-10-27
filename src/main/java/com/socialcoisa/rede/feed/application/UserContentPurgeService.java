@@ -98,11 +98,13 @@ public class UserContentPurgeService implements PurgeAuthorContentUseCase {
 			otherRows += purge.deletePostMediaByPostIds(chunk);
 			otherRows += purge.deletePostSealsByPostIds(chunk);
 			otherRows += purge.deleteArticlesByPostIds(chunk);
+			otherRows += purge.deletePostNotesByPostIds(chunk);
 		}
 		int postCount = 0;
 		for (List<String> chunk : chunks(postIds)) {
 			postCount += purge.deletePostsByIds(chunk);
 		}
+		otherRows += purge.deletePostNotesByAuthor(authorId);
 		// Rede de seguranca: posts criados depois do SELECT (spammer ativo durante a purga).
 		postCount += purge.deletePostsByAuthor(authorId);
 

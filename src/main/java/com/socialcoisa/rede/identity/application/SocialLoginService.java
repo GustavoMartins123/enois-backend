@@ -13,10 +13,14 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import com.socialcoisa.rede.contributions.application.GitHubIdentityLinkedEvent;
+import com.socialcoisa.rede.contributions.application.GitHubIdentityService;
+import com.socialcoisa.rede.contributions.application.GitHubUserTokenService;
 import com.socialcoisa.rede.identity.adapters.out.oauth.OAuthProperties;
 import com.socialcoisa.rede.identity.application.port.in.LinkedProviderView;
 import com.socialcoisa.rede.identity.application.port.in.OAuthStartResponse;
@@ -62,6 +66,9 @@ public class SocialLoginService implements OAuthUseCase {
 	private final PasswordHasher passwordHasher;
 	private final OAuthProperties oAuthProperties;
 	private final com.socialcoisa.rede.linkedin.application.LinkedInIntegrationService linkedin;
+	private final GitHubIdentityService githubIdentity;
+	private final GitHubUserTokenService githubTokens;
+	private final ApplicationEventPublisher events;
 	private final Clock clock;
 	/** Cadastros abertos? Desligado, provedor so ENTRA em conta existente, nunca cria uma nova. */
 	private final boolean signupEnabled;
@@ -78,7 +85,8 @@ public class SocialLoginService implements OAuthUseCase {
 			PasswordHasher passwordHasher,
 			OAuthProperties oAuthProperties,
 			com.socialcoisa.rede.linkedin.application.LinkedInIntegrationService linkedin,
-			Clock clock,
+			GitHubIdentityService githubIdentity, GitHubUserTokenService githubTokens,
+			ApplicationEventPublisher events, Clock clock,
 			@Value("${rede.auth.signup-enabled:true}") boolean signupEnabled) {
 		this.accessTokenTtl = Duration.ofMinutes(accessTokenTtlMinutes);
 		this.refreshTokenTtl = Duration.ofDays(refreshTokenTtlDays);
@@ -91,6 +99,9 @@ public class SocialLoginService implements OAuthUseCase {
 		this.passwordHasher = passwordHasher;
 		this.oAuthProperties = oAuthProperties;
 		this.linkedin = linkedin;
+		this.githubIdentity = githubIdentity;
+		this.githubTokens = githubTokens;
+		this.events = events;
 		this.clock = clock;
 		this.signupEnabled = signupEnabled;
 	}
@@ -110,7 +121,30 @@ public class SocialLoginService implements OAuthUseCase {
 		return startRequest(provider, userId);
 	}
 
+	@Override
+	@Transactional
+	public OAuthStartResponse startLinkWithWrite(String userId, OAuthProvider provider) {
+		if (!StringUtils.hasText(userId)) {
+			throw new ApiException(401, "UNAUTHENTICATED", "Sessao invalida ou expirada.");
+		}
+		if (provider != OAuthProvider.GITHUB) {
+			throw new ApiException(400, "WRITE_SCOPE_NOT_SUPPORTED",
+				"Somente o GitHub tem vínculo com permissão de escrita.");
+		}
+		return startRequest(provider, userId, true);
+	}
+
 	private OAuthStartResponse startRequest(OAuthProvider provider, String linkUserId) {
+		return startRequest(provider, linkUserId, false);
+	}
+
+	private OAuthStartResponse startRequest(OAuthProvider provider, String linkUserId, boolean writeScope) {
+		// O GitHub só serve para VINCULAR: não criamos conta nova por ele (o e-mail público do
+		// GitHub não é prova de posse e o fluxo de login não é o objetivo desta fase).
+		if (provider == OAuthProvider.GITHUB && linkUserId == null) {
+			throw new ApiException(403, "GITHUB_LINK_ONLY",
+				"Entre com e-mail e senha e vincule o GitHub no seu perfil.");
+		}
 		String state = randomToken();
 		String nonce = randomToken();
 		Instant now = clock.instant();
@@ -119,11 +153,11 @@ public class SocialLoginService implements OAuthUseCase {
 		// Faxina oportunista: o state nao precisa sobreviver no banco depois de vencer.
 		authorizationRequestRepository.deleteExpired(now);
 		return new OAuthStartResponse(provider, state,
-			buildAuthorizationUrl(provider, state, nonce, linkUserId != null));
+			buildAuthorizationUrl(provider, state, nonce, linkUserId != null, writeScope));
 	}
 
 	private String buildAuthorizationUrl(OAuthProvider provider, String state, String nonce,
-			boolean includePosting) {
+			boolean includePosting, boolean writeScope) {
 		return switch (provider) {
 			case GOOGLE -> {
 				var config = oAuthProperties.getGoogle();
@@ -146,6 +180,17 @@ public class SocialLoginService implements OAuthUseCase {
 					+ "&redirect_uri=" + urlEncode(config.getRedirectUri())
 					+ "&response_type=code&scope=name+email&response_mode=form_post"
 					+ "&state=" + urlEncode(state) + "&nonce=" + urlEncode(nonce);
+			}
+			case GITHUB -> {
+				var config = oAuthProperties.getGithub();
+				if (!StringUtils.hasText(config.getClientId())) {
+					throw new ApiException(501, "OAUTH_NOT_CONFIGURED",
+						"Vinculo com GitHub nao configurado. Configure GITHUB_CLIENT_ID.");
+				}
+				yield "https://github.com/login/oauth/authorize?client_id=" + urlEncode(config.getClientId())
+					+ "&redirect_uri=" + urlEncode(config.getRedirectUri())
+					+ "&response_type=code&scope=" + (writeScope ? "repo" : "read:user")
+					+ "&state=" + urlEncode(state);
 			}
 			case LINKEDIN -> {
 				var config = oAuthProperties.getLinkedin();
@@ -208,6 +253,15 @@ public class SocialLoginService implements OAuthUseCase {
 	 * vínculo pediu `w_member_social`. Fica cifrado (ver LinkedInIntegrationService) e nunca
 	 * viaja para o cliente.
 	 */
+	private void rememberGithub(String userId, TokenValidationResult validation) {
+		githubIdentity.remember(userId, validation.externalUserId(), validation.name());
+		// O token só é guardado quando o consentimento inclui `repo` (vínculo de moderação).
+		githubTokens.remember(userId, validation.accessToken(), validation.scope());
+		// Conectar o GitHub precisa verificar as contribuições na hora: sem isso o perfil fica sem
+		// selo até a próxima varredura (que nasce desligada). O listener roda fora da transação.
+		events.publishEvent(new GitHubIdentityLinkedEvent(userId, validation.externalUserId()));
+	}
+
 	private void rememberLinkedInAccess(OAuthProvider provider, AuthResponse response,
 			TokenValidationResult validation) {
 		if (provider == OAuthProvider.LINKEDIN && StringUtils.hasText(validation.accessToken())) {
@@ -353,7 +407,10 @@ public class SocialLoginService implements OAuthUseCase {
 				"Esta conta " + provider.name() + " ja esta vinculada a outro usuario.");
 		}
 		if (owner.isPresent()) {
-			// Já vinculada a esta mesma conta: nada a fazer.
+			// Já vinculada a esta mesma conta: atualiza o login do GitHub (o ID não muda).
+			if (provider == OAuthProvider.GITHUB) {
+				rememberGithub(userId, validation);
+			}
 			return createSession(userId);
 		}
 		if (externalIdentityRepository.findByUserId(userId).stream()
@@ -363,7 +420,13 @@ public class SocialLoginService implements OAuthUseCase {
 		}
 		externalIdentityRepository.save(userId, provider.name(), validation.externalUserId(),
 			normalizeEmail(validation.email()));
-		markVerifiedByProvider(userId);
+		if (provider == OAuthProvider.GITHUB) {
+			// GitHub é vínculo de contribuição, não prova de identidade civil nem segundo fator.
+			rememberGithub(userId, validation);
+		}
+		else {
+			markVerifiedByProvider(userId);
+		}
 		return createSession(userId);
 	}
 
@@ -389,6 +452,9 @@ public class SocialLoginService implements OAuthUseCase {
 		if (provider == OAuthProvider.LINKEDIN) {
 			// Sem o vinculo nao ha publicacao: apaga o token de "Share on LinkedIn" junto.
 			linkedin.remove(userId);
+		}
+		if (provider == OAuthProvider.GITHUB) {
+			githubIdentity.unlink(userId);
 		}
 	}
 

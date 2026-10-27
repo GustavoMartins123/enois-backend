@@ -35,8 +35,11 @@ import com.socialcoisa.rede.feed.domain.PostId;
 import com.socialcoisa.rede.feed.domain.PostType;
 import com.socialcoisa.rede.feed.domain.ReactionType;
 import com.socialcoisa.rede.feed.domain.UserId;
+import com.socialcoisa.rede.profile.application.ContributorTagView;
+import com.socialcoisa.rede.profile.application.NameStyleView;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.profile.domain.UserProfile;
+import com.socialcoisa.rede.contributions.application.port.out.UserSealRepository;
 import com.socialcoisa.rede.shared.web.ApiException;
 import com.socialcoisa.rede.feed.application.port.out.PostCommunityReader;
 import com.socialcoisa.rede.shared.blocks.BlockedUsersReader;
@@ -50,6 +53,7 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 	private final FeedCacheRepository feedCacheRepository;
 	private final ConnectionGraphRepository connectionGraphRepository;
 	private final UserProfileRepository userProfileRepository;
+	private final UserSealRepository userSeals;
 	private final PostInteractionRepository postInteractionRepository;
 	private final CommentRepository commentRepository;
 	private final CursorCodec cursorCodec;
@@ -59,22 +63,26 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 	private final SubscribedBlogAuthorsReader subscribedBlogAuthors;
 	private final com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles;
 	private final com.socialcoisa.rede.feed.application.port.out.ReaderPreferencesReader readerPreferences;
+	private final PostNoteService postNotes;
 	private static final Instant DEFAULT_BEFORE = Instant.parse("9999-12-31T23:59:59Z");
 
 	public GetFeedService(PostRepository postRepository, ArticleRepository articleRepository,
 			FeedCacheRepository feedCacheRepository,
 			ConnectionGraphRepository connectionGraphRepository, UserProfileRepository userProfileRepository,
+			UserSealRepository userSeals,
 			PostInteractionRepository postInteractionRepository, CommentRepository commentRepository,
 			CursorCodec cursorCodec, BlockedUsersReader blockedUsersReader, PostCommunityReader postCommunityReader,
 			com.socialcoisa.rede.feed.application.port.out.CommunityChannelReader communityChannelReader,
 			SubscribedBlogAuthorsReader subscribedBlogAuthors,
 			com.socialcoisa.rede.corporate.application.port.out.CorporateProfileRepository corporateProfiles,
-			com.socialcoisa.rede.feed.application.port.out.ReaderPreferencesReader readerPreferences) {
+			com.socialcoisa.rede.feed.application.port.out.ReaderPreferencesReader readerPreferences,
+			PostNoteService postNotes) {
 		this.postRepository = postRepository;
 		this.articleRepository = articleRepository;
 		this.feedCacheRepository = feedCacheRepository;
 		this.connectionGraphRepository = connectionGraphRepository;
 		this.userProfileRepository = userProfileRepository;
+		this.userSeals = userSeals;
 		this.postInteractionRepository = postInteractionRepository;
 		this.commentRepository = commentRepository;
 		this.cursorCodec = cursorCodec;
@@ -84,49 +92,33 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 		this.subscribedBlogAuthors = subscribedBlogAuthors;
 		this.corporateProfiles = corporateProfiles;
 		this.readerPreferences = readerPreferences;
+		this.postNotes = postNotes;
 	}
+
+	private static final long TRENDING_WINDOW_HOURS = 48;
 
 	@Override
 	@Transactional(readOnly = true)
 	public FeedPage getFeed(GetFeedQuery query) {
 		int limit = normalizeLimit(query.limit());
 		Instant before = query.before().orElse(DEFAULT_BEFORE);
-		FeedTab tab = query.tab() != null ? query.tab() : FeedTab.FOR_YOU;
+		FeedTab tab = normalizeTab(query.tab());
+
 		if (tab == FeedTab.FOR_YOU) {
 			return forYou(query, before, limit);
 		}
 		List<Post> posts = switch (tab) {
-			case FOR_YOU, FOLLOWING -> {
-				Set<UserId> authors = new LinkedHashSet<>();
-				authors.add(query.userId());
-				authors.addAll(connectionGraphRepository.findFriends(query.userId()));
-				yield postRepository.findActiveByAuthors(authors, before, limit);
-			}
+			case FOR_YOU -> throw new IllegalStateException();
 			case ALL -> {
+				// Filtro por tipo de post (opcional): se o frontend mandar types, filtra.
+				if (query.types() != null && !query.types().isEmpty()) {
+					yield postRepository.findActiveByTypes(query.types(), before, limit);
+				}
 				Collection<String> blocked = readerPreferences.blockedTopics(query.userId().value());
 				yield blocked.isEmpty() ? postRepository.findActiveAll(before, limit)
 					: postRepository.findActiveAllExcludingTopics(blocked, before, limit);
 			}
-			case DISCUSSIONS, RECENT -> {
-				List<String> postIds = commentRepository.findPostIdsByAuthor(query.userId().value());
-				yield postRepository.findByIds(postIds.stream().map(PostId::new).toList()).stream()
-					.filter(Post::isActive)
-					.filter(p -> p.createdAt().isBefore(before))
-					.limit(limit)
-					.toList();
-			}
-			case PROJECTS -> postRepository.findActiveByType(PostType.PROJECT, before, limit);
-			case NEWS -> postRepository.findActiveByType(PostType.NEWS, before, limit);
-			case TUTORIALS -> postRepository.findActiveByType(PostType.TUTORIAL, before, limit);
-			case OPPORTUNITIES -> postRepository.findActiveByType(PostType.OPPORTUNITY, before, limit);
-			case REVIEWS -> postRepository.findActiveByType(PostType.REVIEW, before, limit);
-			case FUN -> postRepository.findActiveByType(PostType.DIVERTIDO, before, limit);
 			case UNSEEN -> {
-				// "Ainda nao vi": o oposto de Discussoes (que sao os posts em que a pessoa
-				// comentou). Aqui entram os posts em que ela ainda nao REAGIU nem COMENTOU.
-				//
-				// A janela de candidatos e maior que a pagina: o filtro descarta varios, e sem
-				// isso a aba viria quase vazia para quem ja interagiu com muita coisa.
 				Collection<String> bloqueados = readerPreferences.blockedTopics(query.userId().value());
 				int janela = Math.max(limit * 5, 60);
 				List<Post> candidatos = bloqueados.isEmpty()
@@ -139,15 +131,39 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 						candidatos.stream().map(Post::id).toList())
 					.keySet().stream().map(PostId::value).collect(Collectors.toSet());
 				yield candidatos.stream()
-					// O proprio post da pessoa nao entra: ela ja sabe que escreveu.
 					.filter(p -> !p.authorId().value().equals(query.userId().value()))
 					.filter(p -> !comentados.contains(p.id().value()))
 					.filter(p -> !reagidos.contains(p.id().value()))
 					.limit(limit)
 					.toList();
 			}
+			case TRENDING -> {
+				Instant since = java.time.Clock.systemUTC().instant()
+					.minus(java.time.Duration.ofHours(TRENDING_WINDOW_HOURS));
+				yield postRepository.findTrending(since, limit);
+			}
+			// Legado: tabs por tipo que o frontend antigo ainda pode mandar.
+			case PROJECTS -> postRepository.findActiveByType(PostType.PROJECT, before, limit);
+			case NEWS -> postRepository.findActiveByType(PostType.NEWS, before, limit);
+			case TUTORIALS -> postRepository.findActiveByType(PostType.TUTORIAL, before, limit);
+			case OPPORTUNITIES -> postRepository.findActiveByType(PostType.OPPORTUNITY, before, limit);
+			case REVIEWS -> postRepository.findActiveByType(PostType.REVIEW, before, limit);
+			case FUN -> postRepository.findActiveByType(PostType.DIVERTIDO, before, limit);
+			// Legado: FOLLOWING e DISCUSSIONS mapeados pro FOR_YOU.
+			case FOLLOWING, DISCUSSIONS, RECENT -> {
+				Set<UserId> authors = new LinkedHashSet<>();
+				authors.add(query.userId());
+				authors.addAll(connectionGraphRepository.findFriends(query.userId()));
+				yield postRepository.findActiveByAuthors(authors, before, limit);
+			}
 		};
 		return page(enrich(posts, query.userId()), posts, limit);
+	}
+
+	/** Mapeia tabs legados pros novos. */
+	private static FeedTab normalizeTab(FeedTab tab) {
+		if (tab == null) return FeedTab.FOR_YOU;
+		return tab;
 	}
 
 	@Override
@@ -277,6 +293,8 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 			.collect(Collectors.toSet());
 		Map<String, UserProfile> profiles = userProfileRepository.findAllByIds(authorIds).stream()
 			.collect(Collectors.toMap(UserProfile::id, Function.identity()));
+		// Quem tem selo ativo ganha a tag "Contribuinte" junto do nome, em lote.
+		Set<String> contributorIds = userSeals.findActiveUserIds(profiles.keySet());
 		// A apresentação de quem assinou: post CORPORATE mostra o perfil profissional (nome, @,
 		// avatar), nunca a identidade pessoal. Uma consulta em lote para a página inteira.
 		Set<String> corporateAuthorIds = visible.stream()
@@ -298,6 +316,10 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 			.byIds(communityIds, currentUserId == null ? null : currentUserId.value());
 
 		List<PostId> postIds = visible.stream().map(Post::id).toList();
+		List<String> postIdValues = postIds.stream().map(PostId::value).toList();
+		Map<String, List<PostNoteView>> notesByPost = postNotes.viewsByPost(postIdValues, hidden);
+		Map<String, MyPostNoteView> myNotes = currentUserId == null ? Map.of()
+			: postNotes.mineByPost(currentUserId.value(), postIdValues);
 		// Sem sessao (link compartilhado aberto por quem recebeu) nao ha reacao do visitante para
 		// buscar: a leitura publica nao pode depender de um usuario logado.
 		Map<PostId, ReactionType> currentUserReactions = currentUserId == null ? Map.of()
@@ -325,7 +347,10 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 					corporateProfile != null ? corporateProfile.avatar()
 						: profile != null ? profile.avatar() : null,
 					profile != null ? profile.allBadges() : List.of())
-					.withAvatarFrame(profile != null ? profile.avatarFrame() : null);
+					.withAvatarFrame(profile != null ? profile.avatarFrame() : null)
+					.withAuthorStyle(corporateProfile == null ? NameStyleView.from(profile) : null)
+					.withContributor(corporateProfile == null && contributorIds.contains(post.authorId().value())
+						? ContributorTagView.from(profile) : null);
 				ReactionType reaction = currentUserReactions.get(post.id());
 				PostView withReaction = (reaction != null ? view.withCurrentUserReaction(reaction) : view)
 					.withReactionSummary(reactionSummaries.getOrDefault(post.id(), Map.of()));
@@ -337,9 +362,11 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 				}
 				PostCommunityReader.CommunityRef community = post.communityId() == null ? null
 					: communities.get(post.communityId());
-				return community == null ? withReaction
+				PostView withCommunity = community == null ? withReaction
 					: withReaction.withCommunity(community.id(),
 						new PostView.CommunityView(community.id(), community.name(), community.joined()));
+				return withCommunity.withNotes(notesByPost.getOrDefault(post.id().value(), List.of()),
+					myNotes.get(post.id().value()));
 			})
 			.toList();
 	}
@@ -355,8 +382,7 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 
 	private boolean matchesTab(PostView post, FeedTab tab) {
 		return switch (tab) {
-			case FOR_YOU, FOLLOWING, ALL, UNSEEN -> true;
-			case DISCUSSIONS, RECENT -> post.type() == PostType.QUESTION;
+			case FOR_YOU, FOLLOWING, ALL, UNSEEN, TRENDING, DISCUSSIONS, RECENT -> true;
 			case PROJECTS -> post.type() == PostType.PROJECT;
 			case NEWS -> post.type() == PostType.NEWS;
 			case TUTORIALS -> post.type() == PostType.TUTORIAL;
