@@ -35,11 +35,13 @@ class ReportController {
 	private final ReportRepository reports;
 	private final ModerationRemovePostUseCase removePost;
 	private final com.socialcoisa.rede.moderation.application.ModeratorService moderators;
+	private final com.socialcoisa.rede.moderation.adapters.out.persistence.ReportE2eKeyStore reportE2eKeys;
 
 	ReportController(ModerationService moderationService, IdempotencyApplicationService idempotency,
 			CurrentUserResolver currentUserResolver, AdminGuard adminGuard, ReportRepository reports,
 			ModerationRemovePostUseCase removePost,
-			com.socialcoisa.rede.moderation.application.ModeratorService moderators) {
+			com.socialcoisa.rede.moderation.application.ModeratorService moderators,
+			com.socialcoisa.rede.moderation.adapters.out.persistence.ReportE2eKeyStore reportE2eKeys) {
 		this.moderationService = moderationService;
 		this.idempotency = idempotency;
 		this.currentUserResolver = currentUserResolver;
@@ -47,6 +49,7 @@ class ReportController {
 		this.reports = reports;
 		this.removePost = removePost;
 		this.moderators = moderators;
+		this.reportE2eKeys = reportE2eKeys;
 	}
 
 	@PostMapping("/reports")
@@ -56,8 +59,15 @@ class ReportController {
 		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		String hash = idempotency.hash(request);
 		return idempotency.execute(user.id(), "POST", "/api/reports", idempotencyKey, hash,
-			() -> new CommandResponse(201, ReportView.from(moderationService.report(user.id().value(),
-				request.targetType(), request.targetId(), request.reason(), request.description()))));
+			() -> {
+				var report = moderationService.report(user.id().value(),
+					request.targetType(), request.targetId(), request.reason(), request.description());
+				if (request.e2eConversationKey() != null && !request.e2eConversationKey().isBlank()
+						&& request.e2eConversationKey().length() <= 8192) {
+					reportE2eKeys.save(report.id(), request.e2eConversationKey());
+				}
+				return new CommandResponse(201, ReportView.from(report));
+			});
 	}
 
 	/** Denuncias do proprio usuario (acompanhamento; sem dados de terceiros nem triagem interna). */
@@ -65,6 +75,16 @@ class ReportController {
 	List<ReporterReportView> mine(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
 		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		return moderationService.reportsOf(user.id().value(), 100).stream().map(ReporterReportView::from).toList();
+	}
+
+	/** Chave E2E anexada a uma denuncia de mensagem (moderador decifra no browser). */
+	@GetMapping("/admin/reports/{reportId}/e2e-key")
+	java.util.Map<String, String> reportE2eKey(@RequestHeader("X-Session-Token") String sessionToken,
+			@PathVariable String reportId) {
+		adminGuard.requireAdmin(currentUserResolver.resolve(sessionToken));
+		return reportE2eKeys.findByReportId(reportId)
+			.map(key -> java.util.Map.of("conversationKey", key))
+			.orElse(java.util.Map.of());
 	}
 
 	@GetMapping("/admin/reports")
@@ -187,7 +207,8 @@ class ReportController {
 				moderationService.dismiss(reportId, user.id().value(), request.note()))));
 	}
 
-	record CreateReportRequest(TargetType targetType, String targetId, ReportReason reason, String description) {
+	record CreateReportRequest(TargetType targetType, String targetId, ReportReason reason, String description,
+			String e2eConversationKey) {
 	}
 
 	record SuspiciousPostView(String postId, String reportId, int score, String reason, String signals) {
