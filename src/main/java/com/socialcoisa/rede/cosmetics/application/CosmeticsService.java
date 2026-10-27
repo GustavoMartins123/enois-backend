@@ -62,7 +62,11 @@ public class CosmeticsService {
                 new CosmeticItem(19, "moldura-mare", "Maré", "Ondas que sobem e descem em volta do avatar, com bolhas e peixes.", 10_000, ""),
                 new CosmeticItem(20, "moldura-trepadeira", "Trepadeira", "Vinhas que brotam folhas e abrem uma flor no topo.", 10_000, ""),
                 new CosmeticItem(21, "moldura-vendaval", "Vendaval", "Rajadas de vento que giram com poeira e folhas.", 10_000, ""),
-                new CosmeticItem(22, "moldura-vaga-lumes", "Vaga-lumes", "Capim ao pé do retrato e vaga-lumes voando em volta.", 10_000, ""));
+                new CosmeticItem(22, "moldura-vaga-lumes", "Vaga-lumes", "Capim ao pé do retrato e vaga-lumes voando em volta.", 10_000, ""),
+                new CosmeticItem(23, "moldura-fliperama", "Fliperama", "Anel de pixels com a cobrinha comendo maçãs e moedas.", 10_000, ""),
+                new CosmeticItem(24, "moldura-circuito", "Circuito", "Trilhas de placa com pulsos de energia e LEDs.", 10_000, ""),
+                new CosmeticItem(25, "moldura-neon", "Neon", "Tubo de neon sob a chuva, com reflexo nas poças.", 10_000, ""),
+                new CosmeticItem(26, "moldura-radar", "Radar", "Um feixe que varre a tela e acende os contatos.", 10_000, ""));
 
 	private final CoinService coins;
 	private final CoinLedgerRepository ledger;
