@@ -18,6 +18,7 @@ import com.socialcoisa.rede.feed.domain.Post;
 import com.socialcoisa.rede.feed.domain.PostType;
 import com.socialcoisa.rede.media.application.port.in.ValidateMediaOwnershipUseCase;
 import com.socialcoisa.rede.notifications.application.NotificationService;
+import com.socialcoisa.rede.profile.application.ContributorTagView;
 import com.socialcoisa.rede.profile.application.NameStyleView;
 import com.socialcoisa.rede.profile.domain.UserProfile;
 import com.socialcoisa.rede.shared.html.SafeHtml;
@@ -44,6 +45,7 @@ public class PublishPostService implements PublishPostUseCase {
 	private final ValidateMediaOwnershipUseCase validateMediaOwnershipUseCase;
 	private final NotificationService notificationService;
 	private final com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository;
+	private final com.socialcoisa.rede.contributions.application.port.out.UserSealRepository userSeals;
 	private final com.socialcoisa.rede.shared.sanctions.SanctionGate sanctionGate;
 	private final com.socialcoisa.rede.shared.risk.RiskEngine riskEngine;
 	private final com.socialcoisa.rede.shared.age.AgeGate agePolicy;
@@ -66,6 +68,7 @@ public class PublishPostService implements PublishPostUseCase {
 			ValidateMediaOwnershipUseCase validateMediaOwnershipUseCase,
 			NotificationService notificationService,
 			com.socialcoisa.rede.profile.application.port.out.UserProfileRepository userProfileRepository,
+			com.socialcoisa.rede.contributions.application.port.out.UserSealRepository userSeals,
 			com.socialcoisa.rede.shared.sanctions.SanctionGate sanctionGate,
 			com.socialcoisa.rede.shared.risk.RiskEngine riskEngine,
 			com.socialcoisa.rede.shared.age.AgeGate agePolicy,
@@ -86,6 +89,7 @@ public class PublishPostService implements PublishPostUseCase {
 		this.validateMediaOwnershipUseCase = validateMediaOwnershipUseCase;
 		this.notificationService = notificationService;
 		this.userProfileRepository = userProfileRepository;
+		this.userSeals = userSeals;
 		this.sanctionGate = sanctionGate;
 		this.riskEngine = riskEngine;
 		this.agePolicy = agePolicy;
@@ -210,7 +214,9 @@ public class PublishPostService implements PublishPostUseCase {
 		if (author != null) {
 			return PostView.from(saved, author.username(), author.name(), author.avatar(), author.allBadges())
 				.withAvatarFrame(author.avatarFrame())
-				.withAuthorStyle(saved.authorIdentity() == AuthorIdentity.SOCIAL ? NameStyleView.from(author) : null);
+				.withAuthorStyle(saved.authorIdentity() == AuthorIdentity.SOCIAL ? NameStyleView.from(author) : null)
+				.withContributor(saved.authorIdentity() == AuthorIdentity.SOCIAL && userSeals.hasActiveSeal(author.id())
+					? ContributorTagView.from(author) : null);
 		}
 		return PostView.from(saved);
 	}

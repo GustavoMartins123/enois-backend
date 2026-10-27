@@ -35,9 +35,11 @@ import com.socialcoisa.rede.feed.domain.PostId;
 import com.socialcoisa.rede.feed.domain.PostType;
 import com.socialcoisa.rede.feed.domain.ReactionType;
 import com.socialcoisa.rede.feed.domain.UserId;
+import com.socialcoisa.rede.profile.application.ContributorTagView;
 import com.socialcoisa.rede.profile.application.NameStyleView;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.profile.domain.UserProfile;
+import com.socialcoisa.rede.contributions.application.port.out.UserSealRepository;
 import com.socialcoisa.rede.shared.web.ApiException;
 import com.socialcoisa.rede.feed.application.port.out.PostCommunityReader;
 import com.socialcoisa.rede.shared.blocks.BlockedUsersReader;
@@ -51,6 +53,7 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 	private final FeedCacheRepository feedCacheRepository;
 	private final ConnectionGraphRepository connectionGraphRepository;
 	private final UserProfileRepository userProfileRepository;
+	private final UserSealRepository userSeals;
 	private final PostInteractionRepository postInteractionRepository;
 	private final CommentRepository commentRepository;
 	private final CursorCodec cursorCodec;
@@ -65,6 +68,7 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 	public GetFeedService(PostRepository postRepository, ArticleRepository articleRepository,
 			FeedCacheRepository feedCacheRepository,
 			ConnectionGraphRepository connectionGraphRepository, UserProfileRepository userProfileRepository,
+			UserSealRepository userSeals,
 			PostInteractionRepository postInteractionRepository, CommentRepository commentRepository,
 			CursorCodec cursorCodec, BlockedUsersReader blockedUsersReader, PostCommunityReader postCommunityReader,
 			com.socialcoisa.rede.feed.application.port.out.CommunityChannelReader communityChannelReader,
@@ -76,6 +80,7 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 		this.feedCacheRepository = feedCacheRepository;
 		this.connectionGraphRepository = connectionGraphRepository;
 		this.userProfileRepository = userProfileRepository;
+		this.userSeals = userSeals;
 		this.postInteractionRepository = postInteractionRepository;
 		this.commentRepository = commentRepository;
 		this.cursorCodec = cursorCodec;
@@ -285,6 +290,8 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 			.collect(Collectors.toSet());
 		Map<String, UserProfile> profiles = userProfileRepository.findAllByIds(authorIds).stream()
 			.collect(Collectors.toMap(UserProfile::id, Function.identity()));
+		// Quem tem selo ativo ganha a tag "Contribuinte" junto do nome, em lote.
+		Set<String> contributorIds = userSeals.findActiveUserIds(profiles.keySet());
 		// A apresentação de quem assinou: post CORPORATE mostra o perfil profissional (nome, @,
 		// avatar), nunca a identidade pessoal. Uma consulta em lote para a página inteira.
 		Set<String> corporateAuthorIds = visible.stream()
@@ -334,7 +341,9 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 						: profile != null ? profile.avatar() : null,
 					profile != null ? profile.allBadges() : List.of())
 					.withAvatarFrame(profile != null ? profile.avatarFrame() : null)
-					.withAuthorStyle(corporateProfile == null ? NameStyleView.from(profile) : null);
+					.withAuthorStyle(corporateProfile == null ? NameStyleView.from(profile) : null)
+					.withContributor(corporateProfile == null && contributorIds.contains(post.authorId().value())
+						? ContributorTagView.from(profile) : null);
 				ReactionType reaction = currentUserReactions.get(post.id());
 				PostView withReaction = (reaction != null ? view.withCurrentUserReaction(reaction) : view)
 					.withReactionSummary(reactionSummaries.getOrDefault(post.id(), Map.of()));
