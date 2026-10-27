@@ -13,10 +13,12 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import com.socialcoisa.rede.contributions.application.GitHubIdentityLinkedEvent;
 import com.socialcoisa.rede.contributions.application.GitHubIdentityService;
 import com.socialcoisa.rede.identity.adapters.out.oauth.OAuthProperties;
 import com.socialcoisa.rede.identity.application.port.in.LinkedProviderView;
@@ -64,6 +66,7 @@ public class SocialLoginService implements OAuthUseCase {
 	private final OAuthProperties oAuthProperties;
 	private final com.socialcoisa.rede.linkedin.application.LinkedInIntegrationService linkedin;
 	private final GitHubIdentityService githubIdentity;
+	private final ApplicationEventPublisher events;
 	private final Clock clock;
 	/** Cadastros abertos? Desligado, provedor so ENTRA em conta existente, nunca cria uma nova. */
 	private final boolean signupEnabled;
@@ -80,7 +83,7 @@ public class SocialLoginService implements OAuthUseCase {
 			PasswordHasher passwordHasher,
 			OAuthProperties oAuthProperties,
 			com.socialcoisa.rede.linkedin.application.LinkedInIntegrationService linkedin,
-			GitHubIdentityService githubIdentity,
+			GitHubIdentityService githubIdentity, ApplicationEventPublisher events,
 			Clock clock,
 			@Value("${rede.auth.signup-enabled:true}") boolean signupEnabled) {
 		this.accessTokenTtl = Duration.ofMinutes(accessTokenTtlMinutes);
@@ -95,6 +98,7 @@ public class SocialLoginService implements OAuthUseCase {
 		this.oAuthProperties = oAuthProperties;
 		this.linkedin = linkedin;
 		this.githubIdentity = githubIdentity;
+		this.events = events;
 		this.clock = clock;
 		this.signupEnabled = signupEnabled;
 	}
@@ -231,6 +235,9 @@ public class SocialLoginService implements OAuthUseCase {
 	 */
 	private void rememberGithub(String userId, TokenValidationResult validation) {
 		githubIdentity.remember(userId, validation.externalUserId(), validation.name());
+		// Conectar o GitHub precisa verificar as contribuições na hora: sem isso o perfil fica sem
+		// selo até a próxima varredura (que nasce desligada). O listener roda fora da transação.
+		events.publishEvent(new GitHubIdentityLinkedEvent(userId, validation.externalUserId()));
 	}
 
 	private void rememberLinkedInAccess(OAuthProvider provider, AuthResponse response,

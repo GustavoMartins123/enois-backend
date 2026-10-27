@@ -87,6 +87,24 @@ public class GitHubContributionSyncService {
 	}
 
 	public SyncReport sync(boolean dryRun, boolean full, List<String> requestedRepositories) {
+		return sync(dryRun, full, requestedRepositories, Set.of());
+	}
+
+	/**
+	 * Sincroniza só as contribuições de um vínculo GitHub. É o que roda quando a pessoa conecta a
+	 * conta (ou pede para verificar de novo): o recorte evita gastar o orçamento de detalhes com PRs
+	 * alheios. A varredura completa continua sendo a do worker e do painel.
+	 */
+	public SyncReport syncForGithubUser(String githubUserId) {
+		if (!StringUtils.hasText(githubUserId)) {
+			throw new ApiException(400, "INVALID_GITHUB_IDENTITY", "Vínculo do GitHub inválido.");
+		}
+		return sync(false, false, List.of(), Set.of(githubUserId));
+	}
+
+	private SyncReport sync(boolean dryRun, boolean full, List<String> requestedRepositories,
+			Set<String> authorGithubIds) {
+		boolean targeted = !authorGithubIds.isEmpty();
 		Instant started = clock.instant();
 		List<GitHubRepository> all = repositories.findAll();
 		List<GitHubRepository> selected = select(all, requestedRepositories);
@@ -120,6 +138,9 @@ public class GitHubContributionSyncService {
 				fetched += pullRequests.size();
 				for (GitHubPullRequest pull : pullRequests) {
 					seenGithubIds.add(pull.authorId());
+					if (targeted && !authorGithubIds.contains(pull.authorId())) {
+						continue;
+					}
 					String userId = userIdOf(pull.authorId());
 					var existing = contributions.findByRepositoryAndKindAndNumber(repository.repository(),
 						ContributionKind.PULL_REQUEST, (int) pull.number());
@@ -190,7 +211,8 @@ public class GitHubContributionSyncService {
 				}
 
 				// Revert: um PR com título "Revert ..." e referência #N marca a evidência N.
-				for (GitHubPullRequest pull : pullRequests) {
+				// Numa sincronização de um vínculo só, não mexe nas evidências dos outros.
+				for (GitHubPullRequest pull : targeted ? List.<GitHubPullRequest>of() : pullRequests) {
 					Integer target = revertTarget(pull.title(), pull.body());
 					if (target == null) {
 						continue;
@@ -212,6 +234,9 @@ public class GitHubContributionSyncService {
 				issuesFetched += issues.size();
 				for (GitHubIssue issue : issues) {
 					seenGithubIds.add(issue.authorId());
+					if (targeted && !authorGithubIds.contains(issue.authorId())) {
+						continue;
+					}
 					String userId = userIdOf(issue.authorId());
 					var existing = contributions.findByRepositoryAndKindAndNumber(repository.repository(),
 						ContributionKind.ISSUE, (int) issue.number());
@@ -250,10 +275,17 @@ public class GitHubContributionSyncService {
 				}
 
 				if (!dryRun) {
-					repositories.save(repository.withLastSyncedAt(started));
-					for (String githubId : seenGithubIds) {
-						if (StringUtils.hasText(githubId)) {
+					if (targeted) {
+						for (String githubId : authorGithubIds) {
 							identities.markSynced(githubId, GitHubSyncState.OK, null, started);
+						}
+					}
+					else {
+						repositories.save(repository.withLastSyncedAt(started));
+						for (String githubId : seenGithubIds) {
+							if (StringUtils.hasText(githubId)) {
+								identities.markSynced(githubId, GitHubSyncState.OK, null, started);
+							}
 						}
 					}
 				}
@@ -273,7 +305,7 @@ public class GitHubContributionSyncService {
 			}
 			finally {
 				if (failure != null && !dryRun) {
-					for (String githubId : seenGithubIds) {
+					for (String githubId : targeted ? authorGithubIds : seenGithubIds) {
 						if (StringUtils.hasText(githubId)) {
 							identities.markSynced(githubId, GitHubSyncState.ERROR, failure, started);
 						}

@@ -26,9 +26,11 @@ import com.socialcoisa.rede.contributions.application.port.out.GitHubIssue;
 import com.socialcoisa.rede.contributions.application.port.out.GitHubPullRequest;
 import com.socialcoisa.rede.contributions.application.port.out.GitHubRepositoryRegistry;
 import com.socialcoisa.rede.contributions.application.port.out.UserSealRepository;
+import com.socialcoisa.rede.contributions.domain.ContributionCategory;
 import com.socialcoisa.rede.contributions.domain.ContributionKind;
 import com.socialcoisa.rede.contributions.domain.ContributionStatus;
 import com.socialcoisa.rede.contributions.domain.GitHubRepository;
+import com.socialcoisa.rede.contributions.domain.GitHubSyncState;
 import com.socialcoisa.rede.contributions.domain.SealStatus;
 import com.socialcoisa.rede.contributions.domain.SealType;
 import com.socialcoisa.rede.shared.web.TestAuthHelper;
@@ -142,6 +144,65 @@ class GitHubContributionSyncTests {
 		assertThat(second.updated()).isEqualTo(3);
 		assertThat(contributions.findByRepositoryAndKindAndNumber(repo, ContributionKind.PULL_REQUEST, 103))
 			.isPresent();
+	}
+
+	@Test
+	void syncForGithubUserOnlyImportsThatAuthorsContributions() throws Exception {
+		String suffix = String.valueOf(System.nanoTime());
+		String repo = "Rede-ENois/targeted-test-" + suffix;
+		registry.save(new GitHubRepository(repo, true, Instant.now(), null));
+
+		var target = new TestAuthHelper(mockMvc, objectMapper).authenticate("gh_target_" + suffix);
+		var other = new TestAuthHelper(mockMvc, objectMapper).authenticate("gh_other_" + suffix);
+		String targetGithubId = "gh-target-" + suffix;
+		String otherGithubId = "gh-other-" + suffix;
+		identities.remember(target.userId(), targetGithubId, "target-dev");
+		identities.remember(other.userId(), otherGithubId, "other-dev");
+
+		Instant now = Instant.now();
+		PULLS.set(List.of(
+			pull(700, targetGithubId, "target-dev", "Corrige o alvo", List.of("src/main/Target.java"),
+				20, 2, 1, 1, now),
+			pull(701, otherGithubId, "other-dev", "Outra pessoa", List.of("src/main/Other.java"),
+				10, 1, 0, 0, now),
+			revert(702, targetGithubId, "target-dev", 701, now)));
+		ISSUES.set(List.of(
+			issue(800, targetGithubId, "target-dev", "Issue do alvo", List.of("qualificado"), now),
+			issue(801, otherGithubId, "other-dev", "Issue de outra pessoa", List.of("qualificado"), now)));
+
+		var report = sync.syncForGithubUser(targetGithubId);
+
+		assertThat(report.created()).isGreaterThanOrEqualTo(1);
+		var targetPr = contributions.findByRepositoryAndKindAndNumber(repo, ContributionKind.PULL_REQUEST, 700)
+			.orElseThrow();
+		assertThat(targetPr.userId()).isEqualTo(target.userId());
+		assertThat(report.sealsRecalculated()).isGreaterThanOrEqualTo(1);
+		assertThat(contributions.findByRepositoryAndKindAndNumber(repo, ContributionKind.PULL_REQUEST, 701))
+			.isEmpty();
+		assertThat(contributions.findByRepositoryAndKindAndNumber(repo, ContributionKind.ISSUE, 800))
+			.isPresent();
+		assertThat(contributions.findByRepositoryAndKindAndNumber(repo, ContributionKind.ISSUE, 801))
+			.isEmpty();
+
+		// A H2 é compartilhada entre classes: o vínculo é varrido em TODOS os repositórios
+		// registrados, então o nível depende da contagem real — nunca de um número fixo.
+		int prs = contributions.countCountableByUser(target.userId(), ContributionCategory.CODE);
+		int issues = contributions.countCountableByUser(target.userId(), ContributionCategory.ISSUES);
+		assertThat(prs).as("PRs contáveis do alvo").isGreaterThan(0);
+		assertThat(issues).as("issues contáveis do alvo").isGreaterThan(0);
+		assertThat(seals.findByUserAndType(target.userId(), SealType.forCount(ContributionCategory.CODE, prs)))
+			.isPresent();
+		assertThat(seals.findByUserAndType(target.userId(), SealType.forCount(ContributionCategory.ISSUES, issues)))
+			.isPresent();
+		assertThat(seals.findAllActive().stream().noneMatch(seal -> seal.userId().equals(other.userId())))
+			.isTrue();
+
+		assertThat(identities.status(target.userId()).syncState()).isEqualTo(GitHubSyncState.OK);
+		assertThat(identities.status(other.userId()).syncState()).isEqualTo(GitHubSyncState.STALE);
+		// A varredura foi só do vínculo: o repositório não pode avançar a janela dos outros.
+		assertThat(registry.findAll().stream()
+			.filter(item -> item.repository().equals(repo))
+			.findFirst().orElseThrow().lastSyncedAt()).isNull();
 	}
 
 	@Test
