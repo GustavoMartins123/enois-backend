@@ -64,8 +64,9 @@ public interface PostInteractionRepository {
 	Map<String, ReactionType> findCommentReactionsByUser(UserId userId, Collection<String> commentIds);
 	List<ReactionSummary> findReactionsByCommentId(String commentId);
 
-	/** Contagem total de reacoes por comentario (em batch, pra nao fazer N+1). */
-	Map<String, Integer> countCommentReactions(Collection<String> commentIds);
+	/** Contagem de reacoes por comentario e por tipo (em batch, pra desenhar as pilulas sem N+1). */
+	Map<String, Map<ReactionType, Long>> countCommentReactionsByType(Collection<String> commentIds,
+			Collection<String> excludedUserIds);
 
 	record ReactionSummary(String userId, ReactionType type, Instant createdAt) {
 	}

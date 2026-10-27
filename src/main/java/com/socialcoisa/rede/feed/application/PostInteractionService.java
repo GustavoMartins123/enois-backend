@@ -210,12 +210,14 @@ public class PostInteractionService implements CommentOnPostUseCase, GetComments
 			.map(viewer -> postInteractionRepository.findCommentReactionsByUser(viewer,
 				comments.stream().map(CommentView::id).toList()))
 			.orElse(java.util.Map.of());
-		var reactionCounts = postInteractionRepository.countCommentReactions(
-			comments.stream().map(CommentView::id).toList());
+		var reactionSummaries = postInteractionRepository.countCommentReactionsByType(
+			comments.stream().map(CommentView::id).toList(), hidden);
 		var withReactions = comments.stream()
 			.map(cv -> {
 				var r = reactions.containsKey(cv.id()) ? cv.withCurrentUserReaction(reactions.get(cv.id())) : cv;
-				return r.withReactionCount(reactionCounts.getOrDefault(r.id(), 0));
+				var summary = reactionSummaries.getOrDefault(r.id(), java.util.Map.of());
+				int total = summary.values().stream().mapToInt(Long::intValue).sum();
+				return r.withReactionCount(total).withReactionSummary(summary);
 			})
 			.toList();
 		// Cursor pela pagina do banco: comentario escondido nao pode encerrar a paginacao.
