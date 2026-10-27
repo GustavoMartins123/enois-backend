@@ -80,6 +80,10 @@ public class PostNoteService {
 			throw new ApiException(400, "NOTE_TOO_LONG",
 				"A nota deve ter no máximo " + MAX_BODY + " caracteres.");
 		}
+		if (notes.existsByPostIdAndStatus(postId, PostNoteStatus.APPROVED)) {
+			throw new ApiException(409, "NOTE_ALREADY_APPROVED",
+				"Este post já tem uma nota aprovada pela comunidade.");
+		}
 		rateLimiter.require(authorId, UserRateLimiter.CREATE_COMMENT);
 		notes.findByAuthorAndPost(authorId, postId).ifPresent(existing -> {
 			throw new ApiException(409, "NOTE_ALREADY_EXISTS",
@@ -153,8 +157,23 @@ public class PostNoteService {
 		if (note.status() != PostNoteStatus.PENDING) {
 			throw new ApiException(409, "NOTE_ALREADY_REVIEWED", "Esta nota já foi revisada.");
 		}
-		return notes.save(note.review(status, reviewerId, status == PostNoteStatus.DENIED ? reason : null,
-			clock.instant()));
+		Instant now = clock.instant();
+		if (status == PostNoteStatus.APPROVED
+				&& notes.existsByPostIdAndStatus(note.postId(), PostNoteStatus.APPROVED)) {
+			throw new ApiException(409, "NOTE_ALREADY_APPROVED",
+				"Este post já tem uma nota aprovada pela comunidade.");
+		}
+		PostNote saved = notes.save(note.review(status, reviewerId,
+			status == PostNoteStatus.DENIED ? reason : null, now));
+		if (status == PostNoteStatus.APPROVED) {
+			// Só UMA nota vale por post: as outras pendentes são descartadas sem penalidade.
+			for (PostNote pending : notes.findPendingByPost(note.postId())) {
+				if (!pending.id().equals(note.id())) {
+					notes.save(pending.review(PostNoteStatus.DISCARDED, reviewerId, null, now));
+				}
+			}
+		}
+		return saved;
 	}
 
 	public List<PostNote> pending(int limit) {

@@ -4,19 +4,24 @@ import org.springframework.stereotype.Component;
 
 import com.socialcoisa.rede.feed.application.port.out.PostNoteRepository;
 import com.socialcoisa.rede.feed.domain.PostNoteStatus;
-import com.socialcoisa.rede.profile.application.port.out.NotePenaltyReader;
+import com.socialcoisa.rede.profile.application.port.out.NoteCredibilityReader;
 
 @Component
-class NotePenaltyReaderAdapter implements NotePenaltyReader {
+class NoteCredibilityReaderAdapter implements NoteCredibilityReader {
 
 	private final PostNoteRepository notes;
 
-	NotePenaltyReaderAdapter(PostNoteRepository notes) {
+	NoteCredibilityReaderAdapter(PostNoteRepository notes) {
 		this.notes = notes;
 	}
 
 	@Override
 	public int countDeniedByUser(String userId) {
 		return notes.countByAuthorAndStatus(userId, PostNoteStatus.DENIED);
+	}
+
+	@Override
+	public int countApprovedByUser(String userId) {
+		return notes.countByAuthorAndStatus(userId, PostNoteStatus.APPROVED);
 	}
 }

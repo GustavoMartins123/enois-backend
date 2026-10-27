@@ -19,7 +19,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
-import com.socialcoisa.rede.profile.application.port.out.NotePenaltyReader;
+import com.socialcoisa.rede.profile.application.port.out.NoteCredibilityReader;
 import com.socialcoisa.rede.shared.web.TestAuthHelper;
 
 import tools.jackson.databind.ObjectMapper;
@@ -39,7 +39,7 @@ class PostNoteFlowTests {
 	private ObjectMapper objectMapper;
 
 	@Autowired
-	private NotePenaltyReader notePenalties;
+	private NoteCredibilityReader noteCredibility;
 
 	private TestAuthHelper auth;
 
@@ -74,21 +74,25 @@ class PostNoteFlowTests {
 	}
 
 	@Test
-	void aprovadaApareceNoPostENegadaPesaNaCredibilidade() throws Exception {
+	void aprovadaApareceNoPostEDescartaAsConcorrentesSemPenalizar() throws Exception {
 		var autor = auth.authenticate("note_autor_" + System.nanoTime());
-		var comunidade = auth.authenticate("note_comunidade_" + System.nanoTime());
+		var primeiraPessoa = auth.authenticate("note_comunidade_" + System.nanoTime());
+		var segundaPessoa = auth.authenticate("note_concorrente_" + System.nanoTime());
 		var equipe = auth.authenticate("group-admin");
 		String postId = publicar(autor.token(), "note-pub-1");
 
-		// Antes da aprovação a nota não é pública e a credibilidade não muda.
-		String aprovada = enviarNota(comunidade.token(), postId,
+		String vencedora = enviarNota(primeiraPessoa.token(), postId,
 			"A informação correta é 42%, conforme o relatório oficial.", "note-create-1");
+		enviarNota(segundaPessoa.token(), postId,
+			"Na verdade o número correto é 90% e ninguém prova o contrário.", "note-create-2");
+
+		// Antes da aprovação nenhuma nota é pública e a credibilidade não muda.
 		mockMvc.perform(get("/feed/posts/" + postId + "/notes"))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.items.length()").value(0));
-		assertThat(notePenalties.countDeniedByUser(comunidade.userId())).isZero();
+		assertThat(noteCredibility.countDeniedByUser(primeiraPessoa.userId())).isZero();
 
-		mockMvc.perform(patch("/admin/notes/" + aprovada)
+		mockMvc.perform(patch("/admin/notes/" + vencedora)
 				.header("X-Session-Token", equipe.token())
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(objectMapper.writeValueAsString(Map.of("status", "APPROVED"))))
@@ -102,12 +106,34 @@ class PostNoteFlowTests {
 		mockMvc.perform(get("/feed/posts/" + postId).header("X-Session-Token", autor.token()))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.communityNotes.length()").value(1));
-		assertThat(notePenalties.countDeniedByUser(comunidade.userId())).isZero();
 
-		// Outra pessoa manda uma nota falsa: negada não aparece e conta para a credibilidade.
-		var outra = auth.authenticate("note_falsa_" + System.nanoTime());
-		String negada = enviarNota(outra.token(), postId,
-			"Na verdade o número correto é 90% e ninguém prova o contrário.", "note-create-2");
+		// A nota que perdeu a vez foi descartada e NÃO pesa na credibilidade.
+		mockMvc.perform(get("/feed/posts/" + postId + "/notes")
+				.header("X-Session-Token", segundaPessoa.token()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.mine.status").value("DISCARDED"));
+		assertThat(noteCredibility.countDeniedByUser(segundaPessoa.userId())).isZero();
+		assertThat(noteCredibility.countApprovedByUser(primeiraPessoa.userId())).isEqualTo(1);
+
+		// Com nota aprovada, ninguém manda outra.
+		var terceiraPessoa = auth.authenticate("note_depois_" + System.nanoTime());
+		mockMvc.perform(post("/feed/posts/" + postId + "/notes")
+				.header("X-Session-Token", terceiraPessoa.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of(
+					"body", "Tentando mandar uma nota depois da aprovada."))))
+			.andExpect(status().isConflict())
+			.andExpect(jsonPath("$.code").value("NOTE_ALREADY_APPROVED"));
+	}
+
+	@Test
+	void negadaNaoApareceEPesaNaCredibilidade() throws Exception {
+		var autor = auth.authenticate("note_autor_falso_" + System.nanoTime());
+		var pessoa = auth.authenticate("note_falsa_" + System.nanoTime());
+		var equipe = auth.authenticate("group-admin");
+		String postId = publicar(autor.token(), "note-pub-falso");
+		String negada = enviarNota(pessoa.token(), postId,
+			"Na verdade o número correto é 90% e ninguém prova o contrário.", "note-create-falsa");
 
 		mockMvc.perform(patch("/admin/notes/" + negada)
 				.header("X-Session-Token", equipe.token())
@@ -125,8 +151,9 @@ class PostNoteFlowTests {
 
 		mockMvc.perform(get("/feed/posts/" + postId + "/notes"))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.items.length()").value(1));
-		assertThat(notePenalties.countDeniedByUser(outra.userId())).isEqualTo(1);
+			.andExpect(jsonPath("$.items.length()").value(0));
+		assertThat(noteCredibility.countDeniedByUser(pessoa.userId())).isEqualTo(1);
+		assertThat(noteCredibility.countApprovedByUser(pessoa.userId())).isZero();
 	}
 
 	@Test

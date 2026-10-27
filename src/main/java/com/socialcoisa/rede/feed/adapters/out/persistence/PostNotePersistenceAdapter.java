@@ -55,6 +55,17 @@ class PostNotePersistenceAdapter implements PostNoteRepository {
 	}
 
 	@Override
+	public List<PostNote> findPendingByPost(String postId) {
+		return repository.findByPostIdAndStatusOrderByCreatedAtAsc(postId, PostNoteStatus.PENDING).stream()
+			.map(PostNoteJpaEntity::toDomain).toList();
+	}
+
+	@Override
+	public boolean existsByPostIdAndStatus(String postId, PostNoteStatus status) {
+		return repository.existsByPostIdAndStatus(postId, status);
+	}
+
+	@Override
 	public List<PostNote> findByStatus(PostNoteStatus status, int limit) {
 		return repository.findByStatusOrderByCreatedAtAsc(status, PageRequest.of(0, Math.max(1, limit))).stream()
 			.map(PostNoteJpaEntity::toDomain).toList();

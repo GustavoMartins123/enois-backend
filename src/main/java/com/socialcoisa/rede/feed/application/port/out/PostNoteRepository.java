@@ -22,6 +22,11 @@ public interface PostNoteRepository {
 	/** Notas do próprio leitor nos posts da página (para mostrar "em análise" no card). */
 	List<PostNote> findByAuthorAndPosts(String authorId, Collection<String> postIds);
 
+	/** Notas ainda pendentes de um post (para descartar as perdedoras ao aprovar uma). */
+	List<PostNote> findPendingByPost(String postId);
+
+	boolean existsByPostIdAndStatus(String postId, PostNoteStatus status);
+
 	List<PostNote> findByStatus(PostNoteStatus status, int limit);
 
 	int countByAuthorAndStatus(String authorId, PostNoteStatus status);

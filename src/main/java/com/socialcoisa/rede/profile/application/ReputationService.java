@@ -49,19 +49,19 @@ public class ReputationService {
 	private final RecommendationRepository recommendationRepository;
 	/** Vagas excluídas com candidatos sem resposta (item 7 do backlog) — implementação no módulo de jobs. */
 	private final com.socialcoisa.rede.profile.application.port.out.JobAbandonPenaltyReader jobAbandonPenalties;
-	/** Notas de rodapé negadas pela moderação (informação falsa) — o feed implementa. */
-	private final com.socialcoisa.rede.profile.application.port.out.NotePenaltyReader notePenalties;
+	/** Notas de rodapé (fact-checks): aprovadas dão bônus; negadas descontam — o feed implementa. */
+	private final com.socialcoisa.rede.profile.application.port.out.NoteCredibilityReader noteCredibility;
 	private final Clock clock;
 
 	public ReputationService(UserProfileRepository profileRepository, ProfileExtensionRepository extensionRepository,
 			RecommendationRepository recommendationRepository,
 			com.socialcoisa.rede.profile.application.port.out.JobAbandonPenaltyReader jobAbandonPenalties,
-			com.socialcoisa.rede.profile.application.port.out.NotePenaltyReader notePenalties, Clock clock) {
+			com.socialcoisa.rede.profile.application.port.out.NoteCredibilityReader noteCredibility, Clock clock) {
 		this.profileRepository = profileRepository;
 		this.extensionRepository = extensionRepository;
 		this.recommendationRepository = recommendationRepository;
 		this.jobAbandonPenalties = jobAbandonPenalties;
-		this.notePenalties = notePenalties;
+		this.noteCredibility = noteCredibility;
 		this.clock = clock;
 	}
 
@@ -108,12 +108,16 @@ public class ReputationService {
 		// Nota aprovada — ou em análise — não muda a credibilidade: corrigir o post é o objetivo.
 		int jobAbandons = jobAbandonPenalties.countByUser(userId);
 		int abandonPenalty = Math.min(150, 25 * jobAbandons * (jobAbandons + 1) / 2);
-		int deniedNotes = notePenalties.countDeniedByUser(userId);
+		// Nota de rodapé: negada é informação falsa (25/75/150, teto 150); aprovada é fact-check da
+		// comunidade e soma +5 por nota, contando no máximo 5 notas (teto +25).
+		int deniedNotes = noteCredibility.countDeniedByUser(userId);
 		int notePenalty = Math.min(150, 25 * deniedNotes * (deniedNotes + 1) / 2);
+		int approvedNotes = noteCredibility.countApprovedByUser(userId);
+		int noteBonus = 5 * Math.min(approvedNotes, 5);
 		int penalty = Math.min(MAX_PENALTY,
 			60 * confirmedFacts * (confirmedFacts + 1) / 2 + abandonPenalty + notePenalty);
 
-		int raw = (int) Math.round(trajectory + relations + contribution + consistency) - penalty;
+		int raw = (int) Math.round(trajectory + relations + contribution + consistency) + noteBonus - penalty;
 		int capped = Math.max(0, Math.min(MAX_REPUTATION, raw));
 
 		boolean identityVerified = profile.map(UserProfile::identityVerified).orElse(false);
