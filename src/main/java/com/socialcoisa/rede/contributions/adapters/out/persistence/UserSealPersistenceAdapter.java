@@ -34,4 +34,9 @@ class UserSealPersistenceAdapter implements UserSealRepository {
 		return repository.findByUserIdAndStatus(userId, SealStatus.ACTIVE).stream()
 			.map(UserSealJpaEntity::toDomain).toList();
 	}
+
+	@Override
+	public List<UserSeal> findAllActive() {
+		return repository.findByStatus(SealStatus.ACTIVE).stream().map(UserSealJpaEntity::toDomain).toList();
+	}
 }

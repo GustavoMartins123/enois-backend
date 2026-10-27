@@ -13,4 +13,9 @@ public interface ContributorApplicationRepository {
 	List<ContributorApplication> list(ContributorApplicationStatus status, int limit);
 
 	Optional<ContributorApplication> findById(String id);
+
+	Optional<ContributorApplication> findByUserId(String userId);
+
+	/** Candidatura pública (sem conta) que usou o mesmo handle; é reaproveitada na confirmação. */
+	Optional<ContributorApplication> findLandingByGithub(String github);
 }

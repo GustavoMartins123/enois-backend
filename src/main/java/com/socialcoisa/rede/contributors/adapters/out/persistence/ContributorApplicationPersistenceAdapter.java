@@ -37,4 +37,15 @@ class ContributorApplicationPersistenceAdapter implements ContributorApplication
 	public Optional<ContributorApplication> findById(String id) {
 		return springData.findById(id).map(ContributorApplicationJpaEntity::toDomain);
 	}
+
+	@Override
+	public Optional<ContributorApplication> findByUserId(String userId) {
+		return springData.findByUserId(userId).map(ContributorApplicationJpaEntity::toDomain);
+	}
+
+	@Override
+	public Optional<ContributorApplication> findLandingByGithub(String github) {
+		return springData.findFirstByGithubAndUserIdIsNullOrderByCreatedAtDesc(github)
+			.map(ContributorApplicationJpaEntity::toDomain);
+	}
 }

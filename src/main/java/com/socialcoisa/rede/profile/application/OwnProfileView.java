@@ -16,7 +16,7 @@ public record OwnProfileView(String id, String username, String name, String hea
 		String availability, String portfolio, List<String> externalLinks, boolean openToWork, boolean isMentor,
 		int connectionsCount, int followersCount, int reputation, Integer postsCount, String nickname, String socialName,
 		String pronouns, List<String> badges, String aka, String resumeUrl, String resumeName, boolean showRanking,
-		String nameTheme, String nameFont, String nameColor) {
+		String nameTheme, String nameFont, String nameColor, String contributorTagColor) {
 
 	public static OwnProfileView from(UserProfile profile) {
 		return new OwnProfileView(profile.id(), profile.username(), profile.name(), profile.headline(), profile.email(),
@@ -27,7 +27,7 @@ public record OwnProfileView(String id, String username, String name, String hea
 			profile.mentor(), profile.connectionsCount(), profile.followersCount(), profile.reputation(),
 			profile.postsCount(), profile.nickname(), profile.socialName(), profile.pronouns(), profile.badges(),
 			profile.aka(), profile.resumeUrl(), profile.resumeName(), profile.showRanking(), profile.nameTheme(),
-			profile.nameFont(), profile.nameColor());
+			profile.nameFont(), profile.nameColor(), profile.contributorTagColor());
 
 	}
 
@@ -41,7 +41,7 @@ public record OwnProfileView(String id, String username, String name, String hea
 		return new OwnProfileView(id, username, name, headline, email, company, location, avatar, banner, badge, bio,
 			bioHtml, bannerHtml, skills, goals, availability, portfolio, externalLinks, openToWork, isMentor,
 			connectionsCount, followersCount, reputation, postsCount, nickname, socialName, pronouns, badges, aka,
-			resumeUrl, resumeName, showRanking, nameTheme, nameFont, nameColor);
+			resumeUrl, resumeName, showRanking, nameTheme, nameFont, nameColor, contributorTagColor);
 	}
 
 	/** Capa em HTML/CSS; so a leitura do perfil anexa (mesmo motivo da bio). */
@@ -49,6 +49,6 @@ public record OwnProfileView(String id, String username, String name, String hea
 		return new OwnProfileView(id, username, name, headline, email, company, location, avatar, banner, badge, bio,
 			bioHtml, bannerHtml, skills, goals, availability, portfolio, externalLinks, openToWork, isMentor,
 			connectionsCount, followersCount, reputation, postsCount, nickname, socialName, pronouns, badges, aka,
-			resumeUrl, resumeName, showRanking, nameTheme, nameFont, nameColor);
+			resumeUrl, resumeName, showRanking, nameTheme, nameFont, nameColor, contributorTagColor);
 	}
 }

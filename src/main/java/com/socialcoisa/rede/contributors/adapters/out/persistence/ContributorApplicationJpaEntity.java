@@ -3,6 +3,7 @@ package com.socialcoisa.rede.contributors.adapters.out.persistence;
 import java.time.Instant;
 
 import com.socialcoisa.rede.contributors.domain.ContributorApplication;
+import com.socialcoisa.rede.contributors.domain.ContributorApplicationSource;
 import com.socialcoisa.rede.contributors.domain.ContributorApplicationStatus;
 import com.socialcoisa.rede.contributors.domain.ContributorExperience;
 
@@ -22,6 +23,9 @@ class ContributorApplicationJpaEntity {
 
 	@Id
 	private String id;
+
+	@Column(name = "user_id")
+	private String userId;
 
 	@Column(nullable = false, length = 120)
 	private String name;
@@ -49,6 +53,10 @@ class ContributorApplicationJpaEntity {
 	@Column(nullable = false, length = 24)
 	private ContributorApplicationStatus status;
 
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false, length = 24)
+	private ContributorApplicationSource source;
+
 	@Column(name = "created_at", nullable = false)
 	private Instant createdAt;
 
@@ -58,6 +66,7 @@ class ContributorApplicationJpaEntity {
 	static ContributorApplicationJpaEntity fromDomain(ContributorApplication application) {
 		ContributorApplicationJpaEntity entity = new ContributorApplicationJpaEntity();
 		entity.id = application.id();
+		entity.userId = application.userId();
 		entity.name = application.name();
 		entity.github = application.github();
 		entity.email = application.email();
@@ -66,12 +75,13 @@ class ContributorApplicationJpaEntity {
 		entity.message = application.message();
 		entity.acceptedTermsAt = application.acceptedTermsAt();
 		entity.status = application.status();
+		entity.source = application.source();
 		entity.createdAt = application.createdAt();
 		return entity;
 	}
 
 	ContributorApplication toDomain() {
-		return ContributorApplication.restore(id, name, github, email, area, experience, message, acceptedTermsAt,
-			status, createdAt);
+		return ContributorApplication.restore(id, userId, name, github, email, area, experience, message,
+			acceptedTermsAt, status, source, createdAt);
 	}
 }
