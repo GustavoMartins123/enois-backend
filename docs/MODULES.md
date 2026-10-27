@@ -1109,7 +1109,7 @@ Temas da galeria (criados pela comunidade, instaláveis com um clique) e cosmét
 | `POST /temas/galeria` / `.../install` / `.../hide` / `.../report` | Publicar, instalar, ocultar, denunciar |
 | `GET /cosmetics/catalog` / `.../loja` / `.../mine` | Catálogo, loja, meus itens |
 | `POST /cosmetics/loja/{itemId}/comprar` / `.../equipar` | Comprar / equipar item |
-| `PUT /cosmetics/profile/name-style` | Estilo do nome no perfil |
+| `PUT /cosmetics/profile/name-style` | Estilo do nome no perfil e em todo lugar onde o nome aparece |
 
 ## 25. DailyGames (Jogos diários)
 

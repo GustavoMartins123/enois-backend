@@ -15,6 +15,7 @@ import com.socialcoisa.rede.feed.application.port.out.PostRepository;
 import com.socialcoisa.rede.feed.domain.AuthorIdentity;
 import com.socialcoisa.rede.feed.domain.Post;
 import com.socialcoisa.rede.feed.domain.PostType;
+import com.socialcoisa.rede.profile.application.NameStyleView;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.shared.html.SafeHtml;
 import com.socialcoisa.rede.shared.text.PlainText;
@@ -98,7 +99,9 @@ public class EditPostService implements EditPostUseCase {
 
 		var author = userProfileRepository.findById(saved.authorId().value()).orElse(null);
 		return author != null
-			? PostView.from(saved, author.username(), author.name(), author.avatar(), author.allBadges()).withAvatarFrame(author.avatarFrame())
+			? PostView.from(saved, author.username(), author.name(), author.avatar(), author.allBadges())
+				.withAvatarFrame(author.avatarFrame())
+				.withAuthorStyle(saved.authorIdentity() == AuthorIdentity.SOCIAL ? NameStyleView.from(author) : null)
 			: PostView.from(saved);
 	}
 

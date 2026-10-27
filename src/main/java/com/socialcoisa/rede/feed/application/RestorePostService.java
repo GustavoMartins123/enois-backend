@@ -9,6 +9,8 @@ import com.socialcoisa.rede.feed.application.port.out.PostRepository;
 import com.socialcoisa.rede.feed.domain.Post;
 import com.socialcoisa.rede.feed.domain.PostId;
 import com.socialcoisa.rede.feed.domain.UserId;
+import com.socialcoisa.rede.feed.domain.AuthorIdentity;
+import com.socialcoisa.rede.profile.application.NameStyleView;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.shared.web.ApiException;
 
@@ -47,7 +49,9 @@ public class RestorePostService implements RestorePostUseCase {
 		auditLogRepository.record(userId, "POST_RESTORED", saved.id().value(), null);
 		var author = userProfileRepository.findById(saved.authorId().value()).orElse(null);
 		return author != null
-			? PostView.from(saved, author.username(), author.name(), author.avatar(), author.allBadges()).withAvatarFrame(author.avatarFrame())
+			? PostView.from(saved, author.username(), author.name(), author.avatar(), author.allBadges())
+				.withAvatarFrame(author.avatarFrame())
+				.withAuthorStyle(saved.authorIdentity() == AuthorIdentity.SOCIAL ? NameStyleView.from(author) : null)
 			: PostView.from(saved);
 	}
 }

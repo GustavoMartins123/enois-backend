@@ -35,6 +35,7 @@ import com.socialcoisa.rede.feed.domain.PostId;
 import com.socialcoisa.rede.feed.domain.PostType;
 import com.socialcoisa.rede.feed.domain.ReactionType;
 import com.socialcoisa.rede.feed.domain.UserId;
+import com.socialcoisa.rede.profile.application.NameStyleView;
 import com.socialcoisa.rede.profile.application.port.out.UserProfileRepository;
 import com.socialcoisa.rede.profile.domain.UserProfile;
 import com.socialcoisa.rede.shared.web.ApiException;
@@ -332,7 +333,8 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 					corporateProfile != null ? corporateProfile.avatar()
 						: profile != null ? profile.avatar() : null,
 					profile != null ? profile.allBadges() : List.of())
-					.withAvatarFrame(profile != null ? profile.avatarFrame() : null);
+					.withAvatarFrame(profile != null ? profile.avatarFrame() : null)
+					.withAuthorStyle(corporateProfile == null ? NameStyleView.from(profile) : null);
 				ReactionType reaction = currentUserReactions.get(post.id());
 				PostView withReaction = (reaction != null ? view.withCurrentUserReaction(reaction) : view)
 					.withReactionSummary(reactionSummaries.getOrDefault(post.id(), Map.of()));

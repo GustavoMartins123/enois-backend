@@ -27,6 +27,7 @@ import com.socialcoisa.rede.jobs.application.JobService;
 import com.socialcoisa.rede.jobs.domain.Job;
 import com.socialcoisa.rede.jobs.domain.JobApplicationStatus;
 import com.socialcoisa.rede.jobs.domain.JobApplication;
+import com.socialcoisa.rede.profile.application.NameStyleView;
 import com.socialcoisa.rede.shared.web.ApiException;
 import com.socialcoisa.rede.shared.web.CurrentUser;
 import com.socialcoisa.rede.shared.web.CurrentUserResolver;
@@ -593,7 +594,7 @@ class JobContractController {
 			return null;
 		}
 		return new AuthorView(profile.id(), profile.username(), profile.name(), profile.avatar(), profile.headline(),
-			reputationService.reputationOf(profile.id()), profile.identityVerified());
+			reputationService.reputationOf(profile.id()), profile.identityVerified(), NameStyleView.from(profile));
 	}
 
 	private List<ApplicationFieldView> fieldViews(Job job) {
@@ -626,7 +627,7 @@ class JobContractController {
 
 	/** Quem publicou a vaga, com o que sustenta a credibilidade dele. */
 	record AuthorView(String id, String username, String name, String avatar, String headline, int reputation,
-			boolean identityVerified) {
+			boolean identityVerified, NameStyleView nameStyle) {
 	}
 
 	record ApplicationFieldView(String id, String label, String type, boolean required) {
