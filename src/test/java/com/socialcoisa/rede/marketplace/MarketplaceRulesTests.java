@@ -155,6 +155,7 @@ class MarketplaceRulesTests {
 		long balance = walletBalance(buyer.token());
 
 		mockMvc.perform(post("/marketplace/" + relisted.id() + "/buy")
+				.header("Idempotency-Key", java.util.UUID.randomUUID().toString())
 				.header("X-Session-Token", buyer.token()))
 			.andExpect(status().isConflict())
 			.andExpect(jsonPath("$.code").value("ITEM_ALREADY_OWNED"));
@@ -226,6 +227,7 @@ class MarketplaceRulesTests {
 		marketplace.releaseExpired();
 		assertThat(walletBalance(seller.token())).isEqualTo(sellerBalance + CoinService.FAIS(45));
 		mockMvc.perform(post("/marketplace/purchases/" + purchase.id() + "/refund")
+				.header("Idempotency-Key", java.util.UUID.randomUUID().toString())
 				.header("X-Session-Token", buyer.token()))
 			.andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("PURCHASE_NOT_HELD"));
 	}
