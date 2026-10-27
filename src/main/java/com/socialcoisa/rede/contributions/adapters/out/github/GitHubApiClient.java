@@ -9,7 +9,9 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -111,6 +113,45 @@ public class GitHubApiClient implements GitHubGateway, GitHubProfileGateway {
 			}
 		}
 		return result;
+	}
+
+	@Override
+	public List<GitHubPullRequest> listOpenPullRequests(String repository, int maxPages) {
+		List<GitHubPullRequest> result = new ArrayList<>();
+		int pages = Math.max(1, Math.min(maxPages, 10));
+		for (int page = 1; page <= pages; page++) {
+			JsonNode array = get("/repos/" + repository + "/pulls?state=open&sort=created&direction=desc"
+				+ "&per_page=100&page=" + page);
+			if (!array.isArray() || array.isEmpty()) {
+				break;
+			}
+			for (JsonNode pr : array) {
+				result.add(fromPull(pr));
+			}
+			if (array.size() < 100) {
+				break;
+			}
+		}
+		return result;
+	}
+
+	@Override
+	public boolean submitReview(String repository, long number, String decision, String body,
+			String tokenOverride) {
+		Map<String, Object> payload = new LinkedHashMap<>();
+		payload.put("event", decision);
+		if (body != null && !body.isBlank()) {
+			payload.put("body", body);
+		}
+		try {
+			String jsonBody = json.writeValueAsString(payload);
+			HttpResponse<String> response = send(apiBase + "/repos/" + repository + "/pulls/" + number + "/reviews",
+				"application/vnd.github+json", "POST", jsonBody, tokenOverride);
+			return response.statusCode() / 100 == 2;
+		}
+		catch (Exception failure) {
+			return false;
+		}
 	}
 
 	@Override
@@ -295,6 +336,11 @@ public class GitHubApiClient implements GitHubGateway, GitHubProfileGateway {
 	}
 
 	private HttpResponse<String> send(String url, String accept) {
+		return send(url, accept, "GET", null, null);
+	}
+
+	private HttpResponse<String> send(String url, String accept, String method, String body,
+			String tokenOverride) {
 		try {
 			HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url))
 				.timeout(Duration.ofSeconds(15))
@@ -303,10 +349,18 @@ public class GitHubApiClient implements GitHubGateway, GitHubProfileGateway {
 				.header("User-Agent", userAgent);
 			// O token so vai para a API do GitHub. O README cru baixa de raw.githubusercontent.com,
 			// que e publico e nao precisa (nem deve) receber a credencial.
-			if (StringUtils.hasText(token) && url.startsWith(apiBase)) {
-				builder.header("Authorization", "Bearer " + token);
+			String bearer = StringUtils.hasText(tokenOverride) ? tokenOverride : token;
+			if (StringUtils.hasText(bearer) && url.startsWith(apiBase)) {
+				builder.header("Authorization", "Bearer " + bearer);
 			}
-			return http.send(builder.GET().build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+			HttpRequest.BodyPublisher publisher = body == null
+				? HttpRequest.BodyPublishers.noBody()
+				: HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8);
+			if (body != null) {
+				builder.header("Content-Type", "application/json");
+			}
+			return http.send(builder.method(method, publisher).build(),
+				HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
 		}
 		catch (Exception failure) {
 			throw new IllegalStateException("Falha ao consultar o GitHub: " + failure.getMessage(), failure);

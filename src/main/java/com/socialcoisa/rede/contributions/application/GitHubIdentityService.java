@@ -21,10 +21,12 @@ import com.socialcoisa.rede.shared.web.ApiException;
 public class GitHubIdentityService {
 
 	private final GitHubIdentityRepository repository;
+	private final GitHubUserTokenService tokens;
 	private final Clock clock;
 
-	public GitHubIdentityService(GitHubIdentityRepository repository, Clock clock) {
+	public GitHubIdentityService(GitHubIdentityRepository repository, GitHubUserTokenService tokens, Clock clock) {
 		this.repository = repository;
+		this.tokens = tokens;
 		this.clock = clock;
 	}
 
@@ -66,8 +68,9 @@ public class GitHubIdentityService {
 	public GitHubIdentityView status(String userId) {
 		return repository.findByUserId(userId)
 			.map(identity -> new GitHubIdentityView(true, identity.githubLogin(), identity.linkedAt(),
-				identity.lastSyncedAt(), identity.syncState(), identity.lastSyncError()))
-			.orElse(new GitHubIdentityView(false, null, null, null, null, null));
+				identity.lastSyncedAt(), identity.syncState(), identity.lastSyncError(),
+				tokens.hasWriteToken(userId)))
+			.orElse(new GitHubIdentityView(false, null, null, null, null, null, false));
 	}
 
 	private static String cleanLogin(String login) {
@@ -79,6 +82,8 @@ public class GitHubIdentityService {
 	}
 
 	public record GitHubIdentityView(boolean linked, String login, Instant linkedAt, Instant lastSyncedAt,
-			GitHubSyncState syncState, String lastSyncError) {
+			GitHubSyncState syncState, String lastSyncError,
+			/** Token com escopo de escrita guardado (responde issues/revisa PRs em nome da pessoa). */
+			boolean writeAccess) {
 	}
 }

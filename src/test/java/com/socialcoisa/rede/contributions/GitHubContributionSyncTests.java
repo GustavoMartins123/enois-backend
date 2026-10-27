@@ -98,6 +98,17 @@ class GitHubContributionSyncTests {
 		public GitHubPullRequest withDetails(String repository, GitHubPullRequest pullRequest) {
 			return pullRequest;
 		}
+
+		@Override
+		public List<GitHubPullRequest> listOpenPullRequests(String repository, int maxPages) {
+			return List.of();
+		}
+
+		@Override
+		public boolean submitReview(String repository, long number, String decision, String body,
+				String tokenOverride) {
+			return true;
+		}
 	}
 
 	@Test

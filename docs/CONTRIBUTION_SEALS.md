@@ -54,7 +54,8 @@ financeiro nunca se mistura com reputação técnica.
 3. A sincronização roda em três gatilhos: ao concluir o vínculo (só as contribuições daquele
    GitHub, fora da thread da requisição), no botão **Verificar contribuições**
    (`POST /me/github/sync`, com limite por usuário) e na varredura completa
-   (`POST /admin/contributors/sync`, ou o worker periódico). Ela lê:
+   (`POST /admin/contributors/sync`, ou o worker a cada 10 minutos quando `GITHUB_SYNC_ENABLED=true`
+   — o default de produção/QA). Ela lê:
    - PRs integrados (`/repos/{repo}/pulls?state=closed`), com arquivos, revisões e sinais;
    - issues (`/repos/{repo}/issues`), descartando pull requests e guardando as labels.
 4. PR integrado nasce como evidência `VALIDATED` (o GitHub é a fonte). Issue nasce `VALIDATED` se
@@ -68,6 +69,15 @@ financeiro nunca se mistura com reputação técnica.
    pelo endpoint `GET /users/{username}/seals/{category}/evidence?page=&size=` — o cartão abre com a
    primeira página e “Carregar mais” busca o resto, então não existe mais o teto de 12 por
    categoria. Notas internas, suspeitas, e-mail e detalhes de revisão nunca são públicos.
+
+## Revisão de PRs no painel
+
+- A aba **Pull requests** lista os PRs abertos dos repositórios elegíveis (`GET /admin/github/pulls`,
+  moderação) e envia a decisão (`POST /admin/github/pulls/review`): aprovar ou pedir mudanças com
+  comentário.
+- A revisão sai em nome de quem tem o vínculo GitHub **com escrita** — o botão fica no próprio
+  painel e usa `POST /auth/oauth/github/write-link` (escopo `repo`). O token fica cifrado
+  (`github_user_tokens`) e nunca é devolvido ao cliente; sem ele, a revisão usa o token de serviço.
 
 ## Painel de contribuintes e tag
 
@@ -177,7 +187,8 @@ O processo é seguro para reexecução: o índice único e o upsert preservam a 
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | OAuth App do GitHub (callback `.../api/auth/oauth/github/callback`) |
 | `GITHUB_REDIRECT_URI` | URL exata cadastrada no OAuth App |
 | `GITHUB_CONTRIBUTIONS_TOKEN` | token fine-grained **somente leitura** dos repositórios; opcional, mas recomendado |
-| `GITHUB_SYNC_ENABLED` | liga o worker periódico (default `false`) |
+| `GITHUB_SYNC_ENABLED` | liga o worker periódico (default `false`; QA/produção ligam) |
+| `GITHUB_SYNC_CRON` | cadência do worker (default `0 */10 * * * *`, a cada 10 minutos) |
 | `GITHUB_SYNC_MAX_PAGES` | páginas por repositório por ciclo (default 3) |
 | `GITHUB_SYNC_MAX_DETAILS` | PRs com detalhes (arquivos/revisões) por ciclo (default 60) |
 | `GITHUB_QUALIFIED_ISSUE_LABELS` | labels que qualificam issue automaticamente, separadas por vírgula (default vazio = só revisão humana) |
