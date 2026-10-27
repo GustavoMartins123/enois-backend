@@ -50,7 +50,12 @@ public class LinkedinImportService {
 	/** The CSVs read below; every other entry (photos, messages, other data) is never inflated. */
 	private static final Set<String> USED_CSVS = Set.of("Positions.csv", "Profile.csv", "Education.csv",
 		"Skills.csv", "Certifications.csv", "Courses.csv", "Languages.csv", "Projects.csv", "Publications.csv",
-		"Volunteering.csv", "Honors & Awards.csv");
+		"Volunteering.csv", "Honors & Awards.csv", "Connections.csv");
+	/** Teto de contatos por importação (o arquivo real costuma ter centenas, não milhares). */
+	private static final int MAX_CONTACTS = 5000;
+	/** Teto da coluna do nome (linkedin_contact_invites.contact_name) e do e-mail consultado. */
+	private static final int MAX_NAME_LENGTH = 200;
+	private static final int MAX_EMAIL_LENGTH = 254;
 
 	private final long maxTotalBytes;
 
@@ -62,6 +67,86 @@ public class LinkedinImportService {
 	public LinkedinImportService(
 			@Value("${rede.import.linkedin.max-uncompressed-bytes:8388608}") long maxTotalBytes) {
 		this.maxTotalBytes = maxTotalBytes;
+	}
+
+	// ===== contatos (Connections.csv) =====
+
+	/**
+	 * Lê os contatos do arquivo de dados (Connections.csv dentro do ZIP) ou de um CSV avulso.
+	 * A API de conexões do LinkedIn exige o escopo r_1st_connections, restrito a apps aprovados;
+	 * o arquivo exportado é o caminho sancionado e o membro é dono dos próprios dados.
+	 */
+	public List<ParsedContact> parseContacts(MultipartFile file) {
+		if (file == null || file.isEmpty()) {
+			throw new ApiException(400, "FILE_REQUIRED", "Envie o arquivo .zip ou .csv do LinkedIn.");
+		}
+		try {
+			byte[] bytes = file.getBytes();
+			if (bytes.length > MAX_ZIP_BYTES) {
+				throw new ApiException(400, "FILE_TOO_LARGE",
+					"O arquivo passa do limite de " + (MAX_ZIP_BYTES / 1024 / 1024) + " MB.");
+			}
+			String csv;
+			if (bytes.length >= 2 && bytes[0] == 'P' && bytes[1] == 'K') {
+				csv = readUsedCsvs(file).get("Connections.csv");
+			}
+			else {
+				csv = new String(bytes, StandardCharsets.UTF_8);
+			}
+			return contactsFromCsv(csv);
+		}
+		catch (ApiException failure) {
+			throw failure;
+		}
+		catch (Exception failure) {
+			throw new ApiException(400, "INVALID_LINKEDIN_FILE",
+				"Não foi possível ler o arquivo do LinkedIn. Use o ZIP de \"Obter uma cópia dos seus dados\".");
+		}
+	}
+
+	private List<ParsedContact> contactsFromCsv(String csv) {
+		if (!StringUtils.hasText(csv)) {
+			throw new ApiException(400, "CONNECTIONS_NOT_FOUND",
+				"Não encontrei o Connections.csv. Exporte em Configurações → \"Obter uma cópia dos seus dados\".");
+		}
+		// O export do LinkedIn põe algumas linhas de nota antes do cabeçalho.
+		String[] lines = csv.split("R?\\n", -1);
+		int header = -1;
+		for (int i = 0; i < lines.length; i++) {
+			if (lines[i].trim().toLowerCase(java.util.Locale.ROOT).startsWith("first name")) {
+				header = i;
+				break;
+			}
+		}
+		String body = header < 0 ? csv : String.join("\n", java.util.Arrays.copyOfRange(lines, header, lines.length));
+		List<ParsedContact> contacts = new ArrayList<>();
+		java.util.Set<String> seen = new java.util.HashSet<>();
+		for (Map<String, String> row : rows(body)) {
+			String name = (row.getOrDefault("first name", "") + " " + row.getOrDefault("last name", "")).trim();
+			if (name.isBlank()) {
+				continue;
+			}
+			// A coluna guarda 200 caracteres; coluna do arquivo é texto livre e não pode derrubar o INSERT.
+			if (name.length() > MAX_NAME_LENGTH) {
+				name = name.substring(0, MAX_NAME_LENGTH).trim();
+			}
+			String key = name.toLowerCase(java.util.Locale.ROOT).replaceAll("\\s+", " ");
+			if (!seen.add(key)) {
+				continue;
+			}
+			String email = row.getOrDefault("email address", "").trim();
+			if (email.length() > MAX_EMAIL_LENGTH) {
+				email = "";
+			}
+			contacts.add(new ParsedContact(name, email.isBlank() ? null : email.toLowerCase(java.util.Locale.ROOT)));
+			if (contacts.size() >= MAX_CONTACTS) {
+				break;
+			}
+		}
+		return contacts;
+	}
+
+	public record ParsedContact(String name, String email) {
 	}
 
 	// ===== retrato devolvido para revisão no front =====

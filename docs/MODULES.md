@@ -1228,9 +1228,20 @@ publish.
 Importação de dados do LinkedIn (ZIP do arquivo exportado) e do currículo (PDF) para preencher o
 perfil e o diário, com tetos de tamanho e dedupe.
 
+O `Connections.csv` do mesmo arquivo de dados vira uma lista de contatos: cada um é casado por
+e-mail exato ou nome completo idêntico (sem ambiguidade) com uma conta do Énóis, e o botão de
+convite automático manda a solicitação de conexão para quem ainda não é conexão. O LinkedIn não
+expõe a lista de conexões por API (escopo restrito a parceiros aprovados), então o arquivo
+exportado é o caminho sancionado. Convites já resolvidos não se repetem em reimportações.
+
 | Rota | Descrição |
 |---|---|
+| `POST /me/import/linkedin` | Importar o ZIP do export do LinkedIn (prévia) |
 | `POST /me/import/linkedin/texto` | Importar texto do export do LinkedIn |
+| `POST /me/import/linkedin/contatos` | Importar `Connections.csv` (CSV avulso ou dentro do ZIP) e convidar quem casar |
+| `GET /me/import/linkedin/contatos/resumo` | Contagem por estado e o botão de convite automático |
+| `PUT /me/import/linkedin/contatos/auto-convite` | Ligar/desligar o convite automático (ligar processa a fila) |
+| `GET /me/import/linkedin/contatos` | Lista dos contatos importados e o motivo de cada estado |
 | `POST /me/import/resume` | Importar currículo |
 | `POST /me/integrations/linkedin` | Integração com a conta do LinkedIn |
 

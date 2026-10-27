@@ -27,7 +27,9 @@ interface SpringDataUserProfileJpaRepository extends JpaRepository<UserProfileJp
 
 	@org.springframework.data.jpa.repository.Query("""
 		select u from UserProfileJpaEntity u
-		where lower(u.name) like :q escape '!' or lower(u.username) like :q escape '!'
+		where lower(u.name) like :q escape '!'
+		   or lower(u.username) like :q escape '!'
+		   or lower(u.socialName) like :q escape '!'
 		order by u.reputation desc
 		""")
 	List<UserProfileJpaEntity> searchByNameOrUsername(
