@@ -443,7 +443,8 @@ are for sale); a broken file stops the boot. Each item has `id`, `kind` (`FRAME`
 - The equipped nameplate travels with the name style (`nameStyle` / `authorStyle` / `actorStyle` /
   `sellerStyle`: `{ theme, font, color, nameplate }`) in every projection that shows a person,
   community members included; the style is `null` only when all four are empty. Lists load their
-  people in one query (`findAllByIds`), never one lookup per row.
+  people in one query (`findAllByIds`), never one lookup per row; the blog directory also
+  loads bans and post counts for the page in one query each.
 
 `order` accepts only `oldest` and `newest`; anything else returns `400 INVALID_CATALOG_ORDER`. A
 session that is sent and invalid returns an authentication error instead of an anonymous read.
