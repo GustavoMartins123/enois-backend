@@ -45,6 +45,9 @@ public interface MessagingRepository {
 
 	int countUnread(String conversationId, String userId);
 
+	/** Total de mensagens nao lidas em todas as conversas ativas do usuario. */
+	int countTotalUnread(String userId);
+
 	void saveMessage(Message message);
 
 	List<Message> findMessagesByConversation(String conversationId, String viewerId, java.time.Instant before,

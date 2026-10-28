@@ -352,6 +352,10 @@ public class MessagingService {
 		return repository.countUnread(conversationId, userId);
 	}
 
+	public int countTotalUnread(String userId) {
+		return repository.countTotalUnread(userId);
+	}
+
 	public List<Message> getMessages(String conversationId, String viewerId, java.time.Instant before, int limit) {
 		if (!repository.findConversationById(conversationId).isPresent()) {
 			throw new ApiException(404, "CONVERSATION_NOT_FOUND", "Conversa nao encontrada.");

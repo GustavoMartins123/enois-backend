@@ -136,6 +136,11 @@ class MessagingPersistenceAdapter implements MessagingRepository {
 	}
 
 	@Override
+	public int countTotalUnread(String userId) {
+		return participantRepo.countTotalUnread(userId);
+	}
+
+	@Override
 	public void saveMessage(Message message) {
 		messageRepo.save(MessageJpaEntity.fromDomain(message));
 	}
