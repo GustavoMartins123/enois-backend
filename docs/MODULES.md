@@ -1180,6 +1180,14 @@ corporativo do usuário (importável do LinkedIn).
 | `GET /microprojetos` / `POST /empresas/{companyId}/microprojetos` | Catálogo / criar microprojeto |
 | `POST /microprojetos/{projectId}/proposals` / `.../complete` / `.../select` | Propostas, concluir, selecionar |
 | `POST /me/business-profile` / `.../import` / `.../activate` | Perfil corporativo, importar, ativar |
+| `POST /me/business-profile/username` | Troca o nametag (o `@` e o fim de `/profissional/{nametag}`) |
+
+O **nametag** do perfil profissional vive em namespace próprio (índice único no banco) e é
+independente do `@` social: a mesma conta pode ser `aminadojava` no social e `melsantos` no
+profissional. É ele que aparece como `@` e no fim da URL pública; trocar muda o endereço (o antigo
+deixa de responder) sem tocar no perfil social. A importação do perfil social aceita
+`name`, `headline`, `bio`, `avatar`, `banner`, `bannerHtml` e `location` — campo a campo, e a
+comparação do nome do campo ignora maiúsculas (`bannerHtml` chega como o cliente escreve).
 
 ## 30. CommunityProjects + Projects (Projetos)
 
