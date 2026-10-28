@@ -408,8 +408,12 @@ A resposta será cacheadada e reutilizada se a mesma chave for reenviada.
 
 Cada item inclui `releaseOrder`, sequência positiva e única de entrada no catálogo.
 A ordenação usa esse campo, independentemente da posição do item no código. Novos
-itens recebem o próximo número da sequência. O catálogo atual usa somente as 18 molduras
-existentes, com sequência de 1 a 18: Portal é 16, Holograma é 17 e Galáxia é 18.
+itens recebem o próximo número da sequência. O catálogo inclui 26 molduras: as 18
+existentes mantêm seus IDs e sua sequência; Elementos adiciona Maré (19),
+Trepadeira (20), Vendaval (21) e Vaga-lumes (22); Tecnologia adiciona Fliperama
+(23), Circuito (24), Neon (25) e Radar (26). As oito novas custam `10_000` mF cada
+e usam os mesmos contratos de compra, equipamento e exposição no perfil, nos posts
+e nos comentários.
 
 As molduras nativas são definidas no serviço, sem tabela de catálogo. Os itens e a lista
 são imutáveis; a sequência é validada na inicialização e cada consulta retorna uma lista

@@ -66,8 +66,7 @@ class CosmeticsFlowTests {
                         org.junit.jupiter.api.Assertions.assertEquals(previous + 1, releaseOrder);
                         previous = releaseOrder;
                 }
-                // Galáxia foi adicionada depois de Holograma, embora esteja antes dela na declaração.
-                org.junit.jupiter.api.Assertions.assertEquals("moldura-galaxia", items.get(items.size() - 1).get("id").asText());
+                org.junit.jupiter.api.Assertions.assertEquals("moldura-radar", items.get(items.size() - 1).get("id").asText());
                 var explicit = mockMvc.perform(get("/loja").param("order", "oldest"))
                         .andExpect(status().isOk()).andReturn();
                 org.junit.jupiter.api.Assertions.assertEquals(items,
@@ -78,10 +77,10 @@ class CosmeticsFlowTests {
         void catalogListsNewestFirstByReleaseOrder() throws Exception {
                 var result = mockMvc.perform(get("/loja").param("order", "newest"))
                         .andExpect(status().isOk())
-                        .andExpect(jsonPath("$[0].id").value("moldura-galaxia"))
-                        .andExpect(jsonPath("$[0].releaseOrder").value(18))
-                        .andExpect(jsonPath("$[1].id").value("moldura-holograma"))
-                        .andExpect(jsonPath("$[2].id").value("moldura-portal"))
+                        .andExpect(jsonPath("$[0].id").value("moldura-radar"))
+                        .andExpect(jsonPath("$[0].releaseOrder").value(26))
+                        .andExpect(jsonPath("$[1].id").value("moldura-neon"))
+                        .andExpect(jsonPath("$[2].id").value("moldura-circuito"))
                         .andReturn();
                 var items = objectMapper.readTree(result.getResponse().getContentAsString());
                 int previous = items.size() + 1;
@@ -163,7 +162,9 @@ class CosmeticsFlowTests {
         @ValueSource(strings = { "moldura-aurora", "moldura-tempestade", "moldura-inferno",
                 "moldura-buraco-negro", "moldura-orbita", "moldura-glacial", "moldura-toxica",
                 "moldura-nebulosa", "moldura-supernova", "moldura-galaxia", "moldura-portal",
-                "moldura-holograma" })
+                "moldura-holograma", "moldura-mare", "moldura-trepadeira", "moldura-vendaval",
+                "moldura-vaga-lumes", "moldura-fliperama", "moldura-circuito", "moldura-neon",
+                "moldura-radar" })
         void animatedFrameAppearsOnPostAndComment(String frame) throws Exception {
                 var buyer = auth("frame_" + frame.substring("moldura-".length()).replace('-', '_'));
                 mockMvc.perform(get("/carteira").header("X-Session-Token", buyer.token())).andExpect(status().isOk());
