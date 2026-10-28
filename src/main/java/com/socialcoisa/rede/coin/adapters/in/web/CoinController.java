@@ -38,11 +38,13 @@ class CoinController {
 	private final UserProfileRepository profiles;
 	private final com.socialcoisa.rede.shared.web.AdminGuard adminGuard;
 	private final com.socialcoisa.rede.coin.dispute.CoinDisputeService disputes;
+	private final com.socialcoisa.rede.coin.application.CoinEconomyService economy;
 
 	CoinController(CoinService coins, com.socialcoisa.rede.coin.application.CoinRateService rates,
 			CurrentUserResolver currentUserResolver, IdempotencyApplicationService idempotency,
 			UserProfileRepository profiles, com.socialcoisa.rede.shared.web.AdminGuard adminGuard,
-			com.socialcoisa.rede.coin.dispute.CoinDisputeService disputes) {
+			com.socialcoisa.rede.coin.dispute.CoinDisputeService disputes,
+			com.socialcoisa.rede.coin.application.CoinEconomyService economy) {
 		this.coins = coins;
 		this.rates = rates;
 		this.currentUserResolver = currentUserResolver;
@@ -50,11 +52,15 @@ class CoinController {
 		this.profiles = profiles;
 		this.adminGuard = adminGuard;
 		this.disputes = disputes;
+		this.economy = economy;
 	}
 
 	/**
 	 * A MINI BOLSA (monitor público): a cotação de referência da faísca em BRL e o
 	 * histórico que alimenta o gráfico. NÃO é câmbio — não compra faísca com dinheiro.
+	 *
+	 * `brlCents` continua existindo para compatibilidade; `brlMicros` (micro-reais por faísca)
+	 * é a precisão real — 1 centavo = 10.000 µ.
 	 */
 
 	@GetMapping("/coin/cotacao")
@@ -62,10 +68,12 @@ class CoinController {
 		var current = rates.latest();
 		return Map.of(
 			"brlCents", current.brlCents(),
+			"brlMicros", current.brlMicros(),
 			"escala", com.socialcoisa.rede.coin.application.CoinService.SCALE,
 			"atualizadaEm", current.effectiveAt().toString(),
 			"historico", rates.history(history).stream().map(r -> Map.of(
 				"brlCents", r.brlCents(),
+				"brlMicros", r.brlMicros(),
 				"em", r.effectiveAt().toString())).toList());
 	}
 
@@ -75,11 +83,15 @@ class CoinController {
 			@RequestBody SetQuoteRequest request) {
 		CurrentUser user = currentUserResolver.resolve(sessionToken);
 		adminGuard.requireAdmin(user);
-		var published = rates.publish(request.brlCents(), request.note());
-		return Map.of("brlCents", published.brlCents(), "em", published.effectiveAt().toString());
+		var published = request.brlMicros() != null
+			? rates.publish(request.brlMicros(), request.note())
+			: rates.publishCents(request.brlCents() == null ? 1L : request.brlCents(), request.note());
+		return Map.of("brlCents", published.brlCents(), "brlMicros", published.brlMicros(),
+			"em", published.effectiveAt().toString());
 	}
 
-	record SetQuoteRequest(long brlCents, String note) {
+	/** `brlMicros` é a precisão nova; `brlCents` continua aceito para o painel antigo. */
+	record SetQuoteRequest(Long brlCents, Long brlMicros, String note) {
 	}
 
 	/**
@@ -151,6 +163,47 @@ class CoinController {
 			"somaSaldos", supply.somaSaldos(), "coerente", supply.coerente());
 	}
 
+	/**
+	 * Como a cotação automática está sendo calculada: uso, emissão, índice e o valor sugerido.
+	 * Leitura — não publica nada (o worker diário é quem publica).
+	 */
+	@GetMapping("/admin/carteira/economia")
+	Map<String, Object> economy(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser admin = currentUserResolver.resolve(sessionToken);
+		adminGuard.requireAdmin(admin);
+		var summary = economy.snapshot();
+		return Map.of(
+			"janelaDias", summary.windowDays(),
+			"usoEscrow", summary.metrics().escrowUsage(),
+			"usoP2p", summary.metrics().p2pUsage(),
+			"emissao", summary.metrics().issuance(),
+			"circulacao", summary.metrics().circulation(),
+			"indice", summary.result().index(),
+			"cotacaoAtualMicros", summary.previousMicros(),
+			"cotacaoSugeridaMicros", summary.result().suggestedMicros());
+	}
+
+	/**
+	 * Roda o cálculo AGORA (admin) — o worker diário faz sozinho; isto serve para conferir o
+	 * resultado sem esperar a janela e publica a cotação se o valor sugerido mudou.
+	 */
+	@PostMapping("/admin/carteira/economia/recalcular")
+	Map<String, Object> recalculateEconomy(
+			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser admin = currentUserResolver.resolve(sessionToken);
+		adminGuard.requireAdmin(admin);
+		var summary = economy.recalculate();
+		return Map.of(
+			"publicada", summary.published(),
+			"cotacaoAnteriorMicros", summary.previousMicros(),
+			"cotacaoAtualMicros", summary.currentMicros(),
+			"indice", summary.result().index(),
+			"usoEscrow", summary.metrics().escrowUsage(),
+			"usoP2p", summary.metrics().p2pUsage(),
+			"emissao", summary.metrics().issuance(),
+			"circulacao", summary.metrics().circulation());
+	}
+
 	@GetMapping("/admin/carteira/disputas")
 	List<Map<String, Object>> disputesQueue(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestParam(defaultValue = "30") int limit) {
@@ -201,6 +254,7 @@ class CoinController {
 			"balance", wallet.balance(),
 			"escala", wallet.escala(),
 			"cotacaoBrlCents", wallet.cotacaoBrlCents(),
+			"cotacaoBrlMicros", wallet.cotacaoBrlMicros(),
 			"chave", wallet.chave(),
 			"entries", wallet.entries().stream().map(EntryView::from).toList());
 	}

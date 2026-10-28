@@ -48,4 +48,10 @@ public interface CoinLedgerRepository {
 
 	/** Recompensas (kind=REWARD) com refId começando com o prefixo — tetos mensais do earned. */
 	long countRewardsByRefPrefix(String prefix);
+
+	/**
+	 * Soma dos lançamentos de um tipo na janela — é daqui que sai o uso real da moeda
+	 * (escrow de marketplace/serviços, transferências P2P) e a emissão automática.
+	 */
+	long sumAmountByKindBetween(com.socialcoisa.rede.coin.domain.CoinEntry.Kind kind, Instant from, Instant to);
 }
