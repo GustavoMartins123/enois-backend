@@ -1019,12 +1019,19 @@ mesmo formato pt-BR do frontend (`50.000 mf` = "50").
 | `POST /carteira/transacoes/{refId}/contestar` | Contestar uma transação (suspeita de golpe) |
 | `GET /carteira/contestacoes` | Minhas contestações |
 | `GET /coin/cotacao` / `POST /coin/cotacao` | Cotação da moeda (leitura pública / atualização) |
+| `GET /admin/carteira/economia` | Métricas do cálculo automático da cotação (uso, emissão, índice e valor sugerido) |
+| `POST /admin/carteira/economia/recalcular` | Roda o cálculo agora e publica se o valor mudou (admin) |
 | `GET /admin/carteira/disputas` | Fila de disputas para a moderação |
 | `POST /admin/carteira/disputas/{id}/deferir` | Disputa verdadeira: reverte a transferência e restringe o golpista |
 | `POST /admin/carteira/disputas/{id}/rejeitar` | Disputa falsa: restringe quem contestou de má-fé |
 | `GET /admin/carteira/usuarios/{username}/extrato` | Extrato completo de um usuário (moderação) |
 
-Arquivos: `CoinController`, `CoinService`, `CoinRateService`, `coin/dispute/CoinDisputeService`.
+Arquivos: `CoinController`, `CoinService`, `CoinRateService`, `CoinEconomyService`,
+`CoinEconomyCalculator`, `coin/dispute/CoinDisputeService`.
+
+A cotação de referência é **recalculada automaticamente pelo uso** da moeda e a **emissão
+automática é convertida** por ela (mesmo valor em reais quando a faísca sobe ou desce). Fórmula,
+parâmetros e salvaguardas em [`COIN_ECONOMY.md`](COIN_ECONOMY.md).
 
 ## 18. Marketplace
 

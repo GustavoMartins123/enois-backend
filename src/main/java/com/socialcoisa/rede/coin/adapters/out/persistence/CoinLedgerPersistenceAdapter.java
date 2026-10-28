@@ -135,4 +135,10 @@ class CoinLedgerPersistenceAdapter implements CoinLedgerRepository {
 	public long countRewardsByRefPrefix(String prefix) {
 		return entries.countByKindAndRefIdStartingWith(com.socialcoisa.rede.coin.domain.CoinEntry.Kind.REWARD, prefix);
 	}
+
+	@Override
+	public long sumAmountByKindBetween(com.socialcoisa.rede.coin.domain.CoinEntry.Kind kind, Instant from,
+			Instant to) {
+		return entries.sumAmountByKindBetween(kind, from, to);
+	}
 }
