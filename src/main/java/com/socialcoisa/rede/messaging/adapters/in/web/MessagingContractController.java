@@ -74,6 +74,12 @@ class MessagingContractController {
 		return new PageResponse<>(items, nextCursor);
 	}
 
+	@GetMapping("/unread-count")
+	Map<String, Integer> unreadCount(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+		CurrentUser user = currentUserResolver.resolve(sessionToken);
+		return Map.of("count", messagingService.countTotalUnread(user.id().value()));
+	}
+
 	@GetMapping("/search")
 	PageResponse<ConversationView> search(@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestParam(required = false) String q, @RequestParam(defaultValue = "20") int limit) {
