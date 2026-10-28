@@ -172,15 +172,18 @@ class CoinController {
 		CurrentUser admin = currentUserResolver.resolve(sessionToken);
 		adminGuard.requireAdmin(admin);
 		var summary = economy.snapshot();
-		return Map.of(
-			"janelaDias", summary.windowDays(),
-			"usoEscrow", summary.metrics().escrowUsage(),
-			"usoP2p", summary.metrics().p2pUsage(),
-			"emissao", summary.metrics().issuance(),
-			"circulacao", summary.metrics().circulation(),
-			"indice", summary.result().index(),
-			"cotacaoAtualMicros", summary.previousMicros(),
-			"cotacaoSugeridaMicros", summary.result().suggestedMicros());
+		return Map.ofEntries(
+			Map.entry("janelaDias", summary.windowDays()),
+			Map.entry("usoEscrow", summary.metrics().escrowUsage()),
+			Map.entry("usoP2p", summary.metrics().p2pUsage()),
+			Map.entry("retornoCofre", summary.metrics().treasuryInflow()),
+			Map.entry("emissao", summary.metrics().issuance()),
+			Map.entry("circulacao", summary.metrics().circulation()),
+			Map.entry("cofre", summary.metrics().treasuryBalance()),
+			Map.entry("escassez", summary.result().scarcity()),
+			Map.entry("indice", summary.result().index()),
+			Map.entry("cotacaoAtualMicros", summary.previousMicros()),
+			Map.entry("cotacaoSugeridaMicros", summary.result().suggestedMicros()));
 	}
 
 	/**
@@ -193,15 +196,18 @@ class CoinController {
 		CurrentUser admin = currentUserResolver.resolve(sessionToken);
 		adminGuard.requireAdmin(admin);
 		var summary = economy.recalculate();
-		return Map.of(
-			"publicada", summary.published(),
-			"cotacaoAnteriorMicros", summary.previousMicros(),
-			"cotacaoAtualMicros", summary.currentMicros(),
-			"indice", summary.result().index(),
-			"usoEscrow", summary.metrics().escrowUsage(),
-			"usoP2p", summary.metrics().p2pUsage(),
-			"emissao", summary.metrics().issuance(),
-			"circulacao", summary.metrics().circulation());
+		return Map.ofEntries(
+			Map.entry("publicada", summary.published()),
+			Map.entry("cotacaoAnteriorMicros", summary.previousMicros()),
+			Map.entry("cotacaoAtualMicros", summary.currentMicros()),
+			Map.entry("escassez", summary.result().scarcity()),
+			Map.entry("indice", summary.result().index()),
+			Map.entry("usoEscrow", summary.metrics().escrowUsage()),
+			Map.entry("usoP2p", summary.metrics().p2pUsage()),
+			Map.entry("retornoCofre", summary.metrics().treasuryInflow()),
+			Map.entry("emissao", summary.metrics().issuance()),
+			Map.entry("circulacao", summary.metrics().circulation()),
+			Map.entry("cofre", summary.metrics().treasuryBalance()));
 	}
 
 	@GetMapping("/admin/carteira/disputas")

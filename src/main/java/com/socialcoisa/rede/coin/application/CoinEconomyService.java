@@ -49,18 +49,18 @@ public class CoinEconomyService {
 			@Value("${rede.coin.economy.target-turnover:0.05}") double targetTurnover,
 			@Value("${rede.coin.economy.p2p-weight:0.5}") double p2pWeight,
 			@Value("${rede.coin.economy.max-usage-ratio:1.0}") double maxUsageRatio,
+			@Value("${rede.coin.economy.scarcity-weight:0.5}") double scarcityWeight,
 			@Value("${rede.coin.economy.sensitivity:0.25}") double sensitivity,
 			@Value("${rede.coin.economy.max-step:0.01}") double maxStep,
-			@Value("${rede.coin.economy.min-cents:1}") long minCents,
-			@Value("${rede.coin.economy.max-cents:100}") long maxCents) {
+			@Value("${rede.coin.economy.min-micros:1000}") long minMicros,
+			@Value("${rede.coin.economy.max-micros:1000000}") long maxMicros) {
 		this.ledger = ledger;
 		this.rates = rates;
 		this.coins = coins;
 		this.clock = clock;
 		this.enabled = enabled;
 		this.params = new CoinEconomyCalculator.Params(windowDays, targetTurnover, p2pWeight, maxUsageRatio,
-			sensitivity, maxStep, Math.max(1, minCents) * com.socialcoisa.rede.coin.domain.CoinRate.MICROS_PER_CENT,
-			Math.max(minCents, maxCents) * com.socialcoisa.rede.coin.domain.CoinRate.MICROS_PER_CENT);
+			scarcityWeight, sensitivity, maxStep, minMicros, maxMicros);
 	}
 
 	/** Execução diária: publica uma nova cotação quando o valor sugerido mudou. */
@@ -115,14 +115,26 @@ public class CoinEconomyService {
 		long escrow = ledger.sumAmountByKindBetween(CoinEntry.Kind.ESCROW_HOLD, from, to);
 		long p2p = ledger.sumAmountByKindBetween(CoinEntry.Kind.TRANSFER_IN, from, to);
 		long issuance = ledger.sumAmountByKindBetween(CoinEntry.Kind.REWARD, from, to);
-		long circulation = coins.supply().circulacao();
-		return new CoinEconomyCalculator.Metrics(escrow, p2p, issuance, circulation);
+		// Retorno ao cofre: compras da loja (PURCHASE sai do comprador e volta para a tesouraria) e
+		// taxas de marketplace (FEE_IN). Sem esse retorno a tesouraria seca e a economia trava.
+		long store = Math.max(0, -ledger.sumAmountByKindBetween(CoinEntry.Kind.PURCHASE, from, to));
+		long fees = Math.max(0, ledger.sumAmountByKindBetween(CoinEntry.Kind.FEE_IN, from, to));
+		long inflow = saturatingAdd(store, fees);
+		var supply = coins.supply();
+		return new CoinEconomyCalculator.Metrics(escrow, p2p, inflow, issuance, supply.circulacao(),
+			supply.cofre());
 	}
 
 	private String note(CoinEconomyCalculator.Metrics metrics, CoinEconomyCalculator.Result result) {
-		return "Reavaliação automática por uso: uso " + faiscas(metrics.escrowUsage() + metrics.p2pUsage())
-			+ ", emissão " + faiscas(metrics.issuance()) + ", giro " + faiscas(metrics.circulation())
+		return "Reavaliação automática por uso: giro " + faiscas(metrics.escrowUsage() + metrics.p2pUsage()
+			+ metrics.treasuryInflow()) + ", retorno ao cofre " + faiscas(metrics.treasuryInflow())
+			+ ", emissão " + faiscas(metrics.issuance()) + ", cofre " + faiscas(metrics.treasuryBalance())
 			+ ", índice " + String.format(java.util.Locale.ROOT, "%.2f", result.index());
+	}
+
+	private static long saturatingAdd(long a, long b) {
+		long sum = a + b;
+		return sum < 0 ? Long.MAX_VALUE : sum;
 	}
 
 	private static String faiscas(long mf) {

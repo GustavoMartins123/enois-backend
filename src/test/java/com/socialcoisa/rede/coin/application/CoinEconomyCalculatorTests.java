@@ -7,45 +7,80 @@ import org.junit.jupiter.api.Test;
 import com.socialcoisa.rede.coin.application.CoinEconomyCalculator.Metrics;
 import com.socialcoisa.rede.coin.application.CoinEconomyCalculator.Params;
 
-/** A cotação automática: neutra sem uso, sobe com uso, desce com emissão e respeita os limites. */
+/**
+ * A cotação automática: sobe com giro e escassez, desce com emissão e com economia parada, e
+ * respeita piso, teto e passo.
+ */
 class CoinEconomyCalculatorTests {
 
 	private final Params params = Params.defaults();
 
-	@Test
-	void semUsoNemEmissaoACotacaoNaoMuda() {
-		var result = CoinEconomyCalculator.evaluate(10_000, new Metrics(0, 0, 0, 1_000_000), params);
+	private static Metrics metrics(long escrow, long p2p, long inflow, long issuance, long circulation,
+			long treasury) {
+		return new Metrics(escrow, p2p, inflow, issuance, circulation, treasury);
+	}
 
-		assertThat(result.suggestedMicros()).isEqualTo(10_000);
+	@Test
+	void economiaParadaDerrubaUmPasso() {
+		// Ninguém usa e nada volta ao cofre: o preço cede 1% (o cofre precisa de retorno).
+		var result = CoinEconomyCalculator.evaluate(20_000,
+			metrics(0, 0, 0, 0, 1_000_000, 1_000_000), params);
+
+		assertThat(result.index()).isZero();
+		assertThat(result.suggestedMicros()).isEqualTo(19_800);
+	}
+
+	@Test
+	void noPisoOPrecoNaoDesceMais() {
+		var result = CoinEconomyCalculator.evaluate(1_000,
+			metrics(0, 0, 0, 10_000_000, 1_000_000, 1_000_000), params);
+
+		assertThat(result.suggestedMicros()).isEqualTo(1_000);
 	}
 
 	@Test
 	void usoAcimaDaMetaSobeUmPassoNoMaximo() {
-		// 20% do estoque usado na janela contra meta de 5%: índice 4, mas o passo é limitado a 1%.
-		var result = CoinEconomyCalculator.evaluate(10_000, new Metrics(200_000, 0, 0, 1_000_000), params);
+		var result = CoinEconomyCalculator.evaluate(10_000,
+			metrics(200_000, 0, 0, 0, 1_000_000, 1_000_000), params);
 
 		assertThat(result.index()).isGreaterThan(1);
 		assertThat(result.suggestedMicros()).isEqualTo(10_100);
 	}
 
 	@Test
-	void emissaoAltaDiluiEDerrubaUmPasso() {
-		// No piso (1 centavo) a cotação não desce mais: o cálculo só sinaliza o índice baixo.
-		var atFloor = CoinEconomyCalculator.evaluate(10_000,
-			new Metrics(50_000, 0, 1_000_000, 1_000_000), params);
-		assertThat(atFloor.index()).isLessThan(1);
-		assertThat(atFloor.suggestedMicros()).isEqualTo(10_000);
+	void retornoAoCofreContaComoGiro() {
+		// Só volta ao cofre (compras da loja/taxas), sem escrow nem P2P: já é economia girando.
+		var result = CoinEconomyCalculator.evaluate(20_000,
+			metrics(0, 0, 50_000, 0, 1_000_000, 1_000_000), params);
 
-		// Acima do piso, a emissão derruba 1% no passo.
-		var aboveFloor = CoinEconomyCalculator.evaluate(20_000,
-			new Metrics(50_000, 0, 1_000_000, 1_000_000), params);
-		assertThat(aboveFloor.suggestedMicros()).isEqualTo(19_800);
+		assertThat(result.index()).isGreaterThan(1);
+		assertThat(result.suggestedMicros()).isEqualTo(20_200);
+	}
+
+	@Test
+	void menosNoCofreAumentaOValorParaOMesmoGiro() {
+		var cofreCheio = CoinEconomyCalculator.evaluate(10_000,
+			metrics(50_000, 0, 0, 0, 1_000_000, 1_500_000), params);
+		var cofreVazio = CoinEconomyCalculator.evaluate(10_000,
+			metrics(50_000, 0, 0, 0, 1_000_000, 500_000), params);
+
+		assertThat(cofreVazio.scarcity()).isGreaterThan(cofreCheio.scarcity());
+		assertThat(cofreVazio.index()).isGreaterThan(cofreCheio.index());
+	}
+
+	@Test
+	void emissaoAltaDilui() {
+		var result = CoinEconomyCalculator.evaluate(20_000,
+			metrics(50_000, 0, 0, 1_000_000, 1_000_000, 1_000_000), params);
+
+		assertThat(result.index()).isLessThan(1);
+		assertThat(result.suggestedMicros()).isEqualTo(19_800);
 	}
 
 	@Test
 	void poeiraEntreContasNaoEstouraOCalculo() {
-		// Uso declarado de 10x o estoque: o teto de uma volta por janela limita o índice.
-		var result = CoinEconomyCalculator.evaluate(10_000, new Metrics(10_000_000, 0, 0, 1_000_000), params);
+		var result = CoinEconomyCalculator.evaluate(10_000,
+			metrics(10_000_000, 0, 0, 0, 1_000_000, 1_000_000), params);
 
 		assertThat(result.effectiveUsage()).isEqualTo(1_000_000);
 		assertThat(result.suggestedMicros()).isEqualTo(10_100);
@@ -53,26 +88,27 @@ class CoinEconomyCalculatorTests {
 
 	@Test
 	void p2pEntraComPesoMenorQueOConsumo() {
-		var p2pOnly = CoinEconomyCalculator.evaluate(10_000, new Metrics(0, 200_000, 0, 1_000_000), params);
-		var escrowOnly = CoinEconomyCalculator.evaluate(10_000, new Metrics(200_000, 0, 0, 1_000_000), params);
+		var p2pOnly = CoinEconomyCalculator.evaluate(10_000,
+			metrics(0, 200_000, 0, 0, 1_000_000, 1_000_000), params);
+		var escrowOnly = CoinEconomyCalculator.evaluate(10_000,
+			metrics(200_000, 0, 0, 0, 1_000_000, 1_000_000), params);
 
 		assertThat(p2pOnly.index()).isLessThan(escrowOnly.index());
 	}
 
 	@Test
-	void respeitaPisoETetoDePreco() {
-		var floor = CoinEconomyCalculator.evaluate(10_000, new Metrics(0, 0, 10_000_000, 1_000_000), params);
-		assertThat(floor.suggestedMicros()).isEqualTo(10_000);
+	void respeitaTetoDePreco() {
+		var ceiling = new Params(30, 0.05, 0.5, 1.0, 0.5, 0.25, 0.01, 1_000, 999_900);
+		var result = CoinEconomyCalculator.evaluate(999_900,
+			metrics(10_000_000, 0, 0, 0, 1_000_000, 1_000_000), ceiling);
 
-		var ceilingParams = new Params(30, 0.05, 0.5, 1.0, 0.25, 0.01, 10_000, 999_900);
-		var ceiling = CoinEconomyCalculator.evaluate(999_900,
-			new Metrics(10_000_000, 0, 0, 1_000_000), ceilingParams);
-		assertThat(ceiling.suggestedMicros()).isEqualTo(999_900);
+		assertThat(result.suggestedMicros()).isEqualTo(999_900);
 	}
 
 	@Test
 	void semCirculacaoNaoReavalia() {
-		var result = CoinEconomyCalculator.evaluate(12_345, new Metrics(500_000, 0, 0, 0), params);
+		var result = CoinEconomyCalculator.evaluate(12_345,
+			metrics(500_000, 0, 0, 0, 0, 2_000_000), params);
 
 		assertThat(result.suggestedMicros()).isEqualTo(12_345);
 	}
