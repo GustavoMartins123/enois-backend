@@ -183,12 +183,16 @@ class CoinController {
 			Map.entry("escassez", summary.result().scarcity()),
 			Map.entry("indice", summary.result().index()),
 			Map.entry("cotacaoAtualMicros", summary.previousMicros()),
-			Map.entry("cotacaoSugeridaMicros", summary.result().suggestedMicros()));
+			Map.entry("cotacaoSugeridaMicros", summary.result().suggestedMicros()),
+			Map.entry("periodoDecorrido", summary.elapsedFraction()),
+			Map.entry("proximaAvaliacaoEm", summary.nextEvaluationAt().toString()));
 	}
 
 	/**
 	 * Roda o cálculo AGORA (admin) — o worker diário faz sozinho; isto serve para conferir o
-	 * resultado sem esperar a janela e publica a cotação se o valor sugerido mudou.
+	 * resultado sem esperar a janela e publica a cotação se o valor sugerido mudou. O passo
+	 * publicável é proporcional ao tempo desde a última publicação: clicar várias vezes no mesmo
+	 * dia NÃO equivale a vários períodos.
 	 */
 	@PostMapping("/admin/carteira/economia/recalcular")
 	Map<String, Object> recalculateEconomy(
@@ -207,7 +211,9 @@ class CoinController {
 			Map.entry("retornoCofre", summary.metrics().treasuryInflow()),
 			Map.entry("emissao", summary.metrics().issuance()),
 			Map.entry("circulacao", summary.metrics().circulation()),
-			Map.entry("cofre", summary.metrics().treasuryBalance()));
+			Map.entry("cofre", summary.metrics().treasuryBalance()),
+			Map.entry("periodoDecorrido", summary.elapsedFraction()),
+			Map.entry("proximaAvaliacaoEm", summary.nextEvaluationAt().toString()));
 	}
 
 	@GetMapping("/admin/carteira/disputas")
