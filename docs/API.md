@@ -440,6 +440,10 @@ are for sale); a broken file stops the boot. Each item has `id`, `kind` (`FRAME`
   writes only while open (`409 EVENT_CLOSED`); the team badge comes with the choice and, after the
   end, the first reads grant the victory badge to the winning team (a tie: both teams). The hunt
   has 7 spots; the seventh grants `emblema-achei-saci`.
+- The equipped nameplate travels with the name style (`nameStyle` / `authorStyle` / `actorStyle` /
+  `sellerStyle`: `{ theme, font, color, nameplate }`) in every projection that shows a person,
+  community members included; the style is `null` only when all four are empty. Lists load their
+  people in one query (`findAllByIds`), never one lookup per row.
 
 `order` accepts only `oldest` and `newest`; anything else returns `400 INVALID_CATALOG_ORDER`. A
 session that is sent and invalid returns an authentication error instead of an anonymous read.
