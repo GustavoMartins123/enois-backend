@@ -95,7 +95,7 @@ public class GetFeedService implements GetFeedUseCase, GetProfilePostsUseCase, G
 		this.postNotes = postNotes;
 	}
 
-	private static final long TRENDING_WINDOW_HOURS = 48;
+	private static final long TRENDING_WINDOW_HOURS = 24;
 
 	@Override
 	@Transactional(readOnly = true)
