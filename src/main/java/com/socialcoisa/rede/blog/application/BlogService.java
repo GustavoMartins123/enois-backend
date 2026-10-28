@@ -3,8 +3,11 @@ package com.socialcoisa.rede.blog.application;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -84,12 +87,17 @@ public class BlogService {
 	/** Vitrine: os blogs criados, mais recentes primeiro. */
 	@Transactional(readOnly = true)
 	public List<BlogSummaryView> directory(int limit) {
-		return blogs.findAll(limit).stream()
+		List<Blog> listed = blogs.findAll(limit).stream()
 			// Blog de conta banida sai da vitrine (o perfil já dá 404).
 			.filter(blog -> !sanctionGate.banned(blog.userId()))
 			.filter(blog -> !suspiciousText.matches(blog.title(), blog.slug()))
-			.map(blog -> BlogSummaryView.from(blog, profiles.findById(blog.userId()).orElse(null),
-				posts.countByBlog(blog.id())))
+			.toList();
+		// One query for the authors of the page instead of one per blog.
+		Map<String, UserProfile> authors = profiles.findAllByIds(listed.stream().map(Blog::userId).toList())
+			.stream()
+			.collect(Collectors.toMap(UserProfile::id, Function.identity()));
+		return listed.stream()
+			.map(blog -> BlogSummaryView.from(blog, authors.get(blog.userId()), posts.countByBlog(blog.id())))
 			.toList();
 	}
 
