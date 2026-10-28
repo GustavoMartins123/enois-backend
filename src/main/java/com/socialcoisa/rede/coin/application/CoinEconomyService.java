@@ -32,8 +32,14 @@ public class CoinEconomyService {
 
 	private static final Logger LOG = LoggerFactory.getLogger(CoinEconomyService.class);
 
+	/**
+	 * @param elapsedFraction quanto do período já passou desde a última publicação (1.0 = período
+	 * completo); o passo máximo publicável é proporcional a ele
+	 * @param nextEvaluationAt quando a próxima publicação pode acontecer
+	 */
 	public record Summary(int windowDays, CoinEconomyCalculator.Metrics metrics,
-			CoinEconomyCalculator.Result result, long previousMicros, long currentMicros, boolean published) {
+			CoinEconomyCalculator.Result result, long previousMicros, long currentMicros, boolean published,
+			double elapsedFraction, Instant nextEvaluationAt) {
 	}
 
 	private final CoinLedgerRepository ledger;
@@ -42,9 +48,12 @@ public class CoinEconomyService {
 	private final Clock clock;
 	private final boolean enabled;
 	private final CoinEconomyCalculator.Params params;
+	/** Período de referência de uma reavaliação completa (o cron é diário). */
+	private final Duration period;
 
 	public CoinEconomyService(CoinLedgerRepository ledger, CoinRateService rates, CoinService coins, Clock clock,
 			@Value("${rede.coin.economy.enabled:true}") boolean enabled,
+			@Value("${rede.coin.economy.period-hours:24}") int periodHours,
 			@Value("${rede.coin.economy.window-days:30}") int windowDays,
 			@Value("${rede.coin.economy.target-turnover:0.05}") double targetTurnover,
 			@Value("${rede.coin.economy.p2p-weight:0.5}") double p2pWeight,
@@ -59,6 +68,7 @@ public class CoinEconomyService {
 		this.coins = coins;
 		this.clock = clock;
 		this.enabled = enabled;
+		this.period = Duration.ofHours(Math.max(1, periodHours));
 		this.params = new CoinEconomyCalculator.Params(windowDays, targetTurnover, p2pWeight, maxUsageRatio,
 			scarcityWeight, sensitivity, maxStep, minMicros, maxMicros);
 	}
@@ -85,28 +95,59 @@ public class CoinEconomyService {
 		}
 	}
 
-	/** Calcula e, se o botão estiver ligado, publica a cotação sugerida. */
+	/**
+	 * Calcula e, se o botão estiver ligado, publica a cotação sugerida. O passo publicável é
+	 * proporcional ao tempo decorrido desde a última publicação: o cron diário dá o passo cheio,
+	 * e cliques manuais seguidos não valem um período cada um.
+	 */
 	@Transactional
 	public Summary recalculate() {
-		long previous = rates.latest().brlMicros();
+		var latest = rates.latest();
+		long previous = latest.brlMicros();
+		Instant lastAt = latest.effectiveAt();
+		Instant now = clock.instant();
+		double elapsed = elapsedFraction(lastAt, now);
 		CoinEconomyCalculator.Metrics metrics = metrics();
-		CoinEconomyCalculator.Result result = CoinEconomyCalculator.evaluate(previous, metrics, params);
+		CoinEconomyCalculator.Result result = CoinEconomyCalculator.evaluate(previous, metrics, params, elapsed);
 		boolean published = false;
 		if (enabled && result.suggestedMicros() != previous) {
 			rates.publish(result.suggestedMicros(), note(metrics, result));
 			published = true;
 		}
+		Instant next = published || lastAt == null ? now.plus(period) : lastAt.plus(period);
 		return new Summary(params.windowDays(), metrics, result, previous,
-			published ? result.suggestedMicros() : previous, published);
+			published ? result.suggestedMicros() : previous, published, elapsed, next);
 	}
 
-	/** Leitura para o painel: as mesmas métricas, sem publicar nada. */
+	/**
+	 * Leitura para o painel: as mesmas métricas, sem publicar nada. A sugestão é a que um
+	 * "recalcular agora" publicaria — proporcional ao período já decorrido, para o painel não
+	 * prometer um movimento que o clique não faz.
+	 */
 	@Transactional
 	public Summary snapshot() {
-		long previous = rates.latest().brlMicros();
+		var latest = rates.latest();
+		long previous = latest.brlMicros();
+		Instant now = clock.instant();
+		Instant lastAt = latest.effectiveAt();
+		double elapsed = elapsedFraction(lastAt, now);
 		CoinEconomyCalculator.Metrics metrics = metrics();
-		return new Summary(params.windowDays(), metrics, CoinEconomyCalculator.evaluate(previous, metrics, params),
-			previous, previous, false);
+		Instant next = lastAt == null ? now : lastAt.plus(period);
+		return new Summary(params.windowDays(), metrics,
+			CoinEconomyCalculator.evaluate(previous, metrics, params, elapsed), previous, previous, false, elapsed,
+			next);
+	}
+
+	/** Fração do período já decorrida desde a última publicação, limitada a [0, 1]. */
+	double elapsedFraction(Instant lastPublishedAt, Instant now) {
+		if (lastPublishedAt == null) {
+			return 1.0;
+		}
+		long seconds = Duration.between(lastPublishedAt, now).getSeconds();
+		if (seconds <= 0) {
+			return 0.0;
+		}
+		return Math.min(1.0, seconds / (double) period.toSeconds());
 	}
 
 	private CoinEconomyCalculator.Metrics metrics() {
