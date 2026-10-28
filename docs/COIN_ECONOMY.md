@@ -13,34 +13,43 @@ documento descreve o cálculo automático da **cotação de referência** (BRL) 
 
 `CoinEconomyService` executa uma vez por dia (`rede.coin.economy.cron`, padrão `0 10 3 * * *`):
 
-1. Mede, na janela (`window-days`, padrão 30 dias), três coisas no ledger:
+1. Mede, na janela (`window-days`, padrão 30 dias), quatro coisas no ledger:
    - **Uso em escrow** (`ESCROW_HOLD`): compras no marketplace e contratos de serviço pagos em
      faíscas.
    - **Transferências P2P** (`TRANSFER_IN`): o giro entre pessoas.
+   - **Retorno ao cofre** (`PURCHASE` + `FEE_IN`): faíscas que voltam para a tesouraria em compras
+     da loja e taxas de marketplace.
    - **Emissão automática** (`REWARD`): presença, sequência, reações, jogos diários, bônus de
      microprojeto e prêmios.
-2. Compara o uso com a **meta de giro** (`target-turnover`, padrão 5% do estoque em circulação no
-   período). Uso acima da meta empurra o preço para cima; emissão dilui e empurra para baixo.
-3. Aplica no máximo **1% de variação por execução** (`max-step`) e respeita piso de 1 centavo e
-   teto de R$ 1,00 por faísca (`min-cents` / `max-cents`).
+2. Compara o giro com a **meta** (`target-turnover`, padrão 5% do estoque em circulação no
+   período) e multiplica pela **escassez** do cofre: quanto menos faíscas restam no cofre em
+   relação ao total, mais cada faísca vale. Emissão dilui e empurra para baixo.
+3. Aplica no máximo **1% de variação por execução** (`max-step`) e respeita piso de 0,1 centavo e
+   teto de R$ 1,00 por faísca (`min-micros` / `max-micros`).
 4. Se o valor mudou, publica uma nova linha em `coin_rate_history` — a mini bolsa mostra o
    histórico. Sem mudança, nada é gravado.
+
+**Economia parada derruba o preço:** sem uso, sem P2P e sem retorno ao cofre o índice vai a zero e
+a cotação cede um passo por dia (até o piso). O cofre precisa continuar recebendo faíscas para a
+economia não secar.
 
 ### Fórmula
 
 ```
-usoPonderado = escrow + p2p × p2p-weight            (p2p-weight padrão 0,5)
-usoEfetivo   = min(usoPonderado, circulação × max-usage-ratio)
-razão        = usoEfetivo / (circulação × target-turnover)
-diluição     = 1 + emissão / circulação
-índice       = razão / diluição
-variação     = clamp((índice − 1) × sensitivity, −max-step, +max-step)
-novaCotação  = clamp(cotaçãoAtual × (1 + variação), min, max)
+giro          = escrow + p2p × p2p-weight + retornoAoCofre   (p2p-weight padrão 0,5)
+giroEfetivo   = min(giro, circulação × max-usage-ratio)
+escassez      = 1 + scarcity-weight × (1 − cofre / (cofre + circulação))
+razão         = (giroEfetivo / (circulação × target-turnover)) × escassez
+diluição      = 1 + emissão / circulação
+índice        = razão / diluição
+variação      = clamp((índice − 1) × sensitivity, −max-step, +max-step)
+novaCotação   = clamp(cotaçãoAtual × (1 + variação), min, max)
 ```
 
 - **Sem circulação**, o preço não é reavaliado.
 - **P2P entra com peso menor** porque é circulação, não consumo.
-- **Teto de uso por janela** limita ping-pong entre contas (lavagem) a uma volta do estoque.
+- **Teto de giro por janela** limita ping-pong entre contas (lavagem) a uma volta do estoque.
+- **Escassez**: cofre cheio ⇒ fator 1×; cofre vazio ⇒ 1× + `scarcity-weight` (padrão 1,5×).
 
 ## Emissão automática escalada
 
@@ -79,16 +88,17 @@ permitir passos de 1%. A API expõe:
 | `rede.coin.economy.target-turnover` | `COIN_ECONOMY_TARGET_TURNOVER` | `0.05` |
 | `rede.coin.economy.p2p-weight` | `COIN_ECONOMY_P2P_WEIGHT` | `0.5` |
 | `rede.coin.economy.max-usage-ratio` | `COIN_ECONOMY_MAX_USAGE_RATIO` | `1.0` |
+| `rede.coin.economy.scarcity-weight` | `COIN_ECONOMY_SCARCITY_WEIGHT` | `0.5` |
 | `rede.coin.economy.sensitivity` | `COIN_ECONOMY_SENSITIVITY` | `0.25` |
 | `rede.coin.economy.max-step` | `COIN_ECONOMY_MAX_STEP` | `0.01` |
-| `rede.coin.economy.min-cents` | `COIN_ECONOMY_MIN_CENTS` | `1` |
-| `rede.coin.economy.max-cents` | `COIN_ECONOMY_MAX_CENTS` | `100` |
+| `rede.coin.economy.min-micros` | `COIN_ECONOMY_MIN_MICROS` | `1000` (0,1 centavo) |
+| `rede.coin.economy.max-micros` | `COIN_ECONOMY_MAX_MICROS` | `1000000` (R$ 1,00) |
 
 Desligar `enabled` congela a cotação automática (a publicação manual continua funcionando).
 
 ## Observabilidade
 
-`GET /admin/carteira/economia` (admin) devolve janela, uso de escrow, P2P, emissão, circulação,
-índice e a cotação sugerida — sem publicar nada. `POST /admin/carteira/economia/recalcular`
+`GET /admin/carteira/economia` (admin) devolve janela, uso de escrow, P2P, retorno ao cofre,
+emissão, circulação, saldo do cofre, escassez, índice e a cotação sugerida — sem publicar nada. `POST /admin/carteira/economia/recalcular`
 (admin) roda o cálculo na hora e publica se o valor mudou. O worker loga
 `coin_economy quote_micros=...` quando publica.
