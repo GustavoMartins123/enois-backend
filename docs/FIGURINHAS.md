@@ -60,6 +60,11 @@ Regras da junção:
 `/emotes` e `/emotes/index` respondem com `ETag` e `Cache-Control` público (10 min e 1 h). A imagem
 sai com `max-age=604800, immutable` e `nosniff`.
 
+A imagem é isenta do gate de origem (`RequestOriginFilter`), como `/media` e `/storage`: o
+`<img>` do navegador **não manda `Origin`**, e sem a isenção toda figurinha voltava 403 e a
+grade e o texto ficavam sem desenho. As rotas de dados (`/emotes`, `/emotes/index`) continuam
+exigindo origem cadastrada.
+
 ## Proxy de imagem
 
 `EmoteImageCache` guarda até **48 MB** em memória, 7 dias, com o tamanho de cada imagem como peso.
