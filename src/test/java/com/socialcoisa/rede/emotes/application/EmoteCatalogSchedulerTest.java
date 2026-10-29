@@ -24,10 +24,24 @@ class EmoteCatalogSchedulerTest {
 		agendador.warmUpOnBoot();
 		long decorrido = Duration.ofNanos(System.nanoTime() - inicio).toMillis();
 
-		// Regressao: o boot nao pode esperar as listagens do FFZ (segundos cada), nem depender de uma
-		// thread do pool comum que pode nao existir (pod de um nucleo = paralelismo zero).
+		// Regressao: o boot nao pode esperar as listagens do FFZ (segundos cada), nem depender da thread
+		// do agendador comum.
 		assertThat(decorrido).isLessThan(1_000);
 		verify(servico, timeout(5_000)).refresh();
+	}
+
+	@Test
+	void erroQueNaoEExcecaoNoBootNaoEscapaDaThread() throws Exception {
+		EmoteCatalogScheduler agendador = new EmoteCatalogScheduler(servico, true);
+		doThrow(new NoClassDefFoundError("com/exemplo/Sumiu")).when(servico).refresh();
+
+		agendador.warmUpOnBoot();
+
+		// Regressao: um Error matava a thread sem log e a montagem simplesmente nao acontecia.
+		verify(servico, timeout(5_000)).refresh();
+		Thread.sleep(200);
+		assertThat(Thread.getAllStackTraces().keySet().stream().map(Thread::getName))
+			.doesNotContain("figurinhas-boot");
 	}
 
 	@Test
