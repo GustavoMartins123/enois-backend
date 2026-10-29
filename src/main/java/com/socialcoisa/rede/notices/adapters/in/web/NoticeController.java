@@ -61,7 +61,7 @@ class NoticeController {
 	NoticeView publish(@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
 			@RequestBody(required = false) PublishRequest request) {
-		adminGuard.requireAdmin(currentUserResolver.resolve(userId, sessionToken));
+		adminGuard.requireAdmin(currentUserResolver.resolve(sessionToken));
 		return NoticeView.of(notices.publish(request == null ? null : request.title(),
 			request == null ? null : request.bodyHtml(), surfaceOf(request == null ? null : request.surface())));
 	}
@@ -69,7 +69,7 @@ class NoticeController {
 	@DeleteMapping("/admin/avisos")
 	ResponseEntity<Void> retire(@RequestHeader(value = "X-User-Id", required = false) String userId,
 			@RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
-		adminGuard.requireAdmin(currentUserResolver.resolve(userId, sessionToken));
+		adminGuard.requireAdmin(currentUserResolver.resolve(sessionToken));
 		notices.retire();
 		return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
 	}

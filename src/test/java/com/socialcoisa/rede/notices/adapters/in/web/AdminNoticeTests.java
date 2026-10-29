@@ -97,7 +97,7 @@ class AdminNoticeTests {
 	@Test
 	void oHtmlDoPainelSaiSanitizado() throws Exception {
 		var admin = auth.authenticate("notice_admin");
-		String perigoso = "<p>aviso</p><script>alert(1)</script><a href=\"javascript:alert(1)\">clique</a>";
+		String perigoso = "<p>aviso</p><script>alert(1)</script>";
 
 		mockMvc.perform(put("/admin/avisos")
 				.header("X-Session-Token", admin.token())
@@ -108,7 +108,19 @@ class AdminNoticeTests {
 		String salvo = mockMvc.perform(get("/avisos/ativo"))
 			.andExpect(status().isOk())
 			.andReturn().getResponse().getContentAsString();
-		assertThat(salvo).doesNotContain("<script").doesNotContain("javascript:");
+		assertThat(salvo).doesNotContain("<script");
+	}
+
+	@Test
+	void linkPerigosoERecusadoNaBorda() throws Exception {
+		var admin = auth.authenticate("notice_admin");
+
+		mockMvc.perform(put("/admin/avisos")
+				.header("X-Session-Token", admin.token())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(body("Aviso limpo", "<p>aviso</p><a href=\"javascript:alert(1)\">clique</a>", "modal")))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("UNSAFE_LINK"));
 	}
 
 	@Test

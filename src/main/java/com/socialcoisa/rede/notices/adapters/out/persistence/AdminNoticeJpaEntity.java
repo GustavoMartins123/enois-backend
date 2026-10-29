@@ -12,7 +12,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
-/** A linha única do aviso vigente (id fixo; ver V156). */
+/** A linha única do aviso vigente (id fixo; ver V197). */
 @Entity
 @Table(name = "admin_notice")
 class AdminNoticeJpaEntity {

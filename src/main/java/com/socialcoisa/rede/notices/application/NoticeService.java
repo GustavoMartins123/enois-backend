@@ -23,7 +23,7 @@ import com.socialcoisa.rede.shared.web.ApiException;
 @Service
 public class NoticeService {
 
-	/** A chave da linha única; ver V156. */
+	/** A chave da linha única; ver V197. */
 	public static final String NOTICE_ID = "ativo";
 	static final int MAX_TITLE = 140;
 
