@@ -1269,3 +1269,18 @@ exportado é o caminho sancionado. Convites já resolvidos não se repetem em re
 | `POST /me/integrations/linkedin` | Integração com a conta do LinkedIn |
 
 Documentação detalhada do fluxo de import em [`JOB_IMPORT_JOBRADAR.md`](JOB_IMPORT_JOBRADAR.md).
+
+## 37. Emotes (Figurinhas de chat)
+
+Catálogo de figurinhas montado **no backend**, em memória, e atualizado de 3 em 3 horas: coleções
+globais do BTTV e do FFZ, as mais usadas do FFZ (com o recorte animado) e um retrato popular
+embarcado como reserva. O navegador lê uma página por vez e recebe as imagens pelo proxy deste
+backend — era o CDN do FFZ que deixava metade da grade vazia (30% de falha, timeout de 12s).
+
+| Rota | Descrição |
+|---|---|
+| `GET /emotes?page&limit&q&provider` | Página do seletor (40 por padrão, máx. 100) |
+| `GET /emotes/index` | Índice compacto `código → imagem` para o texto |
+| `GET /emotes/image/{provider}/{id}?variant=thumb\|full` | Imagem com cache em memória |
+
+Todas são leitura pública. Documentação detalhada em [`FIGURINHAS.md`](FIGURINHAS.md).

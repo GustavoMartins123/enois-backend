@@ -253,6 +253,45 @@ Resposta:
 
 ---
 
+## Figurinhas (emotes de texto)
+
+Leitura pública (sem sessão): post público desenha figurinha para quem nem entrou. O catálogo é
+montado no backend e atualizado de 3 em 3 horas; ver [`FIGURINHAS.md`](FIGURINHAS.md).
+
+| Método | Rota | Descrição | Autenticação |
+|---|---|---|---|
+| GET | `/api/emotes?page=&limit=&q=&provider=` | Página do seletor (40 por padrão, máx. 100) | Não |
+| GET | `/api/emotes/index` | `código → endereço da imagem` para a leitura do texto | Não |
+| GET | `/api/emotes/image/{provider}/{id}?variant=thumb\|full` | Imagem (cache do backend) | Não |
+
+`/api/emotes` responde:
+
+```json
+{
+  "items": [
+    {
+      "code": "catJAM",
+      "provider": "FFZ",
+      "id": "720564",
+      "animated": true,
+      "popularRank": 41,
+      "image": "/emotes/image/FFZ/720564?variant=full&a=1",
+      "thumb": "/emotes/image/FFZ/720564?variant=thumb"
+    }
+  ],
+  "page": 1,
+  "limit": 40,
+  "total": 1127,
+  "totalPages": 29,
+  "generatedAt": "2026-10-29T01:53:14.352Z"
+}
+```
+
+Os caminhos de imagem são **relativos ao host da API** (o gateway tira o `/api`). O `&a=1` marca
+figurinha com versão em movimento.
+
+---
+
 ## Comunidades
 
 | Método | Rota | Descrição | Autenticação |
