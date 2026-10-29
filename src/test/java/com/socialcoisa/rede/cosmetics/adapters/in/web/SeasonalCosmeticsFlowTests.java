@@ -19,6 +19,8 @@ import java.util.concurrent.Future;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -98,7 +100,7 @@ class SeasonalCosmeticsFlowTests {
 	void catalogListsKindsCollectionsSeasonAndSaleFlags() throws Exception {
 		mockMvc.perform(get("/loja"))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.length()").value(250))
+			.andExpect(jsonPath("$.length()").value(254))
 			.andExpect(jsonPath("$[?(@.id == 'moldura-ambar')].collection").value(org.hamcrest.Matchers.contains(
 				org.hamcrest.Matchers.nullValue())))
 			.andExpect(jsonPath("$[?(@.id == 'moldura-ambar')].available").value(true))
@@ -172,6 +174,24 @@ class SeasonalCosmeticsFlowTests {
 		assertThatThrownBy(() -> cosmetics.buy(buyer.userId(), "moldura-carapuca"))
 			.hasFieldOrPropertyWithValue("code", "OUT_OF_SEASON");
 		assertThat(cosmetics.equip(buyer.userId(), "tema-saci").cardTheme()).isEqualTo("tema-saci");
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "moldura-caixao", "moldura-bruxa", "moldura-lanterna", "moldura-uivo" })
+	void halloweenAnimatedFramesSellInSeasonAndEquip(String frame) throws Exception {
+		String item = "$[?(@.id == '" + frame + "')]";
+		mockMvc.perform(get("/loja"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath(item + ".kind").value("FRAME"))
+			.andExpect(jsonPath(item + ".collection").value("halloween"))
+			.andExpect(jsonPath(item + ".priceMf").value(10_000))
+			.andExpect(jsonPath(item + ".available").value(true));
+		var buyer = wallet("hw_" + frame.substring("moldura-".length()));
+		buy(buyer, frame);
+		assertThat(balance(buyer)).isEqualTo(95_000);
+		mockMvc.perform(post("/loja/" + frame + "/equipar").header("X-Session-Token", buyer.token()))
+			.andExpect(status().isOk());
+		assertThat(me(buyer).get("avatarFrame").asText()).isEqualTo(frame);
 	}
 
 	@Test
