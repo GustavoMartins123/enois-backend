@@ -9,6 +9,8 @@ public enum FeedTab {
 	UNSEEN,
 	/** Em alta: mais reagidos nas últimas 24h. */
 	TRENDING,
+	/** Interações: posts que o usuário reagiu ou comentou. */
+	INTERACTED,
 
 	// Legado — o frontend antigo ainda pode enviar. Mapeados no service.
 	FOLLOWING, DISCUSSIONS, RECENT,
