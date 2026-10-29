@@ -1,6 +1,5 @@
 package com.socialcoisa.rede.emotes.adapters.out.providers;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import com.socialcoisa.rede.emotes.domain.Emote;
@@ -66,29 +65,5 @@ final class FfzEmoteJson {
 			}
 		}
 		return null;
-	}
-
-	static List<Emote> fromPopularSnapshotArray(JsonNode emotes) {
-		List<Emote> result = new ArrayList<>();
-		if (emotes == null || !emotes.isArray()) {
-			return result;
-		}
-		int rank = 0;
-		for (JsonNode node : emotes) {
-			String code = node.path("code").asText("");
-			String url = node.path("url").asText("");
-			String id = idFromUrl(url);
-			if (code.isEmpty() || id == null) {
-				continue;
-			}
-			rank++;
-			try {
-				result.add(new Emote(code, EmoteProvider.FFZ, id, url.contains("/animated/"), rank));
-			}
-			catch (IllegalArgumentException invalid) {
-				rank--;
-			}
-		}
-		return result;
 	}
 }

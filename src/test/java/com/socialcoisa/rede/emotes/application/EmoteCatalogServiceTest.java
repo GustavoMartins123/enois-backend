@@ -47,11 +47,11 @@ class EmoteCatalogServiceTest {
 		};
 	}
 
-	private static EmoteSource snapshot(List<Emote> emotes) {
+	private static EmoteSource embarcado(List<Emote> emotes) {
 		return new EmoteSource() {
 			@Override
 			public String name() {
-				return "POPULAR-SNAPSHOT";
+				return "EMBARCADO";
 			}
 
 			@Override
@@ -64,7 +64,7 @@ class EmoteCatalogServiceTest {
 	@Test
 	void nasceComRetratoEmbarcadoSemEsperarProvedor() {
 		EmoteCatalogService servico = new EmoteCatalogService(List.of(falha("BTTV")),
-				snapshot(List.of(emote("OMEGALUL", EmoteProvider.FFZ, 1))));
+				embarcado(List.of(emote("OMEGALUL", EmoteProvider.FFZ, 1))));
 
 		assertThat(servico.catalog().emotes()).extracting(Emote::code).containsExactly("OMEGALUL");
 		assertThat(servico.liveLoaded()).isFalse();
@@ -75,7 +75,7 @@ class EmoteCatalogServiceTest {
 		EmoteCatalogService servico = new EmoteCatalogService(
 				List.of(live("BTTV", List.of(emote("KEKW", EmoteProvider.BTTV, null))),
 						live("FFZ-POPULAR", List.of(emote("KEKW", EmoteProvider.FFZ, 3), emote("catJAM", EmoteProvider.FFZ, 1)))),
-				snapshot(List.of(emote("KEKW", EmoteProvider.FFZ, 2), emote("OMEGALUL", EmoteProvider.FFZ, 4))));
+				embarcado(List.of(emote("KEKW", EmoteProvider.FFZ, 2), emote("OMEGALUL", EmoteProvider.FFZ, 4))));
 
 		servico.refresh();
 
@@ -93,7 +93,7 @@ class EmoteCatalogServiceTest {
 		List<LiveEmoteSource> saudaveis = new ArrayList<>(
 				List.of(live("BTTV", List.of(emote("KEKW", EmoteProvider.BTTV, null)))));
 		EmoteCatalogService servico = new EmoteCatalogService(saudaveis,
-				snapshot(List.of(emote("OMEGALUL", EmoteProvider.FFZ, 1))));
+				embarcado(List.of(emote("OMEGALUL", EmoteProvider.FFZ, 1))));
 		servico.refresh();
 		int antes = servico.catalog().emotes().size();
 
@@ -105,7 +105,7 @@ class EmoteCatalogServiceTest {
 
 	@Test
 	void catalogoVazioSoQuandoNadaResponde() {
-		EmoteCatalogService servico = new EmoteCatalogService(List.of(falha("BTTV")), snapshot(List.of()));
+		EmoteCatalogService servico = new EmoteCatalogService(List.of(falha("BTTV")), embarcado(List.of()));
 
 		servico.refresh();
 
@@ -116,7 +116,7 @@ class EmoteCatalogServiceTest {
 	@Test
 	void paginaEIndiceSaemDoMesmoCatalogo() {
 		EmoteCatalogService servico = new EmoteCatalogService(List.of(),
-				snapshot(List.of(emote("OMEGALUL", EmoteProvider.FFZ, 2), emote("Pog", EmoteProvider.FFZ, 1),
+				embarcado(List.of(emote("OMEGALUL", EmoteProvider.FFZ, 2), emote("Pog", EmoteProvider.FFZ, 1),
 						emote("KEKW", EmoteProvider.BTTV, null))));
 
 		EmotePage populares = servico.page(1, 1, null, "POPULAR");
@@ -133,7 +133,7 @@ class EmoteCatalogServiceTest {
 		Emote animada = new Emote("catJAM", EmoteProvider.FFZ, "777171", true, null);
 		EmoteCatalogService servico = new EmoteCatalogService(
 				List.of(live("FFZ-POPULAR", List.of(popular)), live("FFZ-ANIMADAS", List.of(animada))),
-				snapshot(List.of()));
+				embarcado(List.of()));
 
 		servico.refresh();
 
@@ -157,7 +157,7 @@ class EmoteCatalogServiceTest {
 		Emote estatica = new Emote("catJAM", EmoteProvider.FFZ, "564062", false, 7);
 		EmoteCatalogService servico = new EmoteCatalogService(
 				List.of(live("FFZ-ANIMADAS", List.of(animada)), live("FFZ-POPULAR", List.of(estatica))),
-				snapshot(List.of()));
+				embarcado(List.of()));
 
 		servico.refresh();
 
