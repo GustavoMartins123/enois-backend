@@ -42,7 +42,9 @@ Regras da junção:
 ## Atualização
 
 - no boot, o catálogo nasce do retrato embarcado (ninguém encontra seletor vazio) e a montagem
-  completa roda em segundo plano (`ApplicationReadyEvent`);
+  completa roda em segundo plano (`ApplicationReadyEvent`) numa **thread própria**: com um núcleo,
+  o pool comum do Java nasce com paralelismo zero e a tarefa enfileirada nele nunca roda — em QA o
+  catálogo ficou no retrato embarcado até a rodada do cron, três horas depois;
 - depois, `@Scheduled` de **3 em 3 horas** (`rede.emotes.refresh-cron`);
 - o refresh é serializado (`synchronized`) e fora do caminho da requisição: a leitura sempre pega o
   catálogo anterior, inteiro.
