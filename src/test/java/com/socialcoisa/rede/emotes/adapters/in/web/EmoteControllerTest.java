@@ -30,10 +30,10 @@ class EmoteControllerTest {
 	private static final Emote CATJAM = new Emote("catJAM", EmoteProvider.FFZ, "777171", true, null);
 
 	private static MockMvc mvc(EmoteImageCache images, List<Emote> catalogo) {
-		EmoteSource snapshot = new EmoteSource() {
+		EmoteSource embarcado = new EmoteSource() {
 			@Override
 			public String name() {
-				return "POPULAR-SNAPSHOT";
+				return "EMBARCADO";
 			}
 
 			@Override
@@ -41,7 +41,7 @@ class EmoteControllerTest {
 				return catalogo;
 			}
 		};
-		EmoteCatalogService servico = new EmoteCatalogService(List.of(), snapshot);
+		EmoteCatalogService servico = new EmoteCatalogService(List.of(), embarcado);
 		return MockMvcBuilders.standaloneSetup(new EmoteController(servico, images)).build();
 	}
 

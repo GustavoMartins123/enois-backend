@@ -28,7 +28,7 @@ próprio. O navegador não fala com `api.betterttv.net` nem com `cdn.frankerface
 | `FfzGlobalEmoteSource` | coleção global do FFZ (13) | 2ª |
 | `FfzListingEmoteSource` (`animated=true`) | as mais usadas do FFZ **com versão em movimento** (400) | 3ª — arte animada vence a estática de mesmo código |
 | `FfzListingEmoteSource` (`sort=count-desc`) | as mais usadas do FFZ (600) | 4ª — dá a posição de uso |
-| `PopularSnapshotSource` | retrato embarcado (`emotes/popular.json`, 735) | última — só preenche o que ninguém trouxe |
+| `EmbeddedCatalogSource` | retrato embarcado (`emotes/catalogo.json`: 1018 figurinhas — 622 populares, 372 animadas, 53 do BTTV) | última — só preenche o que ninguém trouxe |
 
 Regras da junção:
 
@@ -52,7 +52,7 @@ Regras da junção:
 | Rota | Para quê |
 |---|---|
 | `GET /emotes?page=&limit=&q=&provider=` | seletor: 40 por página (máx. 100), busca por código, filtro `ALL`/`POPULAR`/`BTTV`/`FFZ` |
-| `GET /emotes/index` | texto: mapa `código → endereço da imagem` (1127 códigos ≈ 60 KB) |
+| `GET /emotes/index` | texto: mapa `código → endereço da imagem` (~1000 códigos ≈ 60 KB) |
 | `GET /emotes/image/{provider}/{id}?variant=thumb\|full` | a imagem, servida do cache do backend |
 
 `/emotes` e `/emotes/index` respondem com `ETag` e `Cache-Control` público (10 min e 1 h). A imagem
@@ -90,7 +90,20 @@ Endereços de origem:
 | `rede.emotes.popular-pages` | `3` | páginas de 200 da listagem popular (1..20) |
 | `rede.emotes.animated-pages` | `2` | páginas de 200 da listagem animada (1..20) |
 
-Sem rede, o catálogo é o retrato embarcado (735 populares) — o seletor continua abrindo.
+Sem rede, o catálogo é o retrato embarcado — o seletor continua abrindo, com popular, animada e
+BTTV, não só a lista de populares.
+
+## Retrato embarcado (`emotes/catalogo.json`)
+
+O arquivo no jar é o piso do catálogo: um pod que sobe sem rede serve figurinha de verdade em vez de
+seletor vazio. Ele **não** é só a lista de populares — traz a coleção global do BTTV e do FFZ, as
+mais usadas e as animadas, com provedor, identificador e a marcação de animação, para o seletor
+nascer com comum **e** animada.
+
+É gerado por `python3 scripts/emotes-snapshot.py`, que consulta as mesmas quatro fontes ao vivo e
+aplica a mesma junção de `EmoteCatalogService.rebuild()` (na mesma ordem de prioridade de
+`EmotesConfig`). O refresh agendado soma por cima; nada do arquivo é apagado. Mudou a junção no
+código? Muda no script também, e o teste `EmoteSourcesTest` guarda o formato.
 
 ## Limites conhecidos
 

@@ -43,7 +43,7 @@ public class EmoteCatalogService {
 	private static final Logger LOG = LoggerFactory.getLogger(EmoteCatalogService.class);
 
 	private final List<LiveEmoteSource> liveSources;
-	private final EmoteSource snapshot;
+	private final EmoteSource embedded;
 
 	private final Map<String, List<Emote>> lastGood = new ConcurrentHashMap<>();
 
@@ -51,11 +51,11 @@ public class EmoteCatalogService {
 	private volatile Set<String> artsAnimated = Set.of();
 	private volatile boolean liveLoaded;
 
-	public EmoteCatalogService(List<LiveEmoteSource> liveSources, EmoteSource snapshot) {
+	public EmoteCatalogService(List<LiveEmoteSource> liveSources, EmoteSource embedded) {
 		this.liveSources = List.copyOf(liveSources);
-		this.snapshot = snapshot;
+		this.embedded = embedded;
 		// No boot o catalogo ja nasce com o retrato embarcado: nenhuma requisicao encontra seletor vazio.
-		List<Emote> embarcado = loadSnapshot();
+		List<Emote> embarcado = loadEmbedded();
 		this.catalog = embarcado.isEmpty() ? EmoteCatalog.empty() : new EmoteCatalog(sort(embarcado), Instant.now());
 		this.artsAnimated = animatedArts(this.catalog.emotes());
 	}
@@ -118,7 +118,7 @@ public class EmoteCatalogService {
 			algumAoVivo = algumAoVivo || !carregadas.isEmpty();
 			rodadas.add(carregadas);
 		}
-		rodadas.add(loadSnapshot());
+		rodadas.add(loadEmbedded());
 
 		for (List<Emote> rodada : rodadas) {
 			for (Emote emote : rodada) {
@@ -182,12 +182,12 @@ public class EmoteCatalogService {
 		return Set.copyOf(arts);
 	}
 
-	private List<Emote> loadSnapshot() {
+	private List<Emote> loadEmbedded() {
 		try {
-			return snapshot.load();
+			return embedded.load();
 		}
 		catch (Exception falha) {
-			LOG.error("Retrato popular embarcado nao pode ser lido: {}", falha.toString());
+			LOG.error("Retrato embarcado das figurinhas nao pode ser lido: {}", falha.toString());
 			return List.of();
 		}
 	}

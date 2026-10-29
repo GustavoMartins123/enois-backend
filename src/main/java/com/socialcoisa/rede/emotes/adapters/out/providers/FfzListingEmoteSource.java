@@ -26,7 +26,7 @@ import tools.jackson.databind.ObjectMapper;
  *   dela continua sendo o da listagem geral, quando aparece la.
  *
  * So roda no refresh agendado, nunca no clique: cada pagina de 200 leva alguns segundos. Se uma
- * fonte falhar, o catalogo mantem a ultima copia dela e o retrato embarcado (`emotes/popular.json`)
+ * fonte falhar, o catalogo mantem a ultima copia dela e o retrato embarcado (`emotes/catalogo.json`)
  * continua servindo.
  */
 public class FfzListingEmoteSource implements LiveEmoteSource {

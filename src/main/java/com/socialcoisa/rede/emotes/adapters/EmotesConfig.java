@@ -10,9 +10,9 @@ import com.socialcoisa.rede.emotes.adapters.out.images.EmoteImageCache;
 import com.socialcoisa.rede.emotes.adapters.out.images.HttpImageFetcher;
 import com.socialcoisa.rede.emotes.adapters.out.images.ImageFetcher;
 import com.socialcoisa.rede.emotes.adapters.out.providers.BttvEmoteSource;
+import com.socialcoisa.rede.emotes.adapters.out.providers.EmbeddedCatalogSource;
 import com.socialcoisa.rede.emotes.adapters.out.providers.FfzGlobalEmoteSource;
 import com.socialcoisa.rede.emotes.adapters.out.providers.FfzListingEmoteSource;
-import com.socialcoisa.rede.emotes.adapters.out.providers.PopularSnapshotSource;
 import com.socialcoisa.rede.emotes.application.EmoteCatalogService;
 import com.socialcoisa.rede.emotes.application.port.out.EmoteSource;
 import com.socialcoisa.rede.emotes.application.port.out.LiveEmoteSource;
@@ -42,13 +42,13 @@ class EmotesConfig {
 	}
 
 	@Bean
-	PopularSnapshotSource popularSnapshotSource(ObjectMapper objectMapper) {
-		return new PopularSnapshotSource(objectMapper);
+	EmbeddedCatalogSource embeddedCatalogSource(ObjectMapper objectMapper) {
+		return new EmbeddedCatalogSource(objectMapper);
 	}
 
 	@Bean
-	EmoteCatalogService emoteCatalogService(LiveEmoteSources liveEmoteSources, EmoteSource popularSnapshotSource) {
-		return new EmoteCatalogService(liveEmoteSources.sources(), popularSnapshotSource);
+	EmoteCatalogService emoteCatalogService(LiveEmoteSources liveEmoteSources, EmoteSource embeddedCatalogSource) {
+		return new EmoteCatalogService(liveEmoteSources.sources(), embeddedCatalogSource);
 	}
 
 	@Bean

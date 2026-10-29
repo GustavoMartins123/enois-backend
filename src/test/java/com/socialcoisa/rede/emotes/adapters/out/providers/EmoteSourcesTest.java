@@ -51,15 +51,40 @@ class EmoteSourcesTest {
 	}
 
 	@Test
-	void retratoEmbarcadoTemOCatalogoPopularInteiro() throws Exception {
-		List<Emote> emotes = new PopularSnapshotSource(JSON).load();
+	void retratoEmbarcadoTrazFigurinhaComumEAnimadaSemRede() throws Exception {
+		List<Emote> emotes = new EmbeddedCatalogSource(JSON).load();
 
-		assertThat(emotes).hasSizeGreaterThan(500);
+		// O que o pod serve quando nenhum provedor responde: colecao global dos dois + populares.
+		assertThat(emotes).hasSizeGreaterThan(800);
+		assertThat(emotes).anyMatch((emote) -> emote.provider() == EmoteProvider.BTTV);
+		assertThat(emotes).anyMatch((emote) -> emote.provider() == EmoteProvider.FFZ);
+		assertThat(emotes.stream().filter(Emote::animated)).hasSizeGreaterThan(200);
 		assertThat(emotes.get(0).code()).isEqualTo("OMEGALUL");
 		assertThat(emotes.get(0).popularRank()).isEqualTo(1);
-		assertThat(emotes).allMatch((emote) -> emote.provider() == EmoteProvider.FFZ && emote.popular());
+		// Codigo unico: o seletor pagina pelo catalogo, e codigo repetido viraria figurinha repetida.
+		assertThat(emotes).extracting(Emote::code).doesNotHaveDuplicates();
 		// Posicao continua e unica: o seletor depende disso para nao repetir da 1a pagina para a 2a.
-		assertThat(emotes.stream().map(Emote::popularRank).distinct()).hasSize(emotes.size());
+		List<Integer> posicoes = emotes.stream().filter(Emote::popular).map(Emote::popularRank).toList();
+		assertThat(posicoes).isNotEmpty().doesNotHaveDuplicates();
+	}
+
+	@Test
+	void retratoEmbarcadoIgnoraLinhaQueNaoSeriaUsadaNoTexto() {
+		String body = """
+				[{"code":"KEKW","provider":"BTTV","id":"abc","animated":false},
+				 {"code":"catJAM","provider":"FFZ","id":"777171","animated":true,"popularRank":7},
+				 {"code":"com espaco","provider":"FFZ","id":"1"},
+				 {"code":"SEMPROVEDOR","provider":"7TV","id":"1"},
+				 {"code":"SEMID","provider":"FFZ"}]
+				""";
+
+		List<Emote> emotes = EmbeddedCatalogSource.parse(JSON.readTree(body));
+
+		assertThat(emotes).extracting(Emote::code).containsExactly("KEKW", "catJAM");
+		assertThat(emotes.get(1).animated()).isTrue();
+		assertThat(emotes.get(1).popularRank()).isEqualTo(7);
+		assertThat(EmbeddedCatalogSource.parse(JSON.readTree("{}"))).isEmpty();
+		assertThat(EmbeddedCatalogSource.parse(null)).isEmpty();
 	}
 
 	@Test
