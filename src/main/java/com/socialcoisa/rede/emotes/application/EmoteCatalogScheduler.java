@@ -1,7 +1,5 @@
 package com.socialcoisa.rede.emotes.application;
 
-import java.util.concurrent.CompletableFuture;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -37,14 +35,20 @@ public class EmoteCatalogScheduler {
 		if (!enabled) {
 			return;
 		}
-		CompletableFuture.runAsync(() -> {
-			try {
-				catalogService.refresh();
-			}
-			catch (RuntimeException falha) {
-				LOG.warn("Falha ao montar o catalogo de figurinhas no boot (segue com o embarcado).");
-			}
-		});
+		// Thread propria, NAO o pool comum: com um nucleo (`-XX:ActiveProcessorCount=1`) o pool comum
+		// nasce com paralelismo zero e a tarefa enfileirada nunca roda — o catalogo ficava no retrato
+		// embarcado ate o refresh agendado, tres horas depois. Foi o que aconteceu em QA em 2026-10-29:
+		// o pod subiu as 02:11 e o catalogo so saiu do retrato as 03:00, na rodada do cron.
+		Thread.ofVirtual().name("figurinhas-boot").start(this::buildOnBoot);
+	}
+
+	private void buildOnBoot() {
+		try {
+			catalogService.refresh();
+		}
+		catch (RuntimeException falha) {
+			LOG.warn("Falha ao montar o catalogo de figurinhas no boot (segue com o embarcado).", falha);
+		}
 	}
 
 	/**
