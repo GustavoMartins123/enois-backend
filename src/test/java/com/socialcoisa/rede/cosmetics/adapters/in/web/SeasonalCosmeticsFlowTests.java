@@ -100,7 +100,7 @@ class SeasonalCosmeticsFlowTests {
 	void catalogListsKindsCollectionsSeasonAndSaleFlags() throws Exception {
 		mockMvc.perform(get("/loja"))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.length()").value(254))
+			.andExpect(jsonPath("$.length()").value(255))
 			.andExpect(jsonPath("$[?(@.id == 'moldura-ambar')].collection").value(org.hamcrest.Matchers.contains(
 				org.hamcrest.Matchers.nullValue())))
 			.andExpect(jsonPath("$[?(@.id == 'moldura-ambar')].available").value(true))
@@ -177,7 +177,8 @@ class SeasonalCosmeticsFlowTests {
 	}
 
 	@ParameterizedTest
-	@ValueSource(strings = { "moldura-caixao", "moldura-bruxa", "moldura-lanterna", "moldura-uivo" })
+	@ValueSource(strings = { "moldura-caixao", "moldura-bruxa", "moldura-lanterna", "moldura-uivo",
+		"moldura-lacraia" })
 	void halloweenAnimatedFramesSellInSeasonAndEquip(String frame) throws Exception {
 		String item = "$[?(@.id == '" + frame + "')]";
 		mockMvc.perform(get("/loja"))

@@ -30,7 +30,7 @@ class CosmeticCatalogTests {
 	@Test
 	void shippedCatalogLoadsWithEveryCollectionAndLook() {
 		CosmeticCatalog catalog = new CosmeticCatalog(JsonMapper.builder().build());
-		assertThat(catalog.items()).hasSize(254);
+		assertThat(catalog.items()).hasSize(255);
 		assertThat(catalog.collections()).hasSize(11);
 		assertThat(catalog.item("moldura-ambar").orElseThrow().releaseOrder()).isEqualTo(1);
 		assertThat(catalog.item("moldura-radar").orElseThrow().releaseOrder()).isEqualTo(26);
